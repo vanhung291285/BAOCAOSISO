@@ -225,13 +225,27 @@ BEGIN
 END $$;
 
 DO $$
+DECLARE
+    t text;
+    tables text[] := ARRAY[
+        'public.school_settings', 
+        'public.school_years', 
+        'public.campuses', 
+        'public.classes', 
+        'public.indicator_groups', 
+        'public.daily_reports', 
+        'public.daily_report_values'
+    ];
 BEGIN
-    BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.school_settings; EXCEPTION WHEN OTHERS THEN END;
-    BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.school_years; EXCEPTION WHEN OTHERS THEN END;
-    BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.campuses; EXCEPTION WHEN OTHERS THEN END;
-    BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.classes; EXCEPTION WHEN OTHERS THEN END;
-    BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.indicator_groups; EXCEPTION WHEN OTHERS THEN END;
-    BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.daily_reports; EXCEPTION WHEN OTHERS THEN END;
-    BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.daily_report_values; EXCEPTION WHEN OTHERS THEN END;
+    FOR t IN SELECT unnest(tables) LOOP
+        IF NOT EXISTS (
+            SELECT 1 
+            FROM pg_publication_tables 
+            WHERE pubname = 'supabase_realtime' 
+            AND schemaname || '.' || tablename = t
+        ) THEN
+            EXECUTE format('ALTER PUBLICATION supabase_realtime ADD TABLE %s', t);
+        END IF;
+    END LOOP;
 END $$;
 `;
