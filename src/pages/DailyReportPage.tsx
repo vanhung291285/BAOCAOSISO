@@ -19,7 +19,13 @@ interface DailyReportPageProps {
 
 export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) => {
   const { settings, indicators } = useSchool();
-  const [selectedDate, setSelectedDate] = useState('2026-09-15');
+  const [selectedDate, setSelectedDate] = useState(() => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  });
   const [reportData, setReportData] = useState<{
     date: string;
     totalClasses: number;
@@ -45,7 +51,8 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
       const [y, m, d] = selectedDate.split('-');
       return { day: d, month: m, year: y };
     } catch {
-      return { day: '15', month: '09', year: '2026' };
+      const d = new Date();
+      return { day: String(d.getDate()).padStart(2, '0'), month: String(d.getMonth() + 1).padStart(2, '0'), year: String(d.getFullYear()) };
     }
   }, [selectedDate]);
 

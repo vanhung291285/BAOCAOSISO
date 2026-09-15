@@ -54,7 +54,14 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
   const { settings, classes, indicators } = useSchool();
 
   // Selected date defaults to today (or initialDate)
-  const today = '2026-09-15';
+  const getToday = () => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+  const today = getToday();
   const [reportDate, setReportDate] = useState<string>(initialDate || today);
 
   // Selected class

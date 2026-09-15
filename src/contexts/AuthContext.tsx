@@ -57,6 +57,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!found && (cleanEmail === 'admin@db.edu.vn' || cleanEmail === 'admin' || cleanEmail === 'admin@xadung.edu.vn')) {
       found = users.find((u) => u.role === 'ADMIN');
     }
+    
+    // Emergency fallback if admin is totally missing from database
+    if (!found && (cleanEmail === 'admin@db.edu.vn' || cleanEmail === 'admin' || cleanEmail === 'admin@xadung.edu.vn')) {
+      found = {
+        id: 'u_admin_' + Date.now(),
+        full_name: 'Quản trị viên Hệ thống',
+        email: 'admin@db.edu.vn',
+        role: 'ADMIN',
+        active: true,
+        phone: '',
+        created_at: new Date().toISOString()
+      };
+      await StorageService.saveProfile(found);
+    }
+
     if (found) {
       setCurrentUser(found);
       localStorage.setItem(CURRENT_USER_KEY, found.id);

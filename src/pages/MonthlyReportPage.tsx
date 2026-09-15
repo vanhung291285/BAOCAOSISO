@@ -16,7 +16,12 @@ import {
 
 export const MonthlyReportPage: React.FC = () => {
   const { settings } = useSchool();
-  const [selectedMonth, setSelectedMonth] = useState('2026-09');
+  const [selectedMonth, setSelectedMonth] = useState(() => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    return `${year}-${month}`;
+  });
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<{
     yearMonth: string;

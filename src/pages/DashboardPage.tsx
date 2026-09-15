@@ -37,7 +37,11 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSele
   const { currentUser, isAdmin, isBGH, isGVCN } = useAuth();
 
   const [selectedDate, setSelectedDate] = useState(() => {
-    return '2026-09-15';
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   });
 
   const [aggregateData, setAggregateData] = useState<{
