@@ -36,6 +36,12 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSele
   const { settings, classes, indicators, campuses } = useSchool();
   const { currentUser, isAdmin, isBGH, isGVCN } = useAuth();
 
+  const getCampusName = (campusId?: string) => {
+    if (!campusId) return 'Khu chính';
+    const campus = campuses.find(c => c.id === campusId);
+    return campus ? campus.name : 'Khu chính';
+  };
+
   const [selectedDate, setSelectedDate] = useState(() => {
     const d = new Date();
     const year = d.getFullYear();
@@ -572,7 +578,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSele
                           </span>
                         )}
                         <span className="text-[10px] text-slate-500 font-medium">
-                          ({row.classItem.campus_id === 'cam_nasan' ? 'Nà Sản' : row.classItem.campus_id === 'cam_suoilu' ? 'Suối Lư' : 'Khu chính'})
+                          ({getCampusName(row.classItem.campus_id)})
                         </span>
                       </div>
                       <div className="text-[11px] text-slate-600 mt-0.5">

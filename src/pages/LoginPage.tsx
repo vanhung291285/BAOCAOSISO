@@ -34,6 +34,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
   const {
     settings,
     classes,
+    campuses,
     years,
     activeYear,
     setActiveSchoolYear,
@@ -109,6 +110,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
   // Selected Class and Teacher objects
   const currentClass = classes.find((c) => c.id === selectedClassId);
   const currentTeacher = allUsers.find((u) => u.id === selectedTeacherId);
+
+  const getCampusName = (campusId?: string) => {
+    if (!campusId) return 'Khu chính';
+    const campus = campuses.find(c => c.id === campusId);
+    return campus ? campus.name : 'Khu chính';
+  };
 
   // Handle GVCN Quick One-Click Login
   const handleGVCNLogin = async () => {
@@ -422,7 +429,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                       <optgroup label="Khối 6">
                         {grade6Classes.map((cls) => (
                           <option key={cls.id} value={cls.id}>
-                            Lớp {cls.class_name} {cls.campus_id === 'cam_nasan' ? '(Nà Sản)' : cls.campus_id === 'cam_suoilu' ? '(Suối Lư)' : '(Khu chính)'}
+                            Lớp {cls.class_name} ({getCampusName(cls.campus_id)})
                           </option>
                         ))}
                       </optgroup>
@@ -431,7 +438,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                       <optgroup label="Khối 7">
                         {grade7Classes.map((cls) => (
                           <option key={cls.id} value={cls.id}>
-                            Lớp {cls.class_name} {cls.campus_id === 'cam_nasan' ? '(Nà Sản)' : cls.campus_id === 'cam_suoilu' ? '(Suối Lư)' : '(Khu chính)'}
+                            Lớp {cls.class_name} ({getCampusName(cls.campus_id)})
                           </option>
                         ))}
                       </optgroup>
@@ -440,7 +447,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                       <optgroup label="Khối 8">
                         {grade8Classes.map((cls) => (
                           <option key={cls.id} value={cls.id}>
-                            Lớp {cls.class_name} {cls.campus_id === 'cam_nasan' ? '(Nà Sản)' : cls.campus_id === 'cam_suoilu' ? '(Suối Lư)' : '(Khu chính)'}
+                            Lớp {cls.class_name} ({getCampusName(cls.campus_id)})
                           </option>
                         ))}
                       </optgroup>
@@ -449,7 +456,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                       <optgroup label="Khối 9">
                         {grade9Classes.map((cls) => (
                           <option key={cls.id} value={cls.id}>
-                            Lớp {cls.class_name} {cls.campus_id === 'cam_nasan' ? '(Nà Sản)' : cls.campus_id === 'cam_suoilu' ? '(Suối Lư)' : '(Khu chính)'}
+                            Lớp {cls.class_name} ({getCampusName(cls.campus_id)})
                           </option>
                         ))}
                       </optgroup>
