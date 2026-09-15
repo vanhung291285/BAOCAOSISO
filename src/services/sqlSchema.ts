@@ -140,6 +140,33 @@ CREATE TABLE IF NOT EXISTS public.system_logs (
 );
 
 -- ==============================================================================
+-- CẬP NHẬT CẤU TRÚC BẢNG (MIGRATIONS)
+-- Tự động thêm các cột mới nếu đã tạo bảng từ phiên bản trước đó
+-- ==============================================================================
+DO $$
+BEGIN
+    BEGIN
+        ALTER TABLE public.school_settings ADD COLUMN input_mode TEXT DEFAULT 'MODE_1_TOTAL_PRESENT' CHECK (input_mode IN ('MODE_1_TOTAL_PRESENT', 'MODE_2_TOTAL_ABSENT', 'MODE_3_ALL_THREE'));
+    EXCEPTION WHEN duplicate_column THEN END;
+
+    BEGIN
+        ALTER TABLE public.school_settings ADD COLUMN enable_campuses BOOLEAN DEFAULT false;
+    EXCEPTION WHEN duplicate_column THEN END;
+
+    BEGIN
+        ALTER TABLE public.school_settings ADD COLUMN primary_color TEXT DEFAULT '#1d4ed8';
+    EXCEPTION WHEN duplicate_column THEN END;
+
+    BEGIN
+        ALTER TABLE public.classes ADD COLUMN campus_id TEXT REFERENCES public.campuses(id) ON DELETE SET NULL;
+    EXCEPTION WHEN duplicate_column THEN END;
+
+    BEGIN
+        ALTER TABLE public.daily_reports ADD COLUMN locked_at TIMESTAMPTZ;
+    EXCEPTION WHEN duplicate_column THEN END;
+END $$;
+
+-- ==============================================================================
 -- PHÂN QUYỀN ROW LEVEL SECURITY (RLS) & ANONYMOUS KEY ACCESS
 -- Đảm bảo Web Client sử dụng Supabase Anon Key và Authenticated đều truy xuất trơn tru
 -- ==============================================================================

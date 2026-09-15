@@ -1315,10 +1315,19 @@ export const StorageService = {
 
       const hasError = Object.values(details).some((d) => Boolean(d.error));
 
+      let errorDetailsString = '';
+      if (hasError) {
+        const errorList = Object.entries(details)
+          .filter(([_, d]) => Boolean(d.error))
+          .map(([table, d]) => `${table}: ${d.error}`)
+          .join(' | ');
+        errorDetailsString = ` (Chi tiết: ${errorList}. Gợi ý: Hãy thử Copy kịch bản tạo bảng bên dưới và chạy lại trong Supabase SQL Editor để cập nhật cột mới).`;
+      }
+
       return {
         success: !hasError,
         message: hasError
-          ? 'Đồng bộ hoàn tất một phần. Hãy kiểm tra lại các bảng có lỗi bên dưới.'
+          ? `Đồng bộ hoàn tất một phần.${errorDetailsString}`
           : 'Đã đẩy toàn bộ thiết lập và dữ liệu lên Supabase thành công 100%!',
         details,
       };
