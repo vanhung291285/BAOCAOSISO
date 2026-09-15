@@ -15,6 +15,7 @@ import {
   Calendar,
   Layers,
   Database,
+  MapPin,
   Printer,
   FileSpreadsheet,
 } from 'lucide-react';
@@ -137,6 +138,13 @@ export const Navbar: React.FC<NavbarProps> = ({ currentPath, onNavigate }) => {
                     <span>Cấu hình trường & Năm học</span>
                   </button>
                   <button
+                    onClick={() => handleNav('/settings/campuses')}
+                    className="w-full text-left flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium text-slate-700 hover:bg-slate-100"
+                  >
+                    <MapPin className="w-3.5 h-3.5 text-slate-500" />
+                    <span>Quản lý Phân hiệu / Điểm trường</span>
+                  </button>
+                  <button
                     onClick={() => handleNav('/settings/indicators')}
                     className="w-full text-left flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium text-slate-700 hover:bg-slate-100"
                   >
@@ -242,6 +250,15 @@ export const Navbar: React.FC<NavbarProps> = ({ currentPath, onNavigate }) => {
                 >
                   <Settings className="w-4 h-4 text-slate-500" />
                   <span>Cấu hình trường & Năm học</span>
+                </button>
+                <button
+                  onClick={() => handleNav('/settings/campuses')}
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium ${
+                    currentPath === '/settings/campuses' ? 'bg-blue-50 text-blue-800' : 'text-slate-700 hover:bg-slate-100'
+                  }`}
+                >
+                  <MapPin className="w-4 h-4 text-slate-500" />
+                  <span>Quản lý Phân hiệu / Điểm trường</span>
                 </button>
                 <button
                   onClick={() => handleNav('/settings/indicators')}

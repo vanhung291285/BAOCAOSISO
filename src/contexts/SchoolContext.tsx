@@ -25,6 +25,8 @@ interface SchoolContextType {
   saveSchoolYear: (year: SchoolYear) => Promise<void>;
   deleteSchoolYear: (yearId: string) => Promise<void>;
   toggleLockSchoolYear: (yearId: string, locked: boolean) => Promise<void>;
+  saveCampus: (campus: Campus) => Promise<void>;
+  deleteCampus: (campusId: string) => Promise<void>;
   resetAllDataToEmpty: () => Promise<void>;
 }
 
@@ -224,6 +226,16 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     await refreshAll();
   };
 
+  const saveCampus = async (campus: Campus) => {
+    await StorageService.saveCampus(campus);
+    await refreshAll();
+  };
+
+  const deleteCampus = async (campusId: string) => {
+    await StorageService.deleteCampus(campusId);
+    await refreshAll();
+  };
+
   const resetAllDataToEmpty = async () => {
     await StorageService.resetAllDataToEmpty();
     await refreshAll();
@@ -254,6 +266,8 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         saveSchoolYear,
         deleteSchoolYear,
         toggleLockSchoolYear,
+        saveCampus,
+        deleteCampus,
         resetAllDataToEmpty,
       }}
     >

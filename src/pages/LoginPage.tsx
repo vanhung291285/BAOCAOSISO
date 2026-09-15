@@ -23,6 +23,7 @@ import {
   Trash2
 } from 'lucide-react';
 import { SchoolYear } from '../types';
+import { isSupabaseConnected } from '../services/supabase';
 
 interface LoginPageProps {
   onLoginSuccess: (targetPath?: string) => void;
@@ -49,8 +50,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
   const [selectedTeacherId, setSelectedTeacherId] = useState<string>('');
 
   // Admin / BGH Login State
-  const [email, setEmail] = useState('admin@db.edu.vn');
-  const [password, setPassword] = useState('admin123456@');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -265,11 +266,22 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
 
   // List of all GVCN users
   const gvcnUsers = allUsers.filter((u) => u.role === 'GVCN');
-  const adminUser = allUsers.find((u) => u.role === 'ADMIN');
-  const bghUser = allUsers.find((u) => u.role === 'BGH');
 
   return (
     <div className="min-h-screen bg-linear-to-b from-slate-100 via-slate-50 to-slate-200 flex flex-col justify-center py-8 sm:py-12 px-4 sm:px-6 lg:px-8">
+      {!isSupabaseConnected() && (
+        <div className="sm:mx-auto sm:w-full sm:max-w-lg mb-6 animate-in fade-in slide-in-from-top-4">
+          <div className="bg-amber-50 border border-amber-300 p-4 rounded-2xl flex items-start gap-3 shadow-sm">
+            <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+            <div className="text-sm text-amber-900 leading-relaxed">
+              <strong className="block font-bold mb-1">Cảnh báo: Dữ liệu đang lưu cục bộ!</strong>
+              Mọi cấu hình hiện tại chưa được lưu lên Supabase do trình duyệt này chưa có thông số kết nối.
+              Hãy đăng nhập bằng tài khoản Quản trị, vào <strong>Cài đặt Hệ thống &gt; Supabase</strong> để điền URL & API Key, sau đó bấm <strong>Lấy dữ liệu từ Cloud</strong> để đồng bộ.
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header Branding */}
       <div className="sm:mx-auto sm:w-full sm:max-w-lg text-center">
         <div
@@ -518,26 +530,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
             {/* TAB 2: BAN GIÁM HIỆU & QUẢN TRỊ VIÊN */}
             {activeTab === 'ADMIN' && (
               <form className="space-y-5" onSubmit={handleAdminSubmit}>
-                {/* Admin credentials hint card */}
-                <div className="flex items-center justify-between text-xs bg-purple-50/80 border border-purple-200 rounded-xl p-3">
-                  <div className="flex items-center gap-2 text-purple-900">
-                    <ShieldCheck className="w-4 h-4 text-purple-700 flex-shrink-0" />
-                    <div>
-                      <span className="font-bold">Quản trị viên:</span> admin@db.edu.vn
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEmail('admin@db.edu.vn');
-                      setPassword('admin123456@');
-                    }}
-                    className="px-2.5 py-1 rounded-lg text-[11px] font-bold text-purple-700 hover:bg-purple-100 border border-purple-300 transition-colors"
-                  >
-                    Điền nhanh
-                  </button>
-                </div>
-
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
                     Email hoặc Tên đăng nhập
@@ -546,7 +538,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                     <input
                       type="text"
                       required
-                      placeholder="admin@db.edu.vn hoặc bgh@xadung.edu.vn"
+                      placeholder="Nhập email hoặc tên đăng nhập..."
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors shadow-2xs"
@@ -555,16 +547,14 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                 </div>
 
                 <div>
-                  <div className="flex items-center justify-between">
-                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-                      Mật khẩu
-                    </label>
-                    <span className="text-[11px] text-purple-700 font-semibold">Mật khẩu: admin123456@</span>
-                  </div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    Mật khẩu
+                  </label>
                   <div className="mt-1.5 relative">
                     <input
                       type="password"
                       required
+                      placeholder="Nhập mật khẩu..."
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors shadow-2xs"
@@ -582,42 +572,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                     <LogIn className="w-4 h-4" />
                     <span>{isSubmitting ? 'Đang xác thực...' : 'ĐĂNG NHẬP QUẢN TRỊ'}</span>
                   </button>
-                </div>
-
-                {/* Quick evaluation shortcuts for Admin & BGH */}
-                <div className="pt-4 border-t border-slate-100 space-y-2">
-                  <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider text-center">
-                    Đăng nhập nhanh 1-chạm để kiểm thử
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {bghUser && (
-                      <button
-                        type="button"
-                        onClick={() => handleQuickLogin(bghUser.id, '/dashboard')}
-                        className="p-2.5 rounded-xl border border-purple-200 bg-purple-50 hover:bg-purple-100 text-left transition-colors flex items-center gap-2"
-                      >
-                        <Award className="w-4 h-4 text-purple-700 flex-shrink-0" />
-                        <div className="min-w-0">
-                          <div className="text-xs font-bold text-purple-950 truncate">Ban Giám Hiệu</div>
-                          <div className="text-[10px] text-purple-700">Xem toàn trường</div>
-                        </div>
-                      </button>
-                    )}
-
-                    {adminUser && (
-                      <button
-                        type="button"
-                        onClick={() => handleQuickLogin(adminUser.id, '/dashboard')}
-                        className="p-2.5 rounded-xl border border-red-200 bg-red-50 hover:bg-red-100 text-left transition-colors flex items-center gap-2"
-                      >
-                        <ShieldCheck className="w-4 h-4 text-red-700 flex-shrink-0" />
-                        <div className="min-w-0">
-                          <div className="text-xs font-bold text-red-950 truncate">Quản Trị Viên</div>
-                          <div className="text-[10px] text-red-700 font-medium">admin@db.edu.vn</div>
-                        </div>
-                      </button>
-                    )}
-                  </div>
                 </div>
               </form>
             )}

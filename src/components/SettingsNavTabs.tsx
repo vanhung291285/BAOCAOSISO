@@ -1,5 +1,5 @@
 import React from 'react';
-import { School, Layers, FileSpreadsheet, Database } from 'lucide-react';
+import { School, Layers, FileSpreadsheet, Database, MapPin } from 'lucide-react';
 
 interface SettingsNavTabsProps {
   currentPath: string;
@@ -11,6 +11,11 @@ export const SettingsNavTabs: React.FC<SettingsNavTabsProps> = ({ currentPath })
       path: '/settings/school',
       label: 'Cấu hình trường & Năm học',
       icon: School,
+    },
+    {
+      path: '/settings/campuses',
+      label: 'Phân hiệu / Điểm trường',
+      icon: MapPin,
     },
     {
       path: '/settings/indicators',

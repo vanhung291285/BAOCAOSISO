@@ -11,6 +11,7 @@ import { ChartsPage } from './pages/ChartsPage';
 import { ClassesManagementPage } from './pages/ClassesManagementPage';
 import { UsersManagementPage } from './pages/UsersManagementPage';
 import { SettingsSchoolPage } from './pages/SettingsSchoolPage';
+import { SettingsCampusesPage } from './pages/SettingsCampusesPage';
 import { SettingsIndicatorsPage } from './pages/SettingsIndicatorsPage';
 import { SettingsReportTemplatePage } from './pages/SettingsReportTemplatePage';
 import { SettingsSupabasePage } from './pages/SettingsSupabasePage';
@@ -96,6 +97,8 @@ const AppContent: React.FC = () => {
         {currentPath === '/users' && <UsersManagementPage />}
 
         {currentPath === '/settings/school' && <SettingsSchoolPage />}
+
+        {currentPath === '/settings/campuses' && <SettingsCampusesPage />}
 
         {currentPath === '/settings/indicators' && <SettingsIndicatorsPage />}
 

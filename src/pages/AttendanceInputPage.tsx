@@ -123,15 +123,11 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
               absent: val.absent_count,
             };
           } else {
-            // Sensible defaults based on indicator type if newly creating
-            let defTotal = 35;
-            if (ig.code === 'ALL') defTotal = 35;
-            else if (ig.code === 'BOARDING_HALF') defTotal = 28;
-
+            // Default to empty so the user has to fill them in
             initialMap[ig.id] = {
-              total: defTotal,
-              present: defTotal,
-              absent: 0,
+              total: '',
+              present: '',
+              absent: '',
             };
           }
         });
@@ -193,7 +189,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
 
   // Quick increment/decrement helper for mobile with >= 44px touch targets
   const adjustValue = (groupId: string, field: 'present' | 'absent', delta: number) => {
-    const current = formValues[groupId] || { total: 0, present: 0, absent: 0 };
+    const current = formValues[groupId] || { total: '', present: '', absent: '' };
     const curVal = typeof current[field] === 'number' ? (current[field] as number) : 0;
     const nextVal = Math.max(0, curVal + delta);
     handleFieldChange(groupId, field, String(nextVal));
@@ -201,7 +197,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
 
   // Quick preset for absentee count (0, 1, 2, 3 vắng)
   const setAbsentPreset = (groupId: string, absentCount: number) => {
-    const current = formValues[groupId] || { total: 0, present: 0, absent: 0 };
+    const current = formValues[groupId] || { total: '', present: '', absent: '' };
     const total = typeof current.total === 'number' ? current.total : 0;
     const actualAbsent = Math.min(absentCount, total);
     const actualPresent = Math.max(0, total - actualAbsent);
@@ -222,12 +218,12 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
     setFormValues((prev) => {
       const nextMap: Record<string, GroupInputState> = {};
       enabledIndicators.forEach((ig) => {
-        const cur = prev[ig.id] || { total: 35, present: 35, absent: 0 };
-        const total = typeof cur.total === 'number' ? cur.total : 35;
+        const cur = prev[ig.id] || { total: '', present: '', absent: '' };
+        const total = cur.total;
         nextMap[ig.id] = {
           total,
           present: total,
-          absent: 0,
+          absent: typeof total === 'number' ? 0 : '',
         };
       });
       return nextMap;

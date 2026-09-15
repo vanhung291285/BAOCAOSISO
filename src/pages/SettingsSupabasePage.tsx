@@ -108,7 +108,45 @@ export const SettingsSupabasePage: React.FC = () => {
       type: 'info',
       text: 'Đã lưu thông số kết nối Supabase! Đang kiểm tra kết nối...',
     });
-    await handleTestConnection();
+    
+    setTesting(true);
+    try {
+      const status = await testSupabaseConnection();
+      setConnStatus(status);
+      const tableStatuses = await StorageService.getSupabaseSyncStatus();
+      setSyncStatusList(tableStatuses);
+
+      if (status.connected) {
+        setSyncMessage({
+          type: 'info',
+          text: status.message + ' Đang tự động lấy dữ liệu mới nhất từ Cloud...',
+        });
+        
+        // Auto-pull from cloud on successful connection
+        const pullRes = await StorageService.syncAllFromSupabase();
+        if (pullRes.success) {
+          setSyncMessage({ type: 'success', text: 'Kết nối thành công và đã đồng bộ dữ liệu từ Cloud!' });
+          // Force UI refresh via realtime channel
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('sso_realtime_update', { detail: { table: 'all' } }));
+          }
+        } else {
+          setSyncMessage({ type: 'error', text: 'Kết nối thành công nhưng lỗi khi lấy dữ liệu: ' + pullRes.message });
+        }
+      } else {
+        setSyncMessage({
+          type: 'error',
+          text: status.message,
+        });
+      }
+    } catch (err: any) {
+      setSyncMessage({
+        type: 'error',
+        text: `Lỗi kiểm tra kết nối: ${err?.message || err}`,
+      });
+    } finally {
+      setTesting(false);
+    }
   };
 
   const handleUploadAllToCloud = async () => {

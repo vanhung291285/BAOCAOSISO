@@ -18,7 +18,7 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const CURRENT_USER_KEY = 'sso_active_auth_user_id';
+const CURRENT_USER_KEY = 'sso_active_auth_user_id_v2';
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<Profile | null>(null);
@@ -38,12 +38,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
-    // Default to GVCN 6A9 if available or Admin for initial convenient view
-    const defaultUser = users.find((u) => u.role === 'ADMIN') || users[0] || null;
-    setCurrentUser(defaultUser);
-    if (defaultUser) {
-      localStorage.setItem(CURRENT_USER_KEY, defaultUser.id);
-    }
+    // Removed automatic default user assignment to force manual login
+    // Don't leave completely blank in prototype; set to null for login page
+    setCurrentUser(null);
   };
 
   useEffect(() => {
