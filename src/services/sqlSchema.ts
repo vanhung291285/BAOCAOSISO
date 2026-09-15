@@ -158,6 +158,14 @@ BEGIN
     EXCEPTION WHEN duplicate_column THEN END;
 
     BEGIN
+        ALTER TABLE public.school_settings ADD COLUMN developer_name TEXT DEFAULT 'Nguyễn Hùng';
+    EXCEPTION WHEN duplicate_column THEN END;
+
+    BEGIN
+        ALTER TABLE public.school_settings ADD COLUMN developer_contact TEXT DEFAULT 'hungthcsnongu@gmail.com';
+    EXCEPTION WHEN duplicate_column THEN END;
+
+    BEGIN
         ALTER TABLE public.classes ADD COLUMN campus_id TEXT REFERENCES public.campuses(id) ON DELETE SET NULL;
     EXCEPTION WHEN duplicate_column THEN END;
 
