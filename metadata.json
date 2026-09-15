@@ -1,0 +1,6 @@
+{
+  "name": "Sổ Báo Cáo Sĩ Số - Trường PTDTBT THCS Xa Dung",
+  "description": "Hệ thống báo cáo sĩ số học sinh hằng ngày dành cho GVCN và Ban Giám Hiệu, tự động tổng hợp báo cáo toàn trường, hỗ trợ bán trú, nội trú và xuất biểu mẫu Excel.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
