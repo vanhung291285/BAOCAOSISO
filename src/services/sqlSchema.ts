@@ -224,11 +224,14 @@ BEGIN
   END IF;
 END $$;
 
-ALTER PUBLICATION supabase_realtime ADD TABLE public.school_settings;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.school_years;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.campuses;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.classes;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.indicator_groups;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.daily_reports;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.daily_report_values;
+DO $$
+BEGIN
+    BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.school_settings; EXCEPTION WHEN OTHERS THEN END;
+    BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.school_years; EXCEPTION WHEN OTHERS THEN END;
+    BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.campuses; EXCEPTION WHEN OTHERS THEN END;
+    BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.classes; EXCEPTION WHEN OTHERS THEN END;
+    BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.indicator_groups; EXCEPTION WHEN OTHERS THEN END;
+    BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.daily_reports; EXCEPTION WHEN OTHERS THEN END;
+    BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.daily_report_values; EXCEPTION WHEN OTHERS THEN END;
+END $$;
 `;
