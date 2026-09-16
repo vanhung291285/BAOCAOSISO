@@ -598,22 +598,32 @@ export const StorageService = {
   // --- 5. Classes ---
   async getClasses(): Promise<ClassItem[]> {
     ensureInitialized();
+    let data: ClassItem[] | null = null;
     const supabase = getSupabaseClient();
     if (supabase && isSupabaseConnected()) {
       try {
-        const { data, error } = await supabase.from('classes').select('*').order('sort_order', { ascending: true });
-        if (!error && data && data.length > 0) {
-          localStorage.setItem(STORAGE_KEYS.CLASSES, JSON.stringify(data));
-          return data;
+        const { data: cloudData, error } = await supabase.from('classes').select('*').order('sort_order', { ascending: true });
+        if (!error && cloudData && cloudData.length > 0) {
+          localStorage.setItem(STORAGE_KEYS.CLASSES, JSON.stringify(cloudData));
+          data = cloudData;
         }
       } catch (err) {
         console.warn('Supabase fetch classes fallback to local', err);
       }
     }
 
-    const raw = localStorage.getItem(STORAGE_KEYS.CLASSES);
-    const classes: ClassItem[] = raw ? JSON.parse(raw) : [];
-    return classes.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+    if (!data) {
+      const raw = localStorage.getItem(STORAGE_KEYS.CLASSES);
+      data = raw ? JSON.parse(raw) : [];
+    }
+    
+    const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+    return data.sort((a, b) => {
+      if (a.grade !== b.grade) {
+        return (a.grade || 0) - (b.grade || 0);
+      }
+      return collator.compare(a.class_name, b.class_name);
+    });
   },
 
   async saveClass(classItem: ClassItem): Promise<void> {
@@ -621,7 +631,14 @@ export const StorageService = {
     const idx = list.findIndex((c) => c.id === classItem.id);
     if (idx >= 0) list[idx] = classItem;
     else list.push(classItem);
-    list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+    
+    const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+    list.sort((a, b) => {
+      if (a.grade !== b.grade) {
+        return (a.grade || 0) - (b.grade || 0);
+      }
+      return collator.compare(a.class_name, b.class_name);
+    });
     localStorage.setItem(STORAGE_KEYS.CLASSES, JSON.stringify(list));
 
     const supabase = getSupabaseClient();

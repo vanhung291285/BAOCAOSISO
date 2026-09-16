@@ -858,17 +858,6 @@ export const ClassesManagementPage: React.FC = () => {
                   </select>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                    Thứ tự hiển thị
-                  </label>
-                  <input
-                    type="number"
-                    value={formSortOrder}
-                    onChange={(e) => setFormSortOrder(Number(e.target.value))}
-                    className="w-full px-3 py-2 text-sm font-semibold border border-slate-300 rounded-xl focus:outline-hidden"
-                  />
-                </div>
               </div>
 
               {/* Homeroom Teacher Selector with quick create */}
