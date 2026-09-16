@@ -172,7 +172,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentPath, onNavigate }) => {
 
           {/* User profile & Quick Switcher */}
           <div className="flex items-center gap-2 flex-shrink-0">
-            <QuickUserSwitcher />
+            {isAdmin && <QuickUserSwitcher />}
 
             {currentUser && (
               <div className="hidden sm:flex items-center gap-2 pl-2 border-l border-slate-200 flex-shrink-0">
