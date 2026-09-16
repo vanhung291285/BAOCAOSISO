@@ -123,11 +123,11 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
               absent: val.absent_count,
             };
           } else {
-            // Default to empty so the user has to fill them in
+            // Default to 0 so the user has to fill them in
             initialMap[ig.id] = {
-              total: '',
-              present: '',
-              absent: '',
+              total: 0,
+              present: 0,
+              absent: 0,
             };
           }
         });
