@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useSchool } from '../contexts/SchoolContext';
 import { StorageService } from '../services/storage';
+import { CampusSelector } from '../components/CampusSelector';
 import * as XLSX from 'xlsx';
 import {
   Calendar,
@@ -15,13 +16,16 @@ import {
 } from 'lucide-react';
 
 export const MonthlyReportPage: React.FC = () => {
-  const { settings } = useSchool();
+  const { settings, campuses } = useSchool();
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const d = new Date();
     const year = d.getFullYear();
     const month = String(d.getMonth() + 1).padStart(2, '0');
     return `${year}-${month}`;
   });
+  
+  const [selectedCampusId, setSelectedCampusId] = useState<string>('all');
+  
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<{
     yearMonth: string;
@@ -35,19 +39,27 @@ export const MonthlyReportPage: React.FC = () => {
 
   useEffect(() => {
     setLoading(true);
-    StorageService.getMonthlyAggregate(selectedMonth)
+    StorageService.getMonthlyAggregate(selectedMonth, selectedCampusId)
       .then((data) => setStats(data))
       .finally(() => setLoading(false));
-  }, [selectedMonth]);
+  }, [selectedMonth, selectedCampusId]);
 
   const handleExportMonthlyExcel = () => {
     if (!stats) return;
+
+    let campusName = '';
+    if (selectedCampusId !== 'all') {
+      const selectedCampus = campuses.find((c) => c.id === selectedCampusId);
+      if (selectedCampus) {
+        campusName = ` - ${selectedCampus.name.toUpperCase()}`;
+      }
+    }
 
     const wb = XLSX.utils.book_new();
     const wsData: any[][] = [];
 
     wsData.push([settings?.school_name || 'TRƯỜNG PTDTBT THCS XA DUNG']);
-    wsData.push([`BÁO CÁO TỔNG HỢP SĨ SỐ THÁNG ${selectedMonth.split('-').reverse().join('/')}`]);
+    wsData.push([`BÁO CÁO TỔNG HỢP SĨ SỐ THÁNG ${selectedMonth.split('-').reverse().join('/')}${campusName}`]);
     wsData.push([]);
 
     // KPI Summary
@@ -91,7 +103,11 @@ export const MonthlyReportPage: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <CampusSelector
+            selectedCampusId={selectedCampusId}
+            onChange={setSelectedCampusId}
+          />
           <div className="flex items-center gap-2 bg-slate-50 border border-slate-300 rounded-xl px-3 py-1.5">
             <Calendar className="w-4 h-4 text-blue-600" />
             <label className="text-xs font-bold text-slate-700">Chọn tháng:</label>

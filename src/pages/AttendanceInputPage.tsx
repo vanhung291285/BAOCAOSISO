@@ -51,7 +51,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
   onNavigate,
 }) => {
   const { currentUser, isAdmin, isGVCN } = useAuth();
-  const { settings, classes, indicators } = useSchool();
+  const { settings, classes, indicators, campuses } = useSchool();
 
   // Selected date defaults to today (or initialDate)
   const getToday = () => {
@@ -451,11 +451,38 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                 disabled={isGVCN && Boolean(currentUser?.assigned_class_id)}
                 className="w-full px-3 h-11 text-sm font-bold text-slate-800 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-hidden disabled:bg-slate-100 disabled:text-slate-700 cursor-pointer appearance-none"
               >
-                {classes.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    Lớp {c.class_name} (Khối {c.grade})
-                  </option>
-                ))}
+                {settings?.enable_campuses && campuses.length > 0 ? (
+                  <>
+                    {campuses.map(campus => {
+                      const campusClasses = classes.filter(c => c.campus_id === campus.id);
+                      if (campusClasses.length === 0) return null;
+                      return (
+                        <optgroup key={campus.id} label={campus.name}>
+                          {campusClasses.map((c) => (
+                            <option key={c.id} value={c.id}>
+                              Lớp {c.class_name} (Khối {c.grade})
+                            </option>
+                          ))}
+                        </optgroup>
+                      );
+                    })}
+                    {classes.filter(c => !c.campus_id).length > 0 && (
+                      <optgroup label="Chưa xếp phân hiệu">
+                        {classes.filter(c => !c.campus_id).map((c) => (
+                          <option key={c.id} value={c.id}>
+                            Lớp {c.class_name} (Khối {c.grade})
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+                  </>
+                ) : (
+                  classes.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      Lớp {c.class_name} (Khối {c.grade})
+                    </option>
+                  ))
+                )}
               </select>
               {!(isGVCN && Boolean(currentUser?.assigned_class_id)) && (
                 <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-3.5 pointer-events-none" />

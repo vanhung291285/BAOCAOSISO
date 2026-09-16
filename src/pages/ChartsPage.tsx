@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useSchool } from '../contexts/SchoolContext';
 import { StorageService } from '../services/storage';
 import { ClassReportRow } from '../types';
+import { CampusSelector } from '../components/CampusSelector';
 import {
   ResponsiveContainer,
   BarChart,
@@ -38,6 +39,9 @@ export const ChartsPage: React.FC = () => {
     const day = String(d.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
   });
+
+  const [selectedCampusId, setSelectedCampusId] = useState<string>('all');
+
   const [dailyData, setDailyData] = useState<{
     date: string;
     rows: ClassReportRow[];
@@ -49,7 +53,7 @@ export const ChartsPage: React.FC = () => {
   } | null>(null);
 
   useEffect(() => {
-    StorageService.getDailyAggregate(selectedDate).then((res) => {
+    StorageService.getDailyAggregate(selectedDate, selectedCampusId).then((res) => {
       setDailyData({
         date: res.date,
         rows: res.rows,
@@ -57,10 +61,10 @@ export const ChartsPage: React.FC = () => {
       });
     });
 
-    StorageService.getMonthlyAggregate(selectedDate.substring(0, 7)).then((m) => {
+    StorageService.getMonthlyAggregate(selectedDate.substring(0, 7), selectedCampusId).then((m) => {
       setMonthlyData(m);
     });
-  }, [selectedDate]);
+  }, [selectedDate, selectedCampusId]);
 
   // Chart 1: Tỷ lệ vắng theo lớp
   const classRateChartData = useMemo(() => {
@@ -124,6 +128,10 @@ export const ChartsPage: React.FC = () => {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
+          <CampusSelector
+            selectedCampusId={selectedCampusId}
+            onChange={setSelectedCampusId}
+          />
           <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-xl text-xs font-semibold text-slate-700">
             <button
               onClick={() => setTimeFilter('TODAY')}

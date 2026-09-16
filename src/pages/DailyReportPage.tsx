@@ -3,6 +3,7 @@ import { useSchool } from '../contexts/SchoolContext';
 import { StorageService } from '../services/storage';
 import { ClassReportRow } from '../types';
 import { DateNavigator } from '../components/DateNavigator';
+import { CampusSelector } from '../components/CampusSelector';
 import ExcelJS from 'exceljs';
 import {
   Printer,
@@ -18,7 +19,7 @@ interface DailyReportPageProps {
 }
 
 export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) => {
-  const { settings, indicators } = useSchool();
+  const { settings, indicators, campuses } = useSchool();
   const [selectedDate, setSelectedDate] = useState(() => {
     const d = new Date();
     const year = d.getFullYear();
@@ -26,6 +27,9 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
     const day = String(d.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
   });
+
+  const [selectedCampusId, setSelectedCampusId] = useState<string>('all');
+
   const [reportData, setReportData] = useState<{
     date: string;
     totalClasses: number;
@@ -40,10 +44,10 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
 
   useEffect(() => {
     setLoading(true);
-    StorageService.getDailyAggregate(selectedDate)
+    StorageService.getDailyAggregate(selectedDate, selectedCampusId)
       .then((data) => setReportData(data))
       .finally(() => setLoading(false));
-  }, [selectedDate]);
+  }, [selectedDate, selectedCampusId]);
 
   // Parse date into day, month, year for official Vietnamese report header
   const dateParts = useMemo(() => {
@@ -60,9 +64,16 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
   const [blankDateInTitle, setBlankDateInTitle] = useState(true);
 
   const baseTitle = useMemo(() => {
-    const raw = settings?.report_title || 'BÁO CÁO SĨ SỐ HỌC SINH';
-    return raw.replace('BÁO CÁO HỌC SINH SĨ SỐ HỌC SINH', 'BÁO CÁO SĨ SỐ HỌC SINH');
-  }, [settings?.report_title]);
+    let raw = settings?.report_title || 'BÁO CÁO SĨ SỐ HỌC SINH';
+    raw = raw.replace('BÁO CÁO HỌC SINH SĨ SỐ HỌC SINH', 'BÁO CÁO SĨ SỐ HỌC SINH');
+    if (selectedCampusId !== 'all') {
+      const selectedCampus = campuses.find(c => c.id === selectedCampusId);
+      if (selectedCampus) {
+        raw += ` - ${selectedCampus.name.toUpperCase()}`;
+      }
+    }
+    return raw;
+  }, [settings?.report_title, selectedCampusId, campuses]);
 
   const displayTitle = useMemo(() => {
     if (blankDateInTitle) {
@@ -482,6 +493,10 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
         </div>
 
         <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          <CampusSelector
+            selectedCampusId={selectedCampusId}
+            onChange={setSelectedCampusId}
+          />
           <DateNavigator selectedDate={selectedDate} onChangeDate={setSelectedDate} />
 
           <button

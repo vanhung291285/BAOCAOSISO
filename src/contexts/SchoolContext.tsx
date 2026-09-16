@@ -43,10 +43,10 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const refreshAll = useCallback(async () => {
     try {
-      const [sData, yData, cData, clData, iData] = await Promise.all([
+      const cData = await StorageService.getCampuses(); // Call this first to ensure it seeds settings if necessary
+      const [sData, yData, clData, iData] = await Promise.all([
         StorageService.getSettings(),
         StorageService.getSchoolYears(),
-        StorageService.getCampuses(),
         StorageService.getClasses(),
         StorageService.getIndicatorGroups(),
       ]);

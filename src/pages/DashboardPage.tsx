@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { StorageService, subscribeRealtime } from '../services/storage';
 import { ClassReportRow, ReportStatus } from '../types';
 import { DateNavigator } from '../components/DateNavigator';
+import { CampusSelector } from '../components/CampusSelector';
 import {
   Users,
   CheckCircle,
@@ -63,12 +64,13 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSele
   const [loading, setLoading] = useState(true);
   const [selectedGrade, setSelectedGrade] = useState<number | 'ALL'>('ALL');
   const [selectedStatus, setSelectedStatus] = useState<ReportStatus | 'ALL'>('ALL');
-  const [selectedCampus, setSelectedCampus] = useState<string | 'ALL'>('ALL');
+  const [selectedCampus, setSelectedCampus] = useState<string>('all');
+  const [selectedClassId, setSelectedClassId] = useState<string>('all');
   const [showUnreportedChips, setShowUnreportedChips] = useState(true);
 
-  const loadData = async (dateStr: string) => {
+  const loadData = async (dateStr: string, campusId: string) => {
     try {
-      const data = await StorageService.getDailyAggregate(dateStr);
+      const data = await StorageService.getDailyAggregate(dateStr, campusId === 'all' ? undefined : campusId);
       setAggregateData(data);
     } catch (err) {
       console.error('Failed to load daily aggregate:', err);
@@ -78,17 +80,17 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSele
   };
 
   useEffect(() => {
-    loadData(selectedDate);
+    loadData(selectedDate, selectedCampus);
 
     // Subscribe to realtime changes so any GVCN save triggers instant UI reload
     const unsub = subscribeRealtime(() => {
-      loadData(selectedDate);
+      loadData(selectedDate, selectedCampus);
     });
 
     return () => {
       unsub();
     };
-  }, [selectedDate]);
+  }, [selectedDate, selectedCampus]);
 
   const handleToggleLock = async (e: React.MouseEvent, row: ClassReportRow) => {
     e.stopPropagation();
@@ -104,10 +106,11 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSele
     return aggregateData.rows.filter((r) => {
       if (selectedGrade !== 'ALL' && r.classItem.grade !== selectedGrade) return false;
       if (selectedStatus !== 'ALL' && r.status !== selectedStatus) return false;
-      if (selectedCampus !== 'ALL' && r.classItem.campus_id !== selectedCampus) return false;
+      if (selectedCampus !== 'all' && r.classItem.campus_id !== selectedCampus) return false;
+      if (selectedClassId !== 'all' && r.classItem.id !== selectedClassId) return false;
       return true;
     });
-  }, [aggregateData, selectedGrade, selectedStatus, selectedCampus]);
+  }, [aggregateData, selectedGrade, selectedStatus, selectedCampus, selectedClassId]);
 
   // Find enabled indicators
   const enabledIndicators = useMemo(() => {
@@ -147,6 +150,10 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSele
           </div>
 
           <div className="flex flex-wrap items-center justify-between sm:justify-end gap-2">
+            <CampusSelector
+              selectedCampusId={selectedCampus}
+              onChange={setSelectedCampus}
+            />
             <DateNavigator selectedDate={selectedDate} onChangeDate={setSelectedDate} />
             
             <button
@@ -452,7 +459,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSele
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
             <div>
               <h2 className="text-sm sm:text-base font-black text-slate-900">
-                Chi tiết từng lớp ({filteredRows.length}/{classes.length} lớp)
+                Chi tiết từng lớp ({filteredRows.length}/{aggregateData?.totalClasses || 0} lớp)
               </h2>
               <p className="text-[11px] sm:text-xs text-slate-500">
                 Theo dõi tình hình sĩ số cụ thể theo từng khối và từng lớp
@@ -508,21 +515,25 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSele
               ))}
             </div>
 
-            {/* Campus filter if enabled */}
-            {settings?.enable_campuses && campuses.length > 0 && (
+            {/* Class filter */}
+            <div className="relative">
               <select
-                value={selectedCampus}
-                onChange={(e) => setSelectedCampus(e.target.value)}
-                className="text-xs font-semibold px-2 py-1 rounded-lg border border-slate-200 bg-white text-slate-700 focus:outline-hidden cursor-pointer"
+                value={selectedClassId}
+                onChange={(e) => setSelectedClassId(e.target.value)}
+                className="pl-3 pr-8 py-1.5 text-xs font-medium text-slate-700 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 appearance-none cursor-pointer"
               >
-                <option value="ALL">Tất cả phân hiệu</option>
-                {campuses.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
+                <option value="all">Tất cả các lớp</option>
+                {classes
+                  .filter(c => selectedCampus === 'all' || c.campus_id === selectedCampus)
+                  .filter(c => selectedGrade === 'ALL' || c.grade === selectedGrade)
+                  .map(c => (
+                    <option key={c.id} value={c.id}>
+                      Lớp {c.class_name}
+                    </option>
+                  ))}
               </select>
-            )}
+              <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            </div>
           </div>
         </div>
 

@@ -240,34 +240,61 @@ export const StorageService = {
   // --- 1. School Settings ---
   async getSettings(): Promise<SchoolSettings> {
     ensureInitialized();
+    let s: SchoolSettings | null = null;
     const supabase = getSupabaseClient();
     if (supabase && isSupabaseConnected()) {
       try {
         const { data, error } = await supabase.from('school_settings').select('*').limit(1).maybeSingle();
         if (!error && data) {
-          localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(data));
-          return data;
+          s = data;
         }
       } catch (err) {
         console.warn('Supabase fetch settings fallback to local', err);
       }
     }
-    const raw = localStorage.getItem(STORAGE_KEYS.SETTINGS);
-    let s: SchoolSettings = raw ? JSON.parse(raw) : getInitialData().settings;
-    if (s.report_title === 'BÁO CÁO HỌC SINH SĨ SỐ HỌC SINH' || s.report_title?.includes('HỌC SINH SĨ SỐ HỌC SINH')) {
-      s.report_title = s.report_title.replace('BÁO CÁO HỌC SINH SĨ SỐ HỌC SINH', 'BÁO CÁO SĨ SỐ HỌC SINH');
-      localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(s));
+    
+    if (!s) {
+      const raw = localStorage.getItem(STORAGE_KEYS.SETTINGS);
+      s = raw ? JSON.parse(raw) : getInitialData().settings;
     }
-    if (s.developer_name === undefined) {
+
+    let needsSave = false;
+    
+    if (s && !s.enable_campuses) {
+      // Auto-enable if we have campuses in DB
+      const campusesRaw = localStorage.getItem(STORAGE_KEYS.CAMPUSES);
+      const campuses = campusesRaw ? JSON.parse(campusesRaw) : [];
+      if (campuses.length > 0) {
+        s.enable_campuses = true;
+        needsSave = true;
+      }
+    }
+
+    if (s && (s.report_title === 'BÁO CÁO HỌC SINH SĨ SỐ HỌC SINH' || s.report_title?.includes('HỌC SINH SĨ SỐ HỌC SINH'))) {
+      s.report_title = s.report_title.replace('BÁO CÁO HỌC SINH SĨ SỐ HỌC SINH', 'BÁO CÁO SĨ SỐ HỌC SINH');
+      needsSave = true;
+    }
+    if (s && s.developer_name === undefined) {
       s.developer_name = 'Nguyễn Hùng';
       s.developer_contact = 'hungthcsnongu@gmail.com';
-      localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(s));
+      needsSave = true;
     }
-    if (s.address && s.address.includes('Huyện Điện Biên Đông')) {
+    if (s && s.address && s.address.includes('Huyện Điện Biên Đông')) {
       s.address = s.address.replace(', Huyện Điện Biên Đông', '').replace('Huyện Điện Biên Đông, ', '').replace('Huyện Điện Biên Đông', '').trim();
-      localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(s));
+      needsSave = true;
     }
-    return s;
+
+    if (s) {
+      localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(s));
+      if (needsSave && supabase && isSupabaseConnected()) {
+        try {
+          await supabase.from('school_settings').upsert(s);
+        } catch (e) {
+          console.error(e);
+        }
+      }
+    }
+    return s as SchoolSettings;
   },
 
   async updateSettings(settings: Partial<SchoolSettings>, updatedBy?: Profile): Promise<SchoolSettings> {
@@ -418,7 +445,36 @@ export const StorageService = {
       }
     }
     const raw = localStorage.getItem(STORAGE_KEYS.CAMPUSES);
-    return raw ? JSON.parse(raw) : [];
+    const campuses = raw ? JSON.parse(raw) : [];
+
+    // Auto-seed requested campuses if none exist
+    if (campuses.length === 0) {
+      const defaultCampuses = [
+        { id: 'c_1', name: 'Phân hiệu chính', active: true, created_at: new Date().toISOString() },
+        { id: 'c_2', name: 'Phân hiệu Suối Lư', active: true, created_at: new Date().toISOString() },
+        { id: 'c_3', name: 'Phân hiệu Nà Sản', active: true, created_at: new Date().toISOString() },
+      ];
+      localStorage.setItem(STORAGE_KEYS.CAMPUSES, JSON.stringify(defaultCampuses));
+      
+      const settings = JSON.parse(localStorage.getItem(STORAGE_KEYS.SETTINGS) || '{}');
+      if (settings && !settings.enable_campuses) {
+        settings.enable_campuses = true;
+        localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
+      }
+
+      const classesRaw = localStorage.getItem(STORAGE_KEYS.CLASSES);
+      if (classesRaw) {
+        let classes = JSON.parse(classesRaw);
+        classes = classes.map((c: any, i: number) => ({
+          ...c,
+          campus_id: c.campus_id || defaultCampuses[i % defaultCampuses.length].id
+        }));
+        localStorage.setItem(STORAGE_KEYS.CLASSES, JSON.stringify(classes));
+      }
+      return defaultCampuses;
+    }
+
+    return campuses;
   },
 
   async saveCampus(campus: Campus): Promise<void> {
@@ -878,7 +934,7 @@ export const StorageService = {
   },
 
   // --- 8. Aggregate Reports for Day ---
-  async getDailyAggregate(reportDate: string): Promise<{
+  async getDailyAggregate(reportDate: string, campusId?: string): Promise<{
     date: string;
     totalClasses: number;
     reportedClasses: number;
@@ -940,7 +996,10 @@ export const StorageService = {
     const rawValues = localStorage.getItem(STORAGE_KEYS.VALUES);
     const allValues: DailyReportValue[] = rawValues ? JSON.parse(rawValues) : [];
 
-    const activeClasses = classes.filter((c) => c.active);
+    let activeClasses = classes.filter((c) => c.active);
+    if (campusId && campusId !== 'all') {
+      activeClasses = activeClasses.filter(c => c.campus_id === campusId);
+    }
     const totalClasses = activeClasses.length;
 
     let reportedClasses = 0;
@@ -1033,7 +1092,7 @@ export const StorageService = {
   },
 
   // --- 9. Monthly Aggregate ---
-  async getMonthlyAggregate(yearMonth: string): Promise<{
+  async getMonthlyAggregate(yearMonth: string, campusId?: string): Promise<{
     yearMonth: string;
     totalDaysReported: number;
     totalAbsentAccumulated: number;
@@ -1081,15 +1140,23 @@ export const StorageService = {
       }
     }
 
-    const [classes, indicators] = await Promise.all([
+    const [allClasses, indicators] = await Promise.all([
       this.getClasses(),
       this.getIndicatorGroups(),
     ]);
+
+    let activeClasses = allClasses.filter((c) => c.active);
+    if (campusId && campusId !== 'all') {
+      activeClasses = activeClasses.filter((c) => c.campus_id === campusId);
+    }
+    const activeClassIds = new Set(activeClasses.map((c) => c.id));
+
     const mainIndicator = indicators.find((i) => i.code === 'ALL') || indicators[0];
 
     const rawReports = localStorage.getItem(STORAGE_KEYS.REPORTS);
     const reports: DailyReport[] = rawReports ? JSON.parse(rawReports) : [];
-    const monthReports = reports.filter((r) => r.report_date.startsWith(yearMonth));
+    // Only include reports for the active filtered classes
+    const monthReports = reports.filter((r) => r.report_date.startsWith(yearMonth) && activeClassIds.has(r.class_id));
 
     const rawValues = localStorage.getItem(STORAGE_KEYS.VALUES);
     const allValues: DailyReportValue[] = rawValues ? JSON.parse(rawValues) : [];
@@ -1106,7 +1173,7 @@ export const StorageService = {
     let sumRates = 0;
 
     const classStats = new Map<string, { className: string; total: number; absent: number }>();
-    classes.forEach((c) => classStats.set(c.id, { className: c.class_name, total: 0, absent: 0 }));
+    activeClasses.forEach((c) => classStats.set(c.id, { className: c.class_name, total: 0, absent: 0 }));
 
     Array.from(dateMap.keys()).sort().forEach((date) => {
       const repList = dateMap.get(date) || [];
