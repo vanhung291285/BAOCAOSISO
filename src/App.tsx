@@ -31,6 +31,9 @@ const AppContent: React.FC = () => {
   const [selectedClassForInput, setSelectedClassForInput] = useState<{ classId?: string; date?: string }>({});
 
   const handleNavigate = (path: string) => {
+    if (path === '/attendance') {
+      setSelectedClassForInput({});
+    }
     setCurrentPath(path);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -49,6 +52,9 @@ const AppContent: React.FC = () => {
     return (
       <LoginPage
         onLoginSuccess={(targetPath?: string) => {
+          if (targetPath === '/attendance') {
+            setSelectedClassForInput({});
+          }
           if (targetPath) {
             setCurrentPath(targetPath);
           } else {
