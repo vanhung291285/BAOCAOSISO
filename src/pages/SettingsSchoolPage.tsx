@@ -485,7 +485,7 @@ export const SettingsSchoolPage: React.FC = () => {
               </label>
               <input
                 type="text"
-                value={formData.principal_title || 'HIỆU TRƯỞNG'}
+                value={formData.principal_title || 'PHÓ HIỆU TRƯỞNG'}
                 onChange={(e) => setFormData({ ...formData, principal_title: e.target.value })}
                 className="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500"
               />
@@ -510,7 +510,7 @@ export const SettingsSchoolPage: React.FC = () => {
               </label>
               <input
                 type="text"
-                value={formData.reporter_title || 'NGƯỜI LẬP BIỂU'}
+                value={formData.reporter_title || 'GIÁO VIÊN'}
                 onChange={(e) => setFormData({ ...formData, reporter_title: e.target.value })}
                 className="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500"
               />

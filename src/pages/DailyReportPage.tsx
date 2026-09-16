@@ -303,7 +303,7 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
             name: 'Times New Roman',
             size: 10.5,
             bold: absentAll > 0,
-            color: absentAll > 0 ? { argb: 'FFB91C1C' } : { argb: 'FF000000' },
+            color: absentAll > 0 ? { argb: 'FFFF0000' } : { argb: 'FF000000' }, // Red if > 0
           };
 
           rObj.getCell(5).alignment = { horizontal: 'center', vertical: 'middle' };
@@ -314,7 +314,7 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
             name: 'Times New Roman',
             size: 10.5,
             bold: absentBoarding > 0,
-            color: absentBoarding > 0 ? { argb: 'FFB91C1C' } : { argb: 'FF000000' },
+            color: absentBoarding > 0 ? { argb: 'FFFF0000' } : { argb: 'FF000000' }, // Red if > 0
           };
 
           rObj.getCell(7).alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
@@ -363,7 +363,12 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
         for (let c = 1; c <= 9; c++) {
           const cell = sumRow.getCell(c);
           cell.border = thinBorder;
-          cell.font = { name: 'Times New Roman', size: 10.5, bold: true };
+          cell.font = {
+            name: 'Times New Roman',
+            size: 10.5,
+            bold: true,
+            color: (c === 4 || c === 6) && (c === 4 ? absentSchoolAll > 0 : absentSchoolBoarding > 0) ? { argb: 'FFFF0000' } : { argb: 'FF000000' }
+          };
           if (c === 7) {
             cell.alignment = { horizontal: 'left', vertical: 'middle' };
           } else {
@@ -373,6 +378,64 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
         sumRow.height = 24;
         currentRow++;
       }
+
+      // Add 2 empty spacer rows before signatures
+      currentRow += 1;
+
+      // Signatures row
+      ws.mergeCells(`A${currentRow}:D${currentRow}`);
+      ws.mergeCells(`E${currentRow}:I${currentRow}`);
+      
+      const reporterTitleCell = ws.getCell(`A${currentRow}`);
+      reporterTitleCell.value = settings?.reporter_title || 'GIÁO VIÊN';
+      reporterTitleCell.font = { name: 'Times New Roman', size: 12, bold: true };
+      reporterTitleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+
+      const principalDateCell = ws.getCell(`E${currentRow}`);
+      principalDateCell.value = `Ngày ${dateParts.day} tháng ${dateParts.month} năm ${dateParts.year}`;
+      principalDateCell.font = { name: 'Times New Roman', size: 12, italic: true };
+      principalDateCell.alignment = { horizontal: 'center', vertical: 'middle' };
+      
+      currentRow++;
+
+      ws.mergeCells(`A${currentRow}:D${currentRow}`);
+      ws.mergeCells(`E${currentRow}:I${currentRow}`);
+      
+      const reporterSubCell = ws.getCell(`A${currentRow}`);
+      reporterSubCell.value = '(Ký và ghi rõ họ tên)';
+      reporterSubCell.font = { name: 'Times New Roman', size: 11, italic: true };
+      reporterSubCell.alignment = { horizontal: 'center', vertical: 'middle' };
+
+      const principalTitleCell = ws.getCell(`E${currentRow}`);
+      principalTitleCell.value = settings?.principal_title || 'PHÓ HIỆU TRƯỞNG';
+      principalTitleCell.font = { name: 'Times New Roman', size: 12, bold: true };
+      principalTitleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+
+      currentRow++;
+
+      ws.mergeCells(`E${currentRow}:I${currentRow}`);
+      const principalSubCell = ws.getCell(`E${currentRow}`);
+      principalSubCell.value = '(Ký, đóng dấu và ghi rõ họ tên)';
+      principalSubCell.font = { name: 'Times New Roman', size: 11, italic: true };
+      principalSubCell.alignment = { horizontal: 'center', vertical: 'middle' };
+
+      // Space for signatures
+      currentRow += 4;
+
+      ws.mergeCells(`A${currentRow}:D${currentRow}`);
+      ws.mergeCells(`E${currentRow}:I${currentRow}`);
+
+      const reporterNameCell = ws.getCell(`A${currentRow}`);
+      reporterNameCell.value = settings?.reporter_name || 'Trần Thanh Tú';
+      reporterNameCell.font = { name: 'Times New Roman', size: 12, bold: true };
+      reporterNameCell.alignment = { horizontal: 'center', vertical: 'middle' };
+
+      const principalNameCell = ws.getCell(`E${currentRow}`);
+      principalNameCell.value = settings?.principal_name || 'Kiều Việt Hưng';
+      principalNameCell.font = { name: 'Times New Roman', size: 12, bold: true };
+      principalNameCell.alignment = { horizontal: 'center', vertical: 'middle' };
+
+      currentRow++;
 
       // Generate binary and trigger download
       const buffer = await wb.xlsx.writeBuffer();
@@ -653,11 +716,11 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
         <div className="mt-8 grid grid-cols-2 gap-8 text-center font-serif text-black print-break-inside-avoid">
           <div>
             <div className="text-xs uppercase font-bold">
-              {settings?.reporter_title || 'NGƯỜI LẬP BIỂU'}
+              {settings?.reporter_title || 'GIÁO VIÊN'}
             </div>
             <div className="text-[11px] italic text-slate-600 mt-0.5">(Ký và ghi rõ họ tên)</div>
             <div className="h-16"></div>
-            <div className="font-bold text-sm">{settings?.reporter_name || 'Nguyễn Thị Hoa'}</div>
+            <div className="font-bold text-sm">{settings?.reporter_name || 'Trần Thanh Tú'}</div>
           </div>
 
           <div>
@@ -665,11 +728,11 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
               Ngày {dateParts.day} tháng {dateParts.month} năm {dateParts.year}
             </div>
             <div className="text-xs uppercase font-bold">
-              {settings?.principal_title || 'HIỆU TRƯỞNG'}
+              {settings?.principal_title || 'PHÓ HIỆU TRƯỞNG'}
             </div>
             <div className="text-[11px] italic text-slate-600 mt-0.5">(Ký, đóng dấu và ghi rõ họ tên)</div>
             <div className="h-16"></div>
-            <div className="font-bold text-sm">{settings?.principal_name || 'Lò Văn Thao'}</div>
+            <div className="font-bold text-sm">{settings?.principal_name || 'Kiều Việt Hưng'}</div>
           </div>
         </div>
 
