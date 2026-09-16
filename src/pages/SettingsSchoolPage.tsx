@@ -462,9 +462,14 @@ export const SettingsSchoolPage: React.FC = () => {
 
         {/* Section: Thông tin chữ ký */}
         <div className="pt-4 border-t border-slate-100">
-          <h2 className="text-xs font-bold text-blue-700 uppercase tracking-wider mb-4 flex items-center gap-2">
-            <UserCheck className="w-4 h-4" /> 4. THÔNG TIN CHỮ KÝ VÀ NGƯỜI LẬP BIỂU
-          </h2>
+          <div className="mb-4">
+            <h2 className="text-xs font-bold text-blue-700 uppercase tracking-wider flex items-center gap-2">
+              <UserCheck className="w-4 h-4" /> 4. THÔNG TIN CHỮ KÝ VÀ NGƯỜI LẬP BIỂU
+            </h2>
+            <p className="text-[11px] text-slate-500 mt-1 italic">
+              * Đây là thông tin mặc định. Bạn có thể cấu hình tên chữ ký riêng biệt cho từng phân hiệu tại phần <strong>Cài đặt Điểm trường / Phân hiệu</strong>.
+            </p>
+          </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>

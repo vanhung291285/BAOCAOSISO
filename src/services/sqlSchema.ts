@@ -64,6 +64,10 @@ CREATE TABLE IF NOT EXISTS public.campuses (
     id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
     name TEXT NOT NULL,
     active BOOLEAN NOT NULL DEFAULT true,
+    principal_name TEXT,
+    principal_title TEXT,
+    reporter_name TEXT,
+    reporter_title TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
 );
 
@@ -171,6 +175,22 @@ BEGIN
 
     BEGIN
         ALTER TABLE public.daily_reports ADD COLUMN locked_at TIMESTAMPTZ;
+    EXCEPTION WHEN duplicate_column THEN END;
+
+    BEGIN
+        ALTER TABLE public.campuses ADD COLUMN principal_name TEXT;
+    EXCEPTION WHEN duplicate_column THEN END;
+
+    BEGIN
+        ALTER TABLE public.campuses ADD COLUMN principal_title TEXT;
+    EXCEPTION WHEN duplicate_column THEN END;
+
+    BEGIN
+        ALTER TABLE public.campuses ADD COLUMN reporter_name TEXT;
+    EXCEPTION WHEN duplicate_column THEN END;
+
+    BEGIN
+        ALTER TABLE public.campuses ADD COLUMN reporter_title TEXT;
     EXCEPTION WHEN duplicate_column THEN END;
 END $$;
 

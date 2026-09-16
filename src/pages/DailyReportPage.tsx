@@ -82,6 +82,26 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
     return `${baseTitle} NGÀY ${dateParts.day} THÁNG ${dateParts.month} NĂM ${dateParts.year}`;
   }, [baseTitle, blankDateInTitle, dateParts]);
 
+  const signatureSettings = useMemo(() => {
+    if (selectedCampusId !== 'all') {
+      const c = campuses.find(c => c.id === selectedCampusId);
+      if (c) {
+        return {
+          reporter_title: c.reporter_title || settings?.reporter_title || 'GIÁO VIÊN',
+          reporter_name: c.reporter_name || settings?.reporter_name || 'Trần Thanh Tú',
+          principal_title: c.principal_title || settings?.principal_title || 'PHÓ HIỆU TRƯỞNG',
+          principal_name: c.principal_name || settings?.principal_name || 'Kiều Việt Hưng',
+        };
+      }
+    }
+    return {
+      reporter_title: settings?.reporter_title || 'GIÁO VIÊN',
+      reporter_name: settings?.reporter_name || 'Trần Thanh Tú',
+      principal_title: settings?.principal_title || 'PHÓ HIỆU TRƯỞNG',
+      principal_name: settings?.principal_name || 'Kiều Việt Hưng',
+    };
+  }, [selectedCampusId, campuses, settings]);
+
   const enabledIndicators = useMemo(() => {
     return indicators.filter((i) => i.enabled).sort((a, b) => a.sort_order - b.sort_order);
   }, [indicators]);
@@ -398,7 +418,7 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
       ws.mergeCells(`E${currentRow}:I${currentRow}`);
       
       const reporterTitleCell = ws.getCell(`A${currentRow}`);
-      reporterTitleCell.value = settings?.reporter_title || 'GIÁO VIÊN';
+      reporterTitleCell.value = signatureSettings.reporter_title;
       reporterTitleCell.font = { name: 'Times New Roman', size: 12, bold: true };
       reporterTitleCell.alignment = { horizontal: 'center', vertical: 'middle' };
 
@@ -418,7 +438,7 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
       reporterSubCell.alignment = { horizontal: 'center', vertical: 'middle' };
 
       const principalTitleCell = ws.getCell(`E${currentRow}`);
-      principalTitleCell.value = settings?.principal_title || 'PHÓ HIỆU TRƯỞNG';
+      principalTitleCell.value = signatureSettings.principal_title;
       principalTitleCell.font = { name: 'Times New Roman', size: 12, bold: true };
       principalTitleCell.alignment = { horizontal: 'center', vertical: 'middle' };
 
@@ -437,12 +457,12 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
       ws.mergeCells(`E${currentRow}:I${currentRow}`);
 
       const reporterNameCell = ws.getCell(`A${currentRow}`);
-      reporterNameCell.value = settings?.reporter_name || 'Trần Thanh Tú';
+      reporterNameCell.value = signatureSettings.reporter_name;
       reporterNameCell.font = { name: 'Times New Roman', size: 12, bold: true };
       reporterNameCell.alignment = { horizontal: 'center', vertical: 'middle' };
 
       const principalNameCell = ws.getCell(`E${currentRow}`);
-      principalNameCell.value = settings?.principal_name || 'Kiều Việt Hưng';
+      principalNameCell.value = signatureSettings.principal_name;
       principalNameCell.font = { name: 'Times New Roman', size: 12, bold: true };
       principalNameCell.alignment = { horizontal: 'center', vertical: 'middle' };
 
@@ -731,11 +751,11 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
         <div className="mt-8 grid grid-cols-2 gap-8 text-center font-serif text-black print-break-inside-avoid">
           <div>
             <div className="text-xs uppercase font-bold">
-              {settings?.reporter_title || 'GIÁO VIÊN'}
+              {signatureSettings.reporter_title}
             </div>
             <div className="text-[11px] italic text-slate-600 mt-0.5">(Ký và ghi rõ họ tên)</div>
             <div className="h-16"></div>
-            <div className="font-bold text-sm">{settings?.reporter_name || 'Trần Thanh Tú'}</div>
+            <div className="font-bold text-sm">{signatureSettings.reporter_name}</div>
           </div>
 
           <div>
@@ -743,11 +763,11 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
               Ngày {dateParts.day} tháng {dateParts.month} năm {dateParts.year}
             </div>
             <div className="text-xs uppercase font-bold">
-              {settings?.principal_title || 'PHÓ HIỆU TRƯỞNG'}
+              {signatureSettings.principal_title}
             </div>
             <div className="text-[11px] italic text-slate-600 mt-0.5">(Ký, đóng dấu và ghi rõ họ tên)</div>
             <div className="h-16"></div>
-            <div className="font-bold text-sm">{settings?.principal_name || 'Kiều Việt Hưng'}</div>
+            <div className="font-bold text-sm">{signatureSettings.principal_name}</div>
           </div>
         </div>
 

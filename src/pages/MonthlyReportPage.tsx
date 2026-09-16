@@ -85,6 +85,50 @@ export const MonthlyReportPage: React.FC = () => {
       ]);
     });
 
+    wsData.push([]);
+    wsData.push([]);
+
+    const signatureSettings = (() => {
+      if (selectedCampusId !== 'all') {
+        const c = campuses.find((cmp) => cmp.id === selectedCampusId);
+        if (c) {
+          return {
+            reporter_title: c.reporter_title || settings?.reporter_title || 'GIÁO VIÊN',
+            reporter_name: c.reporter_name || settings?.reporter_name || 'Trần Thanh Tú',
+            principal_title: c.principal_title || settings?.principal_title || 'PHÓ HIỆU TRƯỞNG',
+            principal_name: c.principal_name || settings?.principal_name || 'Kiều Việt Hưng',
+          };
+        }
+      }
+      return {
+        reporter_title: settings?.reporter_title || 'GIÁO VIÊN',
+        reporter_name: settings?.reporter_name || 'Trần Thanh Tú',
+        principal_title: settings?.principal_title || 'PHÓ HIỆU TRƯỞNG',
+        principal_name: settings?.principal_name || 'Kiều Việt Hưng',
+      };
+    })();
+
+    // Thêm phần chữ ký (Cột A - D cho người lập, Cột E - G cho Hiệu trưởng)
+    wsData.push([
+      signatureSettings.reporter_title, '', '', '',
+      `Ngày ..... tháng ..... năm ${selectedMonth.split('-')[0]}`
+    ]);
+    wsData.push([
+      '(Ký và ghi rõ họ tên)', '', '', '',
+      signatureSettings.principal_title
+    ]);
+    wsData.push([
+      '', '', '', '',
+      '(Ký, đóng dấu và ghi rõ họ tên)'
+    ]);
+    wsData.push([]);
+    wsData.push([]);
+    wsData.push([]);
+    wsData.push([
+      signatureSettings.reporter_name, '', '', '',
+      signatureSettings.principal_name
+    ]);
+
     const ws = XLSX.utils.aoa_to_sheet(wsData);
     XLSX.utils.book_append_sheet(wb, ws, 'Thang_' + selectedMonth);
     XLSX.writeFile(wb, `Bao_cao_thang_${selectedMonth}.xlsx`);

@@ -12,7 +12,14 @@ export const SettingsCampusesPage: React.FC = () => {
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   
-  const [formData, setFormData] = useState({ name: '', active: true });
+  const [formData, setFormData] = useState({ 
+    name: '', 
+    active: true,
+    principal_name: '',
+    principal_title: '',
+    reporter_name: '',
+    reporter_title: ''
+  });
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [isSaving, setIsSaving] = useState(false);
@@ -40,21 +47,42 @@ export const SettingsCampusesPage: React.FC = () => {
   const handleStartAdd = () => {
     setIsAdding(true);
     setEditingId(null);
-    setFormData({ name: '', active: true });
+    setFormData({ 
+      name: '', 
+      active: true,
+      principal_name: '',
+      principal_title: '',
+      reporter_name: '',
+      reporter_title: ''
+    });
     setErrorMsg('');
   };
 
   const handleStartEdit = (campus: Campus) => {
     setIsAdding(false);
     setEditingId(campus.id);
-    setFormData({ name: campus.name, active: campus.active });
+    setFormData({ 
+      name: campus.name, 
+      active: campus.active,
+      principal_name: campus.principal_name || '',
+      principal_title: campus.principal_title || '',
+      reporter_name: campus.reporter_name || '',
+      reporter_title: campus.reporter_title || ''
+    });
     setErrorMsg('');
   };
 
   const handleCancel = () => {
     setIsAdding(false);
     setEditingId(null);
-    setFormData({ name: '', active: true });
+    setFormData({ 
+      name: '', 
+      active: true,
+      principal_name: '',
+      principal_title: '',
+      reporter_name: '',
+      reporter_title: ''
+    });
     setErrorMsg('');
   };
 
@@ -85,6 +113,10 @@ export const SettingsCampusesPage: React.FC = () => {
           id: `campus_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
           name: trimmedName,
           active: formData.active,
+          principal_name: formData.principal_name.trim(),
+          principal_title: formData.principal_title.trim(),
+          reporter_name: formData.reporter_name.trim(),
+          reporter_title: formData.reporter_title.trim(),
           created_at: new Date().toISOString(),
         };
         await saveCampus(newCampus);
@@ -96,6 +128,10 @@ export const SettingsCampusesPage: React.FC = () => {
             ...existing,
             name: trimmedName,
             active: formData.active,
+            principal_name: formData.principal_name.trim(),
+            principal_title: formData.principal_title.trim(),
+            reporter_name: formData.reporter_name.trim(),
+            reporter_title: formData.reporter_title.trim(),
           };
           await saveCampus(updated);
           setSuccessMsg('Đã cập nhật phân hiệu thành công!');
@@ -168,7 +204,7 @@ export const SettingsCampusesPage: React.FC = () => {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
+            <div className="space-y-1.5 md:col-span-2">
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
                 Tên phân hiệu / Điểm trường
               </label>
@@ -182,8 +218,60 @@ export const SettingsCampusesPage: React.FC = () => {
               />
             </div>
             
-            <div className="space-y-1.5 flex flex-col justify-center pt-5">
-              <label className="flex items-center gap-2 cursor-pointer">
+            <div className="space-y-1.5">
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                Người lập biểu (Báo cáo)
+              </label>
+              <input
+                type="text"
+                value={formData.reporter_name}
+                onChange={(e) => setFormData({ ...formData, reporter_name: e.target.value })}
+                placeholder="VD: Tòng Văn A"
+                className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 text-sm"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                Chức danh lập biểu
+              </label>
+              <input
+                type="text"
+                value={formData.reporter_title}
+                onChange={(e) => setFormData({ ...formData, reporter_title: e.target.value })}
+                placeholder="VD: GIÁO VIÊN"
+                className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 text-sm"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                Người ký duyệt (BGH phụ trách)
+              </label>
+              <input
+                type="text"
+                value={formData.principal_name}
+                onChange={(e) => setFormData({ ...formData, principal_name: e.target.value })}
+                placeholder="VD: Lò Thị B"
+                className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 text-sm font-bold"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                Chức danh ký duyệt
+              </label>
+              <input
+                type="text"
+                value={formData.principal_title}
+                onChange={(e) => setFormData({ ...formData, principal_title: e.target.value })}
+                placeholder="VD: PHÓ HIỆU TRƯỞNG"
+                className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 text-sm"
+              />
+            </div>
+
+            <div className="space-y-1.5 flex flex-col justify-center pt-2 md:col-span-2 border-t border-slate-100">
+              <label className="flex items-center gap-2 cursor-pointer mt-2">
                 <input
                   type="checkbox"
                   checked={formData.active}

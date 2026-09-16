@@ -55,6 +55,10 @@ export interface Campus {
   id: string;
   name: string; // e.g. "Phân hiệu chính", "Phân hiệu Nà Sản", "Phân hiệu Suối Lư"
   active: boolean;
+  principal_name?: string;
+  principal_title?: string;
+  reporter_name?: string;
+  reporter_title?: string;
   created_at: string;
 }
 
