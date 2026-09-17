@@ -21,6 +21,9 @@ import {
   ChevronDown,
   User,
   AlertCircle,
+  ClipboardList,
+  X,
+  FileText,
 } from 'lucide-react';
 
 interface AttendanceInputPageProps {
@@ -75,13 +78,15 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
 
   // Existing report info
   const [existingReport, setExistingReport] = useState<DailyReport | null>(null);
-  const [isEditMode, setIsEditMode] = useState<boolean>(false);
+  const [isEditMode, setIsEditMode] = useState<boolean>(true);
   const [notes, setNotes] = useState<string>('');
   const [absentStudents, setAbsentStudents] = useState<AbsentStudent[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [saveSuccess, setSaveSuccess] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [quickFillNotice, setQuickFillNotice] = useState<string>('');
+  const [showQuickPaste, setShowQuickPaste] = useState<boolean>(false);
+  const [quickPasteText, setQuickPasteText] = useState<string>('');
 
   // Values map: indicator_group_id -> { total, present, absent }
   const [formValues, setFormValues] = useState<Record<string, GroupInputState>>({});
@@ -133,13 +138,42 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
         });
 
         setFormValues(initialMap);
-        // If report exists and already submitted, start in view mode unless user clicks edit
-        setIsEditMode(!report || isAdmin);
+        // Luôn cho phép GVCN và Admin nhập/chỉnh sửa khi báo cáo chưa bị khóa
+        const lockedState = Boolean(selectedClass?.is_locked || report?.status === 'LOCKED');
+        setIsEditMode(!lockedState || isAdmin);
       })
       .finally(() => setLoading(false));
-  }, [selectedClassId, reportDate, enabledIndicators, isAdmin]);
+  }, [selectedClassId, reportDate, enabledIndicators, isAdmin, selectedClass?.is_locked]);
 
-  // Handle field change with automatic calculation according to configured mode
+  // Đồng bộ tự động danh sách học sinh vắng theo số lượng vắng
+  const syncAbsentListToCount = (targetCount: number) => {
+    setAbsentStudents((prev) => {
+      if (targetCount === 0) {
+        // Nếu không vắng em nào và chưa nhập tên ai thì xóa trắng
+        const hasFilled = prev.some((s) => s.full_name && s.full_name.trim() !== '');
+        return hasFilled ? prev : [];
+      }
+      if (prev.length < targetCount) {
+        // Tự động bổ sung các dòng mới để GVCN nhập tên trực tiếp
+        const diff = targetCount - prev.length;
+        const newSlots: AbsentStudent[] = Array.from({ length: diff }, () => ({
+          full_name: '',
+          address: '',
+          reason: 'Ốm',
+        }));
+        return [...prev, ...newSlots];
+      } else if (prev.length > targetCount) {
+        // Chỉ lược bớt những ô chưa nhập tên
+        const filled = prev.filter((s) => s.full_name && s.full_name.trim() !== '');
+        if (filled.length <= targetCount) {
+          return prev.slice(0, targetCount);
+        }
+      }
+      return prev;
+    });
+  };
+
+  // Handle field change with automatic calculation
   const handleFieldChange = (
     groupId: string,
     field: 'total' | 'present' | 'absent',
@@ -160,24 +194,21 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
       const present = typeof next.present === 'number' ? next.present : 0;
       const absent = typeof next.absent === 'number' ? next.absent : 0;
 
-      if (inputMode === 'MODE_1_TOTAL_PRESENT') {
-        // Mode 1: Nhập Tổng số + Có mặt -> Tự động tính Vắng = Tổng số - Có mặt
-        if (field === 'total') {
-          if (typeof next.present === 'number') {
-            next.absent = Math.max(0, total - present);
-          }
-        } else if (field === 'present') {
-          next.absent = Math.max(0, total - (typeof numVal === 'number' ? numVal : 0));
+      if (field === 'total') {
+        if (typeof next.present === 'number') {
+          next.absent = Math.max(0, total - present);
+        } else if (typeof next.absent === 'number') {
+          next.present = Math.max(0, total - absent);
         }
-      } else if (inputMode === 'MODE_2_TOTAL_ABSENT') {
-        // Mode 2: Nhập Tổng số + Vắng -> Tự động tính Có mặt = Tổng số - Vắng
-        if (field === 'total') {
-          if (typeof next.absent === 'number') {
-            next.present = Math.max(0, total - absent);
-          }
-        } else if (field === 'absent') {
-          next.present = Math.max(0, total - (typeof numVal === 'number' ? numVal : 0));
-        }
+      } else if (field === 'present') {
+        next.absent = Math.max(0, total - (typeof numVal === 'number' ? numVal : 0));
+      } else if (field === 'absent') {
+        next.present = Math.max(0, total - (typeof numVal === 'number' ? numVal : 0));
+      }
+
+      // Tự động lập danh sách học sinh vắng nếu là nhóm chỉ tiêu chính (Sĩ số trường / lớp)
+      if (groupId === enabledIndicators[0]?.id && typeof next.absent === 'number') {
+        syncAbsentListToCount(next.absent);
       }
 
       return {
@@ -211,6 +242,15 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
         absent: actualAbsent,
       },
     }));
+
+    // Tự động lập danh sách học sinh vắng cho nhóm chỉ tiêu chính
+    if (groupId === enabledIndicators[0]?.id) {
+      if (actualAbsent === 0) {
+        setAbsentStudents([]);
+      } else {
+        syncAbsentListToCount(actualAbsent);
+      }
+    }
   };
 
   // 1-Tap Quick Action: "CẢ LỚP ĐỦ 100%"
@@ -235,7 +275,28 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
 
   // Absent student handlers
   const handleAddAbsentStudent = () => {
-    setAbsentStudents([...absentStudents, { full_name: '', address: '', reason: '' }]);
+    setAbsentStudents((prev) => [...prev, { full_name: '', address: '', reason: 'Ốm' }]);
+
+    // Tự động đồng bộ tăng số vắng ở chỉ tiêu chính nếu cần
+    if (enabledIndicators[0]) {
+      const mainId = enabledIndicators[0].id;
+      setFormValues((prevVals) => {
+        const cur = prevVals[mainId] || { total: 0, present: 0, absent: 0 };
+        const total = typeof cur.total === 'number' ? cur.total : 0;
+        const curAbsent = typeof cur.absent === 'number' ? cur.absent : 0;
+        const newAbsent = Math.max(curAbsent, absentStudents.length + 1);
+        const newPresent = Math.max(0, total - newAbsent);
+        return {
+          ...prevVals,
+          [mainId]: {
+            ...cur,
+            total,
+            absent: newAbsent,
+            present: newPresent,
+          },
+        };
+      });
+    }
   };
 
   const handleUpdateAbsentStudent = (index: number, field: keyof AbsentStudent, value: string) => {
@@ -248,6 +309,106 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
     const updated = [...absentStudents];
     updated.splice(index, 1);
     setAbsentStudents(updated);
+
+    // Tự động đồng bộ giảm số vắng ở chỉ tiêu chính nếu đang bằng số em trong danh sách
+    if (enabledIndicators[0]) {
+      const mainId = enabledIndicators[0].id;
+      setFormValues((prevVals) => {
+        const cur = prevVals[mainId] || { total: 0, present: 0, absent: 0 };
+        const total = typeof cur.total === 'number' ? cur.total : 0;
+        const curAbsent = typeof cur.absent === 'number' ? cur.absent : 0;
+        if (curAbsent > updated.length) {
+          const newAbsent = updated.length;
+          const newPresent = Math.max(0, total - newAbsent);
+          return {
+            ...prevVals,
+            [mainId]: {
+              ...cur,
+              total,
+              absent: newAbsent,
+              present: newPresent,
+            },
+          };
+        }
+        return prevVals;
+      });
+    }
+  };
+
+  // Dán nhanh danh sách học sinh vắng từ Zalo / Tin nhắn
+  const handleApplyQuickPaste = () => {
+    if (!quickPasteText.trim()) return;
+
+    const lines = quickPasteText
+      .split(/[\n;]+/)
+      .map((l) => l.trim())
+      .filter(Boolean);
+
+    const parsed: AbsentStudent[] = [];
+
+    lines.forEach((line) => {
+      // Bỏ số thứ tự 1., 2/ hoặc gạch đầu dòng -, *
+      const cleaned = line.replace(/^[\d]+[\.\/\)\-\:\s]+/, '').replace(/^[\-\*\•\+]\s*/, '').trim();
+      if (!cleaned) return;
+
+      let fullName = cleaned;
+      let reason = 'Ốm';
+      let address = '';
+
+      // Tách lý do trong ngoặc đơn () hoặc ngoặc vuông []
+      const parenMatch = cleaned.match(/^(.*?)\s*[\(\[](.*?)[\)\]]$/);
+      if (parenMatch) {
+        fullName = parenMatch[1].trim();
+        const inside = parenMatch[2].trim();
+        const parts = inside.split(/[,;\-]/).map((p) => p.trim());
+        reason = parts[0] || 'Ốm';
+        if (parts[1]) address = parts[1];
+      } else {
+        // Tách theo dấu gạch ngang hoặc hai chấm
+        const dashParts = cleaned.split(/[\-\:]/).map((p) => p.trim());
+        if (dashParts.length > 1) {
+          fullName = dashParts[0].trim();
+          reason = dashParts[1].trim() || 'Ốm';
+          if (dashParts[2]) address = dashParts[2].trim();
+        }
+      }
+
+      if (fullName) {
+        parsed.push({
+          full_name: fullName,
+          address: address || '',
+          reason: reason || 'Ốm',
+        });
+      }
+    });
+
+    if (parsed.length > 0) {
+      setAbsentStudents(parsed);
+      setShowQuickPaste(false);
+      setQuickPasteText('');
+      setQuickFillNotice(`Đã tự động thêm ${parsed.length} học sinh vắng vào danh sách!`);
+      setTimeout(() => setQuickFillNotice(''), 3500);
+
+      // Tự động đồng bộ sĩ số vắng ở nhóm chỉ tiêu chính
+      if (enabledIndicators[0]) {
+        const mainId = enabledIndicators[0].id;
+        setFormValues((prev) => {
+          const cur = prev[mainId] || { total: 0, present: 0, absent: 0 };
+          const total = typeof cur.total === 'number' ? cur.total : 0;
+          const newAbsent = parsed.length;
+          const newPresent = Math.max(0, total - newAbsent);
+          return {
+            ...prev,
+            [mainId]: {
+              ...cur,
+              total,
+              absent: newAbsent,
+              present: newPresent,
+            },
+          };
+        });
+      }
+    }
   };
 
   // Validation rules check
@@ -337,7 +498,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
 
       setExistingReport(res.report);
       setSaveSuccess(true);
-      setIsEditMode(false);
+      setIsEditMode(true);
 
       if (onSavedSuccess) {
         onSavedSuccess();
@@ -515,33 +676,29 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
       )}
 
       {/* Existing Report / Lock Notification Banner */}
-      {existingReport && !isEditMode && (
+      {existingReport && (
         <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div className="flex items-start gap-2.5">
             <CheckCircle2 className="w-5 h-5 text-emerald-600 mt-0.5 flex-shrink-0" />
             <div>
               <h3 className="text-xs sm:text-sm font-bold text-emerald-900">
-                Đã báo cáo ngày {reportDate.split('-').reverse().join('/')}
+                Đã có báo cáo ngày {reportDate.split('-').reverse().join('/')}
               </h3>
               <p className="text-[11px] text-emerald-700 mt-0.5">
-                Lớp <span className="font-bold">{selectedClass?.class_name}</span> ghi nhận lúc{' '}
-                {new Date(existingReport.updated_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                Lớp <span className="font-bold">{selectedClass?.class_name}</span> đã lưu lúc{' '}
+                {new Date(existingReport.updated_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}. Thầy/Cô có thể chỉnh sửa và cập nhật lại số liệu bất kỳ lúc nào.
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-2 pt-1 sm:pt-0">
-            {!isLocked ? (
-              <button
-                type="button"
-                onClick={() => setIsEditMode(true)}
-                className="w-full sm:w-auto h-9 px-3.5 rounded-xl text-xs font-bold text-emerald-800 bg-emerald-200 hover:bg-emerald-300 transition-colors flex items-center justify-center gap-1.5 active:scale-95 whitespace-nowrap"
-              >
-                Chỉnh sửa số liệu
-              </button>
-            ) : (
+            {isLocked ? (
               <span className="inline-flex items-center gap-1 text-xs font-bold px-3 py-1.5 rounded-lg bg-slate-200 text-slate-700 whitespace-nowrap">
                 <Lock className="w-3.5 h-3.5" /> Đã khóa
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg bg-emerald-100 text-emerald-800 whitespace-nowrap">
+                <Check className="w-3.5 h-3.5" /> Sẵn sàng cập nhật
               </span>
             )}
           </div>
@@ -619,8 +776,8 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                     <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
                       Chọn nhanh số em vắng:
                     </span>
-                    <span className="text-[10px] font-semibold text-slate-400">
-                      (Tự tính có mặt)
+                    <span className="text-[10px] font-semibold text-blue-600">
+                      (Tự động lập danh sách vắng)
                     </span>
                   </div>
                   <div className="grid grid-cols-4 gap-1.5">
@@ -672,7 +829,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                     pattern="[0-9]*"
                     min="0"
                     step="1"
-                    disabled={!isEditMode || (isLocked && !isAdmin)}
+                    disabled={isLocked && !isAdmin}
                     value={vals.total}
                     onChange={(e) => handleFieldChange(group.id, 'total', e.target.value)}
                     className="w-full text-center text-lg sm:text-2xl font-black text-slate-900 bg-white border border-slate-300 rounded-lg h-10 sm:h-11 focus:ring-2 focus:ring-blue-500 focus:outline-hidden disabled:bg-slate-100"
@@ -691,12 +848,12 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                     pattern="[0-9]*"
                     min="0"
                     step="1"
-                    disabled={!isEditMode || (isLocked && !isAdmin)}
+                    disabled={isLocked && !isAdmin}
                     value={vals.present}
                     onChange={(e) => handleFieldChange(group.id, 'present', e.target.value)}
                     className="w-full text-center text-lg sm:text-2xl font-black text-emerald-800 bg-white border border-emerald-300 rounded-lg h-10 sm:h-11 focus:ring-2 focus:ring-emerald-500 focus:outline-hidden disabled:bg-slate-100"
                   />
-                  {isEditMode && !isLocked ? (
+                  {!isLocked || isAdmin ? (
                     <div className="flex items-center justify-center gap-1.5 mt-1 w-full">
                       <button
                         type="button"
@@ -733,27 +890,20 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                     pattern="[0-9]*"
                     min="0"
                     step="1"
-                    disabled={
-                      !isEditMode ||
-                      (isLocked && !isAdmin) ||
-                      inputMode === 'MODE_1_TOTAL_PRESENT'
-                    }
+                    disabled={isLocked && !isAdmin}
                     value={vals.absent}
                     onChange={(e) => handleFieldChange(group.id, 'absent', e.target.value)}
                     className={`w-full text-center text-lg sm:text-2xl font-black rounded-lg h-10 sm:h-11 focus:ring-2 focus:ring-red-500 focus:outline-hidden ${
                       absentNum > 0 ? 'text-red-700 bg-red-100' : 'text-slate-700 bg-white'
                     } border border-red-300 disabled:bg-slate-100`}
                   />
-                  {inputMode === 'MODE_1_TOTAL_PRESENT' ? (
-                    <div className="text-[10px] text-blue-600 font-semibold mt-1 whitespace-nowrap">
-                      Tự động
-                    </div>
-                  ) : (
+                  {!isLocked || isAdmin ? (
                     <div className="flex items-center justify-center gap-1.5 mt-1 w-full">
                       <button
                         type="button"
                         onClick={() => adjustValue(group.id, 'absent', -1)}
                         className="flex-1 max-w-[36px] h-6 rounded-md bg-red-100 hover:bg-red-200 text-red-900 font-black text-xs flex items-center justify-center active:scale-90"
+                        title="Giảm 1"
                       >
                         -1
                       </button>
@@ -761,10 +911,13 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                         type="button"
                         onClick={() => adjustValue(group.id, 'absent', 1)}
                         className="flex-1 max-w-[36px] h-6 rounded-md bg-red-100 hover:bg-red-200 text-red-900 font-black text-xs flex items-center justify-center active:scale-90"
+                        title="Tăng 1"
                       >
                         +1
                       </button>
                     </div>
+                  ) : (
+                    <div className="text-[10px] text-red-600 mt-1 whitespace-nowrap">Vắng</div>
                   )}
                 </div>
               </div>
@@ -772,34 +925,75 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
           );
         })}
 
-        {/* 4. Absent Students Detail Cards (Tối ưu hóa bố cục, không tràn chữ trên mobile) */}
+        {/* 4. Absent Students Detail Cards */}
         <div className="bg-white rounded-2xl p-3.5 sm:p-5 border border-slate-200 shadow-xs space-y-3">
-          {/* Header tách biệt rõ ràng 2 tầng: Tầng 1 tiêu đề + nút thêm, Tầng 2 chú thích */}
+          {/* Header tách biệt rõ ràng 2 tầng: Tiêu đề + Các nút thao tác nhanh */}
           <div>
-            <div className="flex items-center justify-between gap-2">
-              <h4 className="text-xs sm:text-sm font-black text-slate-900 uppercase tracking-wider truncate">
-                HỌC SINH VẮNG & LÝ DO
-              </h4>
-              {isEditMode && (!isLocked || isAdmin) && (
-                <button
-                  type="button"
-                  onClick={handleAddAbsentStudent}
-                  className="h-8 px-2.5 rounded-lg text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 transition-all flex items-center gap-1 active:scale-95 flex-shrink-0 whitespace-nowrap"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Thêm em vắng</span>
-                </button>
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <div className="flex items-center gap-2">
+                <h4 className="text-xs sm:text-sm font-black text-slate-900 uppercase tracking-wider truncate">
+                  HỌC SINH VẮNG & LÝ DO
+                </h4>
+                {absentStudents.length > 0 && (
+                  <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-700 text-xs font-black">
+                    {absentStudents.length} em
+                  </span>
+                )}
+              </div>
+              {(!isLocked || isAdmin) && (
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setShowQuickPaste(true)}
+                    className="h-8 px-2.5 rounded-lg text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 transition-all flex items-center gap-1 active:scale-95 flex-shrink-0 whitespace-nowrap"
+                    title="Dán nhanh danh sách học sinh vắng từ tin nhắn Zalo"
+                  >
+                    <ClipboardList className="w-3.5 h-3.5" />
+                    <span>Dán từ Zalo</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleAddAbsentStudent}
+                    className="h-8 px-2.5 rounded-lg text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 transition-all flex items-center gap-1 active:scale-95 flex-shrink-0 whitespace-nowrap"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Thêm em vắng</span>
+                  </button>
+                </div>
               )}
             </div>
             <p className="text-[11px] text-slate-500 mt-1 leading-tight">
-              Ghi tên học sinh vắng để tự động điền vào cột "Tên học sinh" trên biểu mẫu
+              Hệ thống tự động đồng bộ số em vắng với sĩ số bên trên. Thầy/Cô nhập tên học sinh và lý do vắng để in biểu mẫu báo cáo.
             </p>
           </div>
 
           {absentStudents.length === 0 ? (
-            <div className="text-center py-4 bg-slate-50 rounded-xl border border-slate-200 border-dashed">
-              <UserX className="w-5 h-5 text-slate-300 mx-auto mb-1" />
-              <p className="text-xs text-slate-500 font-medium">Chưa có học sinh nào báo vắng</p>
+            <div className="text-center py-6 bg-slate-50 rounded-xl border border-slate-200 border-dashed space-y-2">
+              <UserX className="w-7 h-7 text-slate-300 mx-auto" />
+              <p className="text-xs text-slate-600 font-bold">Chưa có học sinh nào báo vắng (Lớp đi đủ 100%)</p>
+              <p className="text-[11px] text-slate-400 max-w-sm mx-auto">
+                Khi lớp có em vắng, Thầy/Cô chỉ cần bấm chọn số lượng ở mục "Chọn nhanh số em vắng" bên trên hoặc bấm nút dưới đây.
+              </p>
+              {(!isLocked || isAdmin) && (
+                <div className="flex items-center justify-center gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={handleAddAbsentStudent}
+                    className="h-8 px-3 rounded-lg text-xs font-bold text-blue-700 bg-blue-100 hover:bg-blue-200 transition-colors flex items-center gap-1.5"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Thêm 1 em vắng
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowQuickPaste(true)}
+                    className="h-8 px-3 rounded-lg text-xs font-bold text-emerald-700 bg-emerald-100 hover:bg-emerald-200 transition-colors flex items-center gap-1.5"
+                  >
+                    <ClipboardList className="w-3.5 h-3.5" />
+                    Dán từ Zalo
+                  </button>
+                </div>
+              )}
             </div>
           ) : (
             <div className="space-y-2.5">
@@ -815,12 +1009,12 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                       </span>
                       Học sinh vắng #{idx + 1}
                     </span>
-                    {isEditMode && (!isLocked || isAdmin) && (
+                    {(!isLocked || isAdmin) && (
                       <button
                         type="button"
                         onClick={() => handleRemoveAbsentStudent(idx)}
                         className="h-6 px-2 text-[11px] font-bold text-red-600 hover:bg-red-50 rounded flex items-center gap-1 transition-colors"
-                        title="Xóa"
+                        title="Xóa học sinh này"
                       >
                         <Trash2 className="w-3 h-3" />
                         <span>Xóa</span>
@@ -835,7 +1029,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                       </label>
                       <input
                         type="text"
-                        disabled={!isEditMode || (isLocked && !isAdmin)}
+                        disabled={isLocked && !isAdmin}
                         value={student.full_name}
                         onChange={(e) => handleUpdateAbsentStudent(idx, 'full_name', e.target.value)}
                         placeholder="VD: Quàng Văn Minh..."
@@ -849,7 +1043,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                       </label>
                       <input
                         type="text"
-                        disabled={!isEditMode || (isLocked && !isAdmin)}
+                        disabled={isLocked && !isAdmin}
                         value={student.address || ''}
                         onChange={(e) => handleUpdateAbsentStudent(idx, 'address', e.target.value)}
                         placeholder="VD: Bản Huổi Hốc..."
@@ -865,7 +1059,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                     </label>
                     <input
                       type="text"
-                      disabled={!isEditMode || (isLocked && !isAdmin)}
+                      disabled={isLocked && !isAdmin}
                       value={student.reason || ''}
                       onChange={(e) => handleUpdateAbsentStudent(idx, 'reason', e.target.value)}
                       placeholder="Gõ lý do hoặc bấm chọn bên dưới..."
@@ -873,7 +1067,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                     />
 
                     {/* Quick reason tag chips */}
-                    {isEditMode && (!isLocked || isAdmin) && (
+                    {(!isLocked || isAdmin) && (
                       <div className="flex flex-wrap gap-1.5 mt-1.5">
                         {QUICK_REASONS.map((reason) => (
                           <button
@@ -904,7 +1098,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
             </label>
             <input
               type="text"
-              disabled={!isEditMode || (isLocked && !isAdmin)}
+              disabled={isLocked && !isAdmin}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Ghi chú tổng thể tình hình học sinh của lớp..."
@@ -936,26 +1130,20 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
 
         {/* Desktop inline action buttons */}
         <div className="hidden sm:block pt-2">
-          {isEditMode && !isLocked ? (
+          {!isLocked ? (
             <button
               type="submit"
               disabled={!isValid}
               className="w-full h-12 rounded-2xl text-base font-black text-white bg-blue-600 hover:bg-blue-700 shadow-lg hover:shadow-xl focus:ring-4 focus:ring-blue-300 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               <Send className="w-5 h-5" />
-              <span>GỬI BÁO CÁO SĨ SỐ</span>
+              <span>{existingReport ? 'CẬP NHẬT BÁO CÁO SĨ SỐ' : 'GỬI BÁO CÁO SĨ SỐ'}</span>
             </button>
           ) : (
             <div className="flex gap-3">
-              {!isLocked && (
-                <button
-                  type="button"
-                  onClick={() => setIsEditMode(true)}
-                  className="flex-1 h-11 rounded-xl text-sm font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 transition-colors"
-                >
-                  Chỉnh sửa số liệu
-                </button>
-              )}
+              <div className="flex-1 h-11 rounded-xl text-sm font-bold text-slate-500 bg-slate-100 flex items-center justify-center gap-2">
+                <Lock className="w-4 h-4" /> Báo cáo đã khóa bởi BGH
+              </div>
               <button
                 type="button"
                 onClick={() => onNavigate && onNavigate('/dashboard')}
@@ -983,7 +1171,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
           )}
 
           <div className="flex items-center gap-2 flex-1 justify-end">
-            {isEditMode && !isLocked ? (
+            {!isLocked ? (
               <button
                 type="button"
                 onClick={() => handleSave()}
@@ -991,19 +1179,13 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                 className="h-11 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-black text-xs sm:text-sm shadow-md flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed flex-1 max-w-[240px] whitespace-nowrap"
               >
                 <Send className="w-4 h-4 flex-shrink-0" />
-                <span>GỬI BÁO CÁO SĨ SỐ</span>
+                <span>{existingReport ? 'CẬP NHẬT BÁO CÁO' : 'GỬI BÁO CÁO'}</span>
               </button>
             ) : (
               <div className="flex items-center gap-2 w-full justify-end">
-                {!isLocked && (
-                  <button
-                    type="button"
-                    onClick={() => setIsEditMode(true)}
-                    className="h-10 px-4 rounded-xl text-xs font-bold text-blue-700 bg-blue-50 border border-blue-200 flex-1 active:scale-95"
-                  >
-                    Sửa số liệu
-                  </button>
-                )}
+                <span className="text-xs font-bold text-slate-500 flex items-center gap-1">
+                  <Lock className="w-3.5 h-3.5" /> Đã khóa
+                </span>
                 <button
                   type="button"
                   onClick={() => onNavigate && onNavigate('/dashboard')}
@@ -1016,6 +1198,67 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
           </div>
         </div>
       </div>
+
+      {/* 6. Quick Paste Modal from Zalo */}
+      {showQuickPaste && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-4 sm:p-6 shadow-2xl space-y-4 border border-slate-200">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <div className="flex items-center gap-2 text-emerald-800">
+                <ClipboardList className="w-5 h-5 text-emerald-600" />
+                <h3 className="font-black text-sm sm:text-base">Dán nhanh từ Zalo / Tin nhắn phụ huynh</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowQuickPaste(false)}
+                className="w-8 h-8 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-600"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="text-xs text-slate-600 space-y-1">
+              <p>Thầy/Cô có thể copy và dán nguyên danh sách phụ huynh nhắn từ Zalo vào đây:</p>
+              <div className="p-2 bg-slate-50 rounded-lg border border-slate-200 text-[11px] text-slate-500 font-mono">
+                Ví dụ:<br />
+                1. Lò Văn Nam - Ốm (Bản Huổi Hốc)<br />
+                2. Cầm Thị Mai - Có phép<br />
+                3. Quàng Văn Minh (Gia đình có việc)
+              </div>
+            </div>
+
+            <textarea
+              rows={5}
+              value={quickPasteText}
+              onChange={(e) => setQuickPasteText(e.target.value)}
+              placeholder="Dán nội dung tin nhắn Zalo vào đây..."
+              className="w-full p-3 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-hidden font-sans"
+            />
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowQuickPaste(false);
+                  setQuickPasteText('');
+                }}
+                className="h-10 px-4 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-colors"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                onClick={handleApplyQuickPaste}
+                disabled={!quickPasteText.trim()}
+                className="h-10 px-4 rounded-xl text-xs font-black text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 transition-colors flex items-center gap-1.5 shadow-md active:scale-95"
+              >
+                <Check className="w-4 h-4" />
+                <span>Áp dụng danh sách</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
