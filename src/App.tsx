@@ -19,7 +19,7 @@ import { ProfilePage } from './pages/ProfilePage';
 import { Heart, School, ShieldAlert, Sparkles, BarChart3, ClipboardList, FileSpreadsheet, User, Code2 } from 'lucide-react';
 
 const AppContent: React.FC = () => {
-  const { currentUser, isGVCN } = useAuth();
+  const { currentUser, isGVCN, loading } = useAuth();
   const { settings, activeYear, classes } = useSchool();
 
   // Navigation state
@@ -44,8 +44,26 @@ const AppContent: React.FC = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  // Default routing for GVCN on app load
+  useEffect(() => {
+    if (!loading && currentUser?.role === 'GVCN' && currentPath === '/dashboard') {
+      setCurrentPath('/attendance');
+    }
+  }, [loading, currentUser, currentPath]);
+
   // Find user's assigned class name if GVCN
   const assignedClass = classes.find((c) => c.id === currentUser?.assigned_class_id);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-100/80 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+          <p className="text-sm font-medium text-slate-600">Đang tải dữ liệu hệ thống...</p>
+        </div>
+      </div>
+    );
+  }
 
   // If not logged in, show LoginPage
   if (!currentUser) {
