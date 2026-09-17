@@ -117,7 +117,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSele
   const handleLockAll = async () => {
     if (!isAdmin) return;
     const formattedDate = selectedDate.split('-').reverse().join('/');
-    if (window.confirm(`Bạn có chắc chắn muốn khóa tất cả các lớp cho ngày ${formattedDate}?\n\nCác lớp chưa báo cáo cũng sẽ bị khóa và không thể nhập số liệu được nữa.`)) {
+    const campusLabel = selectedCampus === 'all' ? 'toàn trường' : getCampusName(selectedCampus);
+    if (window.confirm(`Bạn có chắc chắn muốn khóa tất cả các lớp (${campusLabel}) cho ngày ${formattedDate}?\n\nCác lớp chưa báo cáo cũng sẽ bị khóa và không thể nhập số liệu được nữa.`)) {
       await StorageService.lockAllReportsForDate(selectedDate, true, currentUser!, selectedCampus);
       await loadData(selectedDate, selectedCampus);
     }
@@ -126,7 +127,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSele
   const handleUnlockAll = async () => {
     if (!isAdmin) return;
     const formattedDate = selectedDate.split('-').reverse().join('/');
-    if (window.confirm(`Bạn có chắc chắn muốn mở khóa tất cả các lớp cho ngày ${formattedDate}?`)) {
+    const campusLabel = selectedCampus === 'all' ? 'toàn trường' : getCampusName(selectedCampus);
+    if (window.confirm(`Bạn có chắc chắn muốn mở khóa tất cả các lớp (${campusLabel}) cho ngày ${formattedDate}?`)) {
       await StorageService.lockAllReportsForDate(selectedDate, false, currentUser!, selectedCampus);
       await loadData(selectedDate, selectedCampus);
     }
@@ -300,7 +302,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSele
                     type="button"
                     onClick={handleLockAll}
                     className="flex items-center gap-1 text-xs font-bold px-2 py-1.5 rounded-lg border border-red-200 bg-red-50 text-red-700 hover:bg-red-100 transition-colors shadow-2xs"
-                    title="Khóa tất cả các lớp cho ngày này"
+                    title={`Khóa tất cả các lớp (${selectedCampus === 'all' ? 'toàn trường' : getCampusName(selectedCampus)}) cho ngày này`}
                   >
                     <Lock className="w-3.5 h-3.5" />
                     <span className="hidden sm:inline">Khóa tất cả</span>
@@ -309,7 +311,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSele
                     type="button"
                     onClick={handleUnlockAll}
                     className="flex items-center gap-1 text-xs font-bold px-2 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 transition-colors shadow-2xs"
-                    title="Mở khóa tất cả các lớp cho ngày này"
+                    title={`Mở khóa tất cả các lớp (${selectedCampus === 'all' ? 'toàn trường' : getCampusName(selectedCampus)}) cho ngày này`}
                   >
                     <Unlock className="w-3.5 h-3.5" />
                     <span className="hidden sm:inline">Mở khóa</span>
