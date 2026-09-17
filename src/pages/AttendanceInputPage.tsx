@@ -877,6 +877,12 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                   </button>
                 )}
               </div>
+              
+              <div className="pt-2">
+                <p className="text-[10px] sm:text-[11px] text-slate-400 font-medium tracking-wide">
+                  Ứng dụng được phát triển bởi: <span className="font-bold text-slate-500">Vũ Hùng-SĐT: 0984246993 </span>
+                </p>
+              </div>
             </div>
           </div>
         </div>
