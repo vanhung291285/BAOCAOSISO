@@ -112,32 +112,88 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
     setQuickFillNotice('');
 
     StorageService.getDailyReport(selectedClassId, reportDate)
-      .then(({ report, values }) => {
+      .then(async ({ report, values }) => {
         setExistingReport(report || null);
         setNotes(report?.notes || '');
         setAbsentStudents(report?.absent_students || []);
 
         const initialMap: Record<string, GroupInputState> = {};
 
-        enabledIndicators.forEach((ig) => {
-          const val = values.find((v) => v.indicator_group_id === ig.id);
-          if (val) {
-            initialMap[ig.id] = {
-              total: val.total_count,
-              present: val.present_count,
-              absent: val.absent_count,
-            };
-          } else {
-            // Default to 0 so the user has to fill them in
-            initialMap[ig.id] = {
-              total: 0,
-              present: 0,
-              absent: 0,
-            };
+        // 1. Nếu ngày này đã có báo cáo và có dữ liệu sĩ số
+        const hasExistingValidValues = values && values.some((v) => (v.total_count || 0) > 0);
+        if (report && hasExistingValidValues) {
+          enabledIndicators.forEach((ig) => {
+            const val = values.find((v) => v.indicator_group_id === ig.id);
+            if (val) {
+              initialMap[ig.id] = {
+                total: val.total_count,
+                present: val.present_count,
+                absent: val.absent_count,
+              };
+            } else {
+              initialMap[ig.id] = {
+                total: '',
+                present: '',
+                absent: '',
+              };
+            }
+          });
+          setFormValues(initialMap);
+        } else {
+          // 2. Chưa có báo cáo cho ngày này: Tìm báo cáo gần nhất trước đó của lớp để gợi ý sĩ số tổng
+          try {
+            const latestPrev = await StorageService.getLatestReportForClass(selectedClassId, reportDate);
+            if (latestPrev.report && latestPrev.values.length > 0) {
+              let suggestedTotal = 0;
+              enabledIndicators.forEach((ig) => {
+                const prevVal = latestPrev.values.find((v) => v.indicator_group_id === ig.id);
+                if (prevVal && prevVal.total_count > 0) {
+                  initialMap[ig.id] = {
+                    total: prevVal.total_count,
+                    present: prevVal.total_count, // Mặc định đủ cả lớp từ sĩ số chuẩn
+                    absent: 0,
+                  };
+                  if (ig.id === enabledIndicators[0]?.id) {
+                    suggestedTotal = prevVal.total_count;
+                  }
+                } else {
+                  initialMap[ig.id] = {
+                    total: 0,
+                    present: 0,
+                    absent: 0,
+                  };
+                }
+              });
+              setFormValues(initialMap);
+              if (suggestedTotal > 0) {
+                setQuickFillNotice(
+                  `Đã tự động lấy Sĩ số (${suggestedTotal} học sinh) từ ngày gần nhất. Thầy/Cô hãy kiểm tra lại và gửi báo cáo.`
+                );
+                setTimeout(() => setQuickFillNotice(''), 5000);
+              }
+            } else {
+              // Lớp chưa từng có báo cáo nào: Để trống để bắt buộc GVCN phải nhập số liệu
+              enabledIndicators.forEach((ig) => {
+                initialMap[ig.id] = {
+                  total: '',
+                  present: '',
+                  absent: '',
+                };
+              });
+              setFormValues(initialMap);
+            }
+          } catch (e) {
+            enabledIndicators.forEach((ig) => {
+              initialMap[ig.id] = {
+                total: '',
+                present: '',
+                absent: '',
+              };
+            });
+            setFormValues(initialMap);
           }
-        });
+        }
 
-        setFormValues(initialMap);
         // Luôn cho phép GVCN và Admin nhập/chỉnh sửa khi báo cáo chưa bị khóa
         const lockedState = Boolean(selectedClass?.is_locked || report?.status === 'LOCKED');
         setIsEditMode(!lockedState || isAdmin);
@@ -229,10 +285,15 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
   // Quick preset for absentee count (0, 1, 2, 3 vắng)
   const setAbsentPreset = (groupId: string, absentCount: number) => {
     const current = formValues[groupId] || { total: '', present: '', absent: '' };
-    const total = typeof current.total === 'number' ? current.total : 0;
+    const total = typeof current.total === 'number' ? current.total : Number(current.total) || 0;
+    if (total <= 0) {
+      setErrorMessage('Vui lòng nhập Tổng số học sinh của lớp trước khi chọn số em vắng.');
+      return;
+    }
     const actualAbsent = Math.min(absentCount, total);
     const actualPresent = Math.max(0, total - actualAbsent);
 
+    setErrorMessage('');
     setFormValues((prev) => ({
       ...prev,
       [groupId]: {
@@ -255,26 +316,40 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
 
   // 1-Tap Quick Action: "CẢ LỚP ĐỦ 100%"
   const handleSetFullAttendance = () => {
+    const mainGroup = enabledIndicators[0];
+    const mainTotal = mainGroup ? Number(formValues[mainGroup.id]?.total) || 0 : 0;
+    if (mainTotal <= 0) {
+      setErrorMessage('Vui lòng nhập Sĩ số học sinh của lớp (Tổng số > 0) trước khi bấm Cả lớp đi đủ.');
+      return;
+    }
+
     setFormValues((prev) => {
       const nextMap: Record<string, GroupInputState> = {};
       enabledIndicators.forEach((ig) => {
         const cur = prev[ig.id] || { total: '', present: '', absent: '' };
-        const total = cur.total;
+        const total = typeof cur.total === 'number' ? cur.total : Number(cur.total) || 0;
         nextMap[ig.id] = {
           total,
           present: total,
-          absent: typeof total === 'number' ? 0 : '',
+          absent: 0,
         };
       });
       return nextMap;
     });
     setAbsentStudents([]);
+    setErrorMessage('');
     setQuickFillNotice('Đã áp dụng: Cả lớp đi học đầy đủ 100% (Vắng: 0)!');
     setTimeout(() => setQuickFillNotice(''), 3500);
   };
 
   // Absent student handlers
   const handleAddAbsentStudent = () => {
+    const mainGroup = enabledIndicators[0];
+    const mainTotal = mainGroup ? Number(formValues[mainGroup.id]?.total) || 0 : 0;
+    if (mainTotal <= 0) {
+      setErrorMessage('Vui lòng nhập Sĩ số lớp (Tổng số > 0) trước khi thêm học sinh vắng.');
+      return;
+    }
     setAbsentStudents((prev) => [...prev, { full_name: '', address: '', reason: 'Ốm' }]);
 
     // Tự động đồng bộ tăng số vắng ở chỉ tiêu chính nếu cần
@@ -415,13 +490,38 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
   const validationErrors = useMemo(() => {
     const errors: string[] = [];
 
+    // 1. Kiểm tra nhóm chỉ tiêu chính (Sĩ số học sinh cả lớp)
+    const mainGroup = enabledIndicators[0];
+    const mainVals = mainGroup ? formValues[mainGroup.id] : null;
+    const mainTotal = mainVals && typeof mainVals.total === 'number' ? mainVals.total : Number(mainVals?.total) || 0;
+
+    if (!mainVals || mainVals.total === '' || mainTotal <= 0) {
+      errors.push('Chưa nhập số liệu sĩ số: Tổng số học sinh của lớp phải lớn hơn 0.');
+    }
+
+    let hasAnyPositiveTotal = false;
+
     enabledIndicators.forEach((ig) => {
       const gVals = formValues[ig.id];
       if (!gVals) return;
 
-      const total = typeof gVals.total === 'number' ? gVals.total : 0;
-      const present = typeof gVals.present === 'number' ? gVals.present : 0;
-      const absent = typeof gVals.absent === 'number' ? gVals.absent : 0;
+      const rawTotal = gVals.total;
+      const rawPresent = gVals.present;
+      const rawAbsent = gVals.absent;
+
+      // Không cho phép để trống ô số liệu
+      if (rawTotal === '' || rawPresent === '' || rawAbsent === '') {
+        errors.push(`Nhóm "${ig.name}": Vui lòng điền đầy đủ các ô số liệu (nhập số 0 nếu không có).`);
+        return;
+      }
+
+      const total = typeof rawTotal === 'number' ? rawTotal : Number(rawTotal) || 0;
+      const present = typeof rawPresent === 'number' ? rawPresent : Number(rawPresent) || 0;
+      const absent = typeof rawAbsent === 'number' ? rawAbsent : Number(rawAbsent) || 0;
+
+      if (total > 0) {
+        hasAnyPositiveTotal = true;
+      }
 
       if (total < 0 || present < 0 || absent < 0) {
         errors.push(`Nhóm "${ig.name}": Số lượng không được nhỏ hơn 0.`);
@@ -435,12 +535,16 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
         errors.push(`Nhóm "${ig.name}": Số vắng (${absent}) vượt quá tổng số (${total}).`);
       }
 
-      if (present + absent !== total) {
+      if (total > 0 && present + absent !== total) {
         errors.push(
           `Nhóm "${ig.name}": Có mặt (${present}) + Vắng (${absent}) = ${present + absent}, phải bằng Tổng số (${total}).`
         );
       }
     });
+
+    if (!hasAnyPositiveTotal && errors.length === 0) {
+      errors.push('Thầy/Cô chưa nhập số liệu báo cáo. Vui lòng nhập sĩ số trước khi gửi.');
+    }
 
     return errors;
   }, [formValues, enabledIndicators]);
@@ -453,9 +557,9 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
     if (!mainGroup) return null;
     const v = formValues[mainGroup.id];
     return {
-      total: typeof v?.total === 'number' ? v.total : 0,
-      present: typeof v?.present === 'number' ? v.present : 0,
-      absent: typeof v?.absent === 'number' ? v.absent : 0,
+      total: typeof v?.total === 'number' ? v.total : Number(v?.total) || 0,
+      present: typeof v?.present === 'number' ? v.present : Number(v?.present) || 0,
+      absent: typeof v?.absent === 'number' ? v.absent : Number(v?.absent) || 0,
     };
   }, [enabledIndicators, formValues]);
 
@@ -464,8 +568,20 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
     if (e) e.preventDefault();
     setErrorMessage('');
 
-    if (!isValid) {
-      setErrorMessage('Vui lòng kiểm tra lại cảnh báo trước khi lưu.');
+    // Kiểm tra bắt buộc có sĩ số học sinh
+    const mainGroup = enabledIndicators[0];
+    const mainVals = mainGroup ? formValues[mainGroup.id] : null;
+    const mainTotal = mainVals && typeof mainVals.total === 'number' ? mainVals.total : Number(mainVals?.total) || 0;
+
+    if (!isValid || mainTotal <= 0) {
+      setErrorMessage(
+        validationErrors[0] ||
+        'Không thể gửi báo cáo: Thầy/Cô chưa nhập số liệu sĩ số học sinh của lớp (Tổng số học sinh phải lớn hơn 0)!'
+      );
+      const errorEl = document.getElementById('validation-error-box');
+      if (errorEl) {
+        errorEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
       return;
     }
 
@@ -508,7 +624,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err: any) {
       console.error('Error saving report:', err);
-      setErrorMessage('Không thể lưu báo cáo. Vui lòng kiểm tra kết nối mạng.');
+      setErrorMessage(err?.message || 'Không thể lưu báo cáo. Vui lòng kiểm tra lại số liệu.');
     }
   };
 
@@ -728,18 +844,22 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
         {/* Indicator Group Cards (Học sinh toàn trường & Bán trú) */}
         {enabledIndicators.map((group, idx) => {
           const vals = formValues[group.id] || { total: '', present: '', absent: '' };
-          const totalNum = typeof vals.total === 'number' ? vals.total : 0;
-          const presentNum = typeof vals.present === 'number' ? vals.present : 0;
-          const absentNum = typeof vals.absent === 'number' ? vals.absent : 0;
+          const totalNum = typeof vals.total === 'number' ? vals.total : Number(vals.total) || 0;
+          const presentNum = typeof vals.present === 'number' ? vals.present : Number(vals.present) || 0;
+          const absentNum = typeof vals.absent === 'number' ? vals.absent : Number(vals.absent) || 0;
           const presentRate = totalNum > 0 ? (presentNum / totalNum) * 100 : 0;
 
-          const isGroupValid = totalNum >= 0 && presentNum >= 0 && absentNum >= 0 && presentNum + absentNum === totalNum;
+          const isMain = idx === 0;
+          const hasEmptyField = vals.total === '' || vals.present === '' || vals.absent === '';
+          const isGroupValid = isMain
+            ? (totalNum > 0 && presentNum >= 0 && absentNum >= 0 && presentNum + absentNum === totalNum && !hasEmptyField)
+            : (totalNum >= 0 && presentNum >= 0 && absentNum >= 0 && presentNum + absentNum === totalNum && !hasEmptyField);
 
           return (
             <div
               key={group.id}
               className={`bg-white rounded-2xl p-3.5 sm:p-5 border shadow-xs transition-all ${
-                isGroupValid ? 'border-slate-200' : 'border-red-300 ring-2 ring-red-100'
+                isGroupValid ? 'border-slate-200' : 'border-amber-300 ring-2 ring-amber-100'
               }`}
             >
               {/* Group Title & Attendance Badges */}
@@ -753,6 +873,11 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                       ? `LỚP ${selectedClass.class_name}`
                       : group.name.toUpperCase()}
                   </h3>
+                  {isMain && (vals.total === '' || totalNum <= 0) && (
+                    <span className="text-[10px] font-bold text-amber-700 bg-amber-100 border border-amber-300 px-2 py-0.5 rounded-full whitespace-nowrap">
+                      Chưa nhập sĩ số
+                    </span>
+                  )}
                 </div>
 
                 {group.show_percentage && totalNum > 0 && (
@@ -819,7 +944,11 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
               {/* Number Inputs Grid - Cân đối, chuẩn tỉ lệ trên mọi điện thoại */}
               <div className="grid grid-cols-3 gap-2">
                 {/* 1. Tổng số */}
-                <div className="bg-slate-50 p-2 sm:p-3 rounded-xl border border-slate-200 flex flex-col items-center justify-between text-center">
+                <div className={`p-2 sm:p-3 rounded-xl border flex flex-col items-center justify-between text-center transition-all ${
+                  idx === 0 && (vals.total === '' || totalNum <= 0)
+                    ? 'bg-amber-50/70 border-amber-300 ring-2 ring-amber-100'
+                    : 'bg-slate-50 border-slate-200'
+                }`}>
                   <label className="block text-[10px] sm:text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1 whitespace-nowrap">
                     Tổng số
                   </label>
@@ -829,12 +958,23 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                     pattern="[0-9]*"
                     min="0"
                     step="1"
+                    placeholder="0"
                     disabled={isLocked && !isAdmin}
                     value={vals.total}
                     onChange={(e) => handleFieldChange(group.id, 'total', e.target.value)}
-                    className="w-full text-center text-lg sm:text-2xl font-black text-slate-900 bg-white border border-slate-300 rounded-lg h-10 sm:h-11 focus:ring-2 focus:ring-blue-500 focus:outline-hidden disabled:bg-slate-100"
+                    className={`w-full text-center text-lg sm:text-2xl font-black bg-white border rounded-lg h-10 sm:h-11 focus:ring-2 focus:outline-hidden disabled:bg-slate-100 ${
+                      idx === 0 && (vals.total === '' || totalNum <= 0)
+                        ? 'border-amber-400 text-amber-900 focus:ring-amber-500'
+                        : 'border-slate-300 text-slate-900 focus:ring-blue-500'
+                    }`}
                   />
-                  <div className="text-[10px] text-slate-400 mt-1 whitespace-nowrap">Sĩ số lớp</div>
+                  <div className={`text-[10px] mt-1 whitespace-nowrap ${
+                    idx === 0 && (vals.total === '' || totalNum <= 0)
+                      ? 'text-amber-700 font-extrabold'
+                      : 'text-slate-400'
+                  }`}>
+                    {idx === 0 && (vals.total === '' || totalNum <= 0) ? 'Bắt buộc nhập' : 'Sĩ số lớp'}
+                  </div>
                 </div>
 
                 {/* 2. Có mặt */}
@@ -1109,10 +1249,10 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
 
         {/* Validation Errors Box */}
         {validationErrors.length > 0 && (
-          <div className="bg-red-50 border-2 border-red-300 rounded-2xl p-4 space-y-1.5 animate-in shake duration-150">
+          <div id="validation-error-box" className="bg-red-50 border-2 border-red-300 rounded-2xl p-4 space-y-1.5 animate-in shake duration-150">
             <div className="flex items-center gap-2 text-red-800 font-bold text-xs sm:text-sm">
               <ShieldAlert className="w-4 h-4 text-red-600 flex-shrink-0" />
-              <span>Số liệu chưa hợp lệ:</span>
+              <span>Chưa thể gửi báo cáo - Vui lòng kiểm tra lại:</span>
             </div>
             <ul className="list-disc list-inside text-xs text-red-700 font-medium space-y-1">
               {validationErrors.map((err, i) => (
@@ -1134,10 +1274,18 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
             <button
               type="submit"
               disabled={!isValid}
-              className="w-full h-12 rounded-2xl text-base font-black text-white bg-blue-600 hover:bg-blue-700 shadow-lg hover:shadow-xl focus:ring-4 focus:ring-blue-300 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              className={`w-full h-12 rounded-2xl text-base font-black transition-all flex items-center justify-center gap-2 ${
+                isValid
+                  ? 'text-white bg-blue-600 hover:bg-blue-700 shadow-lg hover:shadow-xl focus:ring-4 focus:ring-blue-300 active:scale-99 cursor-pointer'
+                  : 'text-slate-500 bg-slate-200 border border-slate-300 cursor-not-allowed opacity-80'
+              }`}
             >
               <Send className="w-5 h-5" />
-              <span>{existingReport ? 'CẬP NHẬT BÁO CÁO SĨ SỐ' : 'GỬI BÁO CÁO SĨ SỐ'}</span>
+              <span>
+                {isValid
+                  ? (existingReport ? 'CẬP NHẬT BÁO CÁO SĨ SỐ' : 'GỬI BÁO CÁO SĨ SỐ')
+                  : 'VUI LÒNG NHẬP ĐỦ SỐ LIỆU ĐỂ GỬI BÁO CÁO'}
+              </span>
             </button>
           ) : (
             <div className="flex gap-3">
@@ -1176,10 +1324,18 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                 type="button"
                 onClick={() => handleSave()}
                 disabled={!isValid}
-                className="h-11 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-black text-xs sm:text-sm shadow-md flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed flex-1 max-w-[240px] whitespace-nowrap"
+                className={`h-11 px-4 rounded-xl font-black text-xs sm:text-sm shadow-md flex items-center justify-center gap-2 flex-1 max-w-[240px] whitespace-nowrap transition-all ${
+                  isValid
+                    ? 'bg-blue-600 hover:bg-blue-700 active:scale-95 text-white'
+                    : 'bg-slate-200 text-slate-500 border border-slate-300 cursor-not-allowed opacity-80'
+                }`}
               >
                 <Send className="w-4 h-4 flex-shrink-0" />
-                <span>{existingReport ? 'CẬP NHẬT BÁO CÁO' : 'GỬI BÁO CÁO'}</span>
+                <span>
+                  {isValid
+                    ? (existingReport ? 'CẬP NHẬT BÁO CÁO' : 'GỬI BÁO CÁO')
+                    : 'CHƯA NHẬP ĐỦ SỐ LIỆU'}
+                </span>
               </button>
             ) : (
               <div className="flex items-center gap-2 w-full justify-end">
