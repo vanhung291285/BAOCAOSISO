@@ -830,21 +830,49 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
         </div>
       )}
 
+      {/* Success Modal Window */}
       {saveSuccess && (
-        <div className="relative overflow-hidden bg-gradient-to-r from-emerald-500 to-teal-600 rounded-3xl p-4 sm:p-5 shadow-xl border border-emerald-400 animate-in slide-in-from-top-4 fade-in zoom-in-95 duration-500">
-          <div className="absolute -top-10 -right-10 w-32 h-32 bg-white opacity-10 rounded-full blur-3xl"></div>
-          <div className="absolute -bottom-10 -left-10 w-24 h-24 bg-white opacity-10 rounded-full blur-2xl"></div>
-          <div className="relative z-10 flex items-center gap-3 sm:gap-4">
-            <div className="w-12 h-12 sm:w-14 sm:h-14 bg-white rounded-full flex items-center justify-center flex-shrink-0 shadow-lg animate-in zoom-in duration-500 delay-150">
-              <CheckCircle2 className="w-7 h-7 sm:w-8 sm:h-8 text-emerald-600" />
-            </div>
-            <div className="text-white">
-              <h3 className="font-black text-sm sm:text-lg tracking-wide drop-shadow-sm flex items-center gap-1.5 mb-0.5">
-                GỬI BÁO CÁO THÀNH CÔNG <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 text-yellow-300 animate-pulse" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl animate-in zoom-in-95 duration-500 relative">
+            <div className="bg-gradient-to-br from-emerald-500 to-teal-600 p-6 sm:p-8 text-center relative overflow-hidden">
+              <div className="absolute -top-10 -right-10 w-32 h-32 bg-white opacity-10 rounded-full blur-3xl"></div>
+              <div className="absolute -bottom-10 -left-10 w-24 h-24 bg-white opacity-10 rounded-full blur-2xl"></div>
+              
+              <div className="w-16 h-16 sm:w-20 sm:h-20 bg-white rounded-full flex items-center justify-center shadow-xl mx-auto mb-4 relative z-10 animate-bounce">
+                <CheckCircle2 className="w-10 h-10 sm:w-12 sm:h-12 text-emerald-600" />
+              </div>
+              
+              <h3 className="font-black text-xl sm:text-2xl text-white tracking-wide drop-shadow-sm flex items-center justify-center gap-2 relative z-10">
+                THÀNH CÔNG <Sparkles className="w-5 h-5 sm:w-6 sm:h-6 text-yellow-300 animate-pulse" />
               </h3>
-              <p className="text-[11px] sm:text-sm font-medium text-emerald-50 leading-relaxed drop-shadow-sm">
-                Dữ liệu sĩ số của lớp đã được lưu và đồng bộ lên hệ thống toàn trường.
+            </div>
+            
+            <div className="p-6 text-center space-y-5">
+              <p className="text-sm font-medium text-slate-600 leading-relaxed">
+                Báo cáo sĩ số của lớp <span className="font-bold text-slate-900">{selectedClass?.class_name}</span> đã được lưu và đồng bộ thành công lên hệ thống toàn trường.
               </p>
+              
+              <div className="flex flex-col gap-3">
+                <button
+                  type="button"
+                  onClick={() => setSaveSuccess(false)}
+                  className="w-full py-3.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl shadow-md transition-all active:scale-98"
+                >
+                  Đóng cửa sổ
+                </button>
+                {onNavigate && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSaveSuccess(false);
+                      onNavigate('/dashboard');
+                    }}
+                    className="w-full py-3.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm rounded-xl transition-all active:scale-98"
+                  >
+                    Về Bảng điều khiển
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>
