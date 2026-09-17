@@ -65,21 +65,23 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
   const [yearError, setYearError] = useState('');
   const [isSavingYear, setIsSavingYear] = useState(false);
 
-  // Initialize selected class & teacher
+  // Initialize selected class & teacher (REMOVED AUTO-SELECTION)
   useEffect(() => {
-    if (classes.length > 0 && !selectedClassId) {
-      // Find 6A1 or 6A9 or first class
-      const defaultCls = classes.find((c) => c.class_name === '6A1') || classes[0];
-      setSelectedClassId(defaultCls.id);
-    }
-  }, [classes, selectedClassId]);
+    // No longer auto-selecting a class on mount to force user explicit choice.
+  }, []);
 
   // Sync teacher when selectedClassId changes
   useEffect(() => {
-    if (!selectedClassId) return;
+    if (!selectedClassId) {
+      setSelectedTeacherId('');
+      return;
+    }
 
     const currentCls = classes.find((c) => c.id === selectedClassId);
-    if (!currentCls) return;
+    if (!currentCls) {
+      setSelectedTeacherId('');
+      return;
+    }
 
     // Find teacher assigned to this class
     let teacher = allUsers.find(
@@ -433,6 +435,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                     onChange={(e) => setSelectedClassId(e.target.value)}
                     className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-bold text-slate-800 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors shadow-2xs"
                   >
+                    <option value="" disabled>-- Vui lòng chọn lớp học --</option>
                     {grade6Classes.length > 0 && (
                       <optgroup label="Khối 6">
                         {grade6Classes.map((cls) => (
@@ -486,6 +489,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                     onChange={(e) => setSelectedTeacherId(e.target.value)}
                     className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-semibold text-slate-800 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors shadow-2xs"
                   >
+                    <option value="" disabled>-- Vui lòng chọn giáo viên chủ nhiệm --</option>
                     {gvcnUsers.map((teacher) => {
                       const teacherClass = classes.find((c) => c.id === teacher.assigned_class_id);
                       return (
