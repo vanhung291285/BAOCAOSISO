@@ -97,7 +97,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSele
     if (!isAdmin || !row.report) return;
     const newLockState = row.report.status !== 'LOCKED';
     await StorageService.lockReport(row.report.id, newLockState, currentUser!);
-    await loadData(selectedDate);
+    await loadData(selectedDate, selectedCampus);
   };
 
   // Filtered rows
