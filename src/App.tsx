@@ -83,7 +83,7 @@ const AppContent: React.FC = () => {
       <Navbar currentPath={currentPath} onNavigate={handleNavigate} />
 
       {/* Main Content Area - Optimized spacing for phones */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-3.5 sm:py-8">
+      <main className="flex-1 max-w-[1600px] w-full mx-auto px-3 sm:px-6 lg:px-8 py-3.5 sm:py-8">
         {currentPath === '/dashboard' && (
           <DashboardPage
             onNavigate={handleNavigate}
@@ -129,7 +129,7 @@ const AppContent: React.FC = () => {
 
       {/* App Footer (Hidden when printing reports) */}
       <footer className="mt-auto border-t border-slate-200 bg-white py-5 no-print text-xs text-slate-500">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row items-center justify-between gap-3 text-center md:text-left">
+        <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row items-center justify-between gap-3 text-center md:text-left">
           <div className="flex flex-wrap items-center justify-center md:justify-start gap-2">
             <School className="w-4 h-4 text-blue-700 flex-shrink-0" />
             <span className="font-extrabold text-slate-800">

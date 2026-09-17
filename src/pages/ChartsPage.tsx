@@ -32,6 +32,7 @@ type TimeFilter = 'TODAY' | 'WEEK' | 'MONTH' | 'YEAR';
 
 export const ChartsPage: React.FC = () => {
   const { settings, classes } = useSchool();
+  const { isGVCN, currentUser } = useAuth();
   const [timeFilter, setTimeFilter] = useState<TimeFilter>('TODAY');
   const [selectedDate, setSelectedDate] = useState(() => {
     const d = new Date();

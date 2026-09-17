@@ -36,7 +36,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentPath, onNavigate }) => {
   const navItems = [
     { label: 'Tổng quan', path: '/dashboard', icon: BarChart3 },
     {
-      label: isGVCN ? `Báo cáo sĩ số ${assignedClass ? `(${assignedClass.class_name})` : ''}` : 'Báo cáo sĩ số',
+      label: 'Báo cáo sĩ số',
       path: '/attendance',
       icon: ClipboardList,
       highlight: isGVCN,
@@ -58,11 +58,11 @@ export const Navbar: React.FC<NavbarProps> = ({ currentPath, onNavigate }) => {
 
   return (
     <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-2xs no-print">
-      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16 gap-1.5 sm:gap-4">
+      <div className="max-w-[1600px] w-full mx-auto px-3 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between h-16 gap-2 xl:gap-4 w-full">
           {/* Brand & School info - Protected with flex-shrink-0 so it is never squashed or covered */}
           <div
-            className="flex items-center gap-2 sm:gap-3 cursor-pointer flex-shrink-0"
+            className="flex items-center gap-2 sm:gap-3 cursor-pointer flex-shrink xl:flex-shrink-0 max-w-[200px] sm:max-w-[250px] md:max-w-[350px] lg:max-w-[400px] xl:max-w-[400px] 2xl:max-w-[500px] min-w-0"
             onClick={() => handleNav('/dashboard')}
           >
             <div
@@ -75,11 +75,11 @@ export const Navbar: React.FC<NavbarProps> = ({ currentPath, onNavigate }) => {
                 <School className="w-5 h-5 sm:w-6 sm:h-6" />
               )}
             </div>
-            <div className="flex flex-col justify-center">
-              <div className="text-[11px] font-bold text-blue-700 tracking-wide uppercase leading-tight whitespace-nowrap">
+            <div className="flex flex-col justify-center min-w-0 flex-1">
+              <div className="text-[11px] font-bold text-blue-700 tracking-wide uppercase leading-tight truncate">
                 {settings?.short_name || 'BÁO CÁO SĨ SỐ'}
               </div>
-              <h1 className="text-xs sm:text-sm lg:text-base font-black text-slate-900 tracking-tight leading-snug whitespace-nowrap">
+              <h1 className="text-xs sm:text-sm lg:text-base font-black text-slate-900 tracking-tight leading-snug truncate">
                 {settings?.school_name || 'Hệ thống Báo cáo Sĩ số Học sinh'}
               </h1>
               <div className="flex items-center gap-1.5 text-[10px] sm:text-[11px] text-slate-500 font-medium leading-tight whitespace-nowrap">
@@ -93,7 +93,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentPath, onNavigate }) => {
           </div>
 
           {/* Desktop Navigation Links - Shown on xl screens (>=1280px) to ensure no overlap */}
-          <nav className="hidden xl:flex items-center gap-1 flex-shrink-0">
+          <nav className="hidden xl:flex items-center gap-1 flex-1 min-w-0 overflow-x-auto no-scrollbar px-2">
             {navItems.map((item) => {
               const Icon = item.icon;
               const isActive = currentPath === item.path;
@@ -101,7 +101,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentPath, onNavigate }) => {
                 <button
                   key={item.path}
                   onClick={() => handleNav(item.path)}
-                  className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition-all flex-shrink-0 ${
+                  className={`flex items-center gap-1 xl:gap-1.5 px-1.5 2xl:px-3 py-2 rounded-lg text-[11px] 2xl:text-xs font-semibold whitespace-nowrap transition-all flex-shrink-0 ${
                     item.highlight && !isActive
                       ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-xs'
                       : isActive
@@ -115,11 +115,16 @@ export const Navbar: React.FC<NavbarProps> = ({ currentPath, onNavigate }) => {
               );
             })}
 
+            
+          </nav>
+
+          {/* User profile & Quick Switcher */}
+          <div className="flex items-center gap-2 flex-shrink-0">
             {isAdmin && (
-              <div className="relative group">
+              <div className="relative group hidden xl:block">
                 <button
                   onClick={() => handleNav('/settings/school')}
-                  className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors flex-shrink-0 ${
+                  className={`flex items-center gap-1 xl:gap-1.5 px-1.5 2xl:px-3 py-2 rounded-lg text-[11px] 2xl:text-xs font-semibold whitespace-nowrap transition-colors flex-shrink-0 ${
                     currentPath.startsWith('/settings')
                       ? 'bg-slate-100 text-blue-800 font-bold'
                       : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
@@ -168,10 +173,6 @@ export const Navbar: React.FC<NavbarProps> = ({ currentPath, onNavigate }) => {
                 </div>
               </div>
             )}
-          </nav>
-
-          {/* User profile & Quick Switcher */}
-          <div className="flex items-center gap-2 flex-shrink-0">
             {isAdmin && <QuickUserSwitcher />}
 
             {currentUser && (

@@ -52,7 +52,7 @@ export const QuickUserSwitcher: React.FC = () => {
       >
         <UserCheck className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
         <span className="hidden md:inline text-slate-500">Chuyển:</span>
-        <span className="hidden sm:inline font-bold text-slate-900 truncate max-w-[130px]">
+        <span className="hidden sm:inline font-bold text-slate-900 truncate max-w-[100px] xl:max-w-[120px] 2xl:max-w-[200px]">
           {currentUser?.full_name || 'Chọn'}
         </span>
         <span className="sm:hidden font-bold text-slate-800 text-[11px] truncate max-w-[55px]">
