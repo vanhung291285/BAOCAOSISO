@@ -114,6 +114,24 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSele
     await loadData(selectedDate, selectedCampus);
   };
 
+  const handleLockAll = async () => {
+    if (!isAdmin) return;
+    const formattedDate = selectedDate.split('-').reverse().join('/');
+    if (window.confirm(`Bạn có chắc chắn muốn khóa tất cả các lớp cho ngày ${formattedDate}?\n\nCác lớp chưa báo cáo cũng sẽ bị khóa và không thể nhập số liệu được nữa.`)) {
+      await StorageService.lockAllReportsForDate(selectedDate, true, currentUser!, selectedCampus);
+      await loadData(selectedDate, selectedCampus);
+    }
+  };
+
+  const handleUnlockAll = async () => {
+    if (!isAdmin) return;
+    const formattedDate = selectedDate.split('-').reverse().join('/');
+    if (window.confirm(`Bạn có chắc chắn muốn mở khóa tất cả các lớp cho ngày ${formattedDate}?`)) {
+      await StorageService.lockAllReportsForDate(selectedDate, false, currentUser!, selectedCampus);
+      await loadData(selectedDate, selectedCampus);
+    }
+  };
+
   // Filtered rows
   const filteredRows = useMemo(() => {
     if (!aggregateData) return [];
@@ -274,32 +292,55 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSele
               </p>
             </div>
 
-            {/* Quick Action to toggle Unreported view */}
-            {aggregateData.unreportedClasses > 0 && (
-              <div className="flex items-center gap-1.5 self-start sm:self-auto">
-                <button
-                  type="button"
-                  onClick={() => setSelectedStatus(selectedStatus === 'NOT_REPORTED' ? 'ALL' : 'NOT_REPORTED')}
-                  className={`text-xs font-bold px-2.5 py-1.5 rounded-lg border transition-colors flex items-center gap-1.5 ${
-                    selectedStatus === 'NOT_REPORTED'
-                      ? 'bg-amber-600 text-white border-amber-600 shadow-2xs'
-                      : 'bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100'
-                  }`}
-                >
-                  <Clock className="w-3.5 h-3.5 text-amber-600" />
-                  <span>{selectedStatus === 'NOT_REPORTED' ? 'Đang lọc lớp chưa báo' : `Xem ${aggregateData.unreportedClasses} lớp chưa báo`}</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setShowUnreportedChips(!showUnreportedChips)}
-                  className="p-1.5 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50"
-                  title="Ẩn/Hiện danh sách lớp chưa nộp"
-                >
-                  {showUnreportedChips ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                </button>
-              </div>
-            )}
+            {/* Quick Actions */}
+            <div className="flex flex-wrap items-center gap-1.5 self-start sm:self-auto">
+              {isAdmin && (
+                <div className="flex items-center gap-1.5 mr-1 pr-1 border-r border-slate-200">
+                  <button
+                    type="button"
+                    onClick={handleLockAll}
+                    className="flex items-center gap-1 text-xs font-bold px-2 py-1.5 rounded-lg border border-red-200 bg-red-50 text-red-700 hover:bg-red-100 transition-colors shadow-2xs"
+                    title="Khóa tất cả các lớp cho ngày này"
+                  >
+                    <Lock className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Khóa tất cả</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleUnlockAll}
+                    className="flex items-center gap-1 text-xs font-bold px-2 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 transition-colors shadow-2xs"
+                    title="Mở khóa tất cả các lớp cho ngày này"
+                  >
+                    <Unlock className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Mở khóa</span>
+                  </button>
+                </div>
+              )}
+              {aggregateData.unreportedClasses > 0 && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedStatus(selectedStatus === 'NOT_REPORTED' ? 'ALL' : 'NOT_REPORTED')}
+                    className={`text-xs font-bold px-2.5 py-1.5 rounded-lg border transition-colors flex items-center gap-1.5 ${
+                      selectedStatus === 'NOT_REPORTED'
+                        ? 'bg-amber-600 text-white border-amber-600 shadow-2xs'
+                        : 'bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100'
+                    }`}
+                  >
+                    <Clock className="w-3.5 h-3.5 text-amber-600" />
+                    <span>{selectedStatus === 'NOT_REPORTED' ? 'Đang lọc lớp chưa báo' : `Xem ${aggregateData.unreportedClasses} lớp chưa báo`}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowUnreportedChips(!showUnreportedChips)}
+                    className="p-1.5 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50"
+                    title="Ẩn/Hiện danh sách lớp chưa nộp"
+                  >
+                    {showUnreportedChips ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  </button>
+                </>
+              )}
+            </div>
           </div>
 
           {/* Reporting Visual Progress Bar */}
