@@ -986,6 +986,88 @@ export const StorageService = {
     }
   },
 
+  async lockAllReportsForDate(reportDate: string, locked: boolean, adminUser: Profile, campusId?: string): Promise<void> {
+    ensureInitialized();
+    const classes = await this.getClasses();
+    let targetClasses = classes.filter((c) => c.active);
+    if (campusId && campusId !== 'all') {
+      targetClasses = targetClasses.filter((c) => c.campus_id === campusId);
+    }
+
+    const rawReports = localStorage.getItem(STORAGE_KEYS.REPORTS);
+    const reports: DailyReport[] = rawReports ? JSON.parse(rawReports) : [];
+    const now = new Date().toISOString();
+
+    const supabase = getSupabaseClient();
+    const isConnected = supabase && isSupabaseConnected();
+
+    let changed = false;
+
+    for (const cls of targetClasses) {
+      const existingIndex = reports.findIndex((r) => r.class_id === cls.id && r.report_date === reportDate);
+      if (existingIndex >= 0) {
+        if (reports[existingIndex].status !== (locked ? 'LOCKED' : 'SUBMITTED')) {
+          reports[existingIndex].status = locked ? 'LOCKED' : 'SUBMITTED';
+          reports[existingIndex].locked_at = locked ? now : undefined;
+          changed = true;
+
+          if (isConnected) {
+            try {
+              await supabase
+                .from('daily_reports')
+                .update({
+                  status: reports[existingIndex].status,
+                  locked_at: reports[existingIndex].locked_at || null,
+                })
+                .eq('id', reports[existingIndex].id);
+            } catch (e) {
+              console.error('Supabase lockAllReports error:', e);
+            }
+          }
+        }
+      } else if (locked) {
+        // Create empty locked report for unreported classes
+        const newReport: DailyReport = {
+          id: `rep_${reportDate}_${cls.id}_${Date.now()}_${Math.random().toString(36).substring(2,7)}`,
+          class_id: cls.id,
+          report_date: reportDate,
+          created_by: adminUser.id,
+          created_at: now,
+          updated_at: now,
+          status: 'LOCKED',
+          locked_at: now,
+          notes: '',
+          absent_students: [],
+        };
+        reports.push(newReport);
+        changed = true;
+
+        if (isConnected) {
+          try {
+            await supabase.from('daily_reports').insert(newReport);
+          } catch (e) {
+            console.error('Supabase insert locked report error:', e);
+          }
+        }
+      }
+    }
+
+    if (changed) {
+      localStorage.setItem(STORAGE_KEYS.REPORTS, JSON.stringify(reports));
+
+      await this.addLog({
+        user_id: adminUser.id,
+        user_name: adminUser.full_name,
+        user_role: adminUser.role,
+        action: locked ? 'LOCK' : 'UNLOCK',
+        class_name: campusId && campusId !== 'all' ? `Tất cả lớp (${campusId})` : 'Tất cả lớp',
+        report_date: reportDate,
+      });
+
+      notifyRealtimeChange('daily_reports');
+    }
+  },
+
   // --- 8. Aggregate Reports for Day ---
   async getDailyAggregate(reportDate: string, campusId?: string): Promise<{
     date: string;
