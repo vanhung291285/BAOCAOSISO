@@ -831,10 +831,21 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
       )}
 
       {saveSuccess && (
-        <div className="bg-blue-50 border border-blue-200 rounded-2xl p-3.5 flex items-center gap-2.5">
-          <CheckCircle2 className="w-5 h-5 text-blue-600 flex-shrink-0" />
-          <div className="text-xs text-blue-800 font-semibold">
-            Đã gửi báo cáo sĩ số thành công! Dữ liệu đã đồng bộ toàn trường.
+        <div className="relative overflow-hidden bg-gradient-to-r from-emerald-500 to-teal-600 rounded-3xl p-4 sm:p-5 shadow-xl border border-emerald-400 animate-in slide-in-from-top-4 fade-in zoom-in-95 duration-500">
+          <div className="absolute -top-10 -right-10 w-32 h-32 bg-white opacity-10 rounded-full blur-3xl"></div>
+          <div className="absolute -bottom-10 -left-10 w-24 h-24 bg-white opacity-10 rounded-full blur-2xl"></div>
+          <div className="relative z-10 flex items-center gap-3 sm:gap-4">
+            <div className="w-12 h-12 sm:w-14 sm:h-14 bg-white rounded-full flex items-center justify-center flex-shrink-0 shadow-lg animate-in zoom-in duration-500 delay-150">
+              <CheckCircle2 className="w-7 h-7 sm:w-8 sm:h-8 text-emerald-600" />
+            </div>
+            <div className="text-white">
+              <h3 className="font-black text-sm sm:text-lg tracking-wide drop-shadow-sm flex items-center gap-1.5 mb-0.5">
+                GỬI BÁO CÁO THÀNH CÔNG <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 text-yellow-300 animate-pulse" />
+              </h3>
+              <p className="text-[11px] sm:text-sm font-medium text-emerald-50 leading-relaxed drop-shadow-sm">
+                Dữ liệu sĩ số của lớp đã được lưu và đồng bộ lên hệ thống toàn trường.
+              </p>
+            </div>
           </div>
         </div>
       )}

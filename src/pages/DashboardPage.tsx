@@ -43,6 +43,20 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSele
     return campus ? campus.name : 'Khu chính';
   };
 
+  const getCampusBadgeColor = (campusId?: string) => {
+    if (!campusId) return 'bg-slate-100 text-slate-700 border-slate-200';
+    const index = campuses.findIndex(c => c.id === campusId);
+    if (index === -1) return 'bg-slate-100 text-slate-700 border-slate-200';
+    const colors = [
+      'bg-indigo-100 text-indigo-700 border-indigo-200',
+      'bg-fuchsia-100 text-fuchsia-700 border-fuchsia-200',
+      'bg-teal-100 text-teal-700 border-teal-200',
+      'bg-orange-100 text-orange-700 border-orange-200',
+      'bg-pink-100 text-pink-700 border-pink-200',
+    ];
+    return colors[index % colors.length];
+  };
+
   const [selectedDate, setSelectedDate] = useState(() => {
     const d = new Date();
     const year = d.getFullYear();
@@ -588,9 +602,11 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSele
                             Lớp của bạn
                           </span>
                         )}
-                        <span className="text-[10px] text-slate-500 font-medium">
-                          ({getCampusName(row.classItem.campus_id)})
-                        </span>
+                        {campuses.length > 0 && row.classItem.campus_id && (
+                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${getCampusBadgeColor(row.classItem.campus_id)}`}>
+                            {getCampusName(row.classItem.campus_id)}
+                          </span>
+                        )}
                       </div>
                       <div className="text-[11px] text-slate-600 mt-0.5">
                         GVCN: <span className="font-semibold text-slate-800">{row.teacher?.full_name || 'Chưa phân công'}</span>
@@ -748,10 +764,15 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSele
                         isUserClass ? 'bg-blue-50/40 font-medium' : ''
                       }`}
                     >
-                      {/* Class name */}
+                      {/* Class name & Campus */}
                       <td className="py-3 px-4">
-                        <div className="flex items-center gap-2">
-                          <span className="font-extrabold text-sm text-slate-900">{row.classItem.class_name}</span>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-extrabold text-sm text-slate-900 w-12">{row.classItem.class_name}</span>
+                          {campuses.length > 0 && row.classItem.campus_id && (
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${getCampusBadgeColor(row.classItem.campus_id)}`}>
+                              {getCampusName(row.classItem.campus_id)}
+                            </span>
+                          )}
                           {isUserClass && (
                             <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-800">
                               Lớp của bạn

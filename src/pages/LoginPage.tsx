@@ -143,6 +143,14 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
     setIsSubmitting(true);
     try {
       const cleanEmail = email.toLowerCase().trim();
+      
+      const targetUser = allUsers.find(u => u.email.toLowerCase() === cleanEmail);
+      if (targetUser && targetUser.role === 'GVCN') {
+        setError('Tài khoản của bạn là Giáo viên, không được phép đăng nhập qua cổng Quản trị. Vui lòng chuyển sang thẻ GIÁO VIÊN CHỦ NHIỆM.');
+        setIsSubmitting(false);
+        return;
+      }
+
       if (cleanEmail === 'admin@db.edu.vn' || cleanEmail === 'admin' || cleanEmail === 'admin@xadung.edu.vn') {
         const p = password.trim();
         if (p !== 'admin123456@' && p !== 'admin123456' && p !== '123456' && p !== 'admin') {
