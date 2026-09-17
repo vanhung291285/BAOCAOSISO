@@ -21,9 +21,30 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const CURRENT_USER_KEY = 'sso_active_auth_user_id_v2';
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [currentUser, setCurrentUser] = useState<Profile | null>(null);
-  const [allUsers, setAllUsers] = useState<Profile[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [currentUser, setCurrentUser] = useState<Profile | null>(() => {
+    if (typeof window === 'undefined') return null;
+    try {
+      const savedId = localStorage.getItem(CURRENT_USER_KEY);
+      const rawUsers = localStorage.getItem('sso_profiles_v1');
+      if (savedId && rawUsers) {
+        const users = JSON.parse(rawUsers);
+        const match = users.find((u: Profile) => u.id === savedId);
+        if (match) return match;
+      }
+    } catch (err) {}
+    return null;
+  });
+  
+  const [allUsers, setAllUsers] = useState<Profile[]>(() => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const rawUsers = localStorage.getItem('sso_profiles_v1');
+      if (rawUsers) return JSON.parse(rawUsers);
+    } catch (err) {}
+    return [];
+  });
+  
+  const [loading, setLoading] = useState(false);
 
   const reloadUsers = async () => {
     const users = await StorageService.getProfiles();

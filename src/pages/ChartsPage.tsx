@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useSchool } from '../contexts/SchoolContext';
+import { useAuth } from '../contexts/AuthContext';
 import { StorageService } from '../services/storage';
 import { ClassReportRow } from '../types';
 import { CampusSelector } from '../components/CampusSelector';
@@ -40,7 +41,13 @@ export const ChartsPage: React.FC = () => {
     return `${year}-${month}-${day}`;
   });
 
-  const [selectedCampusId, setSelectedCampusId] = useState<string>('all');
+  const [selectedCampusId, setSelectedCampusId] = useState<string>(() => {
+    if (isGVCN && currentUser?.assigned_class_id) {
+      const cls = classes.find((c) => c.id === currentUser.assigned_class_id);
+      return cls?.campus_id || 'all';
+    }
+    return 'all';
+  });
 
   const [dailyData, setDailyData] = useState<{
     date: string;

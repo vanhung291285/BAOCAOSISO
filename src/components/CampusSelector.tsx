@@ -1,5 +1,6 @@
 import React from 'react';
 import { useSchool } from '../contexts/SchoolContext';
+import { useAuth } from '../contexts/AuthContext';
 import { MapPin, School } from 'lucide-react';
 
 interface CampusSelectorProps {
@@ -13,13 +14,23 @@ export const CampusSelector: React.FC<CampusSelectorProps> = ({
   onChange,
   className = '',
 }) => {
-  const { settings, campuses } = useSchool();
+  const { settings, campuses, classes } = useSchool();
+  const { isGVCN, currentUser } = useAuth();
+
+  // Determine locked campus for GVCN
+  const lockedCampusId = React.useMemo(() => {
+    if (isGVCN && currentUser?.assigned_class_id) {
+      const cls = classes.find(c => c.id === currentUser.assigned_class_id);
+      return cls?.campus_id || null;
+    }
+    return null;
+  }, [isGVCN, currentUser, classes]);
 
   if (!settings?.enable_campuses || campuses.length === 0) {
     return null;
   }
 
-  const activeCampuses = campuses.filter((c) => c.active);
+  const activeCampuses = campuses.filter((c) => c.active && (!lockedCampusId || c.id === lockedCampusId));
   if (activeCampuses.length === 0) return null;
 
   const getCampusColor = (index: number) => {
@@ -35,6 +46,7 @@ export const CampusSelector: React.FC<CampusSelectorProps> = ({
 
   return (
     <div className={`flex items-center bg-slate-100 p-1.5 rounded-xl overflow-x-auto hide-scrollbar border border-slate-200 shadow-inner ${className}`}>
+      {!lockedCampusId && (
       <button
         type="button"
         onClick={() => onChange('all')}
@@ -47,6 +59,7 @@ export const CampusSelector: React.FC<CampusSelectorProps> = ({
         <School className="w-3.5 h-3.5" />
         Toàn trường
       </button>
+      )}
       {activeCampuses.map((campus, idx) => (
         <button
           key={campus.id}

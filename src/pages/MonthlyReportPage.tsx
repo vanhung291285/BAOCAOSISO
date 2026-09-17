@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useSchool } from '../contexts/SchoolContext';
+import { useAuth } from '../contexts/AuthContext';
 import { StorageService } from '../services/storage';
 import { CampusSelector } from '../components/CampusSelector';
 import * as XLSX from 'xlsx';
@@ -16,7 +17,8 @@ import {
 } from 'lucide-react';
 
 export const MonthlyReportPage: React.FC = () => {
-  const { settings, campuses } = useSchool();
+  const { settings, campuses, classes } = useSchool();
+  const { isGVCN, currentUser } = useAuth();
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const d = new Date();
     const year = d.getFullYear();
@@ -24,7 +26,13 @@ export const MonthlyReportPage: React.FC = () => {
     return `${year}-${month}`;
   });
   
-  const [selectedCampusId, setSelectedCampusId] = useState<string>('all');
+  const [selectedCampusId, setSelectedCampusId] = useState<string>(() => {
+    if (isGVCN && currentUser?.assigned_class_id) {
+      const cls = classes.find((c) => c.id === currentUser.assigned_class_id);
+      return cls?.campus_id || 'all';
+    }
+    return 'all';
+  });
   
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<{

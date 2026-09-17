@@ -78,7 +78,13 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSele
   const [loading, setLoading] = useState(true);
   const [selectedGrade, setSelectedGrade] = useState<number | 'ALL'>('ALL');
   const [selectedStatus, setSelectedStatus] = useState<ReportStatus | 'ALL'>('ALL');
-  const [selectedCampus, setSelectedCampus] = useState<string>('all');
+  const [selectedCampus, setSelectedCampus] = useState<string>(() => {
+    if (isGVCN && currentUser?.assigned_class_id) {
+      const cls = classes.find((c) => c.id === currentUser.assigned_class_id);
+      return cls?.campus_id || 'all';
+    }
+    return 'all';
+  });
   const [selectedClassId, setSelectedClassId] = useState<string>('all');
   const [showUnreportedChips, setShowUnreportedChips] = useState(true);
 

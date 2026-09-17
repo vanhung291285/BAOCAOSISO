@@ -285,7 +285,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
   const gvcnUsers = allUsers.filter((u) => u.role === 'GVCN');
 
   return (
-    <div className="min-h-screen bg-linear-to-b from-slate-100 via-slate-50 to-slate-200 flex flex-col justify-center py-8 sm:py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-linear-to-b from-slate-100 via-slate-50 to-slate-200 flex flex-col justify-center py-4 px-4 sm:px-6 lg:px-8">
       {!isSupabaseConnected() && (
         <div className="sm:mx-auto sm:w-full sm:max-w-lg mb-6 animate-in fade-in slide-in-from-top-4">
           <div className="bg-amber-50 border border-amber-300 p-4 rounded-2xl flex items-start gap-3 shadow-sm">
@@ -302,19 +302,19 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       {/* Header Branding */}
       <div className="sm:mx-auto sm:w-full sm:max-w-lg text-center">
         <div
-          className="mx-auto w-16 h-16 sm:w-18 sm:h-18 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-blue-900/10 flex-shrink-0"
+          className="mx-auto w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-blue-900/10 flex-shrink-0"
           style={{ backgroundColor: settings?.primary_color || '#1e40af' }}
         >
           {settings?.logo_url ? (
-            <img src={settings.logo_url} alt="Logo" className="w-12 h-12 object-contain rounded-xl" />
+            <img src={settings.logo_url} alt="Logo" className="w-8 h-8 object-contain rounded-xl" />
           ) : (
-            <School className="w-10 h-10 sm:w-11 sm:h-11" />
+            <School className="w-8 h-8" />
           )}
         </div>
-        <h1 className="mt-4 text-2xl sm:text-3xl font-black text-slate-900 tracking-tight leading-tight">
+        <h1 className="mt-2 text-xl sm:text-2xl font-black text-slate-900 tracking-tight leading-tight">
           SỔ BÁO CÁO SĨ SỐ ĐIỆN TỬ
         </h1>
-        <p className="mt-1 text-base font-bold text-blue-700">
+        <p className="mt-0.5 text-sm font-bold text-blue-700">
           {settings?.school_name || 'Hệ thống Quản lý Báo cáo Sĩ số'}
         </p>
         {(settings?.commune || settings?.province) ? (
@@ -329,10 +329,10 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       </div>
 
       {/* School Year Info Bar - Configuration restricted to ADMIN only */}
-      <div className="mt-5 sm:mx-auto sm:w-full sm:max-w-lg">
-        <div className="bg-white/90 backdrop-blur-xs border border-blue-200/80 rounded-2xl px-4 py-2.5 shadow-xs flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center flex-shrink-0">
+      <div className="mt-3 sm:mx-auto sm:w-full sm:max-w-lg">
+        <div className="bg-white/90 backdrop-blur-xs border border-blue-200/80 rounded-xl px-3 py-1.5 shadow-xs flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-6 h-6 rounded-lg bg-blue-50 text-blue-700 flex items-center justify-center flex-shrink-0">
               <Calendar className="w-4 h-4" />
             </div>
             <div className="min-w-0">
@@ -340,10 +340,10 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                 Năm học hoạt động
               </div>
               <div className="flex items-center gap-2 mt-0.5">
-                <span className="text-xs sm:text-sm font-black text-blue-950">
+                <span className="text-xs font-black text-blue-950">
                   Năm học {activeYear?.name || '2026-2027'}
                 </span>
-                <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-200">
                   Đang áp dụng
                 </span>
               </div>
@@ -380,60 +380,59 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                 setActiveTab('GVCN');
                 setError('');
               }}
-              className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold transition-all ${
+              className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg text-xs font-bold transition-all ${
                 activeTab === 'GVCN'
                   ? 'bg-white text-blue-700 shadow-sm border border-slate-200/80'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
               }`}
             >
-              <GraduationCap className="w-4 h-4 text-blue-600" />
+              <GraduationCap className="w-3.5 h-3.5 text-blue-600" />
               <span>GIÁO VIÊN CHỦ NHIỆM</span>
             </button>
-
             <button
               type="button"
               onClick={() => {
                 setActiveTab('ADMIN');
                 setError('');
               }}
-              className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold transition-all ${
+              className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg text-xs font-bold transition-all ${
                 activeTab === 'ADMIN'
                   ? 'bg-white text-purple-700 shadow-sm border border-slate-200/80'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
               }`}
             >
-              <ShieldCheck className="w-4 h-4 text-purple-600" />
+              <ShieldCheck className="w-3.5 h-3.5 text-purple-600" />
               <span>BGH & QUẢN TRỊ</span>
             </button>
           </div>
 
-          <div className="p-6 sm:p-8">
+          <div className="p-4 sm:p-5">
             {error && (
-              <div className="mb-5 p-3.5 bg-red-50 border border-red-200 rounded-xl text-xs font-semibold text-red-700 flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+              <div className="mb-3 p-2 bg-red-50 border border-red-200 rounded-lg text-[11px] font-semibold text-red-700 flex items-center gap-1.5">
+                <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
                 <span>{error}</span>
               </div>
             )}
 
             {/* TAB 1: GVCN - CHỈ CẦN THÔNG TIN LỚP & TÊN GVCN */}
             {activeTab === 'GVCN' && (
-              <div className="space-y-5">
-                <div className="bg-blue-50/70 border border-blue-100 rounded-xl p-3 text-xs text-blue-800 flex items-start gap-2">
-                  <Sparkles className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
+              <div className="space-y-4">
+                <div className="bg-blue-50/70 border border-blue-100 rounded-lg p-2 text-[11px] text-blue-800 flex items-start gap-1.5 leading-tight">
+                  <Sparkles className="w-3.5 h-3.5 text-blue-600 flex-shrink-0 mt-0.5" />
                   <div>
-                    <span className="font-bold">Đăng nhập nhanh dành cho GVCN:</span> Chỉ cần chọn Lớp học và Giáo viên chủ nhiệm để vào ngay màn hình báo cáo sĩ số, không cần gõ mật khẩu.
+                    <span className="font-bold">Đăng nhập nhanh dành cho GVCN:</span> Chọn lớp và tên của bạn để báo cáo sĩ số, không cần mật khẩu.
                   </div>
                 </div>
 
                 {/* 1. Chọn Lớp học */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
                     1. Chọn Lớp học <span className="text-red-500">*</span>
                   </label>
                   <select
                     value={selectedClassId}
                     onChange={(e) => setSelectedClassId(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-bold text-slate-800 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors shadow-2xs"
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300 text-xs font-bold text-slate-800 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors shadow-2xs"
                   >
                     <option value="" disabled>-- Vui lòng chọn lớp học --</option>
                     {grade6Classes.length > 0 && (
@@ -477,17 +476,16 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
 
                 {/* 2. Tên Giáo viên chủ nhiệm */}
                 <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider">
                       2. Tên Giáo viên chủ nhiệm <span className="text-red-500">*</span>
                     </label>
-                    <span className="text-[11px] text-blue-600 font-semibold">Tự động nhận diện</span>
+                    <span className="text-[10px] text-blue-600 font-semibold">Tự nhận diện</span>
                   </div>
-
                   <select
                     value={selectedTeacherId}
                     onChange={(e) => setSelectedTeacherId(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-semibold text-slate-800 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors shadow-2xs"
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300 text-xs font-semibold text-slate-800 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors shadow-2xs"
                   >
                     <option value="" disabled>-- Vui lòng chọn giáo viên chủ nhiệm --</option>
                     {gvcnUsers.map((teacher) => {
@@ -502,16 +500,16 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
 
                   {/* Teacher Info Preview Card */}
                   {currentTeacher && (
-                    <div className="mt-3 p-3.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-sm flex-shrink-0 shadow-xs">
+                    <div className="mt-2 p-2 rounded-lg bg-slate-50 border border-slate-200 flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-xs flex-shrink-0 shadow-xs">
                           {currentTeacher.full_name.charAt(0)}
                         </div>
                         <div className="min-w-0">
-                          <div className="text-sm font-black text-slate-900 truncate">
+                          <div className="text-xs font-black text-slate-900 truncate">
                             {currentTeacher.full_name}
                           </div>
-                          <div className="text-xs text-blue-700 font-bold flex items-center gap-1.5 mt-0.5">
+                          <div className="text-[10px] text-blue-700 font-bold flex items-center gap-1 mt-0.5">
                             <span>GVCN {currentClass ? `Lớp ${currentClass.class_name}` : ''}</span>
                             <span>•</span>
                             <span className="text-slate-500 font-medium">Năm học {activeYear?.name || '2026-2027'}</span>
@@ -519,8 +517,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                         </div>
                       </div>
                       <div className="flex-shrink-0">
-                        <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
-                          <Check className="w-3 h-3" />
+                        <span className="inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800">
+                          <Check className="w-2.5 h-2.5" />
                           Sẵn sàng
                         </span>
                       </div>
@@ -529,17 +527,17 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                 </div>
 
                 {/* Big Action Button: Vào báo cáo sĩ số ngay */}
-                <div className="pt-2">
+                <div className="pt-1">
                   <button
                     type="button"
                     onClick={handleGVCNLogin}
                     disabled={isSubmitting || !selectedTeacherId}
-                    className="w-full flex justify-center items-center gap-2 py-3.5 px-4 rounded-xl shadow-md text-sm sm:text-base font-black text-white bg-blue-600 hover:bg-blue-700 active:scale-[0.99] focus:outline-hidden focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all disabled:opacity-50"
+                    className="w-full flex justify-center items-center gap-2 py-3 px-4 rounded-xl shadow-md text-sm font-black text-white bg-blue-600 hover:bg-blue-700 active:scale-[0.99] focus:outline-hidden focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all disabled:opacity-50"
                   >
                     <span>VÀO BÁO CÁO SĨ SỐ NGAY</span>
-                    <ArrowRight className="w-5 h-5" />
+                    <ArrowRight className="w-4 h-4" />
                   </button>
-                  <p className="text-center text-[11px] text-slate-400 mt-2">
+                  <p className="text-center text-[10px] text-slate-400 mt-1.5">
                     Hệ thống sẽ chuyển trực tiếp vào màn hình nhập sĩ số của lớp {currentClass?.class_name || ''}
                   </p>
                 </div>
@@ -548,45 +546,45 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
 
             {/* TAB 2: BAN GIÁM HIỆU & QUẢN TRỊ VIÊN */}
             {activeTab === 'ADMIN' && (
-              <form className="space-y-5" onSubmit={handleAdminSubmit}>
+              <form className="space-y-4" onSubmit={handleAdminSubmit}>
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider">
                     Email hoặc Tên đăng nhập
                   </label>
-                  <div className="mt-1.5">
+                  <div className="mt-1">
                     <input
                       type="text"
                       required
                       placeholder="Nhập email hoặc tên đăng nhập..."
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors shadow-2xs"
+                      className="w-full px-3 py-2 rounded-lg border border-slate-300 text-xs focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors shadow-2xs"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider">
                     Mật khẩu
                   </label>
-                  <div className="mt-1.5 relative">
+                  <div className="mt-1 relative">
                     <input
                       type="password"
                       required
                       placeholder="Nhập mật khẩu..."
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors shadow-2xs"
+                      className="w-full px-3 py-2 rounded-lg border border-slate-300 text-xs focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors shadow-2xs"
                     />
-                    <KeyRound className="w-4 h-4 text-slate-400 absolute right-3.5 top-3" />
+                    <KeyRound className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-2.5" />
                   </div>
                 </div>
 
-                <div>
+                <div className="pt-1">
                   <button
                     type="submit"
                     disabled={isSubmitting}
-                    className="w-full flex justify-center items-center gap-2 py-3.5 px-4 rounded-xl shadow-md text-sm font-bold text-white bg-purple-600 hover:bg-purple-700 active:scale-[0.99] focus:outline-hidden focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 transition-all disabled:opacity-50"
+                    className="w-full flex justify-center items-center gap-2 py-3 px-4 rounded-xl shadow-md text-sm font-bold text-white bg-purple-600 hover:bg-purple-700 active:scale-[0.99] focus:outline-hidden focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 transition-all disabled:opacity-50"
                   >
                     <LogIn className="w-4 h-4" />
                     <span>{isSubmitting ? 'Đang xác thực...' : 'ĐĂNG NHẬP QUẢN TRỊ'}</span>

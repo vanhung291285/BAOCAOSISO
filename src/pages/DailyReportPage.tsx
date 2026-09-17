@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useSchool } from '../contexts/SchoolContext';
+import { useAuth } from '../contexts/AuthContext';
 import { StorageService } from '../services/storage';
 import { ClassReportRow } from '../types';
 import { DateNavigator } from '../components/DateNavigator';
@@ -19,7 +20,8 @@ interface DailyReportPageProps {
 }
 
 export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) => {
-  const { settings, indicators, campuses } = useSchool();
+  const { settings, indicators, campuses, classes } = useSchool();
+  const { isGVCN, currentUser } = useAuth();
   const [selectedDate, setSelectedDate] = useState(() => {
     const d = new Date();
     const year = d.getFullYear();
@@ -28,7 +30,13 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
     return `${year}-${month}-${day}`;
   });
 
-  const [selectedCampusId, setSelectedCampusId] = useState<string>('all');
+  const [selectedCampusId, setSelectedCampusId] = useState<string>(() => {
+    if (isGVCN && currentUser?.assigned_class_id) {
+      const cls = classes.find((c) => c.id === currentUser.assigned_class_id);
+      return cls?.campus_id || 'all';
+    }
+    return 'all';
+  });
 
   const [reportData, setReportData] = useState<{
     date: string;
