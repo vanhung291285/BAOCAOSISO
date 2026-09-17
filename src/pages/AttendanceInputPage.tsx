@@ -223,11 +223,15 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
         }));
         return [...prev, ...newSlots];
       } else if (prev.length > targetCount) {
-        // Chỉ lược bớt những ô chưa nhập tên
-        const filled = prev.filter((s) => s.full_name && s.full_name.trim() !== '');
-        if (filled.length <= targetCount) {
-          return prev.slice(0, targetCount);
+        // Chỉ lược bớt những ô chưa nhập tên từ dưới lên
+        const updated = [...prev];
+        for (let i = updated.length - 1; i >= 0; i--) {
+          if (updated.length <= targetCount) break;
+          if (!updated[i].full_name || updated[i].full_name.trim() === '') {
+            updated.splice(i, 1);
+          }
         }
+        return updated;
       }
       return prev;
     });
@@ -255,10 +259,10 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
       const absent = typeof next.absent === 'number' ? next.absent : 0;
 
       if (field === 'total') {
-        if (typeof next.present === 'number') {
-          next.absent = Math.max(0, total - present);
-        } else if (typeof next.absent === 'number') {
+        if (typeof next.absent === 'number') {
           next.present = Math.max(0, total - absent);
+        } else if (typeof next.present === 'number') {
+          next.absent = Math.max(0, total - present);
         }
       } else if (field === 'present') {
         next.absent = Math.max(0, total - (typeof numVal === 'number' ? numVal : 0));
@@ -880,7 +884,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
               
               <div className="pt-2">
                 <p className="text-[10px] sm:text-[11px] text-slate-400 font-medium tracking-wide">
-                  Ứng dụng được phát triển bởi: <span className="font-bold text-slate-500">Vũ Hùng-SĐT: 0984246993 </span>
+                  Ứng dụng được phát triển bởi: <span className="font-bold text-slate-500">Vũ Hùng - SĐT: 0984246993</span>
                 </p>
               </div>
             </div>
