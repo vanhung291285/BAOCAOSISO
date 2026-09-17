@@ -818,6 +818,33 @@ export const StorageService = {
     return { report, values };
   },
 
+  async getLatestReportForClass(
+    classId: string,
+    beforeDate?: string
+  ): Promise<{ report?: DailyReport; values: DailyReportValue[] }> {
+    ensureInitialized();
+    const rawReports = localStorage.getItem(STORAGE_KEYS.REPORTS);
+    const reports: DailyReport[] = rawReports ? JSON.parse(rawReports) : [];
+
+    // Filter by class and date (if provided), sort descending by report_date
+    const classReports = reports
+      .filter((r) => r.class_id === classId && (!beforeDate || r.report_date < beforeDate))
+      .sort((a, b) => b.report_date.localeCompare(a.report_date));
+
+    const rawValues = localStorage.getItem(STORAGE_KEYS.VALUES);
+    const allValues: DailyReportValue[] = rawValues ? JSON.parse(rawValues) : [];
+
+    for (const r of classReports) {
+      const vals = allValues.filter((v) => v.report_id === r.id);
+      const hasPositiveTotal = vals.some((v) => v.total_count > 0);
+      if (hasPositiveTotal) {
+        return { report: r, values: vals };
+      }
+    }
+
+    return { report: undefined, values: [] };
+  },
+
   async saveDailyReport(
     classId: string,
     reportDate: string,
@@ -827,6 +854,15 @@ export const StorageService = {
     absent_students?: import('../types').AbsentStudent[]
   ): Promise<{ report: DailyReport; values: DailyReportValue[] }> {
     ensureInitialized();
+
+    // Guard: Prevent saving empty report where total is 0
+    const maxTotal = Object.values(valuesByGroup).reduce(
+      (acc, curr) => Math.max(acc, Number(curr.total) || 0),
+      0
+    );
+    if (maxTotal <= 0) {
+      throw new Error('Không thể lưu báo cáo rỗng: Sĩ số tổng số học sinh của lớp phải lớn hơn 0.');
+    }
 
     const rawReports = localStorage.getItem(STORAGE_KEYS.REPORTS);
     const reports: DailyReport[] = rawReports ? JSON.parse(rawReports) : [];
@@ -1028,7 +1064,9 @@ export const StorageService = {
     const rows: ClassReportRow[] = activeClasses.map((cls) => {
       const teacher = profiles.find((p) => p.id === cls.homeroom_teacher_id);
       const rep = dayReports.find((r) => r.class_id === cls.id);
-      const isReported = Boolean(rep);
+      const repValues = rep ? allValues.filter((v) => v.report_id === rep.id) : [];
+      const hasRealData = repValues.some((v) => (v.total_count || 0) > 0);
+      const isReported = Boolean(rep && (hasRealData || rep.status === 'LOCKED'));
       let status: ReportStatus = 'NOT_REPORTED';
 
       if (cls.is_locked || rep?.status === 'LOCKED') {
@@ -1041,7 +1079,6 @@ export const StorageService = {
         reportedClasses++;
       }
 
-      const repValues = rep ? allValues.filter((v) => v.report_id === rep.id) : [];
       const values: Record<string, { total: number; present: number; absent: number; rate: number }> = {};
 
       indicators.forEach((ig) => {
