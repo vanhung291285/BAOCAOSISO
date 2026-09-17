@@ -102,12 +102,16 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
   // Input calculation mode from school settings (or default to MODE_1_TOTAL_PRESENT)
   const inputMode = settings?.input_mode || 'MODE_1_TOTAL_PRESENT';
 
+  // Reset success modal when changing date or class
+  useEffect(() => {
+    setSaveSuccess(false);
+  }, [selectedClassId, reportDate]);
+
   // Load existing report for this class and date
   useEffect(() => {
     if (!selectedClassId || !reportDate) return;
 
     setLoading(true);
-    setSaveSuccess(false);
     setErrorMessage('');
     setQuickFillNotice('');
 
