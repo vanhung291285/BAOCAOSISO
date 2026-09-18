@@ -103,7 +103,7 @@ const AppContent: React.FC = () => {
           />
         )}
 
-        {currentPath === '/reports/daily' && (
+        {(currentPath === '/reports/daily' || currentPath === '/daily-report' || currentPath === '/reports') && (
           <DailyReportPage onNavigate={handleNavigate} />
         )}
 
