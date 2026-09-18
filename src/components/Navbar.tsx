@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useSchool } from '../contexts/SchoolContext';
 import { QuickUserSwitcher } from './QuickUserSwitcher';
+import { PWAInstallButton } from './PWAInstallButton';
 import {
   School,
   Menu,
@@ -173,6 +174,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentPath, onNavigate }) => {
                 </div>
               </div>
             )}
+            <PWAInstallButton />
             {isAdmin && <QuickUserSwitcher />}
 
             {currentUser && (

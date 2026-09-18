@@ -1,12 +1,14 @@
-import tailwindcss from '@tailwindcss/vite';
-import react from '@vitejs/plugin-react';
-import { VitePWA } from 'vite-plugin-pwa';
-import path from 'path';
-import {defineConfig} from 'vite';
+const fs = require('fs');
+let file = fs.readFileSync('vite.config.ts', 'utf8');
 
-export default defineConfig(() => {
-  return {
-    plugins: [
+if (!file.includes('VitePWA')) {
+    file = file.replace(
+        "import react from '@vitejs/plugin-react';",
+        "import react from '@vitejs/plugin-react';\nimport { VitePWA } from 'vite-plugin-pwa';"
+    );
+
+    const pluginsRegex = /plugins:\s*\[react\(\),\s*tailwindcss\(\)\]/;
+    file = file.replace(pluginsRegex, `plugins: [
       react(), 
       tailwindcss(),
       VitePWA({
@@ -44,7 +46,6 @@ export default defineConfig(() => {
           ],
         },
         workbox: {
-          maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
         },
         devOptions: {
@@ -52,18 +53,7 @@ export default defineConfig(() => {
           type: 'module',
         },
       })
-    ],
-    resolve: {
-      alias: {
-        '@': path.resolve(__dirname, '.'),
-      },
-    },
-    server: {
-      // HMR is disabled in AI Studio via DISABLE_HMR env var.
-      // Do not modifyâfile watching is disabled to prevent flickering during agent edits.
-      hmr: process.env.DISABLE_HMR !== 'true',
-      // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.
-      watch: process.env.DISABLE_HMR === 'true' ? null : {},
-    },
-  };
-});
+    ]`);
+    
+    fs.writeFileSync('vite.config.ts', file);
+}
