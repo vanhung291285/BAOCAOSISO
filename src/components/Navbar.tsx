@@ -58,7 +58,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentPath, onNavigate }) => {
   };
 
   return (
-    <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-2xs no-print">
+    <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-2xs no-print pt-[env(safe-area-inset-top)]">
       <div className="max-w-[1600px] w-full mx-auto px-3 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 gap-2 xl:gap-4 w-full">
           {/* Brand & School info - Protected with flex-shrink-0 so it is never squashed or covered */}

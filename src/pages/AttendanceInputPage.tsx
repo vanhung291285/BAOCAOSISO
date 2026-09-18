@@ -1358,7 +1358,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
       </form>
 
       {/* 5. STICKY BOTTOM ACTION BAR FOR MOBILE (Chuyên dụng cho điện thoại) */}
-      <div className="sm:hidden fixed bottom-0 left-0 right-0 z-30 bg-white/95 backdrop-blur-md border-t border-slate-200 px-3 py-2.5 shadow-xl">
+      <div className="sm:hidden fixed bottom-0 left-0 right-0 z-30 bg-white/95 backdrop-blur-md border-t border-slate-200 px-3 pb-[calc(env(safe-area-inset-bottom)+0.625rem)] pt-2.5 shadow-xl">
         <div className="max-w-md mx-auto flex items-center justify-between gap-2.5">
           {mobileSummary && (
             <div className="leading-tight">
