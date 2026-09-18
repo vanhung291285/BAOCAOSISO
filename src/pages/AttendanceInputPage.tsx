@@ -109,10 +109,12 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
 
   const canReset = useMemo(() => {
     if (!existingReport) return false;
+    // ADMIN hoặc BGH có quyền reset
     if (isAdmin || currentUser?.role === 'BGH') return true;
-    if (isGVCN && isAssignedTeacher && !isLocked) return true;
+    // GVCN chỉ được reset nếu là lớp của mình và báo cáo chưa bị khóa
+    if (currentUser?.role === 'GVCN' && isAssignedTeacher && !isLocked) return true;
     return false;
-  }, [existingReport, isAdmin, currentUser, isGVCN, isAssignedTeacher, isLocked]);
+  }, [existingReport, isAdmin, currentUser, isAssignedTeacher, isLocked]);
 
   const handleResetReport = async () => {
     if (!selectedClassId || !reportDate || !currentUser) return;

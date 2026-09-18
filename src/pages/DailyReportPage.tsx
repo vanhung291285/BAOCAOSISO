@@ -673,18 +673,20 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
             <span>IN BÁO CÁO</span>
           </button>
 
-          <button
-            type="button"
-            onClick={() => {
-              setManagerDate(selectedDate);
-              setShowResetManager(true);
-            }}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 shadow-2xs transition-colors cursor-pointer"
-            title="Quản lý và reset báo cáo nhầm của các lớp về Chưa báo cáo"
-          >
-            <RotateCcw className="w-3.5 h-3.5 text-rose-600" />
-            <span>RESET BÁO CÁO NHẦM</span>
-          </button>
+          {(isAdmin || isBGH) && (
+            <button
+              type="button"
+              onClick={() => {
+                setManagerDate(selectedDate);
+                setShowResetManager(true);
+              }}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 shadow-2xs transition-colors cursor-pointer"
+              title="Quản trị viên / BGH: Quản lý và reset báo cáo nhầm của các lớp về Chưa báo cáo"
+            >
+              <RotateCcw className="w-3.5 h-3.5 text-rose-600" />
+              <span>RESET BÁO CÁO NHẦM</span>
+            </button>
+          )}
         </div>
       </div>
 

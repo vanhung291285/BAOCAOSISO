@@ -1058,12 +1058,24 @@ export const StorageService = {
    */
   async deleteDailyReport(classId: string, reportDate: string, user: Profile): Promise<boolean> {
     ensureInitialized();
+
+    // Kiểm tra quyền
+    const isAllowed = user.role === 'ADMIN' || user.role === 'BGH' || (user.role === 'GVCN' && user.assigned_class_id === classId);
+    if (!isAllowed) {
+      throw new Error('Bạn không có quyền reset báo cáo sĩ số này!');
+    }
+
     const rawReports = localStorage.getItem(STORAGE_KEYS.REPORTS);
     const reports: DailyReport[] = rawReports ? JSON.parse(rawReports) : [];
     const reportToDelete = reports.find((r) => r.class_id === classId && r.report_date === reportDate);
 
     if (!reportToDelete) {
       return false;
+    }
+    
+    // Kiểm tra khóa
+    if (reportToDelete.status === 'LOCKED') {
+      throw new Error('Báo cáo đã bị khóa, không thể reset!');
     }
 
     // 1. Xóa khỏi danh sách reports cục bộ
