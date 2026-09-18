@@ -935,25 +935,37 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                 Báo cáo sĩ số của lớp <span className="font-bold text-slate-900">{selectedClass?.class_name}</span> đã được lưu và đồng bộ thành công lên hệ thống toàn trường.
               </p>
               
-              <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-2.5">
                 <button
                   type="button"
                   onClick={() => setSaveSuccess(false)}
-                  className="w-full py-3.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl shadow-md transition-all active:scale-98"
+                  className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl shadow-md transition-all active:scale-98"
                 >
                   Đóng cửa sổ
                 </button>
                 {onNavigate && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSaveSuccess(false);
-                      onNavigate('/dashboard');
-                    }}
-                    className="w-full py-3.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm rounded-xl transition-all active:scale-98"
-                  >
-                    Về Bảng điều khiển
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSaveSuccess(false);
+                        onNavigate('/daily-report');
+                      }}
+                      className="w-full py-3 px-4 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 font-bold text-sm rounded-xl transition-all active:scale-98 flex items-center justify-center gap-1.5"
+                    >
+                      <span>Xem Biểu Mẫu Toàn Trường</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSaveSuccess(false);
+                        onNavigate('/dashboard');
+                      }}
+                      className="w-full py-2.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs sm:text-sm rounded-xl transition-all active:scale-98"
+                    >
+                      Về Bảng điều khiển
+                    </button>
+                  </>
                 )}
               </div>
               

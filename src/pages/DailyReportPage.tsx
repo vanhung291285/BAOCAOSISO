@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useSchool } from '../contexts/SchoolContext';
 import { useAuth } from '../contexts/AuthContext';
-import { StorageService } from '../services/storage';
+import { StorageService, subscribeRealtime } from '../services/storage';
 import { ClassReportRow } from '../types';
 import { DateNavigator } from '../components/DateNavigator';
 import { CampusSelector } from '../components/CampusSelector';
@@ -17,6 +17,7 @@ import {
   AlertCircle,
   X,
   CheckCircle,
+  RefreshCw,
 } from 'lucide-react';
 
 interface DailyReportPageProps {
@@ -75,21 +76,32 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
   const [isResetting, setIsResetting] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
 
-  const loadReportData = async () => {
-    setLoading(true);
+  const loadReportData = useCallback(async (showIndicator = true) => {
+    if (showIndicator) setLoading(true);
     try {
       const data = await StorageService.getDailyAggregate(selectedDate, selectedCampusId);
       setReportData(data);
     } catch (err) {
       console.error('Failed to load report data:', err);
     } finally {
-      setLoading(false);
+      if (showIndicator) setLoading(false);
     }
-  };
+  }, [selectedDate, selectedCampusId]);
 
   useEffect(() => {
-    loadReportData();
-  }, [selectedDate, selectedCampusId]);
+    loadReportData(true);
+
+    // Lắng nghe realtime từ GVCN nộp báo cáo hoặc reset báo cáo
+    const unsub = subscribeRealtime((event) => {
+      if (event.table === 'daily_reports' || event.table === 'daily_report_values') {
+        loadReportData(false);
+      }
+    });
+
+    return () => {
+      unsub();
+    };
+  }, [loadReportData]);
 
   const loadManagerData = async (dateStr: string) => {
     setManagerLoading(true);
@@ -605,6 +617,17 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
             onChange={setSelectedCampusId}
           />
           <DateNavigator selectedDate={selectedDate} onChangeDate={setSelectedDate} />
+
+          <button
+            type="button"
+            onClick={() => loadReportData(true)}
+            disabled={loading}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-300 shadow-2xs transition-colors disabled:opacity-50 cursor-pointer"
+            title="Tải lại số liệu mới nhất từ giáo viên chủ nhiệm"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 text-blue-600 ${loading ? 'animate-spin' : ''}`} />
+            <span className="hidden sm:inline">LÀM MỚI</span>
+          </button>
 
           <button
             type="button"
