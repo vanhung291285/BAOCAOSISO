@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useSchool } from '../contexts/SchoolContext';
-import { QuickUserSwitcher } from './QuickUserSwitcher';
 import { PWAInstallButton } from './PWAInstallButton';
 import {
   School,
@@ -19,6 +18,7 @@ import {
   MapPin,
   Printer,
   FileSpreadsheet,
+  Trophy,
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -44,6 +44,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentPath, onNavigate }) => {
     },
     { label: 'Báo cáo ngày', path: '/reports/daily', icon: FileSpreadsheet },
     { label: 'Báo cáo tháng', path: '/reports/monthly', icon: Calendar },
+    { label: 'Thi đua sĩ số', path: '/reports/ranking', icon: Trophy },
     { label: 'Biểu đồ', path: '/charts', icon: BarChart3 },
   ];
 
@@ -175,7 +176,6 @@ export const Navbar: React.FC<NavbarProps> = ({ currentPath, onNavigate }) => {
               </div>
             )}
             <PWAInstallButton />
-            {isAdmin && <QuickUserSwitcher />}
 
             {currentUser && (
               <div className="hidden sm:flex items-center gap-2 pl-2 border-l border-slate-200 flex-shrink-0">

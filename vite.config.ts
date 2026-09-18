@@ -11,15 +11,16 @@ export default defineConfig(() => {
       tailwindcss(),
       VitePWA({
         registerType: 'autoUpdate',
-        includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'icon.svg'],
+        includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'pwa-192x192.png', 'pwa-512x512.png', 'pwa-maskable-512x512.png', 'icon.svg'],
         manifest: {
           id: '/',
-          name: 'Báo cáo Sĩ số',
-          short_name: 'Báo cáo',
+          name: 'Báo cáo Sĩ số - PTDTBT THCS Xa Dung',
+          short_name: 'Báo cáo Sĩ số',
           description: 'Hệ thống báo cáo sĩ số trường học',
           theme_color: '#1e40af',
           background_color: '#ffffff',
           display: 'standalone',
+          orientation: 'portrait',
           start_url: '/',
           scope: '/',
           icons: [

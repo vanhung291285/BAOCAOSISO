@@ -13,6 +13,10 @@ import {
   FileSpreadsheet,
   CheckCircle2,
   Calendar,
+  RotateCcw,
+  AlertCircle,
+  X,
+  CheckCircle,
 } from 'lucide-react';
 
 interface DailyReportPageProps {
@@ -22,6 +26,9 @@ interface DailyReportPageProps {
 export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) => {
   const { settings, indicators, campuses, classes } = useSchool();
   const { isGVCN, currentUser } = useAuth();
+  const isAdmin = currentUser?.role === 'ADMIN';
+  const isBGH = currentUser?.role === 'BGH';
+
   const [selectedDate, setSelectedDate] = useState(() => {
     const d = new Date();
     const year = d.getFullYear();
@@ -50,12 +57,84 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
 
-  useEffect(() => {
+  // Reset Manager State
+  const [showResetManager, setShowResetManager] = useState(false);
+  const [managerDate, setManagerDate] = useState(selectedDate);
+  const [managerData, setManagerData] = useState<{
+    rows: ClassReportRow[];
+    reportedClasses: number;
+    totalClasses: number;
+  } | null>(null);
+  const [managerLoading, setManagerLoading] = useState(false);
+
+  const [confirmResetModal, setConfirmResetModal] = useState<{
+    classId: string;
+    className: string;
+    date: string;
+  } | null>(null);
+  const [isResetting, setIsResetting] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+
+  const loadReportData = async () => {
     setLoading(true);
-    StorageService.getDailyAggregate(selectedDate, selectedCampusId)
-      .then((data) => setReportData(data))
-      .finally(() => setLoading(false));
+    try {
+      const data = await StorageService.getDailyAggregate(selectedDate, selectedCampusId);
+      setReportData(data);
+    } catch (err) {
+      console.error('Failed to load report data:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadReportData();
   }, [selectedDate, selectedCampusId]);
+
+  const loadManagerData = async (dateStr: string) => {
+    setManagerLoading(true);
+    try {
+      const data = await StorageService.getDailyAggregate(dateStr, selectedCampusId);
+      setManagerData(data);
+    } catch (err) {
+      console.error('Failed to load manager data:', err);
+    } finally {
+      setManagerLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (showResetManager) {
+      loadManagerData(managerDate);
+    }
+  }, [showResetManager, managerDate, selectedCampusId]);
+
+  const handlePromptReset = (classId: string, className: string, dateStr: string = selectedDate) => {
+    setConfirmResetModal({ classId, className, date: dateStr });
+  };
+
+  const handleConfirmReset = async () => {
+    if (!confirmResetModal || !currentUser) return;
+    setIsResetting(true);
+    try {
+      const ok = await StorageService.deleteDailyReport(confirmResetModal.classId, confirmResetModal.date, currentUser);
+      if (ok) {
+        setToastMessage(`Đã reset báo cáo lớp ${confirmResetModal.className} ngày ${confirmResetModal.date.split('-').reverse().join('/')} về trạng thái Chưa báo cáo thành công!`);
+        setTimeout(() => setToastMessage(''), 5000);
+        setConfirmResetModal(null);
+        if (confirmResetModal.date === selectedDate) {
+          await loadReportData();
+        }
+        if (showResetManager) {
+          await loadManagerData(managerDate);
+        }
+      }
+    } catch (err) {
+      console.error('Reset report error:', err);
+    } finally {
+      setIsResetting(false);
+    }
+  };
 
   // Parse date into day, month, year for official Vietnamese report header
   const dateParts = useMemo(() => {
@@ -570,6 +649,19 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
             <Printer className="w-4 h-4" />
             <span>IN BÁO CÁO</span>
           </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setManagerDate(selectedDate);
+              setShowResetManager(true);
+            }}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 shadow-2xs transition-colors cursor-pointer"
+            title="Quản lý và reset báo cáo nhầm của các lớp về Chưa báo cáo"
+          >
+            <RotateCcw className="w-3.5 h-3.5 text-rose-600" />
+            <span>RESET BÁO CÁO NHẦM</span>
+          </button>
         </div>
       </div>
 
@@ -608,6 +700,9 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
                 </th>
                 <th rowSpan={2} className="border border-black px-2 py-2.5 w-28 text-center">
                   Tỉ lệ phần trăm chuyên cần (%)
+                </th>
+                <th rowSpan={2} className="border border-black px-2 py-2.5 w-16 text-center print:hidden">
+                  Xử lý
                 </th>
               </tr>
 
@@ -700,6 +795,24 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
                     <td className="border border-black py-1.5 px-1 font-bold text-center text-black">
                       {isReported ? `${presentRate.toFixed(2).replace('.', ',')}%` : '-'}
                     </td>
+
+                    {/* 10. Xử lý reset nhầm (ẩn khi in) */}
+                    <td className="border border-black py-1 px-1.5 text-center print:hidden">
+                      {isReported && (isAdmin || isBGH || (isGVCN && currentUser?.assigned_class_id === row.classItem.id)) ? (
+                        <button
+                          type="button"
+                          onClick={() => handlePromptReset(row.classItem.id, row.classItem.class_name, selectedDate)}
+                          disabled={row.status === 'LOCKED' && !isAdmin}
+                          className="inline-flex items-center justify-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition-colors shadow-2xs disabled:opacity-40 cursor-pointer"
+                          title="Reset báo cáo nhầm về Chưa báo cáo"
+                        >
+                          <RotateCcw className="w-3 h-3 text-rose-600" />
+                          <span>Reset</span>
+                        </button>
+                      ) : (
+                        <span className="text-slate-300 text-[10px]">-</span>
+                      )}
+                    </td>
                   </tr>
                 );
               })}
@@ -747,6 +860,9 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
                       <td className="border border-black py-2 px-1 text-xs font-bold text-black text-center">
                         {overallPresentRate.toFixed(2).replace('.', ',')}%
                       </td>
+                      <td className="border border-black py-2 px-1 text-center font-bold text-slate-400 print:hidden">
+                        -
+                      </td>
                     </tr>
                   );
                 })()
@@ -787,6 +903,243 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
           </div>
         )}
       </div>
+
+      {/* Toast Notice */}
+      {toastMessage && (
+        <div className="fixed bottom-5 right-5 z-50 bg-slate-900 text-white px-4 py-3 rounded-2xl text-xs sm:text-sm font-bold shadow-2xl flex items-center gap-2 border border-slate-700 animate-in fade-in slide-in-from-bottom-3 duration-200 print:hidden">
+          <CheckCircle className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+          <span>{toastMessage}</span>
+        </div>
+      )}
+
+      {/* 1. Modal Bảng Điều Khiển Quản Lý & Reset Báo Cáo Nhầm */}
+      {showResetManager && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150 print:hidden">
+          <div className="bg-white rounded-3xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-150">
+            {/* Modal Header */}
+            <div className="p-4 sm:p-5 bg-gradient-to-r from-rose-50 via-orange-50 to-amber-50 border-b border-rose-100 flex items-center justify-between flex-shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-rose-100 border border-rose-200 flex items-center justify-center text-rose-600 shadow-2xs">
+                  <RotateCcw className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base sm:text-lg font-black text-slate-900 leading-tight">
+                    Quản Lý & Reset Báo Cáo Nhầm
+                  </h3>
+                  <p className="text-xs text-rose-700 font-semibold mt-0.5">
+                    Khôi phục trạng thái Chưa báo cáo cho từng lớp theo ngày
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowResetManager(false)}
+                className="w-8 h-8 rounded-full hover:bg-slate-200/70 flex items-center justify-center text-slate-400 hover:text-slate-700 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Date Selection Bar */}
+            <div className="p-4 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 flex-shrink-0">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-slate-600">Chọn ngày cần reset:</span>
+                <input
+                  type="date"
+                  value={managerDate}
+                  onChange={(e) => setManagerDate(e.target.value)}
+                  className="px-3 py-1.5 rounded-xl border border-slate-300 text-xs font-bold text-slate-800 bg-white shadow-2xs focus:ring-2 focus:ring-rose-500 focus:outline-hidden"
+                />
+              </div>
+
+              <div className="text-xs text-slate-600 font-medium">
+                Đã báo cáo:{' '}
+                <strong className="text-rose-700 font-black">
+                  {managerData?.rows.filter((r) => r.status !== 'NOT_REPORTED').length || 0}
+                </strong>
+                /{managerData?.rows.length || 0} lớp
+              </div>
+            </div>
+
+            {/* Classes List */}
+            <div className="p-4 overflow-y-auto flex-1 space-y-2">
+              {managerLoading ? (
+                <div className="py-12 text-center text-slate-400 text-xs flex flex-col items-center gap-2">
+                  <div className="w-6 h-6 border-2 border-rose-500 border-t-transparent rounded-full animate-spin"></div>
+                  <span>Đang tải danh sách lớp...</span>
+                </div>
+              ) : (
+                (() => {
+                  const reportedRows = (managerData?.rows || []).filter((r) => {
+                    if (isGVCN && !isAdmin && !isBGH) {
+                      return r.classItem.id === currentUser?.assigned_class_id;
+                    }
+                    return true;
+                  });
+
+                  if (reportedRows.length === 0) {
+                    return (
+                      <div className="py-10 text-center text-slate-400 text-xs italic">
+                        Không có lớp nào trong danh sách.
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="space-y-2">
+                      {reportedRows.map((row) => {
+                        const isRep = row.status !== 'NOT_REPORTED';
+                        const canOperate = isAdmin || isBGH || (isGVCN && currentUser?.assigned_class_id === row.classItem.id);
+
+                        return (
+                          <div
+                            key={row.classItem.id}
+                            className={`p-3 rounded-2xl border flex items-center justify-between gap-3 transition-all ${
+                              isRep
+                                ? 'bg-white border-slate-200 hover:border-rose-300 shadow-2xs'
+                                : 'bg-slate-50/60 border-slate-200/60 opacity-60'
+                            }`}
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div
+                                className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm ${
+                                  isRep ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'
+                                }`}
+                              >
+                                {row.classItem.class_name}
+                              </div>
+                              <div className="min-w-0">
+                                <div className="text-xs font-bold text-slate-900 flex items-center gap-2">
+                                  <span>Lớp {row.classItem.class_name}</span>
+                                  <span
+                                    className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                                      isRep
+                                        ? 'bg-emerald-100 text-emerald-800'
+                                        : 'bg-amber-100 text-amber-800'
+                                    }`}
+                                  >
+                                    {isRep ? 'ĐÃ BÁO CÁO' : 'CHƯA BÁO CÁO'}
+                                  </span>
+                                </div>
+                                <div className="text-[11px] text-slate-500 mt-0.5 truncate">
+                                  GVCN: {row.teacher?.full_name || 'Chưa phân công'}
+                                  {row.report?.reported_time && (
+                                    <span className="ml-2 font-mono text-slate-400">
+                                      ({row.report.reported_time})
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2 flex-shrink-0">
+                              {isRep && canOperate ? (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handlePromptReset(row.classItem.id, row.classItem.class_name, managerDate)
+                                  }
+                                  disabled={row.status === 'LOCKED' && !isAdmin}
+                                  className="px-3 py-1.5 rounded-xl text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 active:scale-95 transition-all shadow-2xs flex items-center gap-1.5 disabled:opacity-40 cursor-pointer"
+                                >
+                                  <RotateCcw className="w-3.5 h-3.5" />
+                                  <span>Reset về Chưa báo cáo</span>
+                                </button>
+                              ) : (
+                                <span className="text-xs text-slate-400 italic">
+                                  {isRep ? 'Đã khóa' : 'Chưa có báo cáo'}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between flex-shrink-0">
+              <div className="text-[11px] text-slate-500 italic">
+                Lưu ý: Reset sẽ xóa dữ liệu sĩ số ngày được chọn của lớp để giáo viên nộp lại.
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowResetManager(false)}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-300 transition-colors"
+              >
+                Đóng
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 2. Modal Xác Nhận Reset Từng Lớp */}
+      {confirmResetModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150 print:hidden">
+          <div className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-150">
+            <div className="p-5 sm:p-6 bg-gradient-to-br from-rose-50 to-orange-50 border-b border-rose-100 flex items-start gap-3.5">
+              <div className="w-11 h-11 rounded-2xl bg-rose-100 border border-rose-200 flex items-center justify-center flex-shrink-0 shadow-2xs">
+                <RotateCcw className="w-5 h-5 text-rose-600" />
+              </div>
+              <div>
+                <h3 className="text-base sm:text-lg font-black text-slate-900 leading-tight">
+                  Xác nhận Reset Báo Cáo Nhầm
+                </h3>
+                <p className="text-xs text-rose-700 font-semibold mt-0.5">
+                  Đưa lớp về trạng thái CHƯA BÁO CÁO
+                </p>
+              </div>
+            </div>
+
+            <div className="p-5 sm:p-6 space-y-4">
+              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-2 text-xs">
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500">Lớp học:</span>
+                  <span className="font-extrabold text-slate-900 text-sm">Lớp {confirmResetModal.className}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500">Ngày báo cáo:</span>
+                  <span className="font-bold text-slate-800">
+                    {confirmResetModal.date.split('-').reverse().join('/')}
+                  </span>
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900 leading-relaxed">
+                <div className="font-bold flex items-center gap-1.5 text-amber-800 mb-1">
+                  <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                  Lưu ý khi reset:
+                </div>
+                Dữ liệu sĩ số đã nhập của lớp sẽ bị xóa bỏ hoàn toàn. Bảng tổng hợp toàn trường và biểu mẫu báo cáo sẽ chuyển lớp về trạng thái <strong className="text-amber-950">Chưa báo cáo</strong> cho đến khi GVCN nhập lại.
+              </div>
+            </div>
+
+            <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setConfirmResetModal(null)}
+                disabled={isResetting}
+                className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 transition-colors"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmReset}
+                disabled={isResetting}
+                className="px-5 py-2.5 rounded-xl text-xs font-black text-white bg-rose-600 hover:bg-rose-700 active:scale-95 shadow-md flex items-center gap-1.5 transition-all disabled:opacity-50 cursor-pointer"
+              >
+                <RotateCcw className="w-4 h-4" />
+                <span>{isResetting ? 'Đang reset...' : 'XÁC NHẬN RESET VỀ CHƯA BÁO CÁO'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

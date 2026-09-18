@@ -5,17 +5,28 @@ import { MapPin, School } from 'lucide-react';
 
 interface CampusSelectorProps {
   selectedCampusId: string;
-  onChange: (campusId: string) => void;
+  onChange?: (campusId: string) => void;
+  onChangeCampus?: (campusId: string) => void;
   className?: string;
 }
 
 export const CampusSelector: React.FC<CampusSelectorProps> = ({
   selectedCampusId,
   onChange,
+  onChangeCampus,
   className = '',
 }) => {
   const { settings, campuses, classes } = useSchool();
   const { isGVCN, currentUser } = useAuth();
+
+  const handleSelect = (id: string) => {
+    if (typeof onChange === 'function') {
+      onChange(id);
+    }
+    if (typeof onChangeCampus === 'function') {
+      onChangeCampus(id);
+    }
+  };
 
   // Determine locked campus for GVCN
   const lockedCampusId = React.useMemo(() => {
@@ -49,7 +60,7 @@ export const CampusSelector: React.FC<CampusSelectorProps> = ({
       {!lockedCampusId && (
       <button
         type="button"
-        onClick={() => onChange('all')}
+        onClick={() => handleSelect('all')}
         className={`flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold rounded-lg whitespace-nowrap transition-all duration-200 ${
           selectedCampusId === 'all'
             ? 'bg-blue-600 text-white shadow-md'
@@ -64,7 +75,7 @@ export const CampusSelector: React.FC<CampusSelectorProps> = ({
         <button
           key={campus.id}
           type="button"
-          onClick={() => onChange(campus.id)}
+          onClick={() => handleSelect(campus.id)}
           className={`flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold rounded-lg whitespace-nowrap transition-all duration-200 ${
             selectedCampusId === campus.id
               ? getCampusColor(idx)

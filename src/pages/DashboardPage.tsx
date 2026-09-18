@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useSchool } from '../contexts/SchoolContext';
 import { useAuth } from '../contexts/AuthContext';
 import { StorageService, subscribeRealtime } from '../services/storage';
-import { ClassReportRow, ReportStatus } from '../types';
+import { ClassReportRow, ReportStatus, ClassAttendanceRank } from '../types';
 import { DateNavigator } from '../components/DateNavigator';
 import { CampusSelector } from '../components/CampusSelector';
 import {
@@ -26,6 +26,9 @@ import {
   ChevronDown,
   ChevronUp,
   Plus,
+  Trophy,
+  Award,
+  RotateCcw,
 } from 'lucide-react';
 
 interface DashboardPageProps {
@@ -87,6 +90,10 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSele
   });
   const [selectedClassId, setSelectedClassId] = useState<string>('all');
   const [showUnreportedChips, setShowUnreportedChips] = useState(true);
+  const [myClassRanking, setMyClassRanking] = useState<ClassAttendanceRank | null>(null);
+  const [resetTargetRow, setResetTargetRow] = useState<ClassReportRow | null>(null);
+  const [isResetting, setIsResetting] = useState(false);
+  const [toastNotice, setToastNotice] = useState<string>('');
 
   const loadData = async (dateStr: string, campusId: string) => {
     try {
@@ -99,18 +106,31 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSele
     }
   };
 
+  const loadMyClassRanking = async () => {
+    if (isGVCN && currentUser?.assigned_class_id) {
+      try {
+        const rank = await StorageService.getClassAttendanceRanking(currentUser.assigned_class_id, 'WEEK');
+        setMyClassRanking(rank);
+      } catch (err) {
+        console.error('Failed to load class ranking:', err);
+      }
+    }
+  };
+
   useEffect(() => {
     loadData(selectedDate, selectedCampus);
+    loadMyClassRanking();
 
     // Subscribe to realtime changes so any GVCN save triggers instant UI reload
     const unsub = subscribeRealtime(() => {
       loadData(selectedDate, selectedCampus);
+      loadMyClassRanking();
     });
 
     return () => {
       unsub();
     };
-  }, [selectedDate, selectedCampus]);
+  }, [selectedDate, selectedCampus, isGVCN, currentUser?.assigned_class_id]);
 
   const handleToggleLock = async (e: React.MouseEvent, row: ClassReportRow) => {
     e.stopPropagation();
@@ -137,6 +157,29 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSele
     if (window.confirm(`Bạn có chắc chắn muốn mở khóa tất cả các lớp (${campusLabel}) cho ngày ${formattedDate}?`)) {
       await StorageService.lockAllReportsForDate(selectedDate, false, currentUser!, selectedCampus);
       await loadData(selectedDate, selectedCampus);
+    }
+  };
+
+  const handlePromptReset = (e: React.MouseEvent, row: ClassReportRow) => {
+    e.stopPropagation();
+    setResetTargetRow(row);
+  };
+
+  const handleConfirmReset = async () => {
+    if (!resetTargetRow || !currentUser) return;
+    setIsResetting(true);
+    try {
+      const ok = await StorageService.deleteDailyReport(resetTargetRow.classItem.id, selectedDate, currentUser);
+      if (ok) {
+        setToastNotice(`Đã reset trạng thái báo cáo lớp ${resetTargetRow.classItem.class_name} ngày ${selectedDate.split('-').reverse().join('/')} về Chưa báo cáo thành công!`);
+        setTimeout(() => setToastNotice(''), 5000);
+        setResetTargetRow(null);
+        await loadData(selectedDate, selectedCampus);
+      }
+    } catch (err) {
+      console.error('Reset report error:', err);
+    } finally {
+      setIsResetting(false);
     }
   };
 
@@ -196,6 +239,16 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSele
             />
             <DateNavigator selectedDate={selectedDate} onChangeDate={setSelectedDate} />
             
+            <button
+              type="button"
+              onClick={() => onNavigate('/reports/ranking')}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl text-xs font-bold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 shadow-2xs transition-colors flex-shrink-0"
+              title="Tổng kết thi đua & lớp duy trì sĩ số tốt theo Tuần, Tháng, Năm (không tính ngày nghỉ)"
+            >
+              <Trophy className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-600" />
+              <span>Thi đua sĩ số</span>
+            </button>
+
             <button
               type="button"
               onClick={() => onNavigate('/reports/daily')}
@@ -274,6 +327,49 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSele
           </div>
         );
       })()}
+
+      {/* GVCN SYNCHRONIZED EMULATION STATUS WIDGET */}
+      {isGVCN && myClassRanking && (
+        <div className="bg-gradient-to-r from-amber-50 via-white to-indigo-50/60 rounded-2xl border border-amber-200/80 p-3.5 sm:p-4 shadow-2xs">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-start sm:items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-400 text-amber-950 flex items-center justify-center flex-shrink-0 shadow-xs">
+                <Trophy className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[10px] font-black uppercase tracking-wider bg-amber-400 text-amber-950 px-2 py-0.5 rounded shadow-2xs">
+                    THI ĐUA TUẦN NÀY (ĐỒNG BỘ)
+                  </span>
+                  <span className="text-xs font-black text-slate-800">
+                    Lớp {myClassRanking.classItem.class_name} • {myClassRanking.campusName}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 sm:gap-3 text-xs mt-1 flex-wrap">
+                  <span className="font-extrabold text-indigo-800 bg-indigo-100/80 px-2 py-0.5 rounded">
+                    🥇 Hạng {myClassRanking.campusRank}/{myClassRanking.totalClassesInCampus} ({myClassRanking.campusName})
+                  </span>
+                  <span className="text-slate-600 font-bold">
+                    Hạng <span className="text-blue-700 font-extrabold">#{myClassRanking.schoolRank}</span>/{myClassRanking.totalClassesInSchool} toàn trường
+                  </span>
+                  <span className="font-extrabold text-emerald-700">
+                    Duy trì sĩ số: {myClassRanking.attendanceRate.toFixed(1)}% ({myClassRanking.classificationLabel})
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => onNavigate('/reports/ranking')}
+              className="self-start sm:self-auto px-3.5 py-2 rounded-xl bg-white hover:bg-amber-100 text-amber-950 font-bold text-xs flex items-center gap-1.5 transition-colors border border-amber-300 shadow-2xs cursor-pointer"
+            >
+              <span>Xem Bảng Vàng Thi Đua</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* OVERVIEW PANEL: Tiến độ báo cáo & Các chỉ số quan sát tổng quan */}
       {aggregateData && (
@@ -729,6 +825,18 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSele
                         </button>
                       )}
 
+                      {row.status !== 'NOT_REPORTED' && (canEdit || isAdmin || isBGH) && (
+                        <button
+                          type="button"
+                          onClick={(e) => handlePromptReset(e, row)}
+                          title="Reset báo cáo nhầm về Chưa báo cáo"
+                          className="p-1 rounded-lg text-rose-600 hover:text-rose-800 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition-colors shadow-2xs flex items-center gap-1 text-[11px] font-bold"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5" />
+                          <span className="hidden xs:inline">Reset</span>
+                        </button>
+                      )}
+
                       {isAdmin && row.report && (
                         <button
                           type="button"
@@ -928,6 +1036,17 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSele
                             </button>
                           )}
 
+                          {row.status !== 'NOT_REPORTED' && (canEdit || isAdmin || isBGH) && (
+                            <button
+                              type="button"
+                              onClick={(e) => handlePromptReset(e, row)}
+                              title="Reset báo cáo nhầm về Chưa báo cáo"
+                              className="p-1 rounded-md text-rose-600 hover:text-rose-800 hover:bg-rose-50 border border-rose-200 transition-colors"
+                            >
+                              <RotateCcw className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+
                           {isAdmin && row.report && (
                             <button
                               type="button"
@@ -952,6 +1071,82 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSele
           </table>
         </div>
       </div>
+
+      {/* Toast Notice */}
+      {toastNotice && (
+        <div className="fixed bottom-5 right-5 z-50 bg-slate-900 text-white px-4 py-3 rounded-2xl text-xs sm:text-sm font-bold shadow-2xl flex items-center gap-2 border border-slate-700 animate-in fade-in slide-in-from-bottom-3 duration-200">
+          <CheckCircle className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+          <span>{toastNotice}</span>
+        </div>
+      )}
+
+      {/* Modal xác nhận Reset Báo Cáo Nhầm */}
+      {resetTargetRow && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-150">
+            <div className="p-5 sm:p-6 bg-gradient-to-br from-rose-50 to-orange-50 border-b border-rose-100 flex items-start gap-3.5">
+              <div className="w-11 h-11 rounded-2xl bg-rose-100 border border-rose-200 flex items-center justify-center flex-shrink-0 shadow-2xs">
+                <RotateCcw className="w-5 h-5 text-rose-600" />
+              </div>
+              <div>
+                <h3 className="text-base sm:text-lg font-black text-slate-900 leading-tight">
+                  Xác nhận Reset Báo Cáo Nhầm
+                </h3>
+                <p className="text-xs text-rose-700 font-semibold mt-0.5">
+                  Đưa lớp về trạng thái CHƯA BÁO CÁO
+                </p>
+              </div>
+            </div>
+
+            <div className="p-5 sm:p-6 space-y-4">
+              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-2 text-xs">
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500">Lớp học:</span>
+                  <span className="font-extrabold text-slate-900 text-sm">Lớp {resetTargetRow.classItem.class_name}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500">Ngày báo cáo:</span>
+                  <span className="font-bold text-slate-800">{selectedDate.split('-').reverse().join('/')}</span>
+                </div>
+                {resetTargetRow.teacher?.full_name && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-500">GVCN:</span>
+                    <span className="font-semibold text-slate-700">{resetTargetRow.teacher.full_name}</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900 leading-relaxed">
+                <div className="font-bold flex items-center gap-1.5 text-amber-800 mb-1">
+                  <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                  Lưu ý:
+                </div>
+                Báo cáo sĩ số đã lưu của lớp vào ngày này sẽ được xóa và lớp sẽ quay về trạng thái <strong className="text-amber-950">Chưa báo cáo</strong>.
+              </div>
+            </div>
+
+            <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setResetTargetRow(null)}
+                disabled={isResetting}
+                className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 transition-colors"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmReset}
+                disabled={isResetting}
+                className="px-5 py-2.5 rounded-xl text-xs font-black text-white bg-rose-600 hover:bg-rose-700 active:scale-95 shadow-md flex items-center gap-1.5 transition-all disabled:opacity-50 cursor-pointer"
+              >
+                <RotateCcw className="w-4 h-4" />
+                <span>{isResetting ? 'Đang reset...' : 'XÁC NHẬN RESET VỀ CHƯA BÁO CÁO'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

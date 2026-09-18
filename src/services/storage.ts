@@ -10,8 +10,27 @@ import {
   SystemLog,
   ClassReportRow,
   ReportStatus,
+  SchoolOffDay,
+  AttendanceRankingSummary,
+  ClassAttendanceRank,
+  AttendancePeriodType,
+  CampusRankingSummary,
+  SchoolWeekInfo,
 } from '../types';
 import { getSupabaseClient, isSupabaseConnected } from './supabase';
+import {
+  DEFAULT_WEEK1_START_DATE,
+  DEFAULT_SCHOOL_DAYS_PER_WEEK,
+  DEFAULT_EARLY_REPORT_DEADLINE,
+  DEFAULT_EARLY_REPORT_BONUS_PER_DAY,
+  DEFAULT_EARLY_REPORT_MAX_BONUS,
+  getSchoolWeekFromDate,
+  getSchoolWeekInfo,
+  checkIsReportEarly,
+  addDaysToDateStr,
+  parseDateParts,
+  getTodayDateStr,
+} from '../utils/schoolWeeks';
 
 const STORAGE_KEYS = {
   SETTINGS: 'sso_school_settings_v1',
@@ -23,6 +42,7 @@ const STORAGE_KEYS = {
   REPORTS: 'sso_daily_reports_v1',
   VALUES: 'sso_daily_report_values_v1',
   LOGS: 'sso_system_logs_v1',
+  OFF_DAYS: 'sso_school_off_days_v1',
 };
 
 export interface TableSyncStatus {
@@ -131,6 +151,15 @@ export function getInitialData() {
     primary_color: '#1d4ed8',
     input_mode: 'MODE_1_TOTAL_PRESENT',
     enable_campuses: false,
+    week1_start_date: DEFAULT_WEEK1_START_DATE,
+    school_days_per_week: DEFAULT_SCHOOL_DAYS_PER_WEEK,
+    ranking_threshold_excellent: 98,
+    ranking_threshold_good: 95,
+    ranking_threshold_fair: 90,
+    enable_early_report_bonus: true,
+    early_report_deadline: DEFAULT_EARLY_REPORT_DEADLINE,
+    early_report_bonus_points: DEFAULT_EARLY_REPORT_BONUS_PER_DAY,
+    early_report_max_bonus: DEFAULT_EARLY_REPORT_MAX_BONUS,
     created_at: now,
     updated_at: now,
   };
@@ -283,6 +312,10 @@ export const StorageService = {
       s.address = s.address.replace(', Huyện Điện Biên Đông', '').replace('Huyện Điện Biên Đông, ', '').replace('Huyện Điện Biên Đông', '').trim();
       needsSave = true;
     }
+    if (s && !s.week1_start_date) {
+      s.week1_start_date = DEFAULT_WEEK1_START_DATE;
+      needsSave = true;
+    }
 
     if (s) {
       localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(s));
@@ -295,6 +328,10 @@ export const StorageService = {
       }
     }
     return s as SchoolSettings;
+  },
+
+  async getSchoolSettings(): Promise<SchoolSettings> {
+    return this.getSettings();
   },
 
   async updateSettings(settings: Partial<SchoolSettings>, updatedBy?: Profile): Promise<SchoolSettings> {
@@ -871,6 +908,12 @@ export const StorageService = {
     const reportId = existingIndex >= 0 ? reports[existingIndex].id : `rep_${reportDate}_${classId}_${Date.now()}`;
     const oldReport = existingIndex >= 0 ? { ...reports[existingIndex] } : null;
 
+    const now = new Date();
+    const currentTimeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    const initialReportedTime = existingIndex >= 0 && reports[existingIndex].reported_time
+      ? reports[existingIndex].reported_time
+      : currentTimeStr;
+
     const report: DailyReport = {
       id: reportId,
       class_id: classId,
@@ -879,8 +922,9 @@ export const StorageService = {
       status: 'SUBMITTED',
       notes: notes ?? (existingIndex >= 0 ? reports[existingIndex].notes : ''),
       absent_students: absent_students ?? (existingIndex >= 0 ? reports[existingIndex].absent_students : undefined),
-      created_at: existingIndex >= 0 ? reports[existingIndex].created_at : new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      reported_time: initialReportedTime,
+      created_at: existingIndex >= 0 ? reports[existingIndex].created_at : now.toISOString(),
+      updated_at: now.toISOString(),
     };
 
     if (existingIndex >= 0) {
@@ -995,6 +1039,58 @@ export const StorageService = {
     }
   },
 
+  /**
+   * Reset / Xóa báo cáo sĩ số của một lớp theo ngày về trạng thái CHƯA BÁO CÁO (nếu báo cáo nhầm)
+   */
+  async deleteDailyReport(classId: string, reportDate: string, user: Profile): Promise<boolean> {
+    ensureInitialized();
+    const rawReports = localStorage.getItem(STORAGE_KEYS.REPORTS);
+    const reports: DailyReport[] = rawReports ? JSON.parse(rawReports) : [];
+    const reportToDelete = reports.find((r) => r.class_id === classId && r.report_date === reportDate);
+
+    if (!reportToDelete) {
+      return false;
+    }
+
+    // 1. Xóa khỏi danh sách reports cục bộ
+    const filteredReports = reports.filter((r) => r.id !== reportToDelete.id);
+    localStorage.setItem(STORAGE_KEYS.REPORTS, JSON.stringify(filteredReports));
+
+    // 2. Xóa các giá trị chỉ tiêu tương ứng trong daily_report_values
+    const rawValues = localStorage.getItem(STORAGE_KEYS.VALUES);
+    const allValues: DailyReportValue[] = rawValues ? JSON.parse(rawValues) : [];
+    const filteredValues = allValues.filter((v) => v.report_id !== reportToDelete.id);
+    localStorage.setItem(STORAGE_KEYS.VALUES, JSON.stringify(filteredValues));
+
+    // 3. Xóa trên Supabase nếu có kết nối
+    const supabase = getSupabaseClient();
+    if (supabase && isSupabaseConnected()) {
+      try {
+        await supabase.from('daily_report_values').delete().eq('report_id', reportToDelete.id);
+        await supabase.from('daily_reports').delete().eq('id', reportToDelete.id);
+      } catch (err) {
+        console.error('Supabase delete daily report error:', err);
+      }
+    }
+
+    // 4. Ghi log kiểm toán
+    const classes = await this.getClasses();
+    const cls = classes.find((c) => c.id === classId);
+    await this.addLog({
+      user_id: user.id,
+      user_name: user.full_name,
+      user_role: user.role,
+      action: 'DELETE',
+      class_name: cls?.class_name || classId,
+      report_date: reportDate,
+      old_data: reportToDelete,
+      new_data: { status: 'NOT_REPORTED', note: 'Reset trạng thái báo cáo nhầm về Chưa báo cáo' },
+    });
+
+    notifyRealtimeChange('daily_reports', { classId, reportDate, action: 'RESET' });
+    return true;
+  },
+
   async lockAllReportsForDate(reportDate: string, locked: boolean, adminUser: Profile, campusId?: string): Promise<void> {
     ensureInitialized();
     const classes = await this.getClasses();
@@ -1098,28 +1194,33 @@ export const StorageService = {
           .select('*')
           .eq('report_date', reportDate);
 
-        if (cloudReports && cloudReports.length > 0) {
+        if (cloudReports) {
           const repIds = cloudReports.map((r) => r.id);
-          const { data: cloudValues } = await supabase
-            .from('daily_report_values')
-            .select('*')
-            .in('report_id', repIds);
+          const rawReports = localStorage.getItem(STORAGE_KEYS.REPORTS);
+          let reports: DailyReport[] = rawReports ? JSON.parse(rawReports) : [];
+          
+          // Giữ lại các ngày khác, riêng ngày reportDate chỉ giữ lại các báo cáo còn tồn tại trên cloud
+          const cloudSet = new Set(repIds);
+          reports = reports.filter((r) => r.report_date !== reportDate || cloudSet.has(r.id));
+          cloudReports.forEach((cRep) => {
+            const idx = reports.findIndex((r) => r.id === cRep.id);
+            if (idx >= 0) reports[idx] = cRep;
+            else reports.push(cRep);
+          });
+          localStorage.setItem(STORAGE_KEYS.REPORTS, JSON.stringify(reports));
 
-          if (cloudValues) {
-            // Update local cache
-            const rawReports = localStorage.getItem(STORAGE_KEYS.REPORTS);
-            let reports: DailyReport[] = rawReports ? JSON.parse(rawReports) : [];
-            cloudReports.forEach((cRep) => {
-              const idx = reports.findIndex((r) => r.id === cRep.id);
-              if (idx >= 0) reports[idx] = cRep;
-              else reports.push(cRep);
-            });
-            localStorage.setItem(STORAGE_KEYS.REPORTS, JSON.stringify(reports));
+          if (repIds.length > 0) {
+            const { data: cloudValues } = await supabase
+              .from('daily_report_values')
+              .select('*')
+              .in('report_id', repIds);
 
-            const rawValues = localStorage.getItem(STORAGE_KEYS.VALUES);
-            let allValues: DailyReportValue[] = rawValues ? JSON.parse(rawValues) : [];
-            allValues = allValues.filter((v) => !repIds.includes(v.report_id)).concat(cloudValues);
-            localStorage.setItem(STORAGE_KEYS.VALUES, JSON.stringify(allValues));
+            if (cloudValues) {
+              const rawValues = localStorage.getItem(STORAGE_KEYS.VALUES);
+              let allValues: DailyReportValue[] = rawValues ? JSON.parse(rawValues) : [];
+              allValues = allValues.filter((v) => !repIds.includes(v.report_id)).concat(cloudValues);
+              localStorage.setItem(STORAGE_KEYS.VALUES, JSON.stringify(allValues));
+            }
           }
         }
       } catch (err) {
@@ -1379,6 +1480,508 @@ export const StorageService = {
       lowestAbsentClass,
       dayStats,
     };
+  },
+
+  // --- 9.1 Quản lý Ngày Nghỉ Học Sinh (Không xếp loại những ngày nghỉ) ---
+  async getOffDays(): Promise<SchoolOffDay[]> {
+    ensureInitialized();
+    const raw = localStorage.getItem(STORAGE_KEYS.OFF_DAYS);
+    if (!raw) {
+      const defaultOffDays: SchoolOffDay[] = [
+        { id: 'off_2026_09_02', date: '2026-09-02', name: 'Nghỉ lễ Quốc khánh 2/9', type: 'HOLIDAY', applies_to: 'ALL', created_at: new Date().toISOString() },
+        { id: 'off_2026_09_03', date: '2026-09-03', name: 'Nghỉ lễ Quốc khánh (Nghỉ bù)', type: 'HOLIDAY', applies_to: 'ALL', created_at: new Date().toISOString() },
+        { id: 'off_2026_11_20', date: '2026-11-20', name: 'Kỷ niệm Ngày Nhà giáo Việt Nam 20/11', type: 'SPECIAL', applies_to: 'ALL', created_at: new Date().toISOString() },
+        { id: 'off_2027_01_01', date: '2027-01-01', name: 'Nghỉ Tết Dương lịch', type: 'HOLIDAY', applies_to: 'ALL', created_at: new Date().toISOString() },
+        { id: 'off_2027_04_30', date: '2027-04-30', name: 'Nghỉ lễ 30/4 Giải phóng miền Nam', type: 'HOLIDAY', applies_to: 'ALL', created_at: new Date().toISOString() },
+        { id: 'off_2027_05_01', date: '2027-05-01', name: 'Nghỉ Quốc tế Lao động 1/5', type: 'HOLIDAY', applies_to: 'ALL', created_at: new Date().toISOString() },
+      ];
+      localStorage.setItem(STORAGE_KEYS.OFF_DAYS, JSON.stringify(defaultOffDays));
+      return defaultOffDays;
+    }
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return [];
+    }
+  },
+
+  async saveOffDay(offDay: SchoolOffDay): Promise<void> {
+    const list = await this.getOffDays();
+    const idx = list.findIndex((o) => o.id === offDay.id || o.date === offDay.date);
+    if (idx >= 0) {
+      list[idx] = offDay;
+    } else {
+      list.push(offDay);
+    }
+    localStorage.setItem(STORAGE_KEYS.OFF_DAYS, JSON.stringify(list));
+    notifyRealtimeChange('off_days', list);
+  },
+
+  async deleteOffDay(id: string): Promise<void> {
+    const list = await this.getOffDays();
+    const updated = list.filter((o) => o.id !== id);
+    localStorage.setItem(STORAGE_KEYS.OFF_DAYS, JSON.stringify(updated));
+    notifyRealtimeChange('off_days', updated);
+  },
+
+  // --- 9.2 Tổng kết & Xếp hạng duy trì sĩ số (Tuần / Tháng / Năm - Loại trừ ngày nghỉ) ---
+  async getAttendanceRanking(options: {
+    periodType: AttendancePeriodType;
+    startDate: string;
+    endDate: string;
+    periodLabel: string;
+    weekNumber?: number;
+    schoolWeekInfo?: SchoolWeekInfo;
+    campusId?: string;
+    grade?: number | 'ALL';
+    excludeSundays?: boolean;
+    excludeSaturdays?: boolean;
+    excludeEmptySchoolDays?: boolean;
+  }): Promise<AttendanceRankingSummary> {
+    ensureInitialized();
+    const {
+      periodType,
+      startDate,
+      endDate,
+      periodLabel,
+      weekNumber,
+      schoolWeekInfo,
+      campusId = 'all',
+      grade = 'ALL',
+      excludeSundays = true,
+      excludeSaturdays = periodType === 'WEEK' ? true : false,
+      excludeEmptySchoolDays = true,
+    } = options;
+
+    const [allClasses, indicators, profiles, offDays, campuses, settings] = await Promise.all([
+      this.getClasses(),
+      this.getIndicatorGroups(),
+      this.getProfiles(),
+      this.getOffDays(),
+      this.getCampuses(),
+      this.getSettings(),
+    ]);
+
+    const thresholdExcellent = settings?.ranking_threshold_excellent ?? 98;
+    const thresholdGood = settings?.ranking_threshold_good ?? 95;
+    const thresholdFair = settings?.ranking_threshold_fair ?? 90;
+    const enableEarlyBonus = settings?.enable_early_report_bonus ?? true;
+    const earlyDeadline = settings?.early_report_deadline || DEFAULT_EARLY_REPORT_DEADLINE;
+    const bonusPerDay = settings?.early_report_bonus_points ?? DEFAULT_EARLY_REPORT_BONUS_PER_DAY;
+    const maxBonus = settings?.early_report_max_bonus ?? DEFAULT_EARLY_REPORT_MAX_BONUS;
+
+    let targetClasses = allClasses.filter((c) => c.active);
+    if (campusId && campusId !== 'all') {
+      targetClasses = targetClasses.filter((c) => c.campus_id === campusId);
+    }
+    if (grade !== 'ALL') {
+      targetClasses = targetClasses.filter((c) => c.grade === Number(grade));
+    }
+
+    const targetClassIds = new Set(targetClasses.map((c) => c.id));
+    const mainIndicator = indicators.find((i) => i.code === 'ALL') || indicators[0];
+
+    const rawReports = localStorage.getItem(STORAGE_KEYS.REPORTS);
+    const reports: DailyReport[] = rawReports ? JSON.parse(rawReports) : [];
+
+    const rawValues = localStorage.getItem(STORAGE_KEYS.VALUES);
+    const allValues: DailyReportValue[] = rawValues ? JSON.parse(rawValues) : [];
+
+    // Filter reports in date range
+    const periodReports = reports.filter(
+      (r) => r.report_date >= startDate && r.report_date <= endDate && targetClassIds.has(r.class_id)
+    );
+
+    // Group reports by date
+    const reportsByDate = new Map<string, DailyReport[]>();
+    periodReports.forEach((r) => {
+      const list = reportsByDate.get(r.report_date) || [];
+      list.push(r);
+      reportsByDate.set(r.report_date, list);
+    });
+
+    // Generate list of all calendar days in [startDate, endDate] safely without timezone shifts
+    const dateList: string[] = [];
+    let curDate = startDate;
+    while (curDate <= endDate) {
+      dateList.push(curDate);
+      curDate = addDaysToDateStr(curDate, 1);
+    }
+
+    const excludedOffDays: Array<{ date: string; name: string }> = [];
+    const validDates: string[] = [];
+
+    // Check each date
+    dateList.forEach((dStr) => {
+      const [y, m, d] = parseDateParts(dStr);
+      const dt = new Date(y, m - 1, d, 12, 0, 0);
+      const dayOfWeek = dt.getDay(); // 0 = Sunday, 6 = Saturday
+
+      // 1. Check Sunday
+      if (excludeSundays && dayOfWeek === 0) {
+        excludedOffDays.push({ date: dStr, name: 'Chủ nhật (Nghỉ cuối tuần)' });
+        return;
+      }
+
+      // 2. Check Saturday if enabled
+      if (excludeSaturdays && dayOfWeek === 6) {
+        excludedOffDays.push({ date: dStr, name: 'Thứ bảy (Nghỉ cuối tuần)' });
+        return;
+      }
+
+      // 3. Check OffDays registry
+      const offMatch = offDays.find(
+        (o) => o.date === dStr && (o.applies_to === 'ALL' || o.applies_to === campusId)
+      );
+      if (offMatch) {
+        excludedOffDays.push({ date: dStr, name: offMatch.name });
+        return;
+      }
+
+      // 4. Check if school had no reports (entire school day off)
+      const dayReports = reportsByDate.get(dStr) || [];
+      if (excludeEmptySchoolDays && dayReports.length === 0) {
+        excludedOffDays.push({ date: dStr, name: 'Ngày không có lịch học / Toàn trường nghỉ' });
+        return;
+      }
+
+      validDates.push(dStr);
+    });
+
+    // Calculate attendance score for ALL active classes first to determine both schoolRank and campusRank
+    const allCalculatedRanks: ClassAttendanceRank[] = [];
+    let totalSchoolPossible = 0;
+    let totalSchoolPresent = 0;
+    let totalSchoolAbsent = 0;
+
+    const totalActiveSchoolClasses = allClasses.filter((c) => c.active).length;
+
+    // Process all active classes
+    allClasses.filter((c) => c.active).forEach((cls) => {
+      const teacher = profiles.find((p) => p.id === cls.homeroom_teacher_id);
+      const campusObj = campuses.find((c) => c.id === cls.campus_id);
+      const cName = campusObj?.name || 'Khu chính';
+      const cId = cls.campus_id || 'main';
+
+      let classPossible = 0;
+      let classPresent = 0;
+      let classAbsent = 0;
+      let reportedDays = 0;
+      let earlyReportDays = 0;
+      const reportTimes: string[] = [];
+      let lastKnownTotal = 0;
+
+      validDates.forEach((dateStr) => {
+        const dayRep = reports.find((r) => r.class_id === cls.id && r.report_date === dateStr);
+        if (dayRep) {
+          reportedDays++;
+
+          // Kiểm tra xem báo cáo có được gửi sớm trước giờ quy định không
+          const { isEarly, timeStr } = checkIsReportEarly(dayRep, earlyDeadline);
+          if (isEarly) {
+            earlyReportDays++;
+          }
+          if (timeStr && timeStr !== '--:--') {
+            reportTimes.push(timeStr);
+          }
+
+          const val = allValues.find(
+            (v) => v.report_id === dayRep.id && v.indicator_group_id === mainIndicator?.id
+          );
+          if (val) {
+            classPossible += val.total_count;
+            classPresent += val.present_count;
+            classAbsent += val.absent_count;
+            if (val.total_count > 0) lastKnownTotal = val.total_count;
+          }
+        }
+      });
+
+      // If no report on valid dates, fallback enrollment
+      if (lastKnownTotal === 0) {
+        const anyRep = reports.find((r) => r.class_id === cls.id);
+        if (anyRep) {
+          const val = allValues.find((v) => v.report_id === anyRep.id && v.indicator_group_id === mainIndicator?.id);
+          if (val) lastKnownTotal = val.total_count;
+        }
+      }
+
+      const attendanceRate = classPossible > 0 ? (classPresent / classPossible) * 100 : 0;
+      const absentRate = classPossible > 0 ? (classAbsent / classPossible) * 100 : 0;
+
+      // Tính điểm cộng nộp báo cáo sớm
+      const rawEarlyBonus = enableEarlyBonus ? earlyReportDays * bonusPerDay : 0;
+      const earlyBonusPoints = maxBonus > 0 ? Math.min(rawEarlyBonus, maxBonus) : rawEarlyBonus;
+      const roundedAttendanceRate = Math.round(attendanceRate * 100) / 100;
+      const roundedEarlyBonus = Math.round(earlyBonusPoints * 100) / 100;
+      const totalScore = Math.round((roundedAttendanceRate + roundedEarlyBonus) * 100) / 100;
+
+      // Tính giờ báo cáo trung bình
+      let averageReportTime: string | undefined = undefined;
+      if (reportTimes.length > 0) {
+        const totalMinutes = reportTimes.reduce((acc, t) => {
+          const [h, m] = t.split(':').map(Number);
+          return acc + (isNaN(h) ? 0 : h) * 60 + (isNaN(m) ? 0 : m);
+        }, 0);
+        const avgMin = Math.round(totalMinutes / reportTimes.length);
+        const avgH = Math.floor(avgMin / 60);
+        const avgM = avgMin % 60;
+        averageReportTime = `${String(avgH).padStart(2, '0')}:${String(avgM).padStart(2, '0')}`;
+      }
+
+      let classification: ClassAttendanceRank['classification'] = 'NEEDS_IMPROVEMENT';
+      let classificationLabel = 'Cần cố gắng';
+
+      if (classPossible > 0) {
+        const evalScore = enableEarlyBonus ? totalScore : roundedAttendanceRate;
+        if (evalScore >= thresholdExcellent) {
+          classification = 'EXCELLENT';
+          classificationLabel = 'Xuất sắc';
+        } else if (evalScore >= thresholdGood) {
+          classification = 'GOOD';
+          classificationLabel = 'Tốt';
+        } else if (evalScore >= thresholdFair) {
+          classification = 'FAIR';
+          classificationLabel = 'Khá';
+        } else {
+          classification = 'NEEDS_IMPROVEMENT';
+          classificationLabel = 'Cần cố gắng';
+        }
+      } else {
+        classificationLabel = 'Chưa có số liệu';
+      }
+
+      totalSchoolPossible += classPossible;
+      totalSchoolPresent += classPresent;
+      totalSchoolAbsent += classAbsent;
+
+      allCalculatedRanks.push({
+        rank: 0,
+        schoolRank: 0,
+        totalClassesInSchool: totalActiveSchoolClasses,
+        campusId: cId,
+        campusName: cName,
+        campusRank: 0,
+        totalClassesInCampus: 0,
+        classItem: cls,
+        teacher,
+        enrollment: lastKnownTotal,
+        validSchoolDays: validDates.length,
+        reportedDays,
+        totalPossibleAttendances: classPossible,
+        totalPresentAttendances: classPresent,
+        totalAbsentAttendances: classAbsent,
+        attendanceRate: roundedAttendanceRate,
+        absentRate: Math.round(absentRate * 100) / 100,
+        earlyReportDays,
+        earlyBonusPoints: roundedEarlyBonus,
+        averageReportTime,
+        totalScore,
+        classification,
+        classificationLabel,
+      });
+    });
+
+    // So sánh thứ hạng thi đua toàn diện (Điểm tổng > Tỷ lệ chuyên cần > Số ngày báo sớm > Giờ nộp sớm > Ít vắng)
+    const compareRanks = (a: ClassAttendanceRank, b: ClassAttendanceRank) => {
+      // 1. Điểm thi đua tổng kết (đã bao gồm điểm thưởng báo sớm)
+      if (b.totalScore !== a.totalScore) {
+        return b.totalScore - a.totalScore;
+      }
+      // 2. Tỷ lệ chuyên cần (%)
+      if (b.attendanceRate !== a.attendanceRate) {
+        return b.attendanceRate - a.attendanceRate;
+      }
+      // 3. Số ngày báo sớm nhiều hơn
+      if (b.earlyReportDays !== a.earlyReportDays) {
+        return b.earlyReportDays - a.earlyReportDays;
+      }
+      // 4. Giờ báo cáo trung bình sớm hơn
+      if (a.averageReportTime && b.averageReportTime && a.averageReportTime !== b.averageReportTime) {
+        return a.averageReportTime.localeCompare(b.averageReportTime);
+      }
+      // 5. Ít lượt vắng hơn
+      if (a.totalAbsentAttendances !== b.totalAbsentAttendances) {
+        return a.totalAbsentAttendances - b.totalAbsentAttendances;
+      }
+      // 6. Số ngày đã báo cáo
+      return b.reportedDays - a.reportedDays;
+    };
+
+    // 1. Sort all school-wide to calculate schoolRank
+    allCalculatedRanks.sort(compareRanks);
+
+    allCalculatedRanks.forEach((item, idx) => {
+      item.schoolRank = idx + 1;
+    });
+
+    // 2. Group by campus to calculate campusRank and campusSummaries
+    const campusGroups = new Map<string, ClassAttendanceRank[]>();
+    allCalculatedRanks.forEach((item) => {
+      const cId = item.campusId || 'main';
+      const grp = campusGroups.get(cId) || [];
+      grp.push(item);
+      campusGroups.set(cId, grp);
+    });
+
+    const campusSummaries: CampusRankingSummary[] = [];
+
+    // Order campuses: match order in campuses array if available
+    const knownCampusIds = new Set<string>();
+    campuses.forEach((c) => {
+      knownCampusIds.add(c.id);
+      const grp = campusGroups.get(c.id) || [];
+      // Sort within campus with comprehensive emulation criteria
+      grp.sort(compareRanks);
+
+      grp.forEach((item, idx) => {
+        item.campusRank = idx + 1;
+        item.totalClassesInCampus = grp.length;
+      });
+
+      const totalStudents = grp.reduce((acc, r) => acc + r.enrollment, 0);
+      const totalPresent = grp.reduce((acc, r) => acc + r.totalPresentAttendances, 0);
+      const totalAbsent = grp.reduce((acc, r) => acc + r.totalAbsentAttendances, 0);
+      const totalPossible = grp.reduce((acc, r) => acc + r.totalPossibleAttendances, 0);
+      const attendanceRate = totalPossible > 0 ? Math.round((totalPresent / totalPossible) * 10000) / 100 : 0;
+
+      campusSummaries.push({
+        campusId: c.id,
+        campusName: c.name,
+        totalClasses: grp.length,
+        totalStudents,
+        totalPresent,
+        totalAbsent,
+        attendanceRate,
+        rankings: grp,
+        topPerformers: grp.filter((r) => r.totalScore > 0 || r.attendanceRate > 0).slice(0, 3),
+      });
+    });
+
+    // Handle any remaining groups (e.g. main/unassigned)
+    campusGroups.forEach((grp, cId) => {
+      if (!knownCampusIds.has(cId)) {
+        grp.sort(compareRanks);
+        grp.forEach((item, idx) => {
+          item.campusRank = idx + 1;
+          item.totalClassesInCampus = grp.length;
+        });
+
+        const totalStudents = grp.reduce((acc, r) => acc + r.enrollment, 0);
+        const totalPresent = grp.reduce((acc, r) => acc + r.totalPresentAttendances, 0);
+        const totalAbsent = grp.reduce((acc, r) => acc + r.totalAbsentAttendances, 0);
+        const totalPossible = grp.reduce((acc, r) => acc + r.totalPossibleAttendances, 0);
+        const attendanceRate = totalPossible > 0 ? Math.round((totalPresent / totalPossible) * 10000) / 100 : 0;
+
+        campusSummaries.push({
+          campusId: cId,
+          campusName: grp[0]?.campusName || 'Khu chính',
+          totalClasses: grp.length,
+          totalStudents,
+          totalPresent,
+          totalAbsent,
+          attendanceRate,
+          rankings: grp,
+          topPerformers: grp.filter((r) => r.totalScore > 0 || r.attendanceRate > 0).slice(0, 3),
+        });
+      }
+    });
+
+    // 3. Filter list according to request criteria (campusId and grade)
+    let filteredRanks = [...allCalculatedRanks];
+    if (campusId && campusId !== 'all') {
+      filteredRanks = filteredRanks.filter((r) => r.campusId === campusId || r.classItem.campus_id === campusId);
+    }
+    if (grade !== 'ALL') {
+      filteredRanks = filteredRanks.filter((r) => r.classItem.grade === Number(grade));
+    }
+
+    // Set rank for display based on context
+    filteredRanks.forEach((item, idx) => {
+      if (campusId && campusId !== 'all') {
+        item.rank = item.campusRank || (idx + 1);
+      } else {
+        item.rank = idx + 1;
+      }
+    });
+
+    const topPerformers = filteredRanks.filter((r) => r.totalScore > 0 || r.attendanceRate > 0).slice(0, 3);
+    const schoolAttendanceRate =
+      totalSchoolPossible > 0
+        ? Math.round((totalSchoolPresent / totalSchoolPossible) * 10000) / 100
+        : 0;
+
+    return {
+      periodType,
+      periodLabel,
+      weekNumber,
+      schoolWeekInfo,
+      dateRange: { start: startDate, end: endDate },
+      totalDaysInRange: dateList.length,
+      totalExcludedDays: excludedOffDays.length,
+      excludedOffDays,
+      totalValidDays: validDates.length,
+      schoolAttendanceRate,
+      totalStudents: filteredRanks.reduce((acc, r) => acc + r.enrollment, 0),
+      totalPresent: filteredRanks.reduce((acc, r) => acc + r.totalPresentAttendances, 0),
+      totalAbsent: filteredRanks.reduce((acc, r) => acc + r.totalAbsentAttendances, 0),
+      rankings: filteredRanks,
+      topPerformers,
+      campusSummaries,
+    };
+  },
+
+  /**
+   * Đồng bộ & Lấy nhanh thông tin xếp hạng thi đua cho lớp của GVCN
+   */
+  async getClassAttendanceRanking(classId: string, periodType: AttendancePeriodType = 'WEEK'): Promise<ClassAttendanceRank | null> {
+    const settings = await this.getSettings();
+    const week1Start = settings?.week1_start_date || DEFAULT_WEEK1_START_DATE;
+    const todayStr = getTodayDateStr();
+    let startDate = '';
+    let endDate = '';
+    let periodLabel = '';
+    let weekNumber: number | undefined = undefined;
+    let schoolWeekInfo: SchoolWeekInfo | undefined = undefined;
+
+    if (periodType === 'WEEK') {
+      schoolWeekInfo = getSchoolWeekFromDate(todayStr, week1Start);
+      startDate = schoolWeekInfo.startDate;
+      endDate = schoolWeekInfo.endDate;
+      periodLabel = schoolWeekInfo.label;
+      weekNumber = schoolWeekInfo.weekNumber;
+    } else if (periodType === 'MONTH') {
+      const d = new Date();
+      const year = d.getFullYear();
+      const month = d.getMonth() + 1;
+      const lastDay = new Date(year, month, 0).getDate();
+      startDate = `${year}-${String(month).padStart(2, '0')}-01`;
+      endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+      periodLabel = `Tháng ${month}/${year}`;
+    } else {
+      const d = new Date();
+      const year = d.getFullYear();
+      startDate = `${year}-09-01`;
+      endDate = `${year + 1}-05-31`;
+      periodLabel = 'Năm học';
+    }
+
+    const summary = await this.getAttendanceRanking({
+      periodType,
+      startDate,
+      endDate,
+      periodLabel,
+      weekNumber,
+      schoolWeekInfo,
+      campusId: 'all',
+      grade: 'ALL',
+      excludeSundays: true,
+      excludeSaturdays: true,
+      excludeEmptySchoolDays: true,
+    });
+
+    const found = summary.rankings.find((r) => r.classItem.id === classId);
+    return found || null;
   },
 
   // --- 10. Audit Logs ---

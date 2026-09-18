@@ -14,9 +14,14 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Download,
+  Trophy,
 } from 'lucide-react';
 
-export const MonthlyReportPage: React.FC = () => {
+interface MonthlyReportPageProps {
+  onNavigate?: (path: string) => void;
+}
+
+export const MonthlyReportPage: React.FC<MonthlyReportPageProps> = ({ onNavigate }) => {
   const { settings, campuses, classes } = useSchool();
   const { isGVCN, currentUser } = useAuth();
   const [selectedMonth, setSelectedMonth] = useState(() => {
@@ -174,11 +179,23 @@ export const MonthlyReportPage: React.FC = () => {
           <button
             type="button"
             onClick={handleExportMonthlyExcel}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-emerald-800 bg-emerald-100 hover:bg-emerald-200 border border-emerald-300 transition-colors"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-emerald-800 bg-emerald-100 hover:bg-emerald-200 border border-emerald-300 transition-colors cursor-pointer"
           >
             <Download className="w-4 h-4 text-emerald-700" />
             <span>Xuất Excel Tháng</span>
           </button>
+
+          {onNavigate && (
+            <button
+              type="button"
+              onClick={() => onNavigate('/reports/ranking')}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 transition-colors cursor-pointer"
+              title="Xem xếp hạng và vinh danh lớp duy trì sĩ số tốt nhất"
+            >
+              <Trophy className="w-4 h-4 text-amber-600" />
+              <span>Bảng vàng thi đua</span>
+            </button>
+          )}
         </div>
       </div>
 

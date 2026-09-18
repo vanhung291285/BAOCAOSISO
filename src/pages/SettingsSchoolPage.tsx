@@ -22,6 +22,7 @@ import {
   Trash2,
   AlertCircle,
   Code2,
+  Clock,
 } from 'lucide-react';
 
 export const SettingsSchoolPage: React.FC = () => {
@@ -582,10 +583,196 @@ export const SettingsSchoolPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Section 6: Cấu hình Nhà phát triển & Chân trang */}
+        {/* Section 6: Cấu hình Thời gian biểu & Tiêu chí Xếp loại Thi đua Tuần */}
+        <div className="pt-4 border-t border-slate-100 space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xs font-bold text-blue-700 uppercase tracking-wider flex items-center gap-2">
+              <Calendar className="w-4 h-4" /> 6. THỜI GIAN BIỂU & TIÊU CHÍ XẾP LOẠI THI ĐUA TUẦN
+            </h2>
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-900 border border-amber-200">
+              Áp dụng phân hiệu & toàn trường
+            </span>
+          </div>
+
+          <div className="p-4 bg-blue-50/60 border border-blue-200/80 rounded-2xl space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  Ngày bắt đầu Tuần 1 (Thứ Hai)
+                </label>
+                <input
+                  type="date"
+                  value={formData.week1_start_date || '2026-09-07'}
+                  onChange={(e) => setFormData({ ...formData, week1_start_date: e.target.value })}
+                  className="w-full px-3 py-2 text-sm font-bold border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 bg-white"
+                />
+                <p className="text-[11px] text-slate-500 mt-1">
+                  Mặc định: <strong>07/09/2026</strong>. Hệ thống sẽ tự động tính Tuần 1, Tuần 2, ... Tuần 37 dựa trên ngày này.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  Quy định thời gian một tuần học
+                </label>
+                <div className="px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-800 flex items-center gap-2">
+                  <CheckCircle className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                  <span>Từ Thứ Hai đến hết sáng Thứ Sáu (5 ngày học/tuần)</span>
+                </div>
+                <p className="text-[11px] text-slate-500 mt-1">
+                  Không xếp loại vào Thứ Bảy, Chủ Nhật và các ngày học sinh được nghỉ.
+                </p>
+              </div>
+            </div>
+
+            {/* Emulation ranking criteria thresholds */}
+            <div className="pt-3 border-t border-blue-200/60">
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                Ngưỡng tỷ lệ duy trì sĩ số xếp loại thi đua tuần (%)
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="p-3 bg-white border border-emerald-200 rounded-xl space-y-1 shadow-2xs">
+                  <span className="text-[11px] font-black uppercase text-emerald-700 flex items-center gap-1">
+                    🏆 Loại Xuất sắc
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-bold text-slate-500">≥</span>
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      step={0.1}
+                      value={formData.ranking_threshold_excellent ?? 98}
+                      onChange={(e) => setFormData({ ...formData, ranking_threshold_excellent: parseFloat(e.target.value) || 0 })}
+                      className="w-20 px-2 py-1 text-sm font-black text-emerald-800 border border-emerald-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
+                    />
+                    <span className="text-xs font-bold text-slate-600">%</span>
+                  </div>
+                  <p className="text-[10px] text-slate-400">Mặc định: 98%</p>
+                </div>
+
+                <div className="p-3 bg-white border border-blue-200 rounded-xl space-y-1 shadow-2xs">
+                  <span className="text-[11px] font-black uppercase text-blue-700 flex items-center gap-1">
+                    🥇 Loại Tốt
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-bold text-slate-500">≥</span>
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      step={0.1}
+                      value={formData.ranking_threshold_good ?? 95}
+                      onChange={(e) => setFormData({ ...formData, ranking_threshold_good: parseFloat(e.target.value) || 0 })}
+                      className="w-20 px-2 py-1 text-sm font-black text-blue-800 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    />
+                    <span className="text-xs font-bold text-slate-600">%</span>
+                  </div>
+                  <p className="text-[10px] text-slate-400">Mặc định: 95%</p>
+                </div>
+
+                <div className="p-3 bg-white border border-amber-200 rounded-xl space-y-1 shadow-2xs">
+                  <span className="text-[11px] font-black uppercase text-amber-700 flex items-center gap-1">
+                    🥈 Loại Khá
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-bold text-slate-500">≥</span>
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      step={0.1}
+                      value={formData.ranking_threshold_fair ?? 90}
+                      onChange={(e) => setFormData({ ...formData, ranking_threshold_fair: parseFloat(e.target.value) || 0 })}
+                      className="w-20 px-2 py-1 text-sm font-black text-amber-800 border border-amber-300 rounded-lg focus:ring-2 focus:ring-amber-500"
+                    />
+                    <span className="text-xs font-bold text-slate-600">%</span>
+                  </div>
+                  <p className="text-[10px] text-slate-400">Dưới mức Khá: Cần cố gắng</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Cấu hình cộng điểm thi đua báo cáo sớm */}
+            <div className="pt-3 border-t border-slate-200">
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5 text-amber-600" />
+                  Cộng điểm thi đua báo cáo sớm (Đầu giờ)
+                </label>
+                <label className="inline-flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={formData.enable_early_report_bonus ?? true}
+                    onChange={(e) => setFormData({ ...formData, enable_early_report_bonus: e.target.checked })}
+                    className="w-4 h-4 text-amber-600 rounded focus:ring-amber-500"
+                  />
+                  <span className="text-xs font-bold text-slate-700">Kích hoạt cộng điểm</span>
+                </label>
+              </div>
+
+              {(formData.enable_early_report_bonus ?? true) && (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 bg-amber-50/60 border border-amber-200 rounded-xl">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Giờ quy định báo sớm
+                    </label>
+                    <input
+                      type="time"
+                      value={formData.early_report_deadline || '07:30'}
+                      onChange={(e) => setFormData({ ...formData, early_report_deadline: e.target.value })}
+                      className="w-full px-2.5 py-1.5 text-xs font-black border border-amber-300 rounded-lg bg-white text-slate-800 focus:ring-2 focus:ring-amber-500"
+                    />
+                    <p className="text-[10px] text-slate-500 mt-0.5">Báo trước giờ này tính là sớm</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Điểm cộng mỗi ngày báo sớm
+                    </label>
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="number"
+                        min={0}
+                        max={10}
+                        step={0.1}
+                        value={formData.early_report_bonus_points ?? 0.5}
+                        onChange={(e) => setFormData({ ...formData, early_report_bonus_points: parseFloat(e.target.value) || 0 })}
+                        className="w-full px-2.5 py-1.5 text-xs font-black border border-amber-300 rounded-lg bg-white text-slate-800 focus:ring-2 focus:ring-amber-500"
+                      />
+                      <span className="text-xs font-bold text-amber-900">đ/ngày</span>
+                    </div>
+                    <p className="text-[10px] text-slate-500 mt-0.5">Mặc định: +0.5 điểm/ngày</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Điểm cộng tối đa mỗi tuần
+                    </label>
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="number"
+                        min={0}
+                        max={20}
+                        step={0.1}
+                        value={formData.early_report_max_bonus ?? 2.5}
+                        onChange={(e) => setFormData({ ...formData, early_report_max_bonus: parseFloat(e.target.value) || 0 })}
+                        className="w-full px-2.5 py-1.5 text-xs font-black border border-amber-300 rounded-lg bg-white text-slate-800 focus:ring-2 focus:ring-amber-500"
+                      />
+                      <span className="text-xs font-bold text-amber-900">điểm</span>
+                    </div>
+                    <p className="text-[10px] text-slate-500 mt-0.5">Mặc định: +2.5 điểm (5 ngày x 0.5)</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Section 7: Cấu hình Nhà phát triển & Chân trang */}
         <div className="pt-4 border-t border-slate-100">
           <h2 className="text-xs font-bold text-blue-700 uppercase tracking-wider mb-4 flex items-center gap-2">
-            <Code2 className="w-4 h-4" /> 6. THÔNG TIN NHÀ PHÁT TRIỂN & BẢN QUYỀN CHÂN TRANG
+            <Code2 className="w-4 h-4" /> 7. THÔNG TIN NHÀ PHÁT TRIỂN & BẢN QUYỀN CHÂN TRANG
           </h2>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

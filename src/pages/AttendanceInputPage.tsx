@@ -88,6 +88,11 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
   const [showQuickPaste, setShowQuickPaste] = useState<boolean>(false);
   const [quickPasteText, setQuickPasteText] = useState<string>('');
 
+  // Reset report state
+  const [showResetConfirmModal, setShowResetConfirmModal] = useState<boolean>(false);
+  const [isResetting, setIsResetting] = useState<boolean>(false);
+  const [resetSuccessMessage, setResetSuccessMessage] = useState<string>('');
+
   // Values map: indicator_group_id -> { total, present, absent }
   const [formValues, setFormValues] = useState<Record<string, GroupInputState>>({});
 
@@ -101,6 +106,47 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
 
   // Input calculation mode from school settings (or default to MODE_1_TOTAL_PRESENT)
   const inputMode = settings?.input_mode || 'MODE_1_TOTAL_PRESENT';
+
+  const canReset = useMemo(() => {
+    if (!existingReport) return false;
+    if (isAdmin || currentUser?.role === 'BGH') return true;
+    if (isGVCN && isAssignedTeacher && !isLocked) return true;
+    return false;
+  }, [existingReport, isAdmin, currentUser, isGVCN, isAssignedTeacher, isLocked]);
+
+  const handleResetReport = async () => {
+    if (!selectedClassId || !reportDate || !currentUser) return;
+    setIsResetting(true);
+    setErrorMessage('');
+    try {
+      const ok = await StorageService.deleteDailyReport(selectedClassId, reportDate, currentUser);
+      if (ok) {
+        setExistingReport(null);
+        setNotes('');
+        setAbsentStudents([]);
+        setShowResetConfirmModal(false);
+        setResetSuccessMessage(
+          `Đã reset báo cáo ngày ${reportDate.split('-').reverse().join('/')} của lớp ${selectedClass?.class_name || ''} về trạng thái CHƯA BÁO CÁO thành công!`
+        );
+        setTimeout(() => setResetSuccessMessage(''), 6000);
+
+        // Reset form inputs
+        const initialMap: Record<string, GroupInputState> = {};
+        enabledIndicators.forEach((ig) => {
+          initialMap[ig.id] = { total: '', present: '', absent: '' };
+        });
+        setFormValues(initialMap);
+
+        if (onSavedSuccess) onSavedSuccess();
+      } else {
+        setErrorMessage('Không tìm thấy báo cáo để reset hoặc báo cáo đã được xóa trước đó.');
+      }
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Lỗi khi reset báo cáo');
+    } finally {
+      setIsResetting(false);
+    }
+  };
 
   // Reset success modal when changing date or class
   useEffect(() => {
@@ -799,6 +845,23 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
         </div>
       )}
 
+      {/* Reset Success Message Toast */}
+      {resetSuccessMessage && (
+        <div className="bg-emerald-600 text-white px-4 py-3 rounded-2xl text-xs sm:text-sm font-bold flex items-center justify-between shadow-lg animate-in fade-in slide-in-from-top-2 duration-150">
+          <div className="flex items-center gap-2.5">
+            <CheckCircle2 className="w-5 h-5 flex-shrink-0" />
+            <span>{resetSuccessMessage}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setResetSuccessMessage('')}
+            className="text-white/80 hover:text-white p-1 rounded-lg"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* Existing Report / Lock Notification Banner */}
       {existingReport && (
         <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -810,12 +873,12 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
               </h3>
               <p className="text-[11px] text-emerald-700 mt-0.5">
                 Lớp <span className="font-bold">{selectedClass?.class_name}</span> đã lưu lúc{' '}
-                {new Date(existingReport.updated_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}. Thầy/Cô có thể chỉnh sửa và cập nhật lại số liệu bất kỳ lúc nào.
+                {new Date(existingReport.updated_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}. Thầy/Cô có thể chỉnh sửa số liệu hoặc hủy về trạng thái Chưa báo cáo nếu gửi nhầm.
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 pt-1 sm:pt-0">
+          <div className="flex items-center gap-2 pt-1 sm:pt-0 flex-wrap">
             {isLocked ? (
               <span className="inline-flex items-center gap-1 text-xs font-bold px-3 py-1.5 rounded-lg bg-slate-200 text-slate-700 whitespace-nowrap">
                 <Lock className="w-3.5 h-3.5" /> Đã khóa
@@ -824,6 +887,18 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
               <span className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg bg-emerald-100 text-emerald-800 whitespace-nowrap">
                 <Check className="w-3.5 h-3.5" /> Sẵn sàng cập nhật
               </span>
+            )}
+
+            {canReset && (
+              <button
+                type="button"
+                onClick={() => setShowResetConfirmModal(true)}
+                className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg bg-rose-100 hover:bg-rose-200 text-rose-800 border border-rose-300 transition-colors shadow-2xs whitespace-nowrap cursor-pointer"
+                title="Hủy/Reset báo cáo ngày này về Chưa báo cáo nếu báo cáo nhầm"
+              >
+                <RotateCcw className="w-3.5 h-3.5 text-rose-600" />
+                <span>Reset báo cáo nhầm</span>
+              </button>
             )}
           </div>
         </div>
@@ -1324,22 +1399,36 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
         {/* Desktop inline action buttons */}
         <div className="hidden sm:block pt-2">
           {!isLocked ? (
-            <button
-              type="submit"
-              disabled={!isValid}
-              className={`w-full h-12 rounded-2xl text-base font-black transition-all flex items-center justify-center gap-2 ${
-                isValid
-                  ? 'text-white bg-blue-600 hover:bg-blue-700 shadow-lg hover:shadow-xl focus:ring-4 focus:ring-blue-300 active:scale-99 cursor-pointer'
-                  : 'text-slate-500 bg-slate-200 border border-slate-300 cursor-not-allowed opacity-80'
-              }`}
-            >
-              <Send className="w-5 h-5" />
-              <span>
-                {isValid
-                  ? (existingReport ? 'CẬP NHẬT BÁO CÁO SĨ SỐ' : 'GỬI BÁO CÁO SĨ SỐ')
-                  : 'VUI LÒNG NHẬP ĐỦ SỐ LIỆU ĐỂ GỬI BÁO CÁO'}
-              </span>
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                type="submit"
+                disabled={!isValid}
+                className={`flex-1 h-12 rounded-2xl text-base font-black transition-all flex items-center justify-center gap-2 ${
+                  isValid
+                    ? 'text-white bg-blue-600 hover:bg-blue-700 shadow-lg hover:shadow-xl focus:ring-4 focus:ring-blue-300 active:scale-99 cursor-pointer'
+                    : 'text-slate-500 bg-slate-200 border border-slate-300 cursor-not-allowed opacity-80'
+                }`}
+              >
+                <Send className="w-5 h-5" />
+                <span>
+                  {isValid
+                    ? (existingReport ? 'CẬP NHẬT BÁO CÁO SĨ SỐ' : 'GỬI BÁO CÁO SĨ SỐ')
+                    : 'VUI LÒNG NHẬP ĐỦ SỐ LIỆU ĐỂ GỬI BÁO CÁO'}
+                </span>
+              </button>
+
+              {existingReport && canReset && (
+                <button
+                  type="button"
+                  onClick={() => setShowResetConfirmModal(true)}
+                  className="h-12 px-4 rounded-2xl text-xs sm:text-sm font-bold border border-rose-300 bg-rose-50 text-rose-700 hover:bg-rose-100 hover:border-rose-400 shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer flex-shrink-0"
+                  title="Hủy báo cáo này và đưa về trạng thái Chưa báo cáo nếu đã báo cáo nhầm"
+                >
+                  <RotateCcw className="w-4 h-4 text-rose-600" />
+                  <span>RESET BÁO CÁO NHẦM</span>
+                </button>
+              )}
+            </div>
           ) : (
             <div className="flex gap-3">
               <div className="flex-1 h-11 rounded-xl text-sm font-bold text-slate-500 bg-slate-100 flex items-center justify-center gap-2">
@@ -1373,23 +1462,36 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
 
           <div className="flex items-center gap-2 flex-1 justify-end">
             {!isLocked ? (
-              <button
-                type="button"
-                onClick={() => handleSave()}
-                disabled={!isValid}
-                className={`h-11 px-4 rounded-xl font-black text-xs sm:text-sm shadow-md flex items-center justify-center gap-2 flex-1 max-w-[240px] whitespace-nowrap transition-all ${
-                  isValid
-                    ? 'bg-blue-600 hover:bg-blue-700 active:scale-95 text-white'
-                    : 'bg-slate-200 text-slate-500 border border-slate-300 cursor-not-allowed opacity-80'
-                }`}
-              >
-                <Send className="w-4 h-4 flex-shrink-0" />
-                <span>
-                  {isValid
-                    ? (existingReport ? 'CẬP NHẬT BÁO CÁO' : 'GỬI BÁO CÁO')
-                    : 'CHƯA NHẬP ĐỦ SỐ LIỆU'}
-                </span>
-              </button>
+              <>
+                {existingReport && canReset && (
+                  <button
+                    type="button"
+                    onClick={() => setShowResetConfirmModal(true)}
+                    className="h-11 px-2.5 rounded-xl font-bold text-xs border border-rose-300 bg-rose-50 text-rose-700 hover:bg-rose-100 flex items-center justify-center gap-1 transition-colors flex-shrink-0"
+                    title="Reset về Chưa báo cáo nếu báo cáo nhầm"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5 text-rose-600" />
+                    <span>Reset nhầm</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => handleSave()}
+                  disabled={!isValid}
+                  className={`h-11 px-4 rounded-xl font-black text-xs sm:text-sm shadow-md flex items-center justify-center gap-2 flex-1 max-w-[240px] whitespace-nowrap transition-all ${
+                    isValid
+                      ? 'bg-blue-600 hover:bg-blue-700 active:scale-95 text-white'
+                      : 'bg-slate-200 text-slate-500 border border-slate-300 cursor-not-allowed opacity-80'
+                  }`}
+                >
+                  <Send className="w-4 h-4 flex-shrink-0" />
+                  <span>
+                    {isValid
+                      ? (existingReport ? 'CẬP NHẬT BÁO CÁO' : 'GỬI BÁO CÁO')
+                      : 'CHƯA NHẬP ĐỦ SỐ LIỆU'}
+                  </span>
+                </button>
+              </>
             ) : (
               <div className="flex items-center gap-2 w-full justify-end">
                 <span className="text-xs font-bold text-slate-500 flex items-center gap-1">
@@ -1463,6 +1565,74 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
               >
                 <Check className="w-4 h-4" />
                 <span>Áp dụng danh sách</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 7. Modal xác nhận Reset Báo cáo nhầm về Chưa báo cáo */}
+      {showResetConfirmModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-150">
+            <div className="p-5 sm:p-6 bg-gradient-to-br from-rose-50 to-orange-50 border-b border-rose-100 flex items-start gap-3.5">
+              <div className="w-11 h-11 rounded-2xl bg-rose-100 border border-rose-200 flex items-center justify-center flex-shrink-0 shadow-2xs">
+                <RotateCcw className="w-5 h-5 text-rose-600" />
+              </div>
+              <div>
+                <h3 className="text-base sm:text-lg font-black text-slate-900 leading-tight">
+                  Xác nhận Reset Báo Cáo Nhầm
+                </h3>
+                <p className="text-xs text-rose-700 font-semibold mt-0.5">
+                  Đưa lớp về trạng thái CHƯA BÁO CÁO
+                </p>
+              </div>
+            </div>
+
+            <div className="p-5 sm:p-6 space-y-4">
+              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-2 text-xs">
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500">Lớp học:</span>
+                  <span className="font-extrabold text-slate-900 text-sm">Lớp {selectedClass?.class_name}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500">Ngày báo cáo:</span>
+                  <span className="font-bold text-slate-800">{reportDate.split('-').reverse().join('/')}</span>
+                </div>
+                {existingReport?.reported_time && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-500">Giờ đã báo cáo:</span>
+                    <span className="font-mono font-bold text-slate-700">{existingReport.reported_time}</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900 leading-relaxed">
+                <div className="font-bold flex items-center gap-1.5 text-amber-800 mb-1">
+                  <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                  Lưu ý khi reset báo cáo:
+                </div>
+                Dữ liệu sĩ số đã lưu của lớp vào ngày này sẽ được xóa hoàn toàn. Bảng tổng hợp toàn trường sẽ chuyển lớp về trạng thái <strong className="text-amber-950">Chưa báo cáo</strong> cho đến khi Thầy/Cô nộp lại.
+              </div>
+            </div>
+
+            <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setShowResetConfirmModal(false)}
+                disabled={isResetting}
+                className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 transition-colors"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                onClick={handleResetReport}
+                disabled={isResetting}
+                className="px-4 py-2.5 rounded-xl text-xs font-black text-white bg-rose-600 hover:bg-rose-700 active:scale-95 shadow-md flex items-center gap-1.5 transition-all disabled:opacity-50 cursor-pointer"
+              >
+                <RotateCcw className="w-4 h-4" />
+                <span>{isResetting ? 'Đang reset...' : 'XÁC NHẬN RESET VỀ CHƯA BÁO CÁO'}</span>
               </button>
             </div>
           </div>

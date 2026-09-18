@@ -1,9 +1,10 @@
 import React from 'react';
 import { ChevronLeft, ChevronRight, Calendar, RotateCcw } from 'lucide-react';
+import { addDaysToDateStr, getTodayDateStr } from '../utils/schoolWeeks';
 
 interface DateNavigatorProps {
   selectedDate: string; // YYYY-MM-DD
-  onChangeDate: (newDate: string) => void;
+  onChangeDate?: (newDate: string) => void;
   className?: string;
 }
 
@@ -12,22 +13,24 @@ export const DateNavigator: React.FC<DateNavigatorProps> = ({
   onChangeDate,
   className = '',
 }) => {
-  const today = new Date().toISOString().split('T')[0];
+  const today = getTodayDateStr();
+
+  const handleDateChange = (newDate: string) => {
+    if (typeof onChangeDate === 'function') {
+      onChangeDate(newDate);
+    }
+  };
 
   const handlePrevDay = () => {
-    const d = new Date(selectedDate);
-    d.setDate(d.getDate() - 1);
-    onChangeDate(d.toISOString().split('T')[0]);
+    handleDateChange(addDaysToDateStr(selectedDate, -1));
   };
 
   const handleNextDay = () => {
-    const d = new Date(selectedDate);
-    d.setDate(d.getDate() + 1);
-    onChangeDate(d.toISOString().split('T')[0]);
+    handleDateChange(addDaysToDateStr(selectedDate, 1));
   };
 
   const handleToday = () => {
-    onChangeDate(today);
+    handleDateChange(today);
   };
 
   // Format date display in Vietnamese: Thứ ..., Ngày DD/MM/YYYY
@@ -61,7 +64,7 @@ export const DateNavigator: React.FC<DateNavigatorProps> = ({
           <input
             type="date"
             value={selectedDate}
-            onChange={(e) => e.target.value && onChangeDate(e.target.value)}
+            onChange={(e) => e.target.value && handleDateChange(e.target.value)}
             className="pl-7 sm:pl-8 pr-1.5 py-1 text-xs sm:text-sm font-bold text-slate-800 bg-transparent border-0 focus:ring-0 focus:outline-hidden cursor-pointer"
           />
         </div>

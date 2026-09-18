@@ -7,6 +7,7 @@ import { DashboardPage } from './pages/DashboardPage';
 import { AttendanceInputPage } from './pages/AttendanceInputPage';
 import { DailyReportPage } from './pages/DailyReportPage';
 import { MonthlyReportPage } from './pages/MonthlyReportPage';
+import { AttendanceRankingPage } from './pages/AttendanceRankingPage';
 import { ChartsPage } from './pages/ChartsPage';
 import { ClassesManagementPage } from './pages/ClassesManagementPage';
 import { UsersManagementPage } from './pages/UsersManagementPage';
@@ -106,7 +107,13 @@ const AppContent: React.FC = () => {
           <DailyReportPage onNavigate={handleNavigate} />
         )}
 
-        {currentPath === '/reports/monthly' && <MonthlyReportPage />}
+        {currentPath === '/reports/monthly' && (
+          <MonthlyReportPage onNavigate={handleNavigate} />
+        )}
+
+        {currentPath === '/reports/ranking' && (
+          <AttendanceRankingPage onNavigate={handleNavigate} />
+        )}
 
         {currentPath === '/charts' && <ChartsPage />}
 
