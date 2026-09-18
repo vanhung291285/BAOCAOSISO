@@ -913,26 +913,35 @@ export const StorageService = {
 
     localStorage.setItem(STORAGE_KEYS.VALUES, JSON.stringify(allValues));
 
-    // PERSIST DIRECTLY TO SUPABASE
+    // PERSIST DIRECTLY TO SUPABASE (Non-blocking for instant UI response)
     const supabase = getSupabaseClient();
     if (supabase && isSupabaseConnected()) {
-      try {
-        const { error: repErr } = await supabase.from('daily_reports').upsert(report);
-        if (repErr) console.error('Supabase upsert daily_reports error:', repErr);
+      Promise.resolve().then(async () => {
+        try {
+          const { error: repErr } = await supabase.from('daily_reports').upsert(report);
+          if (repErr) console.error('Supabase upsert daily_reports error:', repErr);
 
-        if (newValues.length > 0) {
-          const { error: valErr } = await supabase.from('daily_report_values').upsert(newValues);
-          if (valErr) console.error('Supabase upsert daily_report_values error:', valErr);
+          if (newValues.length > 0) {
+            const { error: valErr } = await supabase.from('daily_report_values').upsert(newValues);
+            if (valErr) console.error('Supabase upsert daily_report_values error:', valErr);
+          }
+        } catch (err) {
+          console.error('Supabase sync report error:', err);
         }
-      } catch (err) {
-        console.error('Supabase sync report error:', err);
-      }
+      });
     }
 
     // Add audit log
-    const classes = await this.getClasses();
-    const cls = classes.find((c) => c.id === classId);
-    await this.addLog({
+    // Read from localStorage synchronously to prevent blocking the UI
+    const rawClasses = localStorage.getItem('classes') || localStorage.getItem(STORAGE_KEYS.CLASSES);
+    let cls;
+    try {
+       const classes = rawClasses ? JSON.parse(rawClasses) : [];
+       cls = classes.find(c => c.id === classId);
+    } catch(e) {}
+
+    // Fire and forget log for instant UI
+    this.addLog({
       user_id: user.id,
       user_name: user.full_name,
       user_role: user.role,
@@ -941,7 +950,7 @@ export const StorageService = {
       report_date: reportDate,
       old_data: oldReport,
       new_data: { valuesByGroup, notes },
-    });
+    }).catch(console.error);
 
     notifyRealtimeChange('daily_reports', { reportId, classId, reportDate });
     return { report, values: newValues };
@@ -1411,11 +1420,13 @@ export const StorageService = {
 
     const supabase = getSupabaseClient();
     if (supabase && isSupabaseConnected()) {
-      try {
-        await supabase.from('system_logs').insert(item);
-      } catch (e) {
-        console.error('Supabase addLog error:', e);
-      }
+      Promise.resolve().then(async () => {
+        try {
+          await supabase.from('system_logs').insert(item);
+        } catch (e) {
+          console.error('Supabase addLog error:', e);
+        }
+      });
     }
   },
 
