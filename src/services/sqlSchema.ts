@@ -110,6 +110,7 @@ CREATE TABLE IF NOT EXISTS public.daily_reports (
     status TEXT NOT NULL DEFAULT 'SUBMITTED' CHECK (status IN ('DRAFT', 'SUBMITTED', 'LOCKED')),
     notes TEXT,
     absent_students JSONB DEFAULT '[]'::jsonb,
+    reported_time TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
     locked_at TIMESTAMPTZ,
@@ -175,6 +176,10 @@ BEGIN
 
     BEGIN
         ALTER TABLE public.daily_reports ADD COLUMN locked_at TIMESTAMPTZ;
+    EXCEPTION WHEN duplicate_column THEN END;
+
+    BEGIN
+        ALTER TABLE public.daily_reports ADD COLUMN reported_time TEXT;
     EXCEPTION WHEN duplicate_column THEN END;
 
     BEGIN
