@@ -949,7 +949,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                       type="button"
                       onClick={() => {
                         setSaveSuccess(false);
-                        onNavigate('/daily-report');
+                        onNavigate('/reports/daily');
                       }}
                       className="w-full py-3 px-4 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 font-bold text-sm rounded-xl transition-all active:scale-98 flex items-center justify-center gap-1.5"
                     >
