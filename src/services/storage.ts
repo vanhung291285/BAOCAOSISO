@@ -962,8 +962,22 @@ export const StorageService = {
     if (supabase && isSupabaseConnected()) {
       Promise.resolve().then(async () => {
         try {
-          const { error: repErr } = await supabase.from('daily_reports').upsert(report);
-          if (repErr) console.error('Supabase upsert daily_reports error:', repErr);
+          // Chuẩn bị dữ liệu report để gửi lên Supabase
+          let repData: any = { ...report };
+          let { error: repErr } = await supabase.from('daily_reports').upsert(repData);
+
+          // Nếu Supabase báo lỗi chưa có cột reported_time (schema cache cũ) -> loại bỏ reported_time và thử lại
+          if (repErr && (repErr.message?.includes('reported_time') || repErr.code === 'PGRST204')) {
+            const { reported_time: _unused, ...repWithoutTime } = repData;
+            const retryRes = await supabase.from('daily_reports').upsert(repWithoutTime);
+            repErr = retryRes.error;
+          }
+
+          if (repErr) {
+            console.error('Supabase upsert daily_reports error:', repErr);
+            // Nếu daily_reports không tạo/lưu được vào CSDL thì dừng lại, không upsert values để tránh lỗi 23503 foreign key
+            return;
+          }
 
           if (newValues.length > 0) {
             const { error: valErr } = await supabase.from('daily_report_values').upsert(newValues);
@@ -2104,7 +2118,12 @@ export const StorageService = {
         let repErrors: string | undefined;
         for (let i = 0; i < reports.length; i += 50) {
           const batch = reports.slice(i, i + 50);
-          const { error: rErr } = await supabase.from('daily_reports').upsert(batch);
+          let { error: rErr } = await supabase.from('daily_reports').upsert(batch);
+          if (rErr && (rErr.message?.includes('reported_time') || rErr.code === 'PGRST204')) {
+            const batchCleaned = batch.map(({ reported_time, ...rest }) => rest);
+            const retryRes = await supabase.from('daily_reports').upsert(batchCleaned);
+            rErr = retryRes.error;
+          }
           if (rErr) repErrors = rErr.message;
         }
         details.daily_reports = { count: reports.length, error: repErrors };
