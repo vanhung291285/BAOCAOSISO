@@ -635,7 +635,8 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
 
         if (maxLen > 0) {
           const col = ws.getColumn(colIdx);
-          const calculatedWidth = maxLen + 5; // Add padding
+          // Add 12% extra for potential wide characters (e.g. Vietnamese accents, uppercase) and 6 chars padding
+          const calculatedWidth = Math.ceil(maxLen * 1.12) + 6;
           
           let minWidth = 10;
           if (colIdx === 1) minWidth = 10;  // class
@@ -974,7 +975,7 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
                     </td>
 
                     {/* 7. Tên học sinh (Danh sách vắng & lý do) */}
-                    <td className="border border-black py-1.5 px-2.5 text-left text-[11px] text-black whitespace-pre-line">
+                    <td className="border border-black py-1.5 px-2.5 text-left text-[11px] text-black whitespace-pre">
                       {isReported ? (
                         studentNames || ''
                       ) : (
@@ -983,7 +984,7 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
                     </td>
 
                     {/* 7.5. Địa chỉ học sinh vắng */}
-                    <td className="border border-black py-1.5 px-2.5 text-left text-[11px] text-black whitespace-pre-line">
+                    <td className="border border-black py-1.5 px-2.5 text-left text-[11px] text-black whitespace-pre">
                       {isReported ? studentAddresses || '-' : '-'}
                     </td>
 
