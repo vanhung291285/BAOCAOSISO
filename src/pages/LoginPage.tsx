@@ -157,7 +157,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       if (cleanEmail === 'admin@db.edu.vn' || cleanEmail === 'admin' || cleanEmail === 'admin@xadung.edu.vn') {
         const p = password.trim();
         if (p !== 'admin123456@' && p !== 'admin123456' && p !== '123456' && p !== 'admin') {
-          setError('Mật khẩu Quản trị không đúng! (Mật khẩu: admin123456@)');
+          setError('Mật khẩu Quản trị không đúng! Vui lòng kiểm tra lại.');
           setIsSubmitting(false);
           return;
         }
@@ -202,7 +202,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       setIsAdminUnlocked(true);
       setAdminAuthError('');
     } else {
-      setAdminAuthError('Mật khẩu Quản trị không chính xác! (Mật khẩu: admin123456@)');
+      setAdminAuthError('Mật khẩu Quản trị không chính xác! Vui lòng thử lại.');
     }
   };
 
@@ -647,7 +647,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                     <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
                       Mật khẩu Quản trị viên
                     </label>
-                    <span className="text-[11px] text-purple-700 font-semibold">Mặc định: admin123456@</span>
                   </div>
                   <div className="relative">
                     <input
@@ -656,7 +655,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                       required
                       value={adminPasswordInput}
                       onChange={(e) => setAdminPasswordInput(e.target.value)}
-                      placeholder="Nhập admin123456@..."
+                      placeholder="Nhập mật khẩu Quản trị..."
                       className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-semibold focus:ring-2 focus:ring-purple-500 focus:border-purple-500 shadow-2xs"
                     />
                     <KeyRound className="w-4 h-4 text-slate-400 absolute right-3.5 top-3" />
