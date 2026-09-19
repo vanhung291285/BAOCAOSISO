@@ -25,13 +25,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (typeof window === 'undefined') return null;
     try {
       // 1. Check if this is a fresh browser tab/webview session (e.g. from a shared link click)
+      const isStandalone = 
+        window.matchMedia('(display-mode: standalone)').matches ||
+        (window.navigator as any).standalone === true;
+
       const isFreshSession = sessionStorage.getItem('sso_session_active') !== 'true';
-      if (isFreshSession) {
+      if (isFreshSession && !isStandalone) {
         // Clear any old active session to guarantee showing the login/class selection screen on fresh entry
         localStorage.removeItem(CURRENT_USER_KEY);
         sessionStorage.removeItem(CURRENT_USER_KEY);
         sessionStorage.setItem('sso_session_active', 'true');
         return null;
+      }
+
+      if (isStandalone) {
+        sessionStorage.setItem('sso_session_active', 'true');
       }
 
       // 2. Check sessionStorage first (secure session, valid for ADMIN, BGH & current GVCN tab)
@@ -79,13 +87,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const users = await StorageService.getProfiles();
     setAllUsers(users);
 
+    const isStandalone = 
+      window.matchMedia('(display-mode: standalone)').matches ||
+      (window.navigator as any).standalone === true;
+
     const isFreshSession = sessionStorage.getItem('sso_session_active') !== 'true';
-    if (isFreshSession) {
+    if (isFreshSession && !isStandalone) {
       localStorage.removeItem(CURRENT_USER_KEY);
       sessionStorage.removeItem(CURRENT_USER_KEY);
       sessionStorage.setItem('sso_session_active', 'true');
       setCurrentUser(null);
       return;
+    }
+
+    if (isStandalone) {
+      sessionStorage.setItem('sso_session_active', 'true');
     }
 
     let savedId = sessionStorage.getItem(CURRENT_USER_KEY);
