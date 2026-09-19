@@ -246,7 +246,7 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
   const getAbsentStudentText = (row: ClassReportRow): string => {
     if (row.report?.absent_students && row.report.absent_students.length > 0) {
       const listStr = row.report.absent_students
-        .map((s) => `${s.full_name}${s.reason ? ` (${s.reason})` : ''}`)
+        .map((s) => `${s.full_name}${s.isBoarding ? ' (Bán Trú)' : ' (Ngoại Trú)'}${s.reason ? ` (${s.reason})` : ''}`)
         .join('\n');
       if (row.report.notes && !listStr.includes(row.report.notes)) {
         return `${listStr}\n- Ghi chú: ${row.report.notes}`;
@@ -885,6 +885,9 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
                 <th colSpan={2} className="border border-black px-2 py-1.5 text-center">
                   Học sinh bán trú
                 </th>
+                <th colSpan={2} className="border border-black px-2 py-1.5 text-center">
+                  Học sinh ngoại trú
+                </th>
                 <th rowSpan={2} className="border border-black px-3 py-2.5 min-w-[200px] text-center">
                   Tên học sinh nghỉ
                 </th>
@@ -908,6 +911,8 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
                 <th className="border border-black px-1.5 py-1.5 w-20">Số học sinh vắng</th>
                 <th className="border border-black px-1.5 py-1.5 w-20">Tổng số học sinh</th>
                 <th className="border border-black px-1.5 py-1.5 w-20">Số học sinh vắng</th>
+                <th className="border border-black px-1.5 py-1.5 w-20">Tổng số học sinh</th>
+                <th className="border border-black px-1.5 py-1.5 w-20">Số học sinh vắng</th>
               </tr>
             </thead>
 
@@ -924,6 +929,9 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
 
                 const totalBoarding = boardingVal?.total ?? 0;
                 const absentBoarding = boardingVal?.absent ?? 0;
+                
+                const totalNgoaiTru = Math.max(0, totalAll - totalBoarding);
+                const absentNgoaiTru = Math.max(0, absentAll - absentBoarding);
 
                 // Accurate Percentage Calculations:
                 // % vắng = (Số HS vắng / Tổng số HS) * 100
@@ -974,7 +982,21 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
                       {isReported ? absentBoarding : '-'}
                     </td>
 
-                    {/* 7. Tên học sinh (Danh sách vắng & lý do) */}
+                    {/* 7. Học sinh ngoại trú - Tổng số */}
+                    <td className="border border-black py-1.5 px-1 font-medium text-center">
+                      {isReported ? totalNgoaiTru : totalNgoaiTru > 0 ? totalNgoaiTru : '-'}
+                    </td>
+
+                    {/* 8. Học sinh ngoại trú - Số vắng */}
+                    <td
+                      className={`border border-black py-1.5 px-1 font-bold text-center ${
+                        absentNgoaiTru > 0 ? 'text-red-700' : 'text-black'
+                      }`}
+                    >
+                      {isReported ? absentNgoaiTru : '-'}
+                    </td>
+
+                    {/* 9. Tên học sinh (Danh sách vắng & lý do) */}
                     <td className="border border-black py-1.5 px-2.5 text-left text-[11px] text-black whitespace-pre">
                       {isReported ? (
                         studentNames || ''
@@ -983,7 +1005,7 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
                       )}
                     </td>
 
-                    {/* 7.5. Địa chỉ học sinh vắng */}
+                    {/* 9.5. Địa chỉ học sinh vắng */}
                     <td className="border border-black py-1.5 px-2.5 text-left text-[11px] text-black whitespace-pre">
                       {isReported ? studentAddresses || '-' : '-'}
                     </td>

@@ -447,11 +447,11 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
     }
   };
 
-  const handleUpdateAbsentStudent = (index: number, field: keyof AbsentStudent, value: string) => {
+  const handleUpdateAbsentStudent = (index: number, field: keyof AbsentStudent, value: string | boolean) => {
     const updated = [...absentStudents];
     if (field === 'full_name') {
       const match = students.find(
-        (s) => s.class_id === selectedClassId && s.full_name.trim().toLowerCase() === value.trim().toLowerCase()
+        (s) => s.class_id === selectedClassId && s.full_name.trim().toLowerCase() === (value as string).trim().toLowerCase()
       );
       if (match) {
         updated[index] = {
@@ -459,9 +459,10 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
           id: match.id,
           full_name: match.full_name, // keep original case from roster
           address: match.address || '',
+          isBoarding: match.isBoarding,
         };
       } else {
-        updated[index] = { ...updated[index], id: undefined, full_name: value };
+        updated[index] = { ...updated[index], id: undefined, full_name: value as string };
       }
     } else {
       updated[index] = { ...updated[index], [field]: value };
@@ -1505,16 +1506,23 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                       />
                     </div>
 
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
-                        Bản / Thôn (Địa chỉ)
-                      </label>
+                    <div className="flex flex-col justify-end">
+                      <div className="flex items-center gap-2 mb-2">
+                        <input
+                          type="checkbox"
+                          disabled={isLocked && !isAdmin}
+                          checked={!!student.isBoarding}
+                          onChange={(e) => handleUpdateAbsentStudent(idx, 'isBoarding', e.target.checked)}
+                          className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 disabled:opacity-50"
+                        />
+                        <label className="text-[10px] font-bold text-slate-700 uppercase">Học sinh bán trú</label>
+                      </div>
                       <input
                         type="text"
                         disabled={isLocked && !isAdmin}
                         value={student.address || ''}
                         onChange={(e) => handleUpdateAbsentStudent(idx, 'address', e.target.value)}
-                        placeholder="VD: Bản Huổi Hốc..."
+                        placeholder="Bản / Thôn (Địa chỉ)..."
                         className="w-full px-2.5 h-9 text-xs bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-hidden disabled:bg-slate-100"
                       />
                     </div>

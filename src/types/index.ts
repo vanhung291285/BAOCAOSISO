@@ -105,6 +105,7 @@ export interface AbsentStudent {
   full_name: string;
   address?: string;
   reason?: string;
+  isBoarding?: boolean;
 }
 
 export interface Student {
@@ -112,6 +113,7 @@ export interface Student {
   class_id: string;
   full_name: string;
   address?: string;
+  isBoarding?: boolean;
   created_at?: string;
 }
 
