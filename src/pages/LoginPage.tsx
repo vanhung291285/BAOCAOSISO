@@ -66,10 +66,41 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
   const [yearError, setYearError] = useState('');
   const [isSavingYear, setIsSavingYear] = useState(false);
 
-  // Initialize selected class & teacher (REMOVED AUTO-SELECTION)
+  // Initialize selected class & teacher on mount
   useEffect(() => {
-    // No longer auto-selecting a class on mount to force user explicit choice.
+    const savedClassId = localStorage.getItem('sso_saved_class_id');
+    const savedTeacherId = localStorage.getItem('sso_saved_teacher_id');
+    const savedTab = localStorage.getItem('sso_saved_active_tab') as 'GVCN' | 'ADMIN';
+
+    if (savedTab) {
+      setActiveTab(savedTab);
+    }
+    if (savedClassId) {
+      setSelectedClassId(savedClassId);
+    }
+    if (savedTeacherId) {
+      setSelectedTeacherId(savedTeacherId);
+    }
   }, []);
+
+  // Sync and save selection of class
+  useEffect(() => {
+    if (selectedClassId) {
+      localStorage.setItem('sso_saved_class_id', selectedClassId);
+    }
+  }, [selectedClassId]);
+
+  // Save selected teacher
+  useEffect(() => {
+    if (selectedTeacherId) {
+      localStorage.setItem('sso_saved_teacher_id', selectedTeacherId);
+    }
+  }, [selectedTeacherId]);
+
+  // Save active tab
+  useEffect(() => {
+    localStorage.setItem('sso_saved_active_tab', activeTab);
+  }, [activeTab]);
 
   // Sync teacher when selectedClassId changes
   useEffect(() => {
