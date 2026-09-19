@@ -23,6 +23,7 @@ import {
   Trash2
 } from 'lucide-react';
 import { SchoolYear } from '../types';
+import { PWAInstallButton } from '../components/PWAInstallButton';
 import { isSupabaseConnected } from '../services/supabase';
 
 interface LoginPageProps {
@@ -326,6 +327,9 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
             Sổ điện tử theo dõi chuyên cần & sĩ số học sinh hằng ngày
           </p>
         )}
+        <div className="mt-4 flex justify-center">
+          <PWAInstallButton />
+        </div>
       </div>
 
       {/* School Year Info Bar - Configuration restricted to ADMIN only */}

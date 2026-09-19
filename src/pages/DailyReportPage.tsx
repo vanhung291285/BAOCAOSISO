@@ -236,6 +236,17 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
     return row.report?.notes || '';
   };
 
+  // Helper to extract absent student addresses
+  const getAbsentStudentAddresses = (row: ClassReportRow): string => {
+    if (row.report?.absent_students && row.report.absent_students.length > 0) {
+      return row.report.absent_students
+        .map((s) => s.address || '')
+        .filter((a) => a !== '')
+        .join(', ');
+    }
+    return '';
+  };
+
   // Export Excel with complete cell borders, merged headers, and alignment matching the exact image
   const handleExportExcel = async (exportBlankTemplate: boolean = false) => {
     if (!reportData && !exportBlankTemplate) return;
@@ -281,8 +292,9 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
         { key: 'halfTotal', width: 16 },    // Cột 5: Học sinh bán trú - Tổng số học sinh
         { key: 'halfAbsent', width: 16 },   // Cột 6: Học sinh bán trú - Số học sinh vắng
         { key: 'studentNames', width: 32 }, // Cột 7: Tên học sinh
-        { key: 'absentRate', width: 18 },   // Cột 8: Tỉ lệ phần trăm vắng (%)
-        { key: 'presentRate', width: 19 },  // Cột 9: Tỉ lệ phần trăm chuyên cần (%)
+        { key: 'studentAddresses', width: 32 }, // Cột 8: Địa chỉ
+        { key: 'absentRate', width: 18 },   // Cột 9: Tỉ lệ phần trăm vắng (%)
+        { key: 'presentRate', width: 19 },  // Cột 10: Tỉ lệ phần trăm chuyên cần (%)
       ];
 
       // Row 1: Title (BÁO CÁO SĨ SỐ HỌC SINH NGÀY .......THÁNG ...... NĂM 2026)
@@ -290,7 +302,7 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
         ? `${baseTitle} NGÀY .......THÁNG ...... NĂM ${dateParts.year}`
         : `${baseTitle} NGÀY ${dateParts.day} THÁNG ${dateParts.month} NĂM ${dateParts.year}`;
 
-      ws.mergeCells('A1:I1');
+      ws.mergeCells('A1:J1');
       const titleCell = ws.getCell('A1');
       titleCell.value = titleText;
       titleCell.font = { name: 'Times New Roman', size: 13, bold: true };
@@ -317,10 +329,13 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
       ws.getCell('G3').value = 'Tên học sinh';
 
       ws.mergeCells('H3:H4');
-      ws.getCell('H3').value = 'Tỉ lệ phần trăm\nvắng (%)';
+      ws.getCell('H3').value = 'Địa chỉ';
 
       ws.mergeCells('I3:I4');
-      ws.getCell('I3').value = 'Tỉ lệ phần trăm\nchuyên cần (%)';
+      ws.getCell('I3').value = 'Tỉ lệ phần trăm\nvắng (%)';
+
+      ws.mergeCells('J3:J4');
+      ws.getCell('J3').value = 'Tỉ lệ phần trăm\nchuyên cần (%)';
 
       // Row 4: Header Row 2 sub-columns
       ws.getCell('C4').value = 'Tổng số học sinh';
@@ -334,7 +349,7 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
       // Apply borders, fonts and alignments to both header rows (Rows 3 & 4)
       for (let r = 3; r <= 4; r++) {
         const row = ws.getRow(r);
-        for (let c = 1; c <= 9; c++) {
+        for (let c = 1; c <= 10; c++) {
           const cell = row.getCell(c);
           cell.border = thinBorder;
           cell.font = { name: 'Times New Roman', size: 10.5, bold: true };
@@ -367,7 +382,7 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
         // Add 12 additional empty rows with grid borders just like the image template
         for (let i = 0; i < 12; i++) {
           const rObj = ws.getRow(currentRow);
-          for (let c = 1; c <= 9; c++) {
+          for (let c = 1; c <= 10; c++) {
             rObj.getCell(c).border = thinBorder;
           }
           rObj.height = 22;
@@ -395,6 +410,7 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
           const presentRate = totalAll > 0 ? (presentAll / totalAll) * 100 : 0;
 
           const studentNames = getAbsentStudentText(row);
+          const studentAddresses = getAbsentStudentAddresses(row);
 
           const rObj = ws.getRow(currentRow);
           rObj.getCell(1).value = row.classItem.class_name;
@@ -406,8 +422,9 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
             rObj.getCell(5).value = totalBoarding;
             rObj.getCell(6).value = absentBoarding;
             rObj.getCell(7).value = studentNames;
-            rObj.getCell(8).value = `${absentRate.toFixed(2).replace('.', ',')}%`;
-            rObj.getCell(9).value = `${presentRate.toFixed(2).replace('.', ',')}%`;
+            rObj.getCell(8).value = studentAddresses;
+            rObj.getCell(9).value = `${absentRate.toFixed(2).replace('.', ',')}%`;
+            rObj.getCell(10).value = `${presentRate.toFixed(2).replace('.', ',')}%`;
           } else {
             rObj.getCell(3).value = totalAll > 0 ? totalAll : '-';
             rObj.getCell(4).value = '-';
@@ -416,6 +433,7 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
             rObj.getCell(7).value = 'Chưa báo cáo';
             rObj.getCell(8).value = '-';
             rObj.getCell(9).value = '-';
+            rObj.getCell(10).value = '-';
           }
 
           // Alignments & fonts
@@ -720,6 +738,9 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
                 <th rowSpan={2} className="border border-black px-3 py-2.5 min-w-[200px] text-center">
                   Tên học sinh
                 </th>
+                <th rowSpan={2} className="border border-black px-3 py-2.5 min-w-[150px] text-center">
+                  Địa chỉ
+                </th>
                 <th rowSpan={2} className="border border-black px-2 py-2.5 w-24 text-center">
                   Tỉ lệ phần trăm vắng (%)
                 </th>
@@ -761,6 +782,7 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
                 const presentRate = totalAll > 0 ? (presentAll / totalAll) * 100 : 0;
 
                 const studentNames = getAbsentStudentText(row);
+                const studentAddresses = getAbsentStudentAddresses(row);
 
                 return (
                   <tr key={row.classItem.id} className="text-center hover:bg-slate-50/70">
@@ -809,6 +831,11 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
                       ) : (
                         <span className="text-slate-400 italic">Chưa báo cáo</span>
                       )}
+                    </td>
+
+                    {/* 7.5. Địa chỉ học sinh vắng */}
+                    <td className="border border-black py-1.5 px-2.5 text-left text-[11px] text-black whitespace-normal max-w-[200px]">
+                      {isReported ? studentAddresses || '' : '-'}
                     </td>
 
                     {/* 8. Tỉ lệ phần trăm vắng (%) */}
@@ -877,6 +904,9 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
 
                       <td className="border border-black py-2 px-2 text-left text-[11px] font-semibold text-slate-700">
                         Đã báo cáo: {reportData.reportedClasses}/{reportData.totalClasses} lớp
+                      </td>
+                      <td className="border border-black py-2 px-2 text-left text-[11px] font-semibold text-slate-700">
+                        -
                       </td>
 
                       <td className="border border-black py-2 px-1 text-xs font-bold text-black text-center">
