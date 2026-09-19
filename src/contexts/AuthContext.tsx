@@ -24,12 +24,40 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [currentUser, setCurrentUser] = useState<Profile | null>(() => {
     if (typeof window === 'undefined') return null;
     try {
-      const savedId = localStorage.getItem(CURRENT_USER_KEY);
+      // 1. Check if this is a fresh browser tab/webview session (e.g. from a shared link click)
+      const isFreshSession = sessionStorage.getItem('sso_session_active') !== 'true';
+      if (isFreshSession) {
+        // Clear any old active session to guarantee showing the login/class selection screen on fresh entry
+        localStorage.removeItem(CURRENT_USER_KEY);
+        sessionStorage.removeItem(CURRENT_USER_KEY);
+        sessionStorage.setItem('sso_session_active', 'true');
+        return null;
+      }
+
+      // 2. Check sessionStorage first (secure session, valid for ADMIN, BGH & current GVCN tab)
+      let savedId = sessionStorage.getItem(CURRENT_USER_KEY);
+      
+      // 3. If not in sessionStorage, check localStorage (for persistent GVCN)
+      if (!savedId) {
+        savedId = localStorage.getItem(CURRENT_USER_KEY);
+      }
+
       const rawUsers = localStorage.getItem('sso_profiles_v1');
       if (savedId && rawUsers) {
         const users = JSON.parse(rawUsers);
         const match = users.find((u: Profile) => u.id === savedId);
-        if (match) return match;
+        if (match) {
+          // ADMIN and BGH are NEVER persisted in localStorage to prevent automatic login bypass.
+          // They MUST use sessionStorage.
+          if (match.role === 'ADMIN' || match.role === 'BGH') {
+            const hasSessionId = sessionStorage.getItem(CURRENT_USER_KEY) === savedId;
+            if (!hasSessionId) {
+              localStorage.removeItem(CURRENT_USER_KEY);
+              return null;
+            }
+          }
+          return match;
+        }
       }
     } catch (err) {}
     return null;
@@ -44,16 +72,38 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return [];
   });
   
-  const [loading, setLoading] = useState(false);
+  // Set default loading to true to prevent rendering the admin dashboard during session restore validation
+  const [loading, setLoading] = useState(true);
 
   const reloadUsers = async () => {
     const users = await StorageService.getProfiles();
     setAllUsers(users);
 
-    const savedId = localStorage.getItem(CURRENT_USER_KEY);
+    const isFreshSession = sessionStorage.getItem('sso_session_active') !== 'true';
+    if (isFreshSession) {
+      localStorage.removeItem(CURRENT_USER_KEY);
+      sessionStorage.removeItem(CURRENT_USER_KEY);
+      sessionStorage.setItem('sso_session_active', 'true');
+      setCurrentUser(null);
+      return;
+    }
+
+    let savedId = sessionStorage.getItem(CURRENT_USER_KEY);
+    if (!savedId) {
+      savedId = localStorage.getItem(CURRENT_USER_KEY);
+    }
+
     if (savedId) {
       const match = users.find((u) => u.id === savedId);
       if (match) {
+        if (match.role === 'ADMIN' || match.role === 'BGH') {
+          const hasSessionId = sessionStorage.getItem(CURRENT_USER_KEY) === savedId;
+          if (!hasSessionId) {
+            localStorage.removeItem(CURRENT_USER_KEY);
+            setCurrentUser(null);
+            return;
+          }
+        }
         setCurrentUser(match);
         return;
       }
@@ -92,7 +142,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     if (found) {
       setCurrentUser(found);
-      localStorage.setItem(CURRENT_USER_KEY, found.id);
+      
+      // Secure hybrid storage strategy:
+      // ADMIN/BGH use sessionStorage ONLY to guarantee logout on tab/link reopen.
+      // GVCN uses localStorage + sessionStorage for seamless offline/tab reporting.
+      if (found.role === 'ADMIN' || found.role === 'BGH') {
+        sessionStorage.setItem(CURRENT_USER_KEY, found.id);
+        localStorage.removeItem(CURRENT_USER_KEY);
+      } else {
+        localStorage.setItem(CURRENT_USER_KEY, found.id);
+        sessionStorage.setItem(CURRENT_USER_KEY, found.id);
+      }
       return true;
     }
     return false;
@@ -100,6 +160,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const logout = () => {
     localStorage.removeItem(CURRENT_USER_KEY);
+    sessionStorage.removeItem(CURRENT_USER_KEY);
     // Don't leave completely blank in prototype; set to null for login page
     setCurrentUser(null);
   };
@@ -109,7 +170,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const match = users.find((u) => u.id === userId);
     if (match) {
       setCurrentUser(match);
-      localStorage.setItem(CURRENT_USER_KEY, match.id);
+      if (match.role === 'ADMIN' || match.role === 'BGH') {
+        sessionStorage.setItem(CURRENT_USER_KEY, match.id);
+        localStorage.removeItem(CURRENT_USER_KEY);
+      } else {
+        localStorage.setItem(CURRENT_USER_KEY, match.id);
+        sessionStorage.setItem(CURRENT_USER_KEY, match.id);
+      }
     }
   };
 

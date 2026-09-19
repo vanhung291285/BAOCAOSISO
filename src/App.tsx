@@ -48,6 +48,13 @@ const AppContent: React.FC = () => {
   // Find user's assigned class name if GVCN
   const assignedClass = classes.find((c) => c.id === currentUser?.assigned_class_id);
 
+  // Default routing for GVCN on app load or navigation
+  useEffect(() => {
+    if (!loading && currentUser?.role === 'GVCN' && currentPath === '/dashboard') {
+      setCurrentPath('/attendance');
+    }
+  }, [loading, currentUser, currentPath]);
+
   if (loading) {
     // Keep a completely transparent state if strictly necessary, but avoid visual flash
     return null;
