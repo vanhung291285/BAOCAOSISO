@@ -403,7 +403,7 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
       ws.getCell(`E${headerStartRow}`).value = 'Học sinh bán trú';
 
       ws.mergeCells(`G${headerStartRow}:G${headerStartRow + 1}`);
-      ws.getCell(`G${headerStartRow}`).value = 'Tên học sinh';
+      ws.getCell(`G${headerStartRow}`).value = 'Tên học sinh nghỉ';
 
       ws.mergeCells(`H${headerStartRow}:H${headerStartRow + 1}`);
       ws.getCell(`H${headerStartRow}`).value = 'Địa chỉ';
@@ -886,7 +886,7 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
                   Học sinh bán trú
                 </th>
                 <th rowSpan={2} className="border border-black px-3 py-2.5 min-w-[200px] text-center">
-                  Tên học sinh
+                  Tên học sinh nghỉ
                 </th>
                 <th rowSpan={2} className="border border-black px-3 py-2.5 min-w-[150px] text-center">
                   Địa chỉ
