@@ -10,49 +10,36 @@ export const PWAInstallButton: React.FC = () => {
     return null;
   }
 
-  if (isInstallable) {
-    return (
+  // General install/instructions flow
+  return (
+    <>
       <button
-        onClick={install}
-        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-100 text-blue-700 font-bold text-[11px] hover:bg-blue-200 transition-colors shadow-sm"
+        onClick={isInstallable ? install : () => setShowIOSGuide(true)}
+        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 text-white font-bold text-xs hover:bg-blue-700 transition-colors shadow-md"
       >
         <Download className="w-3.5 h-3.5" />
-        <span className="whitespace-nowrap">Cài App</span>
+        <span className="whitespace-nowrap">Cài đặt ứng dụng</span>
       </button>
-    );
-  }
 
-  if (isIOS) {
-    return (
-      <>
-        <button
-          onClick={() => setShowIOSGuide(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-100 text-blue-700 font-bold text-[11px] hover:bg-blue-200 transition-colors shadow-sm"
-        >
-          <Download className="w-3.5 h-3.5" />
-          <span className="whitespace-nowrap">Cài App</span>
-        </button>
-
-        {showIOSGuide && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setShowIOSGuide(false)}>
-            <div className="w-full max-w-sm rounded-xl bg-white p-6 shadow-xl" onClick={e => e.stopPropagation()}>
-              <h3 className="text-lg font-bold text-slate-900">Cài đặt trên iPhone/iPad</h3>
-              <p className="mt-3 text-sm text-slate-600 leading-relaxed">
-                1. Chạm vào nút <strong>Chia sẻ (Share)</strong> ở thanh công cụ Safari.<br />
-                2. Cuộn xuống và chọn <strong>Thêm vào MH chính (Add to Home Screen)</strong>.
-              </p>
-              <button
-                onClick={() => setShowIOSGuide(false)}
-                className="mt-5 w-full rounded-lg bg-slate-100 py-2.5 text-sm font-bold text-slate-800 hover:bg-slate-200"
-              >
-                Đóng
-              </button>
-            </div>
+      {showIOSGuide && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4" onClick={() => setShowIOSGuide(false)}>
+          <div className="w-full max-w-sm rounded-xl bg-white p-6 shadow-xl" onClick={e => e.stopPropagation()}>
+            <h3 className="text-lg font-bold text-slate-900">Cách cài đặt ứng dụng</h3>
+            <p className="mt-3 text-sm text-slate-600 leading-relaxed">
+              {isIOS 
+                ? <>1. Chạm vào nút <strong>Chia sẻ (Share)</strong> ở thanh công cụ Safari.<br />2. Cuộn xuống và chọn <strong>Thêm vào MH chính (Add to Home Screen)</strong>.</>
+                : <>Nhấn vào menu trình duyệt (thường là biểu tượng 3 chấm) và chọn <strong>"Thêm vào màn hình chính" (Add to Home screen)</strong> để cài đặt ứng dụng.</>
+              }
+            </p>
+            <button
+              onClick={() => setShowIOSGuide(false)}
+              className="mt-5 w-full rounded-lg bg-slate-100 py-2.5 text-sm font-bold text-slate-800 hover:bg-slate-200"
+            >
+              Đóng
+            </button>
           </div>
-        )}
-      </>
-    );
-  }
-
-  return null;
+        </div>
+      )}
+    </>
+  );
 };
