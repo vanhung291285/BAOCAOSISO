@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useSchool } from '../contexts/SchoolContext';
 import { SchoolSettings, SchoolYear } from '../types';
@@ -40,6 +40,12 @@ export const SettingsSchoolPage: React.FC = () => {
 
   const [formData, setFormData] = useState<Partial<SchoolSettings>>(settings || {});
   const [savedSuccess, setSavedSuccess] = useState(false);
+
+  useEffect(() => {
+    if (settings) {
+      setFormData(settings);
+    }
+  }, [settings]);
 
   // School Year State
   const [newYearName, setNewYearName] = useState('');

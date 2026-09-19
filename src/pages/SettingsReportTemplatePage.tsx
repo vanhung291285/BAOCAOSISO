@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useSchool } from '../contexts/SchoolContext';
 import { InputCalculationMode } from '../types';
 import { SettingsNavTabs } from '../components/SettingsNavTabs';
@@ -12,6 +12,16 @@ export const SettingsReportTemplatePage: React.FC = () => {
   const [developerName, setDeveloperName] = useState(settings?.developer_name || 'Nguyễn Hùng');
   const [developerContact, setDeveloperContact] = useState(settings?.developer_contact || 'hungthcsnongu@gmail.com');
   const [savedSuccess, setSavedSuccess] = useState(false);
+
+  useEffect(() => {
+    if (settings) {
+      setReportTitle(settings.report_title || 'BÁO CÁO SĨ SỐ HỌC SINH');
+      setInputMode(settings.input_mode || 'MODE_1_TOTAL_PRESENT');
+      setFooterText(settings.footer_text || 'Số liệu được tổng hợp tự động từ phần mềm báo cáo sĩ số hàng ngày.');
+      setDeveloperName(settings.developer_name || 'Nguyễn Hùng');
+      setDeveloperContact(settings.developer_contact || 'hungthcsnongu@gmail.com');
+    }
+  }, [settings]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();

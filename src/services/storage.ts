@@ -2340,12 +2340,18 @@ export const StorageService = {
         }
       }
 
+      const isInSync = connected && !errorMsg && (
+        def.key === 'system_logs'
+          ? cloudCount >= localCount
+          : localCount === cloudCount
+      );
+
       results.push({
         table: def.key,
         label: def.label,
         localCount,
         cloudCount,
-        inSync: connected && !errorMsg && localCount === cloudCount,
+        inSync: isInSync,
         error: errorMsg,
       });
     }

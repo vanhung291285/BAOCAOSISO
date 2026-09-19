@@ -71,8 +71,20 @@ export const MonthlyReportPage: React.FC<MonthlyReportPageProps> = ({ onNavigate
     const wb = XLSX.utils.book_new();
     const wsData: any[][] = [];
 
-    wsData.push([settings?.school_name || 'TRƯỜNG PTDTBT THCS XA DUNG']);
-    wsData.push([`BÁO CÁO TỔNG HỢP SĨ SỐ THÁNG ${selectedMonth.split('-').reverse().join('/')}${campusName}`]);
+    let formattedSchoolName = settings?.school_name || 'TRƯỜNG PTDTBT THCS XA DUNG';
+    if (!formattedSchoolName.toUpperCase().startsWith('TRƯỜNG')) {
+      formattedSchoolName = 'TRƯỜNG ' + formattedSchoolName;
+    }
+    formattedSchoolName = formattedSchoolName.toUpperCase();
+
+    wsData.push([(settings?.sub_department_name || 'UBND XÃ XA DUNG').toUpperCase()]);
+    wsData.push([formattedSchoolName]);
+    if (selectedCampusId !== 'all') {
+      const selectedCampus = campuses.find((c) => c.id === selectedCampusId);
+      wsData.push([`PHÂN HIỆU: ${(selectedCampus ? selectedCampus.name : '...........').toUpperCase()}`]);
+    }
+    wsData.push([]);
+    wsData.push([`BÁO CÁO TỔNG HỢP SĨ SỐ THÁNG ${selectedMonth.split('-').reverse().join('/')}`]);
     wsData.push([]);
 
     // KPI Summary

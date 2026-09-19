@@ -159,20 +159,22 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
     }
   }, [selectedDate]);
 
+  const formattedSchoolName = useMemo(() => {
+    let name = settings?.school_name || 'TRƯỜNG PTDTBT THCS XA DUNG';
+    if (!name.toUpperCase().startsWith('TRƯỜNG')) {
+      name = 'TRƯỜNG ' + name;
+    }
+    return name.toUpperCase();
+  }, [settings?.school_name]);
+
   // Tiêu đề mẫu: mặc định hiển thị "BÁO CÁO SĨ SỐ HỌC SINH NGÀY .......THÁNG ...... NĂM 2026"
   const [blankDateInTitle, setBlankDateInTitle] = useState(true);
 
   const baseTitle = useMemo(() => {
     let raw = settings?.report_title || 'BÁO CÁO SĨ SỐ HỌC SINH';
     raw = raw.replace('BÁO CÁO HỌC SINH SĨ SỐ HỌC SINH', 'BÁO CÁO SĨ SỐ HỌC SINH');
-    if (selectedCampusId !== 'all') {
-      const selectedCampus = campuses.find(c => c.id === selectedCampusId);
-      if (selectedCampus) {
-        raw += ` - ${selectedCampus.name.toUpperCase()}`;
-      }
-    }
     return raw;
-  }, [settings?.report_title, selectedCampusId, campuses]);
+  }, [settings?.report_title]);
 
   const displayTitle = useMemo(() => {
     if (blankDateInTitle) {
@@ -297,57 +299,112 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
         { key: 'presentRate', width: 19 },  // Cột 10: Tỉ lệ phần trăm chuyên cần (%)
       ];
 
-      // Row 1: Title (BÁO CÁO SĨ SỐ HỌC SINH NGÀY .......THÁNG ...... NĂM 2026)
+      let rIdx = 1;
+
+      // Row 1: Left: UBND XÃ XA DUNG. Right: CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM
+      ws.mergeCells(`A${rIdx}:D${rIdx}`);
+      const subDeptCell = ws.getCell(`A${rIdx}`);
+      subDeptCell.value = (settings?.sub_department_name || 'UBND XÃ XA DUNG').toUpperCase();
+      subDeptCell.font = { name: 'Times New Roman', size: 10, bold: true };
+      subDeptCell.alignment = { horizontal: 'left', vertical: 'middle' };
+
+      ws.mergeCells(`G${rIdx}:J${rIdx}`);
+      const nationCell1 = ws.getCell(`G${rIdx}`);
+      nationCell1.value = 'CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM';
+      nationCell1.font = { name: 'Times New Roman', size: 10, bold: true };
+      nationCell1.alignment = { horizontal: 'center', vertical: 'middle' };
+
+      ws.getRow(rIdx).height = 18;
+      rIdx++;
+
+      // Row 2: Left: TRƯỜNG PTDTBT THCS XA DUNG. Right: Độc lập - Tự do - Hạnh phúc
+      ws.mergeCells(`A${rIdx}:D${rIdx}`);
+      const schoolNameCell = ws.getCell(`A${rIdx}`);
+      schoolNameCell.value = formattedSchoolName;
+      schoolNameCell.font = { name: 'Times New Roman', size: 10, bold: true };
+      schoolNameCell.alignment = { horizontal: 'left', vertical: 'middle' };
+
+      ws.mergeCells(`G${rIdx}:J${rIdx}`);
+      const nationCell2 = ws.getCell(`G${rIdx}`);
+      nationCell2.value = 'Độc lập - Tự do - Hạnh phúc';
+      nationCell2.font = { name: 'Times New Roman', size: 10, bold: true, underline: 'single' };
+      nationCell2.alignment = { horizontal: 'center', vertical: 'middle' };
+
+      ws.getRow(rIdx).height = 18;
+      rIdx++;
+
+      // Row 3: PHÂN HIỆU: HUỔI SÓ (only if a specific campus is selected)
+      if (selectedCampusId !== 'all') {
+        ws.mergeCells(`A${rIdx}:D${rIdx}`);
+        const campusCell = ws.getCell(`A${rIdx}`);
+        const selectedCampus = campuses.find((c) => c.id === selectedCampusId);
+        campusCell.value = `PHÂN HIỆU: ${(selectedCampus ? selectedCampus.name : '...........').toUpperCase()}`;
+        campusCell.font = { name: 'Times New Roman', size: 10, bold: true };
+        campusCell.alignment = { horizontal: 'left', vertical: 'middle' };
+        ws.getRow(rIdx).height = 18;
+        rIdx++;
+      }
+
+      // Small spacer before title
+      ws.getRow(rIdx).height = 10;
+      rIdx++;
+
+      // Row 4: Title (BÁO CÁO SĨ SỐ HỌC SINH NGÀY .......THÁNG ...... NĂM 2026)
       const titleText = exportBlankTemplate || blankDateInTitle
         ? `${baseTitle} NGÀY .......THÁNG ...... NĂM ${dateParts.year}`
         : `${baseTitle} NGÀY ${dateParts.day} THÁNG ${dateParts.month} NĂM ${dateParts.year}`;
 
-      ws.mergeCells('A1:J1');
-      const titleCell = ws.getCell('A1');
+      ws.mergeCells(`A${rIdx}:J${rIdx}`);
+      const titleCell = ws.getCell(`A${rIdx}`);
       titleCell.value = titleText;
       titleCell.font = { name: 'Times New Roman', size: 13, bold: true };
       titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
-      ws.getRow(1).height = 32;
+      ws.getRow(rIdx).height = 32;
+      rIdx++;
 
-      // Row 2: Empty spacer
-      ws.getRow(2).height = 8;
+      // Row 5: Empty spacer
+      ws.getRow(rIdx).height = 12;
+      rIdx++;
 
-      // Row 3: Header Row 1 (Merge vertical or horizontal)
-      ws.mergeCells('A3:A4');
-      ws.getCell('A3').value = 'Lớp';
+      // Header rows starting index
+      const headerStartRow = rIdx;
 
-      ws.mergeCells('B3:B4');
-      ws.getCell('B3').value = 'Giáo viên chủ\nnhiệm';
+      // Table Header Row 1 (Merge vertical or horizontal)
+      ws.mergeCells(`A${headerStartRow}:A${headerStartRow + 1}`);
+      ws.getCell(`A${headerStartRow}`).value = 'Lớp';
 
-      ws.mergeCells('C3:D3');
-      ws.getCell('C3').value = 'Học sinh toàn trường';
+      ws.mergeCells(`B${headerStartRow}:B${headerStartRow + 1}`);
+      ws.getCell(`B${headerStartRow}`).value = 'Giáo viên chủ\nnhiệm';
 
-      ws.mergeCells('E3:F3');
-      ws.getCell('E3').value = 'Học sinh bán trú';
+      ws.mergeCells(`C${headerStartRow}:D${headerStartRow}`);
+      ws.getCell(`C${headerStartRow}`).value = 'Học sinh toàn trường';
 
-      ws.mergeCells('G3:G4');
-      ws.getCell('G3').value = 'Tên học sinh';
+      ws.mergeCells(`E${headerStartRow}:F${headerStartRow}`);
+      ws.getCell(`E${headerStartRow}`).value = 'Học sinh bán trú';
 
-      ws.mergeCells('H3:H4');
-      ws.getCell('H3').value = 'Địa chỉ';
+      ws.mergeCells(`G${headerStartRow}:G${headerStartRow + 1}`);
+      ws.getCell(`G${headerStartRow}`).value = 'Tên học sinh';
 
-      ws.mergeCells('I3:I4');
-      ws.getCell('I3').value = 'Tỉ lệ phần trăm\nvắng (%)';
+      ws.mergeCells(`H${headerStartRow}:H${headerStartRow + 1}`);
+      ws.getCell(`H${headerStartRow}`).value = 'Địa chỉ';
 
-      ws.mergeCells('J3:J4');
-      ws.getCell('J3').value = 'Tỉ lệ phần trăm\nchuyên cần (%)';
+      ws.mergeCells(`I${headerStartRow}:I${headerStartRow + 1}`);
+      ws.getCell(`I${headerStartRow}`).value = 'Tỉ lệ phần trăm\nvắng (%)';
 
-      // Row 4: Header Row 2 sub-columns
-      ws.getCell('C4').value = 'Tổng số học sinh';
-      ws.getCell('D4').value = 'Số học sinh vắng';
-      ws.getCell('E4').value = 'Tổng số học sinh';
-      ws.getCell('F4').value = 'Số học sinh vắng';
+      ws.mergeCells(`J${headerStartRow}:J${headerStartRow + 1}`);
+      ws.getCell(`J${headerStartRow}`).value = 'Tỉ lệ phần trăm\nchuyên cần (%)';
 
-      ws.getRow(3).height = 24;
-      ws.getRow(4).height = 24;
+      // Row 2 sub-columns
+      ws.getCell(`C${headerStartRow + 1}`).value = 'Tổng số học sinh';
+      ws.getCell(`D${headerStartRow + 1}`).value = 'Số học sinh vắng';
+      ws.getCell(`E${headerStartRow + 1}`).value = 'Tổng số học sinh';
+      ws.getCell(`F${headerStartRow + 1}`).value = 'Số học sinh vắng';
 
-      // Apply borders, fonts and alignments to both header rows (Rows 3 & 4)
-      for (let r = 3; r <= 4; r++) {
+      ws.getRow(headerStartRow).height = 24;
+      ws.getRow(headerStartRow + 1).height = 24;
+
+      // Apply borders, fonts and alignments to both header rows
+      for (let r = headerStartRow; r <= headerStartRow + 1; r++) {
         const row = ws.getRow(r);
         for (let c = 1; c <= 10; c++) {
           const cell = row.getCell(c);
@@ -357,7 +414,7 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
         }
       }
 
-      let currentRow = 5;
+      let currentRow = headerStartRow + 2;
 
       if (exportBlankTemplate) {
         // Output template rows with class names and empty lines
@@ -371,7 +428,7 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
           rObj.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
           rObj.getCell(1).font = { name: 'Times New Roman', size: 10.5, bold: true };
 
-          for (let c = 1; c <= 9; c++) {
+          for (let c = 1; c <= 10; c++) {
             rObj.getCell(c).border = thinBorder;
             rObj.getCell(c).font = { name: 'Times New Roman', size: 10.5 };
           }
@@ -474,7 +531,10 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
           rObj.getCell(9).alignment = { horizontal: 'center', vertical: 'middle' };
           rObj.getCell(9).font = { name: 'Times New Roman', size: 10.5, bold: true };
 
-          for (let c = 1; c <= 9; c++) {
+          rObj.getCell(10).alignment = { horizontal: 'center', vertical: 'middle' };
+          rObj.getCell(10).font = { name: 'Times New Roman', size: 10.5, bold: true };
+
+          for (let c = 1; c <= 10; c++) {
             rObj.getCell(c).border = thinBorder;
           }
 
@@ -505,10 +565,11 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
         sumRow.getCell(5).value = totalSchoolBoarding;
         sumRow.getCell(6).value = absentSchoolBoarding;
         sumRow.getCell(7).value = `Đã báo cáo: ${reportData.reportedClasses}/${reportData.totalClasses} lớp`;
-        sumRow.getCell(8).value = `${overallAbsentRate.toFixed(2).replace('.', ',')}%`;
-        sumRow.getCell(9).value = `${overallPresentRate.toFixed(2).replace('.', ',')}%`;
+        sumRow.getCell(8).value = '';
+        sumRow.getCell(9).value = `${overallAbsentRate.toFixed(2).replace('.', ',')}%`;
+        sumRow.getCell(10).value = `${overallPresentRate.toFixed(2).replace('.', ',')}%`;
 
-        for (let c = 1; c <= 9; c++) {
+        for (let c = 1; c <= 10; c++) {
           const cell = sumRow.getCell(c);
           cell.border = thinBorder;
           cell.font = {
@@ -532,7 +593,7 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
 
       // Signatures row
       ws.mergeCells(`A${currentRow}:D${currentRow}`);
-      ws.mergeCells(`E${currentRow}:I${currentRow}`);
+      ws.mergeCells(`E${currentRow}:J${currentRow}`);
       
       const reporterTitleCell = ws.getCell(`A${currentRow}`);
       reporterTitleCell.value = signatureSettings.reporter_title;
@@ -547,7 +608,7 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
       currentRow++;
 
       ws.mergeCells(`A${currentRow}:D${currentRow}`);
-      ws.mergeCells(`E${currentRow}:I${currentRow}`);
+      ws.mergeCells(`E${currentRow}:J${currentRow}`);
       
       const reporterSubCell = ws.getCell(`A${currentRow}`);
       reporterSubCell.value = '(Ký và ghi rõ họ tên)';
@@ -561,7 +622,7 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
 
       currentRow++;
 
-      ws.mergeCells(`E${currentRow}:I${currentRow}`);
+      ws.mergeCells(`E${currentRow}:J${currentRow}`);
       const principalSubCell = ws.getCell(`E${currentRow}`);
       principalSubCell.value = '(Ký, đóng dấu và ghi rõ họ tên)';
       principalSubCell.font = { name: 'Times New Roman', size: 11, italic: true };
@@ -571,7 +632,7 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
       currentRow += 4;
 
       ws.mergeCells(`A${currentRow}:D${currentRow}`);
-      ws.mergeCells(`E${currentRow}:I${currentRow}`);
+      ws.mergeCells(`E${currentRow}:J${currentRow}`);
 
       const reporterNameCell = ws.getCell(`A${currentRow}`);
       reporterNameCell.value = signatureSettings.reporter_name;
@@ -710,8 +771,34 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
 
       {/* Main Document Layout - Matched precisely to the template image with solid borderlines */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 sm:p-8 print-container text-black">
+        {/* Official Document Header Block */}
+        <div className="flex flex-col md:flex-row justify-between items-start font-serif text-black mb-6">
+          <div className="flex flex-col items-start text-left">
+            <div className="text-[11px] sm:text-xs font-semibold uppercase tracking-wide">
+              {settings?.sub_department_name || 'UBND XÃ XA DUNG'}
+            </div>
+            <div className="text-[11px] sm:text-xs font-extrabold uppercase mt-0.5 tracking-tight border-b border-black pb-0.5">
+              {formattedSchoolName}
+            </div>
+            {selectedCampusId !== 'all' ? (
+              <div className="text-[11px] sm:text-xs font-bold mt-1 uppercase">
+                PHÂN HIỆU: {campuses.find((c) => c.id === selectedCampusId)?.name || '...........'}
+              </div>
+            ) : null}
+          </div>
+
+          <div className="flex flex-col items-center text-center mt-3 md:mt-0">
+            <div className="text-[11px] sm:text-xs font-bold uppercase tracking-wide">
+              CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM
+            </div>
+            <div className="text-[10px] sm:text-xs font-bold border-b border-black pb-0.5 mt-0.5 px-4">
+              Độc lập - Tự do - Hạnh phúc
+            </div>
+          </div>
+        </div>
+
         {/* Dynamic Big Report Title */}
-        <div className="text-center my-4 pb-2">
+        <div className="text-center my-6 pb-2">
           <h2 className="text-base sm:text-lg md:text-xl font-black uppercase tracking-wider text-black font-serif">
             {displayTitle}
           </h2>

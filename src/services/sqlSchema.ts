@@ -46,6 +46,15 @@ CREATE TABLE IF NOT EXISTS public.school_settings (
     primary_color TEXT DEFAULT '#1d4ed8',
     input_mode TEXT DEFAULT 'MODE_1_TOTAL_PRESENT' CHECK (input_mode IN ('MODE_1_TOTAL_PRESENT', 'MODE_2_TOTAL_ABSENT', 'MODE_3_ALL_THREE')),
     enable_campuses BOOLEAN DEFAULT false,
+    week1_start_date TEXT DEFAULT '2026-09-07',
+    school_days_per_week INTEGER DEFAULT 5,
+    ranking_threshold_excellent NUMERIC DEFAULT 98,
+    ranking_threshold_good NUMERIC DEFAULT 95,
+    ranking_threshold_fair NUMERIC DEFAULT 90,
+    enable_early_report_bonus BOOLEAN DEFAULT true,
+    early_report_deadline TEXT DEFAULT '07:30',
+    early_report_bonus_points NUMERIC DEFAULT 0.5,
+    early_report_max_bonus NUMERIC DEFAULT 2.5,
     created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
 );
@@ -168,6 +177,42 @@ BEGIN
 
     BEGIN
         ALTER TABLE public.school_settings ADD COLUMN developer_contact TEXT DEFAULT 'hungthcsnongu@gmail.com';
+    EXCEPTION WHEN duplicate_column THEN END;
+
+    BEGIN
+        ALTER TABLE public.school_settings ADD COLUMN week1_start_date TEXT DEFAULT '2026-09-07';
+    EXCEPTION WHEN duplicate_column THEN END;
+
+    BEGIN
+        ALTER TABLE public.school_settings ADD COLUMN school_days_per_week INTEGER DEFAULT 5;
+    EXCEPTION WHEN duplicate_column THEN END;
+
+    BEGIN
+        ALTER TABLE public.school_settings ADD COLUMN ranking_threshold_excellent NUMERIC DEFAULT 98;
+    EXCEPTION WHEN duplicate_column THEN END;
+
+    BEGIN
+        ALTER TABLE public.school_settings ADD COLUMN ranking_threshold_good NUMERIC DEFAULT 95;
+    EXCEPTION WHEN duplicate_column THEN END;
+
+    BEGIN
+        ALTER TABLE public.school_settings ADD COLUMN ranking_threshold_fair NUMERIC DEFAULT 90;
+    EXCEPTION WHEN duplicate_column THEN END;
+
+    BEGIN
+        ALTER TABLE public.school_settings ADD COLUMN enable_early_report_bonus BOOLEAN DEFAULT true;
+    EXCEPTION WHEN duplicate_column THEN END;
+
+    BEGIN
+        ALTER TABLE public.school_settings ADD COLUMN early_report_deadline TEXT DEFAULT '07:30';
+    EXCEPTION WHEN duplicate_column THEN END;
+
+    BEGIN
+        ALTER TABLE public.school_settings ADD COLUMN early_report_bonus_points NUMERIC DEFAULT 0.5;
+    EXCEPTION WHEN duplicate_column THEN END;
+
+    BEGIN
+        ALTER TABLE public.school_settings ADD COLUMN early_report_max_bonus NUMERIC DEFAULT 2.5;
     EXCEPTION WHEN duplicate_column THEN END;
 
     BEGIN

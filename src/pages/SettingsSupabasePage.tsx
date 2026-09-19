@@ -424,7 +424,14 @@ export const SettingsSupabasePage: React.FC = () => {
                   <tr key={st.table} className="hover:bg-slate-50/70">
                     <td className="px-3.5 py-2.5">
                       <div className="font-bold text-slate-800">{st.label}</div>
-                      <div className="font-mono text-[10px] text-slate-400">{st.table}</div>
+                      <div className="font-mono text-[10px] text-slate-400">
+                        {st.table}
+                        {st.table === 'system_logs' && (
+                          <span className="text-slate-400 font-sans block text-[9px] mt-0.5 leading-normal max-w-md">
+                            * Trình duyệt chỉ lưu tối đa 100-200 dòng mới nhất để tránh đầy bộ nhớ máy, đám mây lưu trữ toàn bộ lịch sử vĩnh viễn.
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-3.5 py-2.5 text-center font-bold text-slate-700">
                       {st.localCount}
