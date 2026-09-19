@@ -25,7 +25,7 @@ interface DailyReportPageProps {
 }
 
 export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) => {
-  const { settings, indicators, campuses, classes } = useSchool();
+  const { settings, indicators, campuses, classes, students } = useSchool();
   const { isGVCN, currentUser } = useAuth();
   const isAdmin = currentUser?.role === 'ADMIN';
   const isBGH = currentUser?.role === 'BGH';
@@ -224,29 +224,49 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
     window.print();
   };
 
+  // Helper to resolve student address based on ID, Name fallback, and database lookup
+  const getResolvedAddress = (s: any, classId: string): string => {
+    // 1. Try matching with ID
+    if (s.id) {
+      const match = students.find((std) => std.id === s.id);
+      if (match && match.address) return match.address;
+    }
+    // 2. Try matching with name (case-insensitive) within same class
+    if (s.full_name) {
+      const match = students.find(
+        (std) => std.class_id === classId && std.full_name.trim().toLowerCase() === s.full_name.trim().toLowerCase()
+      );
+      if (match && match.address) return match.address;
+    }
+    // 3. Fallback to existing student address recorded on report
+    return s.address || '';
+  };
+
   // Helper to extract absent names/notes for a class
   const getAbsentStudentText = (row: ClassReportRow): string => {
     if (row.report?.absent_students && row.report.absent_students.length > 0) {
       const listStr = row.report.absent_students
         .map((s) => `${s.full_name}${s.reason ? ` (${s.reason})` : ''}`)
-        .join(', ');
+        .join('\n');
       if (row.report.notes && !listStr.includes(row.report.notes)) {
-        return `${listStr} - ${row.report.notes}`;
+        return `${listStr}\n- Ghi chú: ${row.report.notes}`;
       }
       return listStr;
     }
     return row.report?.notes || '';
   };
 
-  // Helper to extract absent student addresses
+  // Helper to extract absent student addresses matched to names
   const getAbsentStudentAddresses = (row: ClassReportRow): string => {
     if (row.report?.absent_students && row.report.absent_students.length > 0) {
       return row.report.absent_students
-        .map((s) => s.address || '')
-        .filter((a) => a !== '')
-        .join(', ');
+        .map((s) => {
+          const addr = getResolvedAddress(s, row.classItem.id);
+          return addr && addr.trim() !== '' ? addr : '-';
+        })
+        .join('\n'); // Using newline for better visual alignment in multi-line cells
     }
-    return '';
+    return '-';
   };
 
   // Export Excel with complete cell borders, merged headers, and alignment matching the exact image
@@ -480,6 +500,7 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
             rObj.getCell(6).value = absentBoarding;
             rObj.getCell(7).value = studentNames;
             rObj.getCell(8).value = studentAddresses;
+            rObj.getCell(8).alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
             rObj.getCell(9).value = `${absentRate.toFixed(2).replace('.', ',')}%`;
             rObj.getCell(10).value = `${presentRate.toFixed(2).replace('.', ',')}%`;
           } else {
@@ -525,8 +546,8 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
           rObj.getCell(7).alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
           rObj.getCell(7).font = { name: 'Times New Roman', size: 10 };
 
-          rObj.getCell(8).alignment = { horizontal: 'center', vertical: 'middle' };
-          rObj.getCell(8).font = { name: 'Times New Roman', size: 10.5, bold: true };
+          rObj.getCell(8).alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+          rObj.getCell(8).font = { name: 'Times New Roman', size: 10 };
 
           rObj.getCell(9).alignment = { horizontal: 'center', vertical: 'middle' };
           rObj.getCell(9).font = { name: 'Times New Roman', size: 10.5, bold: true };
@@ -586,6 +607,47 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
         }
         sumRow.height = 24;
         currentRow++;
+      }
+
+      // Auto-fit column widths based on the maximum character length of the longest line in any cell
+      // Only measure from headerStartRow down to currentRow (before signatures) to avoid merged signature row interference
+      for (let colIdx = 1; colIdx <= 10; colIdx++) {
+        let maxLen = 0;
+        for (let r = headerStartRow; r < currentRow; r++) {
+          const row = ws.getRow(r);
+          const cell = row.getCell(colIdx);
+          
+          // Skip horizontally merged header cells for columns 3, 4, 5, 6 on the first header row
+          if (r === headerStartRow && (colIdx === 3 || colIdx === 4 || colIdx === 5 || colIdx === 6)) {
+            continue;
+          }
+
+          if (cell && cell.value) {
+            const valStr = cell.value.toString();
+            const lines = valStr.split('\n');
+            lines.forEach((line) => {
+              if (line.length > maxLen) {
+                maxLen = line.length;
+              }
+            });
+          }
+        }
+
+        if (maxLen > 0) {
+          const col = ws.getColumn(colIdx);
+          const calculatedWidth = maxLen + 5; // Add padding
+          
+          let minWidth = 10;
+          if (colIdx === 1) minWidth = 10;  // class
+          if (colIdx === 2) minWidth = 22;  // teacher
+          if (colIdx === 3 || colIdx === 4 || colIdx === 5 || colIdx === 6) minWidth = 16; // totals
+          if (colIdx === 7) minWidth = 32;  // studentNames
+          if (colIdx === 8) minWidth = 32;  // studentAddresses
+          if (colIdx === 9) minWidth = 18;  // absentRate
+          if (colIdx === 10) minWidth = 19; // presentRate
+          
+          col.width = Math.max(minWidth, calculatedWidth);
+        }
       }
 
       // Add 2 empty spacer rows before signatures
@@ -912,7 +974,7 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
                     </td>
 
                     {/* 7. Tên học sinh (Danh sách vắng & lý do) */}
-                    <td className="border border-black py-1.5 px-2.5 text-left text-[11px] text-black whitespace-normal max-w-[240px]">
+                    <td className="border border-black py-1.5 px-2.5 text-left text-[11px] text-black whitespace-pre-line">
                       {isReported ? (
                         studentNames || ''
                       ) : (
@@ -921,8 +983,8 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
                     </td>
 
                     {/* 7.5. Địa chỉ học sinh vắng */}
-                    <td className="border border-black py-1.5 px-2.5 text-left text-[11px] text-black whitespace-normal max-w-[200px]">
-                      {isReported ? studentAddresses || '' : '-'}
+                    <td className="border border-black py-1.5 px-2.5 text-left text-[11px] text-black whitespace-pre-line">
+                      {isReported ? studentAddresses || '-' : '-'}
                     </td>
 
                     {/* 8. Tỉ lệ phần trăm vắng (%) */}

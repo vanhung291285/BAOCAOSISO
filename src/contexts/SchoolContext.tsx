@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { SchoolSettings, SchoolYear, Campus, ClassItem, IndicatorGroup } from '../types';
+import { SchoolSettings, SchoolYear, Campus, ClassItem, IndicatorGroup, Student } from '../types';
 import { StorageService, subscribeRealtime } from '../services/storage';
 
 interface SchoolContextType {
@@ -9,6 +9,7 @@ interface SchoolContextType {
   campuses: Campus[];
   classes: ClassItem[];
   indicators: IndicatorGroup[];
+  students: Student[];
   loading: boolean;
   refreshAll: () => Promise<void>;
   updateSettings: (newSettings: Partial<SchoolSettings>) => Promise<void>;
@@ -28,6 +29,10 @@ interface SchoolContextType {
   saveCampus: (campus: Campus) => Promise<void>;
   deleteCampus: (campusId: string) => Promise<void>;
   resetAllDataToEmpty: () => Promise<void>;
+  addStudent: (student: Omit<Student, 'id' | 'created_at'>) => Promise<void>;
+  updateStudent: (studentId: string, partial: Partial<Student>) => Promise<void>;
+  deleteStudent: (studentId: string) => Promise<void>;
+  importStudents: (students: Array<Omit<Student, 'id' | 'created_at'>>) => Promise<void>;
 }
 
 const SchoolContext = createContext<SchoolContextType | undefined>(undefined);
@@ -75,16 +80,23 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
     return [];
   });
+  const [students, setStudents] = useState<Student[]>(() => {
+    if (typeof window !== 'undefined') {
+      try { const raw = localStorage.getItem('sso_students_v1'); if (raw) return JSON.parse(raw); } catch {}
+    }
+    return [];
+  });
   const [loading, setLoading] = useState(false);
 
   const refreshAll = useCallback(async () => {
     try {
       const cData = await StorageService.getCampuses(); // Call this first to ensure it seeds settings if necessary
-      const [sData, yData, clData, iData] = await Promise.all([
+      const [sData, yData, clData, iData, stData] = await Promise.all([
         StorageService.getSettings(),
         StorageService.getSchoolYears(),
         StorageService.getClasses(),
         StorageService.getIndicatorGroups(),
+        StorageService.getStudents(),
       ]);
       setSettings(sData);
       setYears(yData);
@@ -93,6 +105,7 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setCampuses(cData);
       setClasses(clData);
       setIndicators(iData);
+      setStudents(stData);
     } catch (err) {
       console.error('Failed to load school context data:', err);
     }
@@ -277,6 +290,39 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     await refreshAll();
   };
 
+  const addStudent = async (student: Omit<Student, 'id' | 'created_at'>) => {
+    const newStudent: Student = {
+      ...student,
+      id: `std_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    };
+    await StorageService.saveStudent(newStudent);
+    await refreshAll();
+  };
+
+  const updateStudent = async (studentId: string, partial: Partial<Student>) => {
+    const list = await StorageService.getStudents();
+    const existing = list.find((s) => s.id === studentId);
+    if (existing) {
+      const updated = { ...existing, ...partial };
+      await StorageService.saveStudent(updated);
+      await refreshAll();
+    }
+  };
+
+  const deleteStudent = async (studentId: string) => {
+    await StorageService.deleteStudent(studentId);
+    await refreshAll();
+  };
+
+  const importStudents = async (newStudents: Array<Omit<Student, 'id' | 'created_at'>>) => {
+    const studentsToSave: Student[] = newStudents.map((s, idx) => ({
+      ...s,
+      id: `std_${Date.now()}_${idx}_${Math.random().toString(36).substr(2, 5)}`,
+    }));
+    await StorageService.saveStudents(studentsToSave);
+    await refreshAll();
+  };
+
   return (
     <SchoolContext.Provider
       value={{
@@ -286,6 +332,7 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         campuses,
         classes,
         indicators,
+        students,
         loading,
         refreshAll,
         updateSettings,
@@ -305,6 +352,10 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         saveCampus,
         deleteCampus,
         resetAllDataToEmpty,
+        addStudent,
+        updateStudent,
+        deleteStudent,
+        importStudents,
       }}
     >
       {children}

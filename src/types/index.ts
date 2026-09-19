@@ -101,9 +101,18 @@ export interface IndicatorGroup {
 }
 
 export interface AbsentStudent {
+  id?: string; // ID liên kết với danh sách học sinh
   full_name: string;
   address?: string;
   reason?: string;
+}
+
+export interface Student {
+  id: string;
+  class_id: string;
+  full_name: string;
+  address?: string;
+  created_at?: string;
 }
 
 export interface DailyReport {

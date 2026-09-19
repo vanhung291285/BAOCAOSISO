@@ -43,6 +43,7 @@ const STORAGE_KEYS = {
   VALUES: 'sso_daily_report_values_v1',
   LOGS: 'sso_system_logs_v1',
   OFF_DAYS: 'sso_school_off_days_v1',
+  STUDENTS: 'sso_students_v1',
 };
 
 export interface TableSyncStatus {
@@ -243,6 +244,7 @@ export function resetAllDataToEmpty() {
   localStorage.setItem(STORAGE_KEYS.REPORTS, JSON.stringify(seed.dailyReports));
   localStorage.setItem(STORAGE_KEYS.VALUES, JSON.stringify(seed.dailyReportValues));
   localStorage.setItem(STORAGE_KEYS.LOGS, JSON.stringify(seed.logs));
+  localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify([]));
   localStorage.setItem(STORAGE_CLEAN_VERSION_KEY, 'v3_blank_slate');
   localStorage.setItem('sso_current_user_id', 'u_admin');
   notifyRealtimeChange('all_reset');
@@ -725,6 +727,99 @@ export const StorageService = {
 
       notifyRealtimeChange('classes');
     }
+  },
+
+  // --- 5.5. Students ---
+  async getStudents(): Promise<import('../types').Student[]> {
+    ensureInitialized();
+    let data: import('../types').Student[] | null = null;
+    const supabase = getSupabaseClient();
+    if (supabase && isSupabaseConnected()) {
+      try {
+        const { data: cloudData, error } = await supabase.from('students').select('*').order('full_name', { ascending: true });
+        if (!error && cloudData && cloudData.length > 0) {
+          localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(cloudData));
+          data = cloudData;
+        }
+      } catch (err) {
+        console.warn('Supabase fetch students fallback to local', err);
+      }
+    }
+
+    if (!data) {
+      const raw = localStorage.getItem(STORAGE_KEYS.STUDENTS);
+      data = raw ? JSON.parse(raw) : [];
+    }
+    
+    const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+    return data.sort((a, b) => collator.compare(a.full_name, b.full_name));
+  },
+
+  async saveStudent(student: import('../types').Student): Promise<void> {
+    const list = await this.getStudents();
+    const idx = list.findIndex((s) => s.id === student.id);
+    if (idx >= 0) list[idx] = student;
+    else list.push(student);
+    
+    const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+    list.sort((a, b) => collator.compare(a.full_name, b.full_name));
+    localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(list));
+
+    const supabase = getSupabaseClient();
+    if (supabase && isSupabaseConnected()) {
+      try {
+        await supabase.from('students').upsert(student);
+      } catch (e) {
+        console.error('Supabase saveStudent error:', e);
+      }
+    }
+
+    notifyRealtimeChange('students');
+  },
+
+  async deleteStudent(studentId: string): Promise<void> {
+    const list = await this.getStudents();
+    const filtered = list.filter((s) => s.id !== studentId);
+    localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(filtered));
+
+    const supabase = getSupabaseClient();
+    if (supabase && isSupabaseConnected()) {
+      try {
+        await supabase.from('students').delete().eq('id', studentId);
+      } catch (e) {
+        console.error('Supabase deleteStudent error:', e);
+      }
+    }
+
+    notifyRealtimeChange('students');
+  },
+
+  async getStudentsByClass(classId: string): Promise<import('../types').Student[]> {
+    const all = await this.getStudents();
+    return all.filter((s) => s.class_id === classId);
+  },
+
+  async saveStudents(students: import('../types').Student[]): Promise<void> {
+    const all = await this.getStudents();
+    const updated = [...all];
+    for (const student of students) {
+      const idx = updated.findIndex((s) => s.id === student.id);
+      if (idx >= 0) updated[idx] = student;
+      else updated.push(student);
+    }
+    const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+    updated.sort((a, b) => collator.compare(a.full_name, b.full_name));
+    localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(updated));
+
+    const supabase = getSupabaseClient();
+    if (supabase && isSupabaseConnected()) {
+      try {
+        await supabase.from('students').upsert(students);
+      } catch (e) {
+        console.error('Supabase saveStudents bulk error:', e);
+      }
+    }
+    notifyRealtimeChange('students');
   },
 
   // --- 6. Profiles (Users) ---

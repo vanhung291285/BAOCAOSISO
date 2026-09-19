@@ -24,6 +24,8 @@ import {
   ClipboardList,
   X,
   FileText,
+  UserPlus,
+  Edit2,
 } from 'lucide-react';
 
 interface AttendanceInputPageProps {
@@ -54,7 +56,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
   onNavigate,
 }) => {
   const { currentUser, isAdmin, isGVCN } = useAuth();
-  const { settings, classes, indicators, campuses } = useSchool();
+  const { settings, classes, indicators, campuses, students, addStudent, updateStudent, deleteStudent, importStudents } = useSchool();
 
   // Selected date defaults to today (or initialDate)
   const getToday = () => {
@@ -75,6 +77,21 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
   }, [initialClassId, currentUser, classes]);
 
   const [selectedClassId, setSelectedClassId] = useState<string>(defaultClassId);
+
+  // Class students list
+  const classStudents = useMemo(() => {
+    return students.filter((s) => s.class_id === selectedClassId);
+  }, [students, selectedClassId]);
+
+  // Roster management states
+  const [showRosterModal, setShowRosterModal] = useState<boolean>(false);
+  const [newStudentName, setNewStudentName] = useState<string>('');
+  const [newStudentAddress, setNewStudentAddress] = useState<string>('');
+  const [editingStudentId, setEditingStudentId] = useState<string | null>(null);
+  const [editingStudentName, setEditingStudentName] = useState<string>('');
+  const [editingStudentAddress, setEditingStudentAddress] = useState<string>('');
+  const [bulkStudentText, setBulkStudentText] = useState<string>('');
+  const [showBulkImport, setShowBulkImport] = useState<boolean>(false);
 
   // Existing report info
   const [existingReport, setExistingReport] = useState<DailyReport | null>(null);
@@ -432,8 +449,134 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
 
   const handleUpdateAbsentStudent = (index: number, field: keyof AbsentStudent, value: string) => {
     const updated = [...absentStudents];
-    updated[index] = { ...updated[index], [field]: value };
+    if (field === 'full_name') {
+      const match = students.find(
+        (s) => s.class_id === selectedClassId && s.full_name.trim().toLowerCase() === value.trim().toLowerCase()
+      );
+      if (match) {
+        updated[index] = {
+          ...updated[index],
+          id: match.id,
+          full_name: match.full_name, // keep original case from roster
+          address: match.address || '',
+        };
+      } else {
+        updated[index] = { ...updated[index], id: undefined, full_name: value };
+      }
+    } else {
+      updated[index] = { ...updated[index], [field]: value };
+    }
     setAbsentStudents(updated);
+  };
+
+  const handleToggleStudentAbsence = (student: import('../types').Student) => {
+    const isAlreadyAbsent = absentStudents.some(
+      (s) => s.id === student.id || s.full_name.trim().toLowerCase() === student.full_name.trim().toLowerCase()
+    );
+
+    let updatedList: AbsentStudent[];
+    if (isAlreadyAbsent) {
+      updatedList = absentStudents.filter(
+        (s) => s.id !== student.id && s.full_name.trim().toLowerCase() !== student.full_name.trim().toLowerCase()
+      );
+    } else {
+      updatedList = [
+        ...absentStudents,
+        {
+          id: student.id,
+          full_name: student.full_name,
+          address: student.address || '',
+          reason: 'Ốm',
+        },
+      ];
+    }
+    setAbsentStudents(updatedList);
+
+    // Auto sync absent count in formValues
+    if (enabledIndicators[0]) {
+      const mainId = enabledIndicators[0].id;
+      setFormValues((prev) => {
+        const cur = prev[mainId] || { total: 0, present: 0, absent: 0 };
+        const total = typeof cur.total === 'number' ? cur.total : 0;
+        const newAbsent = updatedList.length;
+        const newPresent = Math.max(0, total - newAbsent);
+        return {
+          ...prev,
+          [mainId]: {
+            ...cur,
+            total,
+            absent: newAbsent,
+            present: newPresent,
+          },
+        };
+      });
+    }
+  };
+
+  const handleBulkImportStudents = async () => {
+    if (!bulkStudentText.trim() || !selectedClassId) return;
+    const lines = bulkStudentText.split('\n').map((l) => l.trim()).filter(Boolean);
+    const parsedStudents: Array<Omit<import('../types').Student, 'id' | 'created_at'>> = [];
+    
+    lines.forEach((line) => {
+      const cleaned = line.replace(/^[\d]+[\.\/\)\-\:\s]+/, '').replace(/^[\-\*\•\+]\s*/, '').trim();
+      if (!cleaned) return;
+      
+      let name = cleaned;
+      let address = '';
+      
+      const parts = cleaned.split(/[\-\:,]/).map((p) => p.trim());
+      if (parts.length > 1) {
+        name = parts[0];
+        address = parts.slice(1).join(' - ');
+      }
+      
+      parsedStudents.push({
+        class_id: selectedClassId,
+        full_name: name,
+        address: address,
+      });
+    });
+    
+    if (parsedStudents.length > 0) {
+      await importStudents(parsedStudents);
+      setBulkStudentText('');
+      setShowBulkImport(false);
+      setQuickFillNotice(`Đã thêm ${parsedStudents.length} học sinh vào danh sách lớp!`);
+      setTimeout(() => setQuickFillNotice(''), 3500);
+    }
+  };
+
+  const handleAddSingleStudent = async () => {
+    if (!newStudentName.trim() || !selectedClassId) return;
+    await addStudent({
+      class_id: selectedClassId,
+      full_name: newStudentName.trim(),
+      address: newStudentAddress.trim(),
+    });
+    setNewStudentName('');
+    setNewStudentAddress('');
+  };
+
+  const handleStartEditStudent = (s: import('../types').Student) => {
+    setEditingStudentId(s.id);
+    setEditingStudentName(s.full_name);
+    setEditingStudentAddress(s.address || '');
+  };
+  
+  const handleSaveEditStudent = async () => {
+    if (!editingStudentId || !editingStudentName.trim()) return;
+    await updateStudent(editingStudentId, {
+      full_name: editingStudentName.trim(),
+      address: editingStudentAddress.trim(),
+    });
+    setEditingStudentId(null);
+  };
+
+  const handleDeleteStudent = async (id: string, name: string) => {
+    if (window.confirm(`Bạn có chắc chắn muốn xóa học sinh ${name} khỏi danh sách lớp?`)) {
+      await deleteStudent(id);
+    }
   };
 
   const handleRemoveAbsentStudent = (index: number) => {
@@ -505,9 +648,13 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
       }
 
       if (fullName) {
+        const match = students.find(
+          (s) => s.class_id === selectedClassId && s.full_name.trim().toLowerCase() === fullName.trim().toLowerCase()
+        );
         parsed.push({
-          full_name: fullName,
-          address: address || '',
+          id: match?.id,
+          full_name: match ? match.full_name : fullName,
+          address: match ? (match.address || '') : (address || ''),
           reason: reason || 'Ốm',
         });
       }
@@ -821,6 +968,14 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                 <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-3.5 pointer-events-none" />
               )}
             </div>
+            <button
+              type="button"
+              onClick={() => setShowRosterModal(true)}
+              className="mt-2 w-full h-9 px-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 font-bold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <UserPlus className="w-3.5 h-3.5 text-blue-600" />
+              <span>Cập nhật Danh sách Học sinh ({classStudents.length} em)</span>
+            </button>
           </div>
         </div>
 
@@ -1249,6 +1404,37 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
             </p>
           </div>
 
+          {/* Quick Select Checklist from class roster */}
+          {classStudents.length > 0 && (
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-2">
+              <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 block">
+                Chọn nhanh học sinh vắng từ danh sách lớp ({classStudents.length} em)
+              </span>
+              <div className="flex flex-wrap gap-1.5 pt-1 max-h-[140px] overflow-y-auto pr-1">
+                {classStudents.map((student) => {
+                  const isAbsent = absentStudents.some(
+                    (s) => s.id === student.id || s.full_name.trim().toLowerCase() === student.full_name.trim().toLowerCase()
+                  );
+                  return (
+                    <button
+                      key={student.id}
+                      type="button"
+                      onClick={() => handleToggleStudentAbsence(student)}
+                      className={`h-7 px-2.5 rounded-lg text-xs font-bold border transition-all flex items-center gap-1 cursor-pointer select-none active:scale-95 ${
+                        isAbsent
+                          ? 'bg-rose-100 text-rose-800 border-rose-300 shadow-2xs'
+                          : 'bg-white text-slate-700 hover:bg-slate-100 border-slate-200'
+                      }`}
+                    >
+                      {isAbsent && <span className="w-1.5 h-1.5 rounded-full bg-rose-600 animate-pulse"></span>}
+                      <span>{student.full_name}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {absentStudents.length === 0 ? (
             <div className="text-center py-6 bg-slate-50 rounded-xl border border-slate-200 border-dashed space-y-2">
               <UserX className="w-7 h-7 text-slate-300 mx-auto" />
@@ -1647,6 +1833,259 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
               >
                 <RotateCcw className="w-4 h-4" />
                 <span>{isResetting ? 'Đang reset...' : 'XÁC NHẬN RESET VỀ CHƯA BÁO CÁO'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 8. Modal quản lý danh sách học sinh của lớp */}
+      {showRosterModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl border border-slate-200 flex flex-col max-h-[90vh]">
+            {/* Modal Header */}
+            <div className="p-4 sm:p-5 bg-gradient-to-br from-blue-50 to-indigo-50 border-b border-blue-100 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-10 h-10 rounded-2xl bg-blue-100 text-blue-700 flex items-center justify-center">
+                  <UserPlus className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base sm:text-lg font-black text-slate-900 leading-tight">
+                    Danh Sách Học Sinh Lớp {selectedClass?.class_name}
+                  </h3>
+                  <p className="text-[11px] text-slate-500 font-bold">
+                    Tổng số học sinh hiện tại: {classStudents.length} em
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowRosterModal(false)}
+                className="w-8 h-8 rounded-full hover:bg-white flex items-center justify-center text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-4 sm:p-6 overflow-y-auto space-y-4 flex-1">
+              
+              {/* Tabs / Switcher for Bulk vs Single */}
+              <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
+                <button
+                  type="button"
+                  onClick={() => setShowBulkImport(false)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    !showBulkImport
+                      ? 'bg-blue-600 text-white shadow-xs'
+                      : 'text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  Thêm từng em
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowBulkImport(true)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    showBulkImport
+                      ? 'bg-blue-600 text-white shadow-xs'
+                      : 'text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  Nhập danh sách hàng loạt (Bulk)
+                </button>
+              </div>
+
+              {/* Add form */}
+              {!showBulkImport ? (
+                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
+                  <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">
+                    Thêm Học Sinh Mới
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                        Họ và tên học sinh
+                      </label>
+                      <input
+                        type="text"
+                        value={newStudentName}
+                        onChange={(e) => setNewStudentName(e.target.value)}
+                        placeholder="Ví dụ: Nguyễn Văn A"
+                        className="w-full px-3 h-10 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                        Địa chỉ / Bản thôn (Tương ứng bảng mẫu)
+                      </label>
+                      <input
+                        type="text"
+                        value={newStudentAddress}
+                        onChange={(e) => setNewStudentAddress(e.target.value)}
+                        placeholder="Ví dụ: Bản Suối Lư"
+                        className="w-full px-3 h-10 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex justify-end pt-1">
+                    <button
+                      type="button"
+                      onClick={handleAddSingleStudent}
+                      disabled={!newStudentName.trim()}
+                      className="h-9 px-4 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 transition-colors flex items-center gap-1.5 active:scale-95"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Thêm vào danh sách</span>
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">
+                      Nhập Hàng Loạt Từ Excel / Word / Zalo
+                    </h4>
+                  </div>
+                  <p className="text-[10px] text-slate-500 leading-normal">
+                    Mỗi dòng một học sinh. Hệ thống hỗ trợ tách Địa chỉ nếu phân tách bằng dấu gạch ngang (<code>-</code>) hoặc dấu phẩy (<code>,</code>).<br />
+                    Ví dụ:<br />
+                    Nguyễn Văn A - Bản Suối Lư<br />
+                    Lê Thị B - Bản Pa Háng
+                  </p>
+                  <textarea
+                    rows={6}
+                    value={bulkStudentText}
+                    onChange={(e) => setBulkStudentText(e.target.value)}
+                    placeholder="Dán danh sách học sinh vào đây..."
+                    className="w-full p-3 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-hidden font-mono"
+                  />
+                  <div className="flex justify-end gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={handleBulkImportStudents}
+                      disabled={!bulkStudentText.trim()}
+                      className="h-9 px-4 rounded-xl text-xs font-black text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 transition-colors flex items-center gap-1.5 active:scale-95 shadow-md"
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                      <span>Nhập danh sách học sinh</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Roster list */}
+              <div className="space-y-2">
+                <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">
+                  Danh Sách Học Sinh Của Lớp ({classStudents.length})
+                </h4>
+                {classStudents.length === 0 ? (
+                  <div className="text-center py-8 bg-slate-50 rounded-2xl border border-slate-200 border-dashed text-slate-400">
+                    <User className="w-8 h-8 mx-auto opacity-35 mb-2" />
+                    <p className="text-xs font-bold text-slate-500">Chưa có học sinh nào được thêm</p>
+                    <p className="text-[10px] text-slate-400 mt-1">Sử dụng form bên trên để đăng ký danh sách lớp.</p>
+                  </div>
+                ) : (
+                  <div className="border border-slate-200 rounded-2xl overflow-hidden bg-white max-h-[300px] overflow-y-auto">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-extrabold uppercase text-[10px] tracking-wider">
+                          <th className="py-2.5 px-4 w-12 text-center">STT</th>
+                          <th className="py-2.5 px-4">Họ và tên</th>
+                          <th className="py-2.5 px-4">Địa chỉ / Bản thôn</th>
+                          <th className="py-2.5 px-4 w-24 text-center">Hành động</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {classStudents.map((student, sIdx) => {
+                          const isEditing = editingStudentId === student.id;
+                          return (
+                            <tr key={student.id} className="hover:bg-slate-50 transition-colors">
+                              <td className="py-2 px-4 text-center font-bold text-slate-400">{sIdx + 1}</td>
+                              <td className="py-2 px-4 font-bold text-slate-800">
+                                {isEditing ? (
+                                  <input
+                                    type="text"
+                                    value={editingStudentName}
+                                    onChange={(e) => setEditingStudentName(e.target.value)}
+                                    className="w-full px-2 py-1 text-xs border border-slate-300 rounded-lg focus:outline-hidden focus:ring-1 focus:ring-blue-500"
+                                  />
+                                ) : (
+                                  student.full_name
+                                )}{' '}
+                                <span className="text-[9px] font-mono text-slate-400 ml-1">({student.id.split('_').pop()})</span>
+                              </td>
+                              <td className="py-2 px-4 text-slate-600">
+                                {isEditing ? (
+                                  <input
+                                    type="text"
+                                    value={editingStudentAddress}
+                                    onChange={(e) => setEditingStudentAddress(e.target.value)}
+                                    className="w-full px-2 py-1 text-xs border border-slate-300 rounded-lg focus:outline-hidden focus:ring-1 focus:ring-blue-500"
+                                  />
+                                ) : (
+                                  student.address || <em className="text-slate-400">Không có</em>
+                                )}
+                              </td>
+                              <td className="py-2 px-4 text-center">
+                                {isEditing ? (
+                                  <div className="flex items-center justify-center gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={handleSaveEditStudent}
+                                      className="p-1 text-emerald-600 hover:bg-emerald-50 rounded-md"
+                                      title="Lưu"
+                                    >
+                                      <Check className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setEditingStudentId(null)}
+                                      className="p-1 text-slate-400 hover:bg-slate-100 rounded-md"
+                                      title="Hủy"
+                                    >
+                                      <X className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center justify-center gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleStartEditStudent(student)}
+                                      className="p-1 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-md"
+                                      title="Sửa học sinh"
+                                    >
+                                      <Edit2 className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteStudent(student.id, student.full_name)}
+                                      className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md"
+                                      title="Xóa học sinh"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end">
+              <button
+                type="button"
+                onClick={() => setShowRosterModal(false)}
+                className="px-5 h-10 rounded-xl text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 transition-colors cursor-pointer"
+              >
+                Đóng lại
               </button>
             </div>
           </div>
