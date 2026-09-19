@@ -45,13 +45,6 @@ const AppContent: React.FC = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // Default routing for GVCN on app load
-  useEffect(() => {
-    if (!loading && currentUser?.role === 'GVCN' && currentPath === '/dashboard') {
-      setCurrentPath('/attendance');
-    }
-  }, [loading, currentUser, currentPath]);
-
   // Find user's assigned class name if GVCN
   const assignedClass = classes.find((c) => c.id === currentUser?.assigned_class_id);
 

@@ -781,7 +781,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
               <select
                 value={selectedClassId}
                 onChange={(e) => setSelectedClassId(e.target.value)}
-                disabled={isGVCN && Boolean(currentUser?.assigned_class_id)}
+                disabled={false}
                 className="w-full px-3 h-11 text-sm font-bold text-slate-800 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-hidden disabled:bg-slate-100 disabled:text-slate-700 cursor-pointer appearance-none"
               >
                 {settings?.enable_campuses && campuses.length > 0 ? (
