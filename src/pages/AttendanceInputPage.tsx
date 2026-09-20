@@ -213,7 +213,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
           try {
             const latestPrev = await StorageService.getLatestReportForClass(selectedClassId, reportDate);
             if (latestPrev.report && latestPrev.values.length > 0) {
-              let suggestedTotal = 0;
+              // Logic replaced
               enabledIndicators.forEach((ig) => {
                 const prevVal = latestPrev.values.find((v) => v.indicator_group_id === ig.id);
                 if (prevVal && prevVal.total_count > 0) {
