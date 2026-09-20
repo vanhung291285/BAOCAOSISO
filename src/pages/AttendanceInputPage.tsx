@@ -85,6 +85,8 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
 
   // Roster management states
   const [showRosterModal, setShowRosterModal] = useState<boolean>(false);
+  const [showErrorModal, setShowErrorModal] = useState<boolean>(false);
+  const [errorModalMessage, setErrorModalMessage] = useState<string>('');
   const [newStudentName, setNewStudentName] = useState<string>('');
   const [newStudentAddress, setNewStudentAddress] = useState<string>('');
   const [editingStudentId, setEditingStudentId] = useState<string | null>(null);
@@ -822,7 +824,16 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
     // Kiểm tra học sinh vắng đã chọn loại hình (Bán trú/Ngoại trú)
     const hasUnsetBoarding = absentStudents.some(s => typeof s.isBoarding !== 'boolean');
     if (hasUnsetBoarding) {
-      setErrorMessage('Vui lòng chọn loại hình (Bán trú/Ngoại trú) cho tất cả học sinh vắng.');
+      setErrorModalMessage('Vui lòng chọn loại hình (Bán trú/Ngoại trú) cho tất cả học sinh vắng.');
+      setShowErrorModal(true);
+      return;
+    }
+
+    // Kiểm tra tên học sinh vắng
+    const hasEmptyName = absentStudents.some(s => !s.full_name || s.full_name.trim() === '');
+    if (hasEmptyName) {
+      setErrorModalMessage('Vui lòng nhập họ và tên cho tất cả học sinh vắng đã thêm.');
+      setShowErrorModal(true);
       return;
     }
 
@@ -838,12 +849,14 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
       const isDayIndicator = ig.name.toLowerCase().includes('ngoại trú');
 
       if (isBoardingIndicator && absentReported !== absentBoardingCount) {
-        setErrorMessage(`Số liệu vắng Bán trú (báo cáo ${absentReported}) không khớp với danh sách học sinh vắng đã thêm (${absentBoardingCount} em).`);
+        setErrorModalMessage(`Số liệu vắng Bán trú (báo cáo ${absentReported}) không khớp với danh sách học sinh vắng đã thêm (${absentBoardingCount} em).`);
+        setShowErrorModal(true);
         return;
       }
       
       if (isDayIndicator && absentReported !== absentDayCount) {
-        setErrorMessage(`Số liệu vắng Ngoại trú (báo cáo ${absentReported}) không khớp với danh sách học sinh vắng đã thêm (${absentDayCount} em).`);
+        setErrorModalMessage(`Số liệu vắng Ngoại trú (báo cáo ${absentReported}) không khớp với danh sách học sinh vắng đã thêm (${absentDayCount} em).`);
+        setShowErrorModal(true);
         return;
       }
     }
@@ -1923,6 +1936,25 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                 <span>{isResetting ? 'Đang reset...' : 'XÁC NHẬN RESET VỀ CHƯA BÁO CÁO'}</span>
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 9. Modal báo lỗi kiểm tra dữ liệu */}
+      {showErrorModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl w-full max-w-sm p-6 shadow-2xl border border-slate-100 flex flex-col items-center text-center animate-in zoom-in-95 duration-200">
+            <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mb-5 border border-red-100 shadow-inner">
+              <AlertCircle className="w-8 h-8 text-red-500" />
+            </div>
+            <h3 className="text-xl font-black text-slate-900 mb-3">Lỗi kiểm tra dữ liệu</h3>
+            <p className="text-sm text-slate-600 mb-7 leading-relaxed font-medium">{errorModalMessage}</p>
+            <button
+              className="w-full h-12 px-6 font-black text-white bg-slate-900 hover:bg-slate-800 rounded-xl transition-all shadow-md active:scale-95"
+              onClick={() => setShowErrorModal(false)}
+            >
+              Đã hiểu, tôi sẽ chỉnh lại
+            </button>
           </div>
         </div>
       )}
