@@ -20,8 +20,10 @@ interface SchoolContextType {
   createTeacherAndAssign: (teacherData: { full_name: string; email: string; phone?: string }, classId?: string) => Promise<string>;
   deleteClass: (id: string) => Promise<void>;
   toggleLockClass: (id: string, lock: boolean) => Promise<void>;
-  saveIndicator: (ig: IndicatorGroup) => Promise<void>;
+  addIndicator: (ig: Omit<IndicatorGroup, 'id' | 'created_at'>) => Promise<void>;
+  updateIndicator: (id: string, partial: Partial<IndicatorGroup>) => Promise<void>;
   deleteIndicator: (id: string) => Promise<void>;
+  saveIndicator: (ig: IndicatorGroup) => Promise<void>;
   setActiveSchoolYear: (yearId: string) => Promise<void>;
   saveSchoolYear: (year: SchoolYear) => Promise<void>;
   deleteSchoolYear: (yearId: string) => Promise<void>;
@@ -245,6 +247,25 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     await refreshAll();
   };
 
+  const addIndicator = async (ig: Omit<IndicatorGroup, 'id'>) => {
+    const newIg: IndicatorGroup = {
+      ...ig,
+      id: `ig_${Date.now()}`,
+      created_at: new Date().toISOString(),
+    };
+    await StorageService.saveIndicatorGroup(newIg);
+    await refreshAll();
+  };
+
+  const updateIndicator = async (id: string, partial: Partial<IndicatorGroup>) => {
+    const list = await StorageService.getIndicatorGroups();
+    const existing = list.find((i) => i.id === id);
+    if (existing) {
+      await StorageService.saveIndicatorGroup({ ...existing, ...partial });
+      await refreshAll();
+    }
+  };
+
   const saveIndicator = async (ig: IndicatorGroup) => {
     await StorageService.saveIndicatorGroup(ig);
     await refreshAll();
@@ -343,6 +364,8 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         createTeacherAndAssign,
         deleteClass,
         toggleLockClass,
+        addIndicator,
+        updateIndicator,
         saveIndicator,
         deleteIndicator,
         setActiveSchoolYear,

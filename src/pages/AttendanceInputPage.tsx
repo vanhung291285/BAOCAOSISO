@@ -308,32 +308,35 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
     field: 'total' | 'present' | 'absent',
     rawVal: string
   ) => {
-    let numVal: number | '' = '';
-    if (rawVal !== '') {
-      const parsed = parseInt(rawVal, 10);
-      if (isNaN(parsed) || parsed < 0) return;
-      numVal = parsed;
-    }
-
     setFormValues((prev) => {
       const current = prev[groupId] || { total: 0, present: 0, absent: 0 };
-      const next: GroupInputState = { ...current, [field]: numVal };
+      // Strip leading zeros unless the value is '0'
+      const displayVal = rawVal.replace(/^0+(?!$)/, '');
+      const next: GroupInputState = { ...current, [field]: displayVal };
 
-      const total = typeof next.total === 'number' ? next.total : 0;
-      const present = typeof next.present === 'number' ? next.present : 0;
-      const absent = typeof next.absent === 'number' ? next.absent : 0;
-
+      // Calculate based on numbers
+      let total = parseInt(String(next.total) || '0', 10);
+      let present = parseInt(String(next.present) || '0', 10);
+      let absent = parseInt(String(next.absent) || '0', 10);
+      
       if (field === 'total') {
-        if (typeof next.absent === 'number') {
-          next.present = Math.max(0, total - absent);
-        } else if (typeof next.present === 'number') {
-          next.absent = Math.max(0, total - present);
+        if (typeof current.absent === 'number' && current.absent <= total) {
+          present = total - absent;
+        } else if (typeof current.present === 'number' && current.present <= total) {
+          absent = total - present;
+        } else {
+          present = total;
+          absent = 0;
         }
       } else if (field === 'present') {
-        next.absent = Math.max(0, total - (typeof numVal === 'number' ? numVal : 0));
+        absent = Math.max(0, total - present);
       } else if (field === 'absent') {
-        next.present = Math.max(0, total - (typeof numVal === 'number' ? numVal : 0));
+        present = Math.max(0, total - absent);
       }
+      
+      next.total = total;
+      next.present = present;
+      next.absent = absent;
 
       // Tự động lập danh sách học sinh vắng nếu là nhóm chỉ tiêu chính (Sĩ số trường / lớp)
       if (groupId === enabledIndicators[0]?.id && typeof next.absent === 'number') {
@@ -746,6 +749,33 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
       }
     });
 
+    // Add cross-indicator validation
+    const totalGroup = enabledIndicators.find(ig => ig.name.toLowerCase().includes('toàn trường') || ig.code === 'ALL');
+    const boardingGroup = enabledIndicators.find(ig => ig.name.toLowerCase().includes('bán trú'));
+    const nonBoardingGroup = enabledIndicators.find(ig => ig.name.toLowerCase().includes('ngoại trú'));
+
+    if (totalGroup && boardingGroup && nonBoardingGroup) {
+      const tVals = formValues[totalGroup.id];
+      const bVals = formValues[boardingGroup.id];
+      const nVals = formValues[nonBoardingGroup.id];
+      
+      if (tVals && bVals && nVals && typeof tVals.total === 'number' && typeof bVals.total === 'number' && typeof nVals.total === 'number') {
+        if (tVals.total !== bVals.total + nVals.total) {
+          errors.push(`Tổng sĩ số (${tVals.total}) phải bằng Sĩ số bán trú (${bVals.total}) + Sĩ số ngoại trú (${nVals.total}).`);
+        }
+      }
+      if (tVals && bVals && nVals && typeof tVals.present === 'number' && typeof bVals.present === 'number' && typeof nVals.present === 'number') {
+        if (tVals.present !== bVals.present + nVals.present) {
+          errors.push(`Tổng có mặt (${tVals.present}) phải bằng Có mặt bán trú (${bVals.present}) + Có mặt ngoại trú (${nVals.present}).`);
+        }
+      }
+      if (tVals && bVals && nVals && typeof tVals.absent === 'number' && typeof bVals.absent === 'number' && typeof nVals.absent === 'number') {
+        if (tVals.absent !== bVals.absent + nVals.absent) {
+          errors.push(`Tổng vắng (${tVals.absent}) phải bằng Vắng bán trú (${bVals.absent}) + Vắng ngoại trú (${nVals.absent}).`);
+        }
+      }
+    }
+
     if (!hasAnyPositiveTotal && errors.length === 0) {
       errors.push('Thầy/Cô chưa nhập số liệu báo cáo. Vui lòng nhập sĩ số trước khi gửi.');
     }
@@ -787,6 +817,35 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
         errorEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
       return;
+    }
+
+    // Kiểm tra học sinh vắng đã chọn loại hình (Bán trú/Ngoại trú)
+    const hasUnsetBoarding = absentStudents.some(s => typeof s.isBoarding !== 'boolean');
+    if (hasUnsetBoarding) {
+      setErrorMessage('Vui lòng chọn loại hình (Bán trú/Ngoại trú) cho tất cả học sinh vắng.');
+      return;
+    }
+
+    // Kiểm tra sự khớp dữ liệu giữa số học sinh vắng đã thêm và chỉ tiêu báo cáo
+    const absentBoardingCount = absentStudents.filter(s => s.isBoarding === true).length;
+    const absentDayCount = absentStudents.filter(s => s.isBoarding === false).length;
+
+    for (const ig of enabledIndicators) {
+      const val = formValues[ig.id] || { total: 0, present: 0, absent: 0 };
+      const absentReported = parseInt(String(val.absent) || '0', 10);
+      
+      const isBoardingIndicator = ig.name.toLowerCase().includes('bán trú');
+      const isDayIndicator = ig.name.toLowerCase().includes('ngoại trú');
+
+      if (isBoardingIndicator && absentReported !== absentBoardingCount) {
+        setErrorMessage(`Số liệu vắng Bán trú (báo cáo ${absentReported}) không khớp với danh sách học sinh vắng đã thêm (${absentBoardingCount} em).`);
+        return;
+      }
+      
+      if (isDayIndicator && absentReported !== absentDayCount) {
+        setErrorMessage(`Số liệu vắng Ngoại trú (báo cáo ${absentReported}) không khớp với danh sách học sinh vắng đã thêm (${absentDayCount} em).`);
+        return;
+      }
     }
 
     if (isLocked && !isAdmin) {
@@ -1251,7 +1310,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                     Tổng số
                   </label>
                   <input
-                    type="number"
+                    type="text"
                     inputMode="numeric"
                     pattern="[0-9]*"
                     min="0"
@@ -1259,7 +1318,10 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                     placeholder="0"
                     disabled={isLocked && !isAdmin}
                     value={vals.total}
-                    onChange={(e) => handleFieldChange(group.id, 'total', e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/[^0-9]/g, '');
+                      handleFieldChange(group.id, 'total', val);
+                    }}
                     className={`w-full text-center text-lg sm:text-2xl font-black bg-white border rounded-lg h-10 sm:h-11 focus:ring-2 focus:outline-hidden disabled:bg-slate-100 ${
                       idx === 0 && (vals.total === '' || totalNum <= 0)
                         ? 'border-amber-400 text-amber-900 focus:ring-amber-500'
@@ -1281,14 +1343,17 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                     Có mặt
                   </label>
                   <input
-                    type="number"
+                    type="text"
                     inputMode="numeric"
                     pattern="[0-9]*"
                     min="0"
                     step="1"
                     disabled={isLocked && !isAdmin}
                     value={vals.present}
-                    onChange={(e) => handleFieldChange(group.id, 'present', e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/[^0-9]/g, '');
+                      handleFieldChange(group.id, 'present', val);
+                    }}
                     className="w-full text-center text-lg sm:text-2xl font-black text-emerald-800 bg-white border border-emerald-300 rounded-lg h-10 sm:h-11 focus:ring-2 focus:ring-emerald-500 focus:outline-hidden disabled:bg-slate-100"
                   />
                   {!isLocked || isAdmin ? (
@@ -1323,14 +1388,17 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                     Vắng
                   </label>
                   <input
-                    type="number"
+                    type="text"
                     inputMode="numeric"
                     pattern="[0-9]*"
                     min="0"
                     step="1"
                     disabled={isLocked && !isAdmin}
                     value={vals.absent}
-                    onChange={(e) => handleFieldChange(group.id, 'absent', e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/[^0-9]/g, '');
+                      handleFieldChange(group.id, 'absent', val);
+                    }}
                     className={`w-full text-center text-lg sm:text-2xl font-black rounded-lg h-10 sm:h-11 focus:ring-2 focus:ring-red-500 focus:outline-hidden ${
                       absentNum > 0 ? 'text-red-700 bg-red-100' : 'text-slate-700 bg-white'
                     } border border-red-300 disabled:bg-slate-100`}
@@ -1507,15 +1575,27 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                     </div>
 
                     <div className="flex flex-col justify-end">
-                      <div className="flex items-center gap-2 mb-2">
-                        <input
-                          type="checkbox"
-                          disabled={isLocked && !isAdmin}
-                          checked={!!student.isBoarding}
-                          onChange={(e) => handleUpdateAbsentStudent(idx, 'isBoarding', e.target.checked)}
-                          className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 disabled:opacity-50"
-                        />
-                        <label className="text-[10px] font-bold text-slate-700 uppercase">Học sinh bán trú</label>
+                      <div className="flex items-center gap-4 mb-2">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            disabled={isLocked && !isAdmin}
+                            checked={student.isBoarding === true}
+                            onChange={(e) => handleUpdateAbsentStudent(idx, 'isBoarding', e.target.checked ? true : undefined)}
+                            className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 disabled:opacity-50"
+                          />
+                          <span className="text-[10px] font-bold text-slate-700 uppercase">Bán trú</span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            disabled={isLocked && !isAdmin}
+                            checked={student.isBoarding === false}
+                            onChange={(e) => handleUpdateAbsentStudent(idx, 'isBoarding', e.target.checked ? false : undefined)}
+                            className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 disabled:opacity-50"
+                          />
+                          <span className="text-[10px] font-bold text-slate-700 uppercase">Ngoại trú</span>
+                        </label>
                       </div>
                       <input
                         type="text"

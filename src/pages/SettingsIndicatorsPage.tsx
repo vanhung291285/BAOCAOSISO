@@ -68,7 +68,6 @@ export const SettingsIndicatorsPage: React.FC = () => {
 
     if (isCreating) {
       await addIndicator({
-        school_id: 'school_main',
         name: formName.trim(),
         code: formCode.trim().toUpperCase() || formName.trim().toUpperCase(),
         column_header_override: formHeaderOverride.trim() || undefined,

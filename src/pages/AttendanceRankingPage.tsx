@@ -23,6 +23,16 @@ import {
   getTodayDateStr,
 } from '../utils/schoolWeeks';
 import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+  CartesianGrid,
+} from 'recharts';
+import {
   Trophy,
   Award,
   Medal,
@@ -147,6 +157,9 @@ export const AttendanceRankingPage: React.FC<AttendanceRankingPageProps> = ({ on
   // View mode: 'ALL_SCHOOL' (Bảng tổng sắp toàn trường) or 'BY_CAMPUS' (Xếp hạng theo từng phân hiệu)
   const [rankingMode, setRankingMode] = useState<'ALL_SCHOOL' | 'BY_CAMPUS'>('ALL_SCHOOL');
   const [activeCampusTab, setActiveCampusTab] = useState<string>('all');
+  
+  // View mode: 'TABLE' or 'CHART'
+  const [viewMode, setViewMode] = useState<'TABLE' | 'CHART'>('TABLE');
 
   // GVCN assigned class rank
   const myClassRank = useMemo(() => {
@@ -590,6 +603,16 @@ export const AttendanceRankingPage: React.FC<AttendanceRankingPageProps> = ({ on
 
           {/* Action buttons */}
           <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => setViewMode(viewMode === 'TABLE' ? 'CHART' : 'TABLE')}
+              className={`px-3 py-2 text-xs font-bold rounded-xl border flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer active:scale-95 ${
+                viewMode === 'CHART' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              <BarChart3 className="w-4 h-4" />
+              <span>{viewMode === 'TABLE' ? 'Xem Biểu đồ' : 'Xem Bảng'}</span>
+            </button>
+
             <button
               onClick={() => setShowOffDaysModal(true)}
               className="px-3 py-2 text-xs font-bold rounded-xl border border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer active:scale-95"
@@ -1574,6 +1597,22 @@ export const AttendanceRankingPage: React.FC<AttendanceRankingPageProps> = ({ on
         ) : !summary || summary.rankings.length === 0 ? (
           <div className="p-12 text-center text-slate-500 text-sm">
             Chưa có dữ liệu báo cáo sĩ số trong khoảng thời gian đã chọn.
+          </div>
+        ) : viewMode === 'CHART' ? (
+          <div className="bg-white rounded-2xl p-4 sm:p-6 shadow-xs border border-slate-200">
+            <h2 className="text-lg font-black text-slate-900 mb-6">Biểu đồ xếp hạng thi đua (Top 10 lớp)</h2>
+            <div className="h-[400px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={summary.rankings.slice(0, 10)}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="classItem.class_name" />
+                  <YAxis domain={[80, 100]} />
+                  <Tooltip />
+                  <Legend />
+                  <Bar dataKey="attendanceRate" name="Tỷ lệ duy trì (%)" fill="#3b82f6" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           </div>
         ) : (
           <div className="overflow-x-auto">
