@@ -950,6 +950,55 @@ export const StorageService = {
     return { report, values };
   },
 
+  async getLatestReport(
+    classId: string
+  ): Promise<{ report?: DailyReport; values: DailyReportValue[] }> {
+    ensureInitialized();
+    const supabase = getSupabaseClient();
+
+    if (supabase && isSupabaseConnected()) {
+      try {
+        const { data: rep, error: rErr } = await supabase
+          .from('daily_reports')
+          .select('*')
+          .eq('class_id', classId)
+          .order('report_date', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (!rErr && rep) {
+          const { data: vals, error: vErr } = await supabase
+            .from('daily_report_values')
+            .select('*')
+            .eq('report_id', rep.id);
+
+          if (!vErr && vals) {
+            return { report: rep, values: vals };
+          }
+        }
+      } catch (err) {
+        console.warn('Supabase fetch latest report fallback to local:', err);
+      }
+    }
+
+    const rawReports = localStorage.getItem(STORAGE_KEYS.REPORTS);
+    const reports: DailyReport[] = rawReports ? JSON.parse(rawReports) : [];
+    const classReports = reports
+      .filter((r) => r.class_id === classId)
+      .sort((a, b) => b.report_date.localeCompare(a.report_date));
+
+    const report = classReports[0];
+    if (!report) {
+      return { report: undefined, values: [] };
+    }
+
+    const rawValues = localStorage.getItem(STORAGE_KEYS.VALUES);
+    const allValues: DailyReportValue[] = rawValues ? JSON.parse(rawValues) : [];
+    const values = allValues.filter((v) => v.report_id === report.id);
+
+    return { report, values };
+  },
+
   async getLatestReportForClass(
     classId: string,
     beforeDate?: string
