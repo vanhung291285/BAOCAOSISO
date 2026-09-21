@@ -18,6 +18,7 @@ import {
   X,
   CheckCircle,
   RefreshCw,
+  CloudUpload,
 } from 'lucide-react';
 
 interface DailyReportPageProps {
@@ -75,6 +76,26 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
   } | null>(null);
   const [isResetting, setIsResetting] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
+  const [syncingSupabase, setSyncingSupabase] = useState(false);
+
+  const handleSyncSupabase = async () => {
+    setSyncingSupabase(true);
+    try {
+      const res = await StorageService.syncAllToSupabase();
+      if (res.success) {
+        setToastMessage('Đã đồng bộ thành công toàn bộ dữ liệu báo cáo lên Supabase!');
+        await loadReportData(false);
+      } else {
+        setToastMessage(res.message || 'Lỗi khi đồng bộ. Vui lòng kiểm tra cấu hình Supabase.');
+      }
+    } catch (err: any) {
+      console.error('Lỗi khi đồng bộ lên Supabase:', err);
+      setToastMessage('Lỗi đồng bộ Supabase: ' + (err?.message || err));
+    } finally {
+      setSyncingSupabase(false);
+      setTimeout(() => setToastMessage(''), 4500);
+    }
+  };
 
   const loadReportData = useCallback(async (showIndicator = true) => {
     if (showIndicator) setLoading(true);
@@ -286,14 +307,17 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
           fitToPage: true,
           fitToWidth: 1,
           fitToHeight: 0,
+          horizontalCentered: true,
+          verticalCentered: false,
           margins: {
-            left: 0.4,
-            right: 0.4,
-            top: 0.5,
-            bottom: 0.5,
-            header: 0.2,
-            footer: 0.2,
+            left: 0.5,   // ~1.27 cm
+            right: 0.5,  // ~1.27 cm
+            top: 0.6,    // ~1.5 cm
+            bottom: 0.6, // ~1.5 cm
+            header: 0.3,
+            footer: 0.3,
           },
+          showGridLines: true,
         },
       });
 
@@ -305,31 +329,34 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
         right: { style: 'thin', color: { argb: 'FF000000' } },
       };
 
-      // Set column widths matching the document
+      // Set column widths matching the document (13 columns)
       ws.columns = [
-        { key: 'class', width: 10 },        // Cột 1: Lớp
-        { key: 'teacher', width: 22 },      // Cột 2: Giáo viên chủ nhiệm
-        { key: 'allTotal', width: 16 },     // Cột 3: Học sinh toàn trường - Tổng số học sinh
-        { key: 'allAbsent', width: 16 },    // Cột 4: Học sinh toàn trường - Số học sinh vắng
-        { key: 'halfTotal', width: 16 },    // Cột 5: Học sinh bán trú - Tổng số học sinh
-        { key: 'halfAbsent', width: 16 },   // Cột 6: Học sinh bán trú - Số học sinh vắng
-        { key: 'studentNames', width: 32 }, // Cột 7: Tên học sinh
-        { key: 'studentAddresses', width: 32 }, // Cột 8: Địa chỉ
-        { key: 'absentRate', width: 18 },   // Cột 9: Tỉ lệ phần trăm vắng (%)
-        { key: 'presentRate', width: 19 },  // Cột 10: Tỉ lệ phần trăm chuyên cần (%)
+        { key: 'class', width: 9 },            // Cột 1: Lớp
+        { key: 'teacher', width: 22 },          // Cột 2: Giáo viên chủ nhiệm
+        { key: 'allTotal', width: 13 },         // Cột 3: Học sinh toàn trường - Tổng số học sinh
+        { key: 'allAbsent', width: 13 },        // Cột 4: Học sinh toàn trường - Số học sinh vắng
+        { key: 'halfTotal', width: 13 },        // Cột 5: Học sinh bán trú - Tổng số học sinh
+        { key: 'halfAbsent', width: 13 },       // Cột 6: Học sinh bán trú - Số học sinh vắng
+        { key: 'halfMeal', width: 15 },         // Cột 7: Học sinh bán trú - Học sinh báo ăn
+        { key: 'ngoaiTruTotal', width: 13 },    // Cột 8: Học sinh ngoại trú - Tổng số học sinh
+        { key: 'ngoaiTruAbsent', width: 13 },   // Cột 9: Học sinh ngoại trú - Số học sinh vắng
+        { key: 'studentNames', width: 28 },     // Cột 10: Tên học sinh nghỉ
+        { key: 'studentAddresses', width: 24 }, // Cột 11: Địa chỉ
+        { key: 'absentRate', width: 14 },       // Cột 12: Tỉ lệ phần trăm vắng (%)
+        { key: 'presentRate', width: 15 },      // Cột 13: Tỉ lệ phần trăm chuyên cần (%)
       ];
 
       let rIdx = 1;
 
       // Row 1: Left: UBND XÃ XA DUNG. Right: CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM
-      ws.mergeCells(`A${rIdx}:D${rIdx}`);
+      ws.mergeCells(`A${rIdx}:E${rIdx}`);
       const subDeptCell = ws.getCell(`A${rIdx}`);
       subDeptCell.value = (settings?.sub_department_name || 'UBND XÃ XA DUNG').toUpperCase();
       subDeptCell.font = { name: 'Times New Roman', size: 10, bold: true };
       subDeptCell.alignment = { horizontal: 'left', vertical: 'middle' };
 
-      ws.mergeCells(`G${rIdx}:J${rIdx}`);
-      const nationCell1 = ws.getCell(`G${rIdx}`);
+      ws.mergeCells(`I${rIdx}:M${rIdx}`);
+      const nationCell1 = ws.getCell(`I${rIdx}`);
       nationCell1.value = 'CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM';
       nationCell1.font = { name: 'Times New Roman', size: 10, bold: true };
       nationCell1.alignment = { horizontal: 'center', vertical: 'middle' };
@@ -338,14 +365,14 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
       rIdx++;
 
       // Row 2: Left: TRƯỜNG PTDTBT THCS XA DUNG. Right: Độc lập - Tự do - Hạnh phúc
-      ws.mergeCells(`A${rIdx}:D${rIdx}`);
+      ws.mergeCells(`A${rIdx}:E${rIdx}`);
       const schoolNameCell = ws.getCell(`A${rIdx}`);
       schoolNameCell.value = formattedSchoolName;
       schoolNameCell.font = { name: 'Times New Roman', size: 10, bold: true };
       schoolNameCell.alignment = { horizontal: 'left', vertical: 'middle' };
 
-      ws.mergeCells(`G${rIdx}:J${rIdx}`);
-      const nationCell2 = ws.getCell(`G${rIdx}`);
+      ws.mergeCells(`I${rIdx}:M${rIdx}`);
+      const nationCell2 = ws.getCell(`I${rIdx}`);
       nationCell2.value = 'Độc lập - Tự do - Hạnh phúc';
       nationCell2.font = { name: 'Times New Roman', size: 10, bold: true, underline: 'single' };
       nationCell2.alignment = { horizontal: 'center', vertical: 'middle' };
@@ -353,9 +380,9 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
       ws.getRow(rIdx).height = 18;
       rIdx++;
 
-      // Row 3: PHÂN HIỆU: HUỔI SÓ (only if a specific campus is selected)
+      // Row 3: PHÂN HIỆU (only if a specific campus is selected)
       if (selectedCampusId !== 'all') {
-        ws.mergeCells(`A${rIdx}:D${rIdx}`);
+        ws.mergeCells(`A${rIdx}:E${rIdx}`);
         const campusCell = ws.getCell(`A${rIdx}`);
         const selectedCampus = campuses.find((c) => c.id === selectedCampusId);
         campusCell.value = `PHÂN HIỆU: ${(selectedCampus ? selectedCampus.name : '...........').toUpperCase()}`;
@@ -369,12 +396,12 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
       ws.getRow(rIdx).height = 10;
       rIdx++;
 
-      // Row 4: Title (BÁO CÁO SĨ SỐ HỌC SINH NGÀY .......THÁNG ...... NĂM 2026)
+      // Row 4: Title
       const titleText = exportBlankTemplate || blankDateInTitle
         ? `${baseTitle} NGÀY .......THÁNG ...... NĂM ${dateParts.year}`
         : `${baseTitle} NGÀY ${dateParts.day} THÁNG ${dateParts.month} NĂM ${dateParts.year}`;
 
-      ws.mergeCells(`A${rIdx}:J${rIdx}`);
+      ws.mergeCells(`A${rIdx}:M${rIdx}`);
       const titleCell = ws.getCell(`A${rIdx}`);
       titleCell.value = titleText;
       titleCell.font = { name: 'Times New Roman', size: 13, bold: true };
@@ -399,26 +426,32 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
       ws.mergeCells(`C${headerStartRow}:D${headerStartRow}`);
       ws.getCell(`C${headerStartRow}`).value = 'Học sinh toàn trường';
 
-      ws.mergeCells(`E${headerStartRow}:F${headerStartRow}`);
+      ws.mergeCells(`E${headerStartRow}:G${headerStartRow}`);
       ws.getCell(`E${headerStartRow}`).value = 'Học sinh bán trú';
 
-      ws.mergeCells(`G${headerStartRow}:G${headerStartRow + 1}`);
-      ws.getCell(`G${headerStartRow}`).value = 'Tên học sinh nghỉ';
-
-      ws.mergeCells(`H${headerStartRow}:H${headerStartRow + 1}`);
-      ws.getCell(`H${headerStartRow}`).value = 'Địa chỉ';
-
-      ws.mergeCells(`I${headerStartRow}:I${headerStartRow + 1}`);
-      ws.getCell(`I${headerStartRow}`).value = 'Tỉ lệ phần trăm\nvắng (%)';
+      ws.mergeCells(`H${headerStartRow}:I${headerStartRow}`);
+      ws.getCell(`H${headerStartRow}`).value = 'Học sinh ngoại trú';
 
       ws.mergeCells(`J${headerStartRow}:J${headerStartRow + 1}`);
-      ws.getCell(`J${headerStartRow}`).value = 'Tỉ lệ phần trăm\nchuyên cần (%)';
+      ws.getCell(`J${headerStartRow}`).value = 'Tên học sinh nghỉ';
+
+      ws.mergeCells(`K${headerStartRow}:K${headerStartRow + 1}`);
+      ws.getCell(`K${headerStartRow}`).value = 'Địa chỉ';
+
+      ws.mergeCells(`L${headerStartRow}:L${headerStartRow + 1}`);
+      ws.getCell(`L${headerStartRow}`).value = 'Tỉ lệ phần trăm\nvắng (%)';
+
+      ws.mergeCells(`M${headerStartRow}:M${headerStartRow + 1}`);
+      ws.getCell(`M${headerStartRow}`).value = 'Tỉ lệ phần trăm\nchuyên cần (%)';
 
       // Row 2 sub-columns
       ws.getCell(`C${headerStartRow + 1}`).value = 'Tổng số học sinh';
       ws.getCell(`D${headerStartRow + 1}`).value = 'Số học sinh vắng';
       ws.getCell(`E${headerStartRow + 1}`).value = 'Tổng số học sinh';
       ws.getCell(`F${headerStartRow + 1}`).value = 'Số học sinh vắng';
+      ws.getCell(`G${headerStartRow + 1}`).value = 'Học sinh báo ăn';
+      ws.getCell(`H${headerStartRow + 1}`).value = 'Tổng số học sinh';
+      ws.getCell(`I${headerStartRow + 1}`).value = 'Số học sinh vắng';
 
       ws.getRow(headerStartRow).height = 24;
       ws.getRow(headerStartRow + 1).height = 24;
@@ -426,11 +459,16 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
       // Apply borders, fonts and alignments to both header rows
       for (let r = headerStartRow; r <= headerStartRow + 1; r++) {
         const row = ws.getRow(r);
-        for (let c = 1; c <= 10; c++) {
+        for (let c = 1; c <= 13; c++) {
           const cell = row.getCell(c);
           cell.border = thinBorder;
-          cell.font = { name: 'Times New Roman', size: 10.5, bold: true };
+          cell.font = { name: 'Times New Roman', size: 10, bold: true };
           cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+          cell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: c === 7 ? 'FFE8F0FE' : 'FFF2F4F7' },
+          };
         }
       }
 
@@ -448,7 +486,7 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
           rObj.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
           rObj.getCell(1).font = { name: 'Times New Roman', size: 10.5, bold: true };
 
-          for (let c = 1; c <= 10; c++) {
+          for (let c = 1; c <= 13; c++) {
             rObj.getCell(c).border = thinBorder;
             rObj.getCell(c).font = { name: 'Times New Roman', size: 10.5 };
           }
@@ -459,7 +497,7 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
         // Add 12 additional empty rows with grid borders just like the image template
         for (let i = 0; i < 12; i++) {
           const rObj = ws.getRow(currentRow);
-          for (let c = 1; c <= 10; c++) {
+          for (let c = 1; c <= 13; c++) {
             rObj.getCell(c).border = thinBorder;
           }
           rObj.height = 22;
@@ -479,8 +517,12 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
 
           const totalBoarding = boardingVal?.total ?? 0;
           const absentBoarding = boardingVal?.absent ?? 0;
+          const baoAnBoarding = Math.max(0, totalBoarding - absentBoarding); // Học sinh báo ăn = Tổng số HS bán trú - Số HS vắng bán trú
 
-          // Formulas requested:
+          const totalNgoaiTru = Math.max(0, totalAll - totalBoarding);
+          const absentNgoaiTru = Math.max(0, absentAll - absentBoarding);
+
+          // Accurate Percentage Calculations:
           // % vắng = (Số HS vắng / Tổng số HS) * 100
           const absentRate = totalAll > 0 ? (absentAll / totalAll) * 100 : 0;
           // % chuyên cần = (Số HS có mặt / Tổng số HS) * 100 = ((Tổng số - Số vắng) / Tổng số) * 100
@@ -498,64 +540,96 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
             rObj.getCell(4).value = absentAll;
             rObj.getCell(5).value = totalBoarding;
             rObj.getCell(6).value = absentBoarding;
-            rObj.getCell(7).value = studentNames;
-            rObj.getCell(8).value = studentAddresses;
-            rObj.getCell(8).alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
-            rObj.getCell(9).value = `${absentRate.toFixed(2).replace('.', ',')}%`;
-            rObj.getCell(10).value = `${presentRate.toFixed(2).replace('.', ',')}%`;
+            rObj.getCell(7).value = baoAnBoarding;
+            rObj.getCell(8).value = totalNgoaiTru;
+            rObj.getCell(9).value = absentNgoaiTru;
+            rObj.getCell(10).value = studentNames;
+            rObj.getCell(11).value = studentAddresses;
+            rObj.getCell(12).value = `${absentRate.toFixed(2).replace('.', ',')}%`;
+            rObj.getCell(13).value = `${presentRate.toFixed(2).replace('.', ',')}%`;
           } else {
             rObj.getCell(3).value = totalAll > 0 ? totalAll : '-';
             rObj.getCell(4).value = '-';
             rObj.getCell(5).value = totalBoarding > 0 ? totalBoarding : '-';
             rObj.getCell(6).value = '-';
-            rObj.getCell(7).value = 'Chưa báo cáo';
-            rObj.getCell(8).value = '-';
+            rObj.getCell(7).value = '-';
+            rObj.getCell(8).value = totalNgoaiTru > 0 ? totalNgoaiTru : '-';
             rObj.getCell(9).value = '-';
-            rObj.getCell(10).value = '-';
+            rObj.getCell(10).value = 'Chưa báo cáo';
+            rObj.getCell(11).value = '-';
+            rObj.getCell(12).value = '-';
+            rObj.getCell(13).value = '-';
           }
 
-          // Alignments & fonts
+          // Alignments & fonts for every column
+          // Cột 1: Lớp (Căn giữa)
           rObj.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
           rObj.getCell(1).font = { name: 'Times New Roman', size: 10.5, bold: true };
 
-          rObj.getCell(2).alignment = { horizontal: 'left', vertical: 'middle' };
+          // Cột 2: Giáo viên chủ nhiệm (Căn trái, thụt lề nhẹ)
+          rObj.getCell(2).alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
           rObj.getCell(2).font = { name: 'Times New Roman', size: 10.5 };
 
+          // Cột 3: Học sinh toàn trường - Tổng số (Căn giữa)
           rObj.getCell(3).alignment = { horizontal: 'center', vertical: 'middle' };
           rObj.getCell(3).font = { name: 'Times New Roman', size: 10.5 };
 
+          // Cột 4: Học sinh toàn trường - Số vắng (Căn giữa, màu đỏ nếu > 0)
           rObj.getCell(4).alignment = { horizontal: 'center', vertical: 'middle' };
           rObj.getCell(4).font = {
             name: 'Times New Roman',
             size: 10.5,
             bold: absentAll > 0,
-            color: absentAll > 0 ? { argb: 'FFFF0000' } : { argb: 'FF000000' }, // Red if > 0
+            color: absentAll > 0 ? { argb: 'FFFF0000' } : { argb: 'FF000000' },
           };
 
+          // Cột 5: Học sinh bán trú - Tổng số (Căn giữa)
           rObj.getCell(5).alignment = { horizontal: 'center', vertical: 'middle' };
           rObj.getCell(5).font = { name: 'Times New Roman', size: 10.5 };
 
+          // Cột 6: Học sinh bán trú - Số vắng (Căn giữa, màu đỏ nếu > 0)
           rObj.getCell(6).alignment = { horizontal: 'center', vertical: 'middle' };
           rObj.getCell(6).font = {
             name: 'Times New Roman',
             size: 10.5,
             bold: absentBoarding > 0,
-            color: absentBoarding > 0 ? { argb: 'FFFF0000' } : { argb: 'FF000000' }, // Red if > 0
+            color: absentBoarding > 0 ? { argb: 'FFFF0000' } : { argb: 'FF000000' },
           };
 
-          rObj.getCell(7).alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
-          rObj.getCell(7).font = { name: 'Times New Roman', size: 10 };
+          // Cột 7: Học sinh bán trú - Học sinh báo ăn (Căn giữa, in đậm)
+          rObj.getCell(7).alignment = { horizontal: 'center', vertical: 'middle' };
+          rObj.getCell(7).font = { name: 'Times New Roman', size: 10.5, bold: true, color: { argb: 'FF1E40AF' } };
 
-          rObj.getCell(8).alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
-          rObj.getCell(8).font = { name: 'Times New Roman', size: 10 };
+          // Cột 8: Học sinh ngoại trú - Tổng số (Căn giữa)
+          rObj.getCell(8).alignment = { horizontal: 'center', vertical: 'middle' };
+          rObj.getCell(8).font = { name: 'Times New Roman', size: 10.5 };
 
+          // Cột 9: Học sinh ngoại trú - Số vắng (Căn giữa, màu đỏ nếu > 0)
           rObj.getCell(9).alignment = { horizontal: 'center', vertical: 'middle' };
-          rObj.getCell(9).font = { name: 'Times New Roman', size: 10.5, bold: true };
+          rObj.getCell(9).font = {
+            name: 'Times New Roman',
+            size: 10.5,
+            bold: absentNgoaiTru > 0,
+            color: absentNgoaiTru > 0 ? { argb: 'FFFF0000' } : { argb: 'FF000000' },
+          };
 
-          rObj.getCell(10).alignment = { horizontal: 'center', vertical: 'middle' };
-          rObj.getCell(10).font = { name: 'Times New Roman', size: 10.5, bold: true };
+          // Cột 10: Tên học sinh nghỉ (Căn trái, tự động xuống dòng)
+          rObj.getCell(10).alignment = { horizontal: 'left', vertical: 'middle', wrapText: true, indent: 1 };
+          rObj.getCell(10).font = { name: 'Times New Roman', size: 10 };
 
-          for (let c = 1; c <= 10; c++) {
+          // Cột 11: Địa chỉ (Căn trái, tự động xuống dòng)
+          rObj.getCell(11).alignment = { horizontal: 'left', vertical: 'middle', wrapText: true, indent: 1 };
+          rObj.getCell(11).font = { name: 'Times New Roman', size: 10 };
+
+          // Cột 12: % Vắng (Căn giữa, in đậm)
+          rObj.getCell(12).alignment = { horizontal: 'center', vertical: 'middle' };
+          rObj.getCell(12).font = { name: 'Times New Roman', size: 10.5, bold: true };
+
+          // Cột 13: % Chuyên cần (Căn giữa, in đậm)
+          rObj.getCell(13).alignment = { horizontal: 'center', vertical: 'middle' };
+          rObj.getCell(13).font = { name: 'Times New Roman', size: 10.5, bold: true };
+
+          for (let c = 1; c <= 13; c++) {
             rObj.getCell(c).border = thinBorder;
           }
 
@@ -570,6 +644,10 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
 
         const totalSchoolBoarding = boardingIndicator ? (reportData.totals[boardingIndicator.id]?.total || 0) : 0;
         const absentSchoolBoarding = boardingIndicator ? (reportData.totals[boardingIndicator.id]?.absent || 0) : 0;
+        const baoAnSchoolBoarding = Math.max(0, totalSchoolBoarding - absentSchoolBoarding); // Tổng học sinh báo ăn
+
+        const totalSchoolNgoaiTru = Math.max(0, totalSchoolAll - totalSchoolBoarding);
+        const absentSchoolNgoaiTru = Math.max(0, absentSchoolAll - absentSchoolBoarding);
 
         const overallAbsentRate = totalSchoolAll > 0 ? (absentSchoolAll / totalSchoolAll) * 100 : 0;
         const overallPresentRate = totalSchoolAll > 0 ? (presentSchoolAll / totalSchoolAll) * 100 : 0;
@@ -585,25 +663,34 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
         sumRow.getCell(4).value = absentSchoolAll;
         sumRow.getCell(5).value = totalSchoolBoarding;
         sumRow.getCell(6).value = absentSchoolBoarding;
-        sumRow.getCell(7).value = `Đã báo cáo: ${reportData.reportedClasses}/${reportData.totalClasses} lớp`;
-        sumRow.getCell(8).value = '';
-        sumRow.getCell(9).value = `${overallAbsentRate.toFixed(2).replace('.', ',')}%`;
-        sumRow.getCell(10).value = `${overallPresentRate.toFixed(2).replace('.', ',')}%`;
+        sumRow.getCell(7).value = baoAnSchoolBoarding;
+        sumRow.getCell(8).value = totalSchoolNgoaiTru;
+        sumRow.getCell(9).value = absentSchoolNgoaiTru;
+        sumRow.getCell(10).value = `Đã báo cáo: ${reportData.reportedClasses}/${reportData.totalClasses} lớp`;
+        sumRow.getCell(11).value = '-';
+        sumRow.getCell(12).value = `${overallAbsentRate.toFixed(2).replace('.', ',')}%`;
+        sumRow.getCell(13).value = `${overallPresentRate.toFixed(2).replace('.', ',')}%`;
 
-        for (let c = 1; c <= 10; c++) {
+        for (let c = 1; c <= 13; c++) {
           const cell = sumRow.getCell(c);
           cell.border = thinBorder;
+          const isRed = (c === 4 && absentSchoolAll > 0) || (c === 6 && absentSchoolBoarding > 0) || (c === 9 && absentSchoolNgoaiTru > 0);
           cell.font = {
             name: 'Times New Roman',
             size: 10.5,
             bold: true,
-            color: (c === 4 || c === 6) && (c === 4 ? absentSchoolAll > 0 : absentSchoolBoarding > 0) ? { argb: 'FFFF0000' } : { argb: 'FF000000' }
+            color: isRed ? { argb: 'FFFF0000' } : (c === 7 ? { argb: 'FF1E40AF' } : { argb: 'FF000000' })
           };
-          if (c === 7) {
-            cell.alignment = { horizontal: 'left', vertical: 'middle' };
+          if (c === 10) {
+            cell.alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
           } else {
             cell.alignment = { horizontal: 'center', vertical: 'middle' };
           }
+          cell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: c === 7 ? 'FFE8F0FE' : 'FFF2F4F7' }
+          };
         }
         sumRow.height = 24;
         currentRow++;
@@ -611,14 +698,14 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
 
       // Auto-fit column widths based on the maximum character length of the longest line in any cell
       // Only measure from headerStartRow down to currentRow (before signatures) to avoid merged signature row interference
-      for (let colIdx = 1; colIdx <= 10; colIdx++) {
+      for (let colIdx = 1; colIdx <= 13; colIdx++) {
         let maxLen = 0;
         for (let r = headerStartRow; r < currentRow; r++) {
           const row = ws.getRow(r);
           const cell = row.getCell(colIdx);
           
-          // Skip horizontally merged header cells for columns 3, 4, 5, 6 on the first header row
-          if (r === headerStartRow && (colIdx === 3 || colIdx === 4 || colIdx === 5 || colIdx === 6)) {
+          // Skip horizontally merged header cells on the first header row (columns 3-9)
+          if (r === headerStartRow && colIdx >= 3 && colIdx <= 9) {
             continue;
           }
 
@@ -635,17 +722,18 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
 
         if (maxLen > 0) {
           const col = ws.getColumn(colIdx);
-          // Add 12% extra for potential wide characters (e.g. Vietnamese accents, uppercase) and 6 chars padding
-          const calculatedWidth = Math.ceil(maxLen * 1.12) + 6;
+          // Add 12% extra for wide characters and 4 chars padding
+          const calculatedWidth = Math.ceil(maxLen * 1.12) + 4;
           
           let minWidth = 10;
-          if (colIdx === 1) minWidth = 10;  // class
+          if (colIdx === 1) minWidth = 9;   // class
           if (colIdx === 2) minWidth = 22;  // teacher
-          if (colIdx === 3 || colIdx === 4 || colIdx === 5 || colIdx === 6) minWidth = 16; // totals
-          if (colIdx === 7) minWidth = 32;  // studentNames
-          if (colIdx === 8) minWidth = 32;  // studentAddresses
-          if (colIdx === 9) minWidth = 18;  // absentRate
-          if (colIdx === 10) minWidth = 19; // presentRate
+          if (colIdx === 3 || colIdx === 4 || colIdx === 5 || colIdx === 6 || colIdx === 8 || colIdx === 9) minWidth = 13; // totals
+          if (colIdx === 7) minWidth = 15;  // bao an
+          if (colIdx === 10) minWidth = 28; // studentNames
+          if (colIdx === 11) minWidth = 24; // studentAddresses
+          if (colIdx === 12) minWidth = 14; // absentRate
+          if (colIdx === 13) minWidth = 15; // presentRate
           
           col.width = Math.max(minWidth, calculatedWidth);
         }
@@ -655,38 +743,38 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
       currentRow += 1;
 
       // Signatures row
-      ws.mergeCells(`A${currentRow}:D${currentRow}`);
-      ws.mergeCells(`E${currentRow}:J${currentRow}`);
+      ws.mergeCells(`A${currentRow}:E${currentRow}`);
+      ws.mergeCells(`I${currentRow}:M${currentRow}`);
       
       const reporterTitleCell = ws.getCell(`A${currentRow}`);
       reporterTitleCell.value = signatureSettings.reporter_title;
       reporterTitleCell.font = { name: 'Times New Roman', size: 12, bold: true };
       reporterTitleCell.alignment = { horizontal: 'center', vertical: 'middle' };
 
-      const principalDateCell = ws.getCell(`E${currentRow}`);
+      const principalDateCell = ws.getCell(`I${currentRow}`);
       principalDateCell.value = `Ngày ${dateParts.day} tháng ${dateParts.month} năm ${dateParts.year}`;
       principalDateCell.font = { name: 'Times New Roman', size: 12, italic: true };
       principalDateCell.alignment = { horizontal: 'center', vertical: 'middle' };
       
       currentRow++;
 
-      ws.mergeCells(`A${currentRow}:D${currentRow}`);
-      ws.mergeCells(`E${currentRow}:J${currentRow}`);
+      ws.mergeCells(`A${currentRow}:E${currentRow}`);
+      ws.mergeCells(`I${currentRow}:M${currentRow}`);
       
       const reporterSubCell = ws.getCell(`A${currentRow}`);
       reporterSubCell.value = '(Ký và ghi rõ họ tên)';
       reporterSubCell.font = { name: 'Times New Roman', size: 11, italic: true };
       reporterSubCell.alignment = { horizontal: 'center', vertical: 'middle' };
 
-      const principalTitleCell = ws.getCell(`E${currentRow}`);
+      const principalTitleCell = ws.getCell(`I${currentRow}`);
       principalTitleCell.value = signatureSettings.principal_title;
       principalTitleCell.font = { name: 'Times New Roman', size: 12, bold: true };
       principalTitleCell.alignment = { horizontal: 'center', vertical: 'middle' };
 
       currentRow++;
 
-      ws.mergeCells(`E${currentRow}:J${currentRow}`);
-      const principalSubCell = ws.getCell(`E${currentRow}`);
+      ws.mergeCells(`I${currentRow}:M${currentRow}`);
+      const principalSubCell = ws.getCell(`I${currentRow}`);
       principalSubCell.value = '(Ký, đóng dấu và ghi rõ họ tên)';
       principalSubCell.font = { name: 'Times New Roman', size: 11, italic: true };
       principalSubCell.alignment = { horizontal: 'center', vertical: 'middle' };
@@ -694,15 +782,15 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
       // Space for signatures
       currentRow += 4;
 
-      ws.mergeCells(`A${currentRow}:D${currentRow}`);
-      ws.mergeCells(`E${currentRow}:J${currentRow}`);
+      ws.mergeCells(`A${currentRow}:E${currentRow}`);
+      ws.mergeCells(`I${currentRow}:M${currentRow}`);
 
       const reporterNameCell = ws.getCell(`A${currentRow}`);
       reporterNameCell.value = signatureSettings.reporter_name;
       reporterNameCell.font = { name: 'Times New Roman', size: 12, bold: true };
       reporterNameCell.alignment = { horizontal: 'center', vertical: 'middle' };
 
-      const principalNameCell = ws.getCell(`E${currentRow}`);
+      const principalNameCell = ws.getCell(`I${currentRow}`);
       principalNameCell.value = signatureSettings.principal_name;
       principalNameCell.font = { name: 'Times New Roman', size: 12, bold: true };
       principalNameCell.alignment = { horizontal: 'center', vertical: 'middle' };
@@ -797,6 +885,17 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
 
           <button
             type="button"
+            onClick={handleSyncSupabase}
+            disabled={syncingSupabase}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-teal-800 bg-teal-100 hover:bg-teal-200 border border-teal-300 shadow-2xs transition-colors disabled:opacity-50 cursor-pointer"
+            title="Đồng bộ toàn bộ dữ liệu báo cáo, chỉ số và danh sách vắng lên Supabase"
+          >
+            <CloudUpload className={`w-4 h-4 text-teal-700 ${syncingSupabase ? 'animate-bounce' : ''}`} />
+            <span>{syncingSupabase ? 'ĐANG ĐỒNG BỘ...' : 'ĐỒNG BỘ SUPABASE'}</span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => handleExportExcel(true)}
             disabled={exporting}
             className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-300 shadow-2xs transition-colors disabled:opacity-50"
@@ -882,7 +981,7 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
                 <th colSpan={2} className="border border-black px-2 py-1.5 text-center">
                   Học sinh toàn trường
                 </th>
-                <th colSpan={2} className="border border-black px-2 py-1.5 text-center">
+                <th colSpan={3} className="border border-black px-2 py-1.5 text-center bg-blue-50/50">
                   Học sinh bán trú
                 </th>
                 <th colSpan={2} className="border border-black px-2 py-1.5 text-center">
@@ -907,12 +1006,13 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
 
               {/* Header Row 2: Sub-columns */}
               <tr className="bg-slate-50 text-black font-bold text-center text-[11px]">
-                <th className="border border-black px-1.5 py-1.5 w-20">Tổng số học sinh</th>
-                <th className="border border-black px-1.5 py-1.5 w-20">Số học sinh vắng</th>
-                <th className="border border-black px-1.5 py-1.5 w-20">Tổng số học sinh</th>
-                <th className="border border-black px-1.5 py-1.5 w-20">Số học sinh vắng</th>
-                <th className="border border-black px-1.5 py-1.5 w-20">Tổng số học sinh</th>
-                <th className="border border-black px-1.5 py-1.5 w-20">Số học sinh vắng</th>
+                <th className="border border-black px-1.5 py-1.5 w-18">Tổng số học sinh</th>
+                <th className="border border-black px-1.5 py-1.5 w-18">Số học sinh vắng</th>
+                <th className="border border-black px-1.5 py-1.5 w-18">Tổng số học sinh</th>
+                <th className="border border-black px-1.5 py-1.5 w-18">Số học sinh vắng</th>
+                <th className="border border-black px-1.5 py-1.5 w-20 bg-blue-50/80 text-blue-900 font-bold">Học sinh báo ăn</th>
+                <th className="border border-black px-1.5 py-1.5 w-18">Tổng số học sinh</th>
+                <th className="border border-black px-1.5 py-1.5 w-18">Số học sinh vắng</th>
               </tr>
             </thead>
 
@@ -929,6 +1029,7 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
 
                 const totalBoarding = boardingVal?.total ?? 0;
                 const absentBoarding = boardingVal?.absent ?? 0;
+                const baoAnBoarding = Math.max(0, totalBoarding - absentBoarding); // Học sinh báo ăn = Tổng số HS bán trú - Số HS vắng bán trú
                 
                 const totalNgoaiTru = Math.max(0, totalAll - totalBoarding);
                 const absentNgoaiTru = Math.max(0, absentAll - absentBoarding);
@@ -982,12 +1083,17 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
                       {isReported ? absentBoarding : '-'}
                     </td>
 
-                    {/* 7. Học sinh ngoại trú - Tổng số */}
+                    {/* 7. Học sinh bán trú - Học sinh báo ăn (Tổng HS bán trú - Số HS vắng bán trú) */}
+                    <td className="border border-black py-1.5 px-1 font-bold text-center text-blue-900 bg-blue-50/40">
+                      {isReported ? baoAnBoarding : '-'}
+                    </td>
+
+                    {/* 8. Học sinh ngoại trú - Tổng số */}
                     <td className="border border-black py-1.5 px-1 font-medium text-center">
                       {isReported ? totalNgoaiTru : totalNgoaiTru > 0 ? totalNgoaiTru : '-'}
                     </td>
 
-                    {/* 8. Học sinh ngoại trú - Số vắng */}
+                    {/* 9. Học sinh ngoại trú - Số vắng */}
                     <td
                       className={`border border-black py-1.5 px-1 font-bold text-center ${
                         absentNgoaiTru > 0 ? 'text-red-700' : 'text-black'
@@ -996,7 +1102,7 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
                       {isReported ? absentNgoaiTru : '-'}
                     </td>
 
-                    {/* 9. Tên học sinh (Danh sách vắng & lý do) */}
+                    {/* 10. Tên học sinh (Danh sách vắng & lý do) */}
                     <td className="border border-black py-1.5 px-2.5 text-left text-[11px] text-black whitespace-pre">
                       {isReported ? (
                         studentNames || ''
@@ -1005,22 +1111,22 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
                       )}
                     </td>
 
-                    {/* 9.5. Địa chỉ học sinh vắng */}
+                    {/* 11. Địa chỉ học sinh vắng */}
                     <td className="border border-black py-1.5 px-2.5 text-left text-[11px] text-black whitespace-pre">
                       {isReported ? studentAddresses || '-' : '-'}
                     </td>
 
-                    {/* 8. Tỉ lệ phần trăm vắng (%) */}
+                    {/* 12. Tỉ lệ phần trăm vắng (%) */}
                     <td className="border border-black py-1.5 px-1 font-bold text-center text-black">
                       {isReported ? `${absentRate.toFixed(2).replace('.', ',')}%` : '-'}
                     </td>
 
-                    {/* 9. Tỉ lệ phần trăm chuyên cần (%) */}
+                    {/* 13. Tỉ lệ phần trăm chuyên cần (%) */}
                     <td className="border border-black py-1.5 px-1 font-bold text-center text-black">
                       {isReported ? `${presentRate.toFixed(2).replace('.', ',')}%` : '-'}
                     </td>
 
-                    {/* 10. Xử lý reset nhầm (ẩn khi in) */}
+                    {/* 14. Xử lý reset nhầm (ẩn khi in) */}
                     <td className="border border-black py-1 px-1.5 text-center print:hidden">
                       {isReported && (isAdmin || isBGH || (isGVCN && currentUser?.assigned_class_id === row.classItem.id)) ? (
                         <button
@@ -1050,6 +1156,10 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
 
                   const totalSchoolBoarding = boardingIndicator ? (reportData.totals[boardingIndicator.id]?.total || 0) : 0;
                   const absentSchoolBoarding = boardingIndicator ? (reportData.totals[boardingIndicator.id]?.absent || 0) : 0;
+                  const baoAnSchoolBoarding = Math.max(0, totalSchoolBoarding - absentSchoolBoarding); // Tổng học sinh báo ăn
+
+                  const totalSchoolNgoaiTru = Math.max(0, totalSchoolAll - totalSchoolBoarding);
+                  const absentSchoolNgoaiTru = Math.max(0, absentSchoolAll - absentSchoolBoarding);
 
                   const overallAbsentRate = totalSchoolAll > 0 ? (absentSchoolAll / totalSchoolAll) * 100 : 0;
                   const overallPresentRate = totalSchoolAll > 0 ? (presentSchoolAll / totalSchoolAll) * 100 : 0;
@@ -1060,6 +1170,7 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
                         TỔNG CỘNG
                       </td>
 
+                      {/* Toàn trường */}
                       <td className="border border-black py-2 px-1 text-sm font-bold text-center">
                         {totalSchoolAll}
                       </td>
@@ -1067,17 +1178,32 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
                         {absentSchoolAll}
                       </td>
 
+                      {/* Bán trú */}
                       <td className="border border-black py-2 px-1 text-sm font-bold text-center">
                         {totalSchoolBoarding}
                       </td>
                       <td className="border border-black py-2 px-1 text-sm font-bold text-red-700 text-center">
                         {absentSchoolBoarding}
                       </td>
+                      {/* Báo ăn */}
+                      <td className="border border-black py-2 px-1 text-sm font-bold text-blue-900 bg-blue-100/60 text-center">
+                        {baoAnSchoolBoarding}
+                      </td>
 
+                      {/* Ngoại trú */}
+                      <td className="border border-black py-2 px-1 text-sm font-bold text-center">
+                        {totalSchoolNgoaiTru}
+                      </td>
+                      <td className="border border-black py-2 px-1 text-sm font-bold text-red-700 text-center">
+                        {absentSchoolNgoaiTru}
+                      </td>
+
+                      {/* Tên học sinh vắng */}
                       <td className="border border-black py-2 px-2 text-left text-[11px] font-semibold text-slate-700">
                         Đã báo cáo: {reportData.reportedClasses}/{reportData.totalClasses} lớp
                       </td>
-                      <td className="border border-black py-2 px-2 text-left text-[11px] font-semibold text-slate-700">
+                      {/* Địa chỉ */}
+                      <td className="border border-black py-2 px-2 text-center text-[11px] font-semibold text-slate-700">
                         -
                       </td>
 
