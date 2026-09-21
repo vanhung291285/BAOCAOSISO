@@ -116,13 +116,30 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   useEffect(() => {
     refreshAll().finally(() => setLoading(false));
 
-    // Subscribe to realtime changes
+    // Subscribe to realtime changes - ONLY for school configuration tables, NEVER for daily_reports
+    const SCHOOL_CONTEXT_TABLES = new Set([
+      'school_settings',
+      'school_years',
+      'campuses',
+      'classes',
+      'indicator_groups',
+      'students',
+      'all_reset',
+      'all'
+    ]);
+
+    let refreshTimeout: any = null;
     const unsubscribe = subscribeRealtime((event) => {
-      // Re-fetch affected or all data
-      refreshAll();
+      if (event?.table && SCHOOL_CONTEXT_TABLES.has(event.table)) {
+        if (refreshTimeout) clearTimeout(refreshTimeout);
+        refreshTimeout = setTimeout(() => {
+          refreshAll();
+        }, 350);
+      }
     });
 
     return () => {
+      if (refreshTimeout) clearTimeout(refreshTimeout);
       unsubscribe();
     };
   }, [refreshAll]);
