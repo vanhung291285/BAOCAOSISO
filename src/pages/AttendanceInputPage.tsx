@@ -175,12 +175,16 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
   }, [selectedClassId, reportDate]);
 
   // Load existing report for this class and date
+  const [lastLoaded, setLastLoaded] = useState({ classId: '', date: '' });
+
   useEffect(() => {
     if (!selectedClassId || !reportDate) return;
+    if (lastLoaded.classId === selectedClassId && lastLoaded.date === reportDate) return;
 
     setLoading(true);
     setErrorMessage('');
     setQuickFillNotice('');
+    setLastLoaded({ classId: selectedClassId, date: reportDate });
 
     StorageService.getDailyReport(selectedClassId, reportDate)
       .then(async ({ report, values }) => {
@@ -215,7 +219,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
           try {
             const latestPrev = await StorageService.getLatestReportForClass(selectedClassId, reportDate);
             if (latestPrev.report && latestPrev.values.length > 0) {
-              // Logic replaced
+              let suggestedTotal = 0;
               enabledIndicators.forEach((ig) => {
                 const prevVal = latestPrev.values.find((v) => v.indicator_group_id === ig.id);
                 if (prevVal && prevVal.total_count > 0) {
@@ -270,7 +274,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
         setIsEditMode(!lockedState || isAdmin);
       })
       .finally(() => setLoading(false));
-  }, [selectedClassId, reportDate, enabledIndicators, isAdmin, selectedClass?.is_locked]);
+  }, [selectedClassId, reportDate]);
 
   // Đồng bộ tự động danh sách học sinh vắng theo số lượng vắng
   const syncAbsentListToCount = (targetCount: number) => {
