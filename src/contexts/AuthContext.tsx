@@ -24,39 +24,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [currentUser, setCurrentUser] = useState<Profile | null>(() => {
     if (typeof window === 'undefined') return null;
     try {
-      // 1. Check if this is a fresh browser tab/webview session (e.g. from a shared link click)
-      const isStandalone = 
-        window.matchMedia('(display-mode: standalone)').matches ||
-        (window.navigator as any).standalone === true;
-
-      const isFreshSession = sessionStorage.getItem('sso_session_active') !== 'true';
-      if (isFreshSession && !isStandalone) {
-        // Clear any old active session to guarantee showing the login/class selection screen on fresh entry
-        localStorage.removeItem(CURRENT_USER_KEY);
-        sessionStorage.removeItem(CURRENT_USER_KEY);
-        sessionStorage.setItem('sso_session_active', 'true');
-        return null;
-      }
-
-      if (isStandalone) {
-        sessionStorage.setItem('sso_session_active', 'true');
-      }
-
-      // 2. Check sessionStorage first (secure session, valid for ADMIN, BGH & current GVCN tab)
-      let savedId = sessionStorage.getItem(CURRENT_USER_KEY);
-      
-      // 3. If not in sessionStorage, check localStorage (for persistent GVCN)
-      if (!savedId) {
-        savedId = localStorage.getItem(CURRENT_USER_KEY);
-      }
-
+      // Check for saved user ID
+      let savedId = sessionStorage.getItem(CURRENT_USER_KEY) || localStorage.getItem(CURRENT_USER_KEY);
       const rawUsers = localStorage.getItem('sso_profiles_v1');
+      
       if (savedId && rawUsers) {
         const users = JSON.parse(rawUsers);
         const match = users.find((u: Profile) => u.id === savedId);
         if (match) {
-          // ADMIN and BGH are NEVER persisted in localStorage to prevent automatic login bypass.
-          // They MUST use sessionStorage.
+          // ADMIN and BGH require active session in sessionStorage
           if (match.role === 'ADMIN' || match.role === 'BGH') {
             const hasSessionId = sessionStorage.getItem(CURRENT_USER_KEY) === savedId;
             if (!hasSessionId) {
@@ -64,6 +40,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               return null;
             }
           }
+          // GVCN stays logged in reliably across tabs/sessions
+          sessionStorage.setItem('sso_session_active', 'true');
+          sessionStorage.setItem(CURRENT_USER_KEY, match.id);
           return match;
         }
       }
@@ -87,27 +66,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const users = await StorageService.getProfiles();
     setAllUsers(users);
 
-    const isStandalone = 
-      window.matchMedia('(display-mode: standalone)').matches ||
-      (window.navigator as any).standalone === true;
-
-    const isFreshSession = sessionStorage.getItem('sso_session_active') !== 'true';
-    if (isFreshSession && !isStandalone) {
-      localStorage.removeItem(CURRENT_USER_KEY);
-      sessionStorage.removeItem(CURRENT_USER_KEY);
-      sessionStorage.setItem('sso_session_active', 'true');
-      setCurrentUser(null);
-      return;
-    }
-
-    if (isStandalone) {
-      sessionStorage.setItem('sso_session_active', 'true');
-    }
-
-    let savedId = sessionStorage.getItem(CURRENT_USER_KEY);
-    if (!savedId) {
-      savedId = localStorage.getItem(CURRENT_USER_KEY);
-    }
+    let savedId = sessionStorage.getItem(CURRENT_USER_KEY) || localStorage.getItem(CURRENT_USER_KEY);
 
     if (savedId) {
       const match = users.find((u) => u.id === savedId);
@@ -120,13 +79,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             return;
           }
         }
+        sessionStorage.setItem('sso_session_active', 'true');
+        sessionStorage.setItem(CURRENT_USER_KEY, match.id);
         setCurrentUser(match);
         return;
       }
     }
 
-    // Removed automatic default user assignment to force manual login
-    // Don't leave completely blank in prototype; set to null for login page
     setCurrentUser(null);
   };
 
