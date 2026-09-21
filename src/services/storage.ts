@@ -89,9 +89,41 @@ export function subscribeRealtime(callback: (event: { table: string; payload?: a
       channel = supabase
         .channel('public:all_changes')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_reports' }, (payload) => {
+          try {
+            if (payload.new && (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE')) {
+              const newRep = payload.new as DailyReport;
+              const raw = localStorage.getItem(STORAGE_KEYS.REPORTS);
+              let reps: DailyReport[] = raw ? JSON.parse(raw) : [];
+              const idx = reps.findIndex(r => r.id === newRep.id || (r.class_id === newRep.class_id && r.report_date === newRep.report_date));
+              if (idx >= 0) reps[idx] = newRep;
+              else reps.push(newRep);
+              localStorage.setItem(STORAGE_KEYS.REPORTS, JSON.stringify(reps));
+            } else if (payload.old && payload.eventType === 'DELETE') {
+              const oldId = (payload.old as any).id;
+              const raw = localStorage.getItem(STORAGE_KEYS.REPORTS);
+              let reps: DailyReport[] = raw ? JSON.parse(raw) : [];
+              reps = reps.filter(r => r.id !== oldId);
+              localStorage.setItem(STORAGE_KEYS.REPORTS, JSON.stringify(reps));
+            }
+          } catch (e) {
+            console.warn('Error merging realtime daily_reports:', e);
+          }
           callback({ table: 'daily_reports', payload });
         })
         .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_report_values' }, (payload) => {
+          try {
+            if (payload.new && (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE')) {
+              const newVal = payload.new as DailyReportValue;
+              const raw = localStorage.getItem(STORAGE_KEYS.VALUES);
+              let vals: DailyReportValue[] = raw ? JSON.parse(raw) : [];
+              const idx = vals.findIndex(v => v.id === newVal.id || (v.report_id === newVal.report_id && v.indicator_group_id === newVal.indicator_group_id));
+              if (idx >= 0) vals[idx] = newVal;
+              else vals.push(newVal);
+              localStorage.setItem(STORAGE_KEYS.VALUES, JSON.stringify(vals));
+            }
+          } catch (e) {
+            console.warn('Error merging realtime daily_report_values:', e);
+          }
           callback({ table: 'daily_report_values', payload });
         })
         .on('postgres_changes', { event: '*', schema: 'public', table: 'classes' }, (payload) => {
@@ -891,6 +923,21 @@ export const StorageService = {
   },
 
   // --- 7. Daily Reports & Values ---
+  getLocalDailyReport(
+    classId: string,
+    reportDate: string
+  ): { report?: DailyReport; values: DailyReportValue[] } {
+    ensureInitialized();
+    const rawReports = localStorage.getItem(STORAGE_KEYS.REPORTS);
+    const reports: DailyReport[] = rawReports ? JSON.parse(rawReports) : [];
+    const report = reports.find((r) => r.class_id === classId && r.report_date === reportDate);
+    if (!report) return { report: undefined, values: [] };
+    const rawValues = localStorage.getItem(STORAGE_KEYS.VALUES);
+    const allValues: DailyReportValue[] = rawValues ? JSON.parse(rawValues) : [];
+    const values = allValues.filter((v) => v.report_id === report.id);
+    return { report, values };
+  },
+
   async getDailyReport(
     classId: string,
     reportDate: string
@@ -1101,13 +1148,12 @@ export const StorageService = {
 
     localStorage.setItem(STORAGE_KEYS.VALUES, JSON.stringify(allValues));
 
-    // PERSIST DIRECTLY TO SUPABASE (Non-blocking for instant UI response)
+    // PERSIST DIRECTLY TO SUPABASE (Awaited with timeout to ensure cloud persistence before realtime broadcast)
     const supabase = getSupabaseClient();
     if (supabase && isSupabaseConnected()) {
-      Promise.resolve().then(async () => {
-        try {
-          // Chuẩn bị dữ liệu report để gửi lên Supabase
-          let repData: any = { ...report };
+      try {
+        let repData: any = { ...report };
+        const upsertPromise = (async () => {
           let { error: repErr } = await supabase.from('daily_reports').upsert(repData);
 
           // Nếu Supabase báo lỗi chưa có cột reported_time (schema cache cũ) -> loại bỏ reported_time và thử lại
@@ -1119,7 +1165,6 @@ export const StorageService = {
 
           if (repErr) {
             console.error('Supabase upsert daily_reports error:', repErr);
-            // Nếu daily_reports không tạo/lưu được vào CSDL thì dừng lại, không upsert values để tránh lỗi 23503 foreign key
             return;
           }
 
@@ -1127,10 +1172,16 @@ export const StorageService = {
             const { error: valErr } = await supabase.from('daily_report_values').upsert(newValues);
             if (valErr) console.error('Supabase upsert daily_report_values error:', valErr);
           }
-        } catch (err) {
-          console.error('Supabase sync report error:', err);
-        }
-      });
+        })();
+
+        // Wait up to 4 seconds for Supabase to commit so other clients reading from cloud immediately see it
+        await Promise.race([
+          upsertPromise,
+          new Promise((resolve) => setTimeout(resolve, 4000))
+        ]);
+      } catch (err) {
+        console.error('Supabase sync report error:', err);
+      }
     }
 
     // Add audit log
@@ -1365,20 +1416,17 @@ export const StorageService = {
           .eq('report_date', reportDate);
 
         if (cloudReports) {
-          const repIds = cloudReports.map((r) => r.id);
           const rawReports = localStorage.getItem(STORAGE_KEYS.REPORTS);
           let reports: DailyReport[] = rawReports ? JSON.parse(rawReports) : [];
           
-          // Giữ lại các ngày khác, riêng ngày reportDate chỉ giữ lại các báo cáo còn tồn tại trên cloud
-          const cloudSet = new Set(repIds);
-          reports = reports.filter((r) => r.report_date !== reportDate || cloudSet.has(r.id));
           cloudReports.forEach((cRep) => {
-            const idx = reports.findIndex((r) => r.id === cRep.id);
+            const idx = reports.findIndex((r) => r.id === cRep.id || (r.class_id === cRep.class_id && r.report_date === cRep.report_date));
             if (idx >= 0) reports[idx] = cRep;
             else reports.push(cRep);
           });
           localStorage.setItem(STORAGE_KEYS.REPORTS, JSON.stringify(reports));
 
+          const repIds = cloudReports.map((r) => r.id);
           if (repIds.length > 0) {
             const { data: cloudValues } = await supabase
               .from('daily_report_values')
@@ -1388,7 +1436,11 @@ export const StorageService = {
             if (cloudValues) {
               const rawValues = localStorage.getItem(STORAGE_KEYS.VALUES);
               let allValues: DailyReportValue[] = rawValues ? JSON.parse(rawValues) : [];
-              allValues = allValues.filter((v) => !repIds.includes(v.report_id)).concat(cloudValues);
+              cloudValues.forEach((cVal) => {
+                const vIdx = allValues.findIndex(v => v.id === cVal.id || (v.report_id === cVal.report_id && v.indicator_group_id === cVal.indicator_group_id));
+                if (vIdx >= 0) allValues[vIdx] = cVal;
+                else allValues.push(cVal);
+              });
               localStorage.setItem(STORAGE_KEYS.VALUES, JSON.stringify(allValues));
             }
           }
