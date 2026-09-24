@@ -32,15 +32,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const users = JSON.parse(rawUsers);
         const match = users.find((u: Profile) => u.id === savedId);
         if (match) {
-          // ADMIN and BGH require active session in sessionStorage
+          // ADMIN and BGH support persistent login if remembered on Safari / iPhone
           if (match.role === 'ADMIN' || match.role === 'BGH') {
             const hasSessionId = sessionStorage.getItem(CURRENT_USER_KEY) === savedId;
-            if (!hasSessionId) {
+            const isRemembered = localStorage.getItem('sso_admin_remember_login') !== 'false';
+            if (!hasSessionId && !isRemembered) {
               localStorage.removeItem(CURRENT_USER_KEY);
               return null;
             }
           }
-          // GVCN stays logged in reliably across tabs/sessions
+          // GVCN and remembered admin stay logged in reliably across tabs/sessions
           sessionStorage.setItem('sso_session_active', 'true');
           sessionStorage.setItem(CURRENT_USER_KEY, match.id);
           return match;
@@ -73,7 +74,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (match) {
         if (match.role === 'ADMIN' || match.role === 'BGH') {
           const hasSessionId = sessionStorage.getItem(CURRENT_USER_KEY) === savedId;
-          if (!hasSessionId) {
+          const isRemembered = localStorage.getItem('sso_admin_remember_login') !== 'false';
+          if (!hasSessionId && !isRemembered) {
             localStorage.removeItem(CURRENT_USER_KEY);
             setCurrentUser(null);
             return;
@@ -118,15 +120,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (found) {
       setCurrentUser(found);
       
-      // Secure hybrid storage strategy:
-      // ADMIN/BGH use sessionStorage ONLY to guarantee logout on tab/link reopen.
-      // GVCN uses localStorage + sessionStorage for seamless offline/tab reporting.
+      // Storage strategy:
+      // GVCN and Admin with remember option persist in localStorage to avoid reload kicks on iPhone Safari
+      sessionStorage.setItem('sso_session_active', 'true');
+      sessionStorage.setItem(CURRENT_USER_KEY, found.id);
+
+      const isRemembered = localStorage.getItem('sso_admin_remember_login') !== 'false';
       if (found.role === 'ADMIN' || found.role === 'BGH') {
-        sessionStorage.setItem(CURRENT_USER_KEY, found.id);
-        localStorage.removeItem(CURRENT_USER_KEY);
+        if (isRemembered) {
+          localStorage.setItem(CURRENT_USER_KEY, found.id);
+        } else {
+          localStorage.removeItem(CURRENT_USER_KEY);
+        }
       } else {
         localStorage.setItem(CURRENT_USER_KEY, found.id);
-        sessionStorage.setItem(CURRENT_USER_KEY, found.id);
       }
       return true;
     }
@@ -136,6 +143,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = () => {
     localStorage.removeItem(CURRENT_USER_KEY);
     sessionStorage.removeItem(CURRENT_USER_KEY);
+    sessionStorage.removeItem('sso_session_active');
     // Don't leave completely blank in prototype; set to null for login page
     setCurrentUser(null);
   };
@@ -145,12 +153,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const match = users.find((u) => u.id === userId);
     if (match) {
       setCurrentUser(match);
+      sessionStorage.setItem('sso_session_active', 'true');
+      sessionStorage.setItem(CURRENT_USER_KEY, match.id);
+
+      const isRemembered = localStorage.getItem('sso_admin_remember_login') !== 'false';
       if (match.role === 'ADMIN' || match.role === 'BGH') {
-        sessionStorage.setItem(CURRENT_USER_KEY, match.id);
-        localStorage.removeItem(CURRENT_USER_KEY);
+        if (isRemembered) {
+          localStorage.setItem(CURRENT_USER_KEY, match.id);
+        } else {
+          localStorage.removeItem(CURRENT_USER_KEY);
+        }
       } else {
         localStorage.setItem(CURRENT_USER_KEY, match.id);
-        sessionStorage.setItem(CURRENT_USER_KEY, match.id);
       }
     }
   };
