@@ -20,7 +20,9 @@ import {
   AlertCircle,
   Lock,
   Unlock,
-  Trash2
+  Trash2,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { SchoolYear } from '../types';
 import { PWAInstallButton } from '../components/PWAInstallButton';
@@ -56,6 +58,11 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [rememberAdmin, setRememberAdmin] = useState<boolean>(() => {
+    return localStorage.getItem('sso_admin_remember_login') !== 'false';
+  });
+  const [showPassword, setShowPassword] = useState(false);
+  const [hasSavedCreds, setHasSavedCreds] = useState(false);
 
   // School Year Config Modal State (ADMIN ONLY)
   const [showYearModal, setShowYearModal] = useState(false);
@@ -65,6 +72,13 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
   const [newYearName, setNewYearName] = useState('');
   const [yearError, setYearError] = useState('');
   const [isSavingYear, setIsSavingYear] = useState(false);
+
+  // Clear saved credentials manually
+  const handleClearSavedAdminCreds = () => {
+    localStorage.removeItem('sso_saved_admin_creds');
+    setPassword('');
+    setHasSavedCreds(false);
+  };
 
   // Initialize selected class & teacher on mount
   useEffect(() => {
@@ -80,6 +94,21 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
     }
     if (savedTeacherId) {
       setSelectedTeacherId(savedTeacherId);
+    }
+
+    // Auto-fill saved admin credentials on Safari / Chrome / Mobile
+    const savedAdminCreds = localStorage.getItem('sso_saved_admin_creds');
+    if (savedAdminCreds) {
+      try {
+        const parsed = JSON.parse(savedAdminCreds);
+        if (parsed.email) setEmail(parsed.email);
+        if (parsed.password) {
+          setPassword(parsed.password);
+          setHasSavedCreds(true);
+        }
+      } catch {
+        // ignore parse error
+      }
     }
   }, []);
 
@@ -193,15 +222,47 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
           return;
         }
       }
+
+      // 1. Lưu thông tin đăng nhập vào LocalStorage nếu chọn Ghi nhớ (hỗ trợ Safari iPhone)
+      if (rememberAdmin) {
+        localStorage.setItem('sso_admin_remember_login', 'true');
+        localStorage.setItem(
+          'sso_saved_admin_creds',
+          JSON.stringify({ email: cleanEmail, password: password.trim() })
+        );
+        setHasSavedCreds(true);
+      } else {
+        localStorage.setItem('sso_admin_remember_login', 'false');
+        localStorage.removeItem('sso_saved_admin_creds');
+        setHasSavedCreds(false);
+      }
+
+      // 2. Kích hoạt W3C Credential Management API (Chuỗi khóa iCloud Safari / Google Password Manager)
+      if (typeof window !== 'undefined' && (window as any).PasswordCredential && navigator.credentials?.store) {
+        try {
+          const cred = new (window as any).PasswordCredential({
+            id: cleanEmail,
+            password: password.trim(),
+            name: targetUser?.full_name || 'Quản trị viên'
+          });
+          await navigator.credentials.store(cred);
+        } catch {
+          // Trình duyệt không hỗ trợ hoặc chặn, tiếp tục luồng bình thường
+        }
+      }
+
       const ok = await login(email);
       if (ok) {
-        onLoginSuccess('/dashboard');
+        // Cho Safari iOS 150-200ms để bắt sự kiện lưu mật khẩu vào Chuỗi khóa iCloud trước khi unmount form
+        setTimeout(() => {
+          onLoginSuccess('/dashboard');
+        }, 180);
       } else {
         setError('Email hoặc tài khoản không chính xác. Vui lòng thử lại.');
+        setIsSubmitting(false);
       }
     } catch {
       setError('Đã xảy ra lỗi khi đăng nhập.');
-    } finally {
       setIsSubmitting(false);
     }
   };
@@ -581,49 +642,133 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
 
             {/* TAB 2: BAN GIÁM HIỆU & QUẢN TRỊ VIÊN */}
             {activeTab === 'ADMIN' && (
-              <form className="space-y-4" onSubmit={handleAdminSubmit}>
+              <form
+                id="admin-login-form"
+                name="adminLoginForm"
+                method="post"
+                action="#"
+                autoComplete="on"
+                className="space-y-4"
+                onSubmit={handleAdminSubmit}
+              >
+                {/* Thông báo thông tin đã được ghi nhớ trên Safari / Thiết bị */}
+                {hasSavedCreds && (
+                  <div className="p-2.5 bg-purple-50 border border-purple-200 rounded-xl text-xs text-purple-900 flex items-center justify-between gap-2 shadow-2xs">
+                    <div className="flex items-center gap-2">
+                      <KeyRound className="w-4 h-4 text-purple-600 flex-shrink-0" />
+                      <span className="text-[11px] font-bold">
+                        Đã lưu mật khẩu quản trị trên Safari
+                      </span>
+                    </div>
+                    <span className="text-[10px] font-black bg-purple-200 text-purple-800 px-2 py-0.5 rounded-full">
+                      Tự động điền
+                    </span>
+                  </div>
+                )}
+
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider">
-                    Email hoặc Tên đăng nhập
+                  <label htmlFor="admin-username" className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider">
+                    Email hoặc Tên đăng nhập <span className="text-red-500">*</span>
                   </label>
                   <div className="mt-1">
                     <input
+                      id="admin-username"
+                      name="username"
                       type="text"
+                      autoComplete="username"
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      inputMode="email"
                       required
-                      placeholder="Nhập email hoặc tên đăng nhập..."
+                      placeholder="admin@db.edu.vn hoặc admin..."
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      className="w-full px-3 py-2 rounded-lg border border-slate-300 text-xs focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors shadow-2xs"
+                      className="w-full px-3 py-2 rounded-lg border border-slate-300 text-xs font-semibold focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors shadow-2xs"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider">
-                    Mật khẩu
-                  </label>
-                  <div className="mt-1 relative">
+                  <div className="flex items-center justify-between mb-1">
+                    <label htmlFor="admin-password" className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider">
+                      Mật khẩu Quản trị <span className="text-red-500">*</span>
+                    </label>
+                    <span className="text-[10px] text-purple-600 font-semibold">Bảo mật</span>
+                  </div>
+                  <div className="relative">
                     <input
-                      type="password"
+                      id="admin-password"
+                      name="password"
+                      type={showPassword ? 'text' : 'password'}
+                      autoComplete="current-password"
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      spellCheck={false}
                       required
-                      placeholder="Nhập mật khẩu..."
+                      placeholder="Nhập mật khẩu quản trị..."
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      className="w-full px-3 py-2 rounded-lg border border-slate-300 text-xs focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors shadow-2xs"
+                      className="w-full pl-3 pr-10 py-2 rounded-lg border border-slate-300 text-xs font-mono font-semibold focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors shadow-2xs"
                     />
-                    <KeyRound className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-2.5" />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="w-7 h-7 flex items-center justify-center text-slate-400 hover:text-slate-600 rounded-md absolute right-2 top-1.5 cursor-pointer transition-colors"
+                      tabIndex={-1}
+                      title={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+                    >
+                      {showPassword ? <EyeOff className="w-4 h-4 text-purple-600" /> : <Eye className="w-4 h-4" />}
+                    </button>
                   </div>
+                </div>
+
+                {/* Tùy chọn: Ghi nhớ mật khẩu trên Safari iPhone */}
+                <div className="flex items-center justify-between text-xs pt-0.5">
+                  <label className="flex items-center gap-2 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      name="remember"
+                      id="admin-remember"
+                      checked={rememberAdmin}
+                      onChange={(e) => setRememberAdmin(e.target.checked)}
+                      className="w-4 h-4 text-purple-600 border-slate-300 rounded focus:ring-purple-500 cursor-pointer"
+                    />
+                    <span className="text-[11px] font-bold text-slate-700">
+                      Ghi nhớ mật khẩu trên Safari (iPhone)
+                    </span>
+                  </label>
+                  {hasSavedCreds && (
+                    <button
+                      type="button"
+                      onClick={handleClearSavedAdminCreds}
+                      className="text-[10px] text-rose-600 hover:text-rose-700 font-semibold underline cursor-pointer"
+                    >
+                      Xóa mật khẩu đã lưu
+                    </button>
+                  )}
                 </div>
 
                 <div className="pt-1">
                   <button
                     type="submit"
+                    id="admin-login-btn"
                     disabled={isSubmitting}
-                    className="w-full flex justify-center items-center gap-2 py-3 px-4 rounded-xl shadow-md text-sm font-bold text-white bg-purple-600 hover:bg-purple-700 active:scale-[0.99] focus:outline-hidden focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 transition-all disabled:opacity-50"
+                    className="w-full flex justify-center items-center gap-2 py-3 px-4 rounded-xl shadow-md text-sm font-bold text-white bg-purple-600 hover:bg-purple-700 active:scale-[0.99] focus:outline-hidden focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 transition-all disabled:opacity-50 cursor-pointer"
                   >
                     <LogIn className="w-4 h-4" />
-                    <span>{isSubmitting ? 'Đang xác thực...' : 'ĐĂNG NHẬP QUẢN TRỊ'}</span>
+                    <span>{isSubmitting ? 'Đang xác thực & Lưu mật khẩu...' : 'ĐĂNG NHẬP QUẢN TRỊ'}</span>
                   </button>
+                </div>
+
+                {/* Hướng dẫn lưu mật khẩu trên Safari iPhone */}
+                <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[11px] text-slate-600 leading-relaxed">
+                  <p className="font-semibold text-slate-700 flex items-center gap-1 mb-0.5">
+                    <span>💡 Hướng dẫn lưu mật khẩu trên Safari iPhone:</span>
+                  </p>
+                  <p>
+                    Khi Safari hỏi <em>"Lưu mật khẩu này trong Chuỗi khóa iCloud?"</em>, hãy chọn <strong>"Lưu mật khẩu"</strong> để Safari tự động điền bằng Face ID / Touch ID ở các lần sau.
+                  </p>
                 </div>
               </form>
             )}
@@ -665,7 +810,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
 
             {/* STEP 1: Admin Password Verification if not yet verified */}
             {!isAdminUnlocked ? (
-              <form onSubmit={handleVerifyAdmin} className="mt-5 space-y-4">
+              <form onSubmit={handleVerifyAdmin} className="mt-5 space-y-4" method="post" action="#">
                 <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 leading-relaxed flex items-start gap-2.5">
                   <ShieldAlert className="w-4 h-4 text-amber-700 flex-shrink-0 mt-0.5" />
                   <div>
@@ -675,19 +820,25 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
 
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    <label htmlFor="admin-modal-password" className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
                       Mật khẩu Quản trị viên
                     </label>
                   </div>
                   <div className="relative">
                     <input
+                      id="admin-modal-password"
+                      name="password"
                       type="password"
+                      autoComplete="current-password"
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      spellCheck={false}
                       autoFocus
                       required
                       value={adminPasswordInput}
                       onChange={(e) => setAdminPasswordInput(e.target.value)}
                       placeholder="Nhập mật khẩu Quản trị..."
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-semibold focus:ring-2 focus:ring-purple-500 focus:border-purple-500 shadow-2xs"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-semibold focus:ring-2 focus:ring-purple-500 focus:border-purple-500 shadow-2xs font-mono"
                     />
                     <KeyRound className="w-4 h-4 text-slate-400 absolute right-3.5 top-3" />
                   </div>
