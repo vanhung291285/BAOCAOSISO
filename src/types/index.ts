@@ -50,6 +50,10 @@ export interface SchoolSettings {
   early_report_deadline?: string; // Giờ quy định báo sớm (mặc định: '07:30')
   early_report_bonus_points?: number; // Số điểm cộng mỗi ngày báo sớm (mặc định: 0.5)
   early_report_max_bonus?: number; // Điểm cộng tối đa mỗi tuần (mặc định: 2.5)
+  // Cấu hình tự động nhắc nhở GVCN chưa báo cáo sĩ số
+  enable_auto_reminder?: boolean; // Bật tính năng tự động báo về tài khoản GVCN (mặc định: true)
+  auto_reminder_time?: string; // Giờ tự động nhắc nhở (mặc định: '07:45')
+  reminder_message_template?: string; // Mẫu tin nhắn nhắc nhở
   created_at: string;
   updated_at: string;
 }
@@ -240,4 +244,22 @@ export interface AttendanceRankingSummary {
   rankings: ClassAttendanceRank[];
   topPerformers: ClassAttendanceRank[];
   campusSummaries: CampusRankingSummary[];
+}
+
+export type NotificationType = 'ATTENDANCE_REMINDER' | 'BGH_ALERT' | 'ATTENDANCE_SUCCESS' | 'SYSTEM';
+
+export interface AppNotification {
+  id: string;
+  user_id: string; // ID tài khoản người nhận (GVCN, BGH, ADMIN)
+  class_id?: string;
+  class_name?: string;
+  type: NotificationType;
+  title: string;
+  message: string;
+  date: string; // YYYY-MM-DD
+  read: boolean;
+  action_url?: string;
+  created_at: string;
+  created_by_name?: string;
+  urgent?: boolean;
 }

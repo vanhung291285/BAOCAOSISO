@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { SchoolProvider, useSchool } from './contexts/SchoolContext';
+import { NotificationProvider } from './contexts/NotificationContext';
 import { Navbar } from './components/Navbar';
+import { GVCNUnreportedAlertBanner } from './components/GVCNUnreportedAlertBanner';
 import { LoginPage } from './pages/LoginPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { AttendanceInputPage } from './pages/AttendanceInputPage';
@@ -82,6 +84,9 @@ const AppContent: React.FC = () => {
     <div className="min-h-[100dvh] bg-slate-100/80 flex flex-col font-sans antialiased text-slate-800 selection:bg-blue-600 selection:text-white pb-[calc(env(safe-area-inset-bottom)+4rem)] sm:pb-0">
       {/* Top Navbar */}
       <Navbar currentPath={currentPath} onNavigate={handleNavigate} />
+
+      {/* Automatic Alert Banner for GVCN when class has not reported attendance */}
+      <GVCNUnreportedAlertBanner onNavigate={handleNavigate} currentPath={currentPath} />
 
       {/* Main Content Area - Optimized spacing for phones */}
       <main className="flex-1 max-w-[1600px] w-full mx-auto px-3 sm:px-6 lg:px-8 py-3.5 sm:py-8">
@@ -226,7 +231,9 @@ export default function App() {
   return (
     <SchoolProvider>
       <AuthProvider>
-        <AppContent />
+        <NotificationProvider>
+          <AppContent />
+        </NotificationProvider>
       </AuthProvider>
     </SchoolProvider>
   );

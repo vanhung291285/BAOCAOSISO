@@ -23,6 +23,7 @@ import {
   AlertCircle,
   Code2,
   Clock,
+  BellRing,
 } from 'lucide-react';
 
 export const SettingsSchoolPage: React.FC = () => {
@@ -775,10 +776,90 @@ export const SettingsSchoolPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Section 7: Cấu hình Nhà phát triển & Chân trang */}
+        {/* Section 7: Cấu hình tự động nhắc nhở GVCN chưa báo cáo sĩ số */}
+        <div className="pt-4 border-t border-slate-100">
+          <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+            <div>
+              <h2 className="text-xs font-bold text-rose-700 uppercase tracking-wider flex items-center gap-2">
+                <BellRing className="w-4 h-4 text-rose-600" /> 7. CẤU HÌNH TỰ ĐỘNG BÁO VỀ TÀI KHOẢN GVCN CHƯA BÁO CÁO SĨ SỐ
+              </h2>
+              <p className="text-[11px] text-slate-500 mt-1">
+                Khi lớp chưa gửi báo cáo sĩ số, hệ thống sẽ tự động phát cảnh báo, gửi thông báo trực tiếp về tài khoản của GVCN đó và hiển thị banner nhắc nhở.
+              </p>
+            </div>
+            <label className="inline-flex items-center gap-2 cursor-pointer bg-rose-50 px-3 py-1.5 rounded-xl border border-rose-200">
+              <input
+                type="checkbox"
+                checked={formData.enable_auto_reminder ?? true}
+                onChange={(e) => setFormData({ ...formData, enable_auto_reminder: e.target.checked })}
+                className="w-4 h-4 text-rose-600 rounded focus:ring-rose-500"
+              />
+              <span className="text-xs font-bold text-rose-900">Bật tự động nhắc nhở</span>
+            </label>
+          </div>
+
+          {(formData.enable_auto_reminder ?? true) && (
+            <div className="p-4 bg-rose-50/50 border border-rose-200/80 rounded-2xl space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Giờ tự động quét và phát thông báo nhắc nhở
+                  </label>
+                  <input
+                    type="time"
+                    value={formData.auto_reminder_time || '07:45'}
+                    onChange={(e) => setFormData({ ...formData, auto_reminder_time: e.target.value })}
+                    className="w-full px-3 py-2 text-sm font-bold border border-rose-300 rounded-xl bg-white text-slate-800 focus:ring-2 focus:ring-rose-500"
+                  />
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    Mặc định: <strong>07:45</strong> sáng mỗi ngày. Nếu lớp chưa nộp, hệ thống sẽ tự động tạo thông báo và rung chuông tài khoản GVCN.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Phương thức cảnh báo trên tài khoản GVCN
+                  </label>
+                  <div className="p-2.5 bg-white border border-rose-200 rounded-xl space-y-1.5 text-xs text-slate-700">
+                    <div className="flex items-center gap-2 font-bold text-emerald-800">
+                      <CheckCircle className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                      <span>Chuông thông báo & huy hiệu đỏ ở thanh điều hướng</span>
+                    </div>
+                    <div className="flex items-center gap-2 font-bold text-blue-800">
+                      <CheckCircle className="w-4 h-4 text-blue-600 flex-shrink-0" />
+                      <span>Banner cảnh báo gắn chặt đầu trang khi GVCN vào ứng dụng</span>
+                    </div>
+                    <div className="flex items-center gap-2 font-bold text-amber-800">
+                      <CheckCircle className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                      <span>Phát âm thanh chuông nhắc nhở và thông báo đẩy trình duyệt</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Mẫu nội dung thông báo nhắc nhở tự động
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={formData.reminder_message_template || 'Lớp {class_name} chưa nộp báo cáo sĩ số ngày hôm nay ({date}). Thầy/Cô vui lòng cập nhật sớm để BGH tổng hợp toàn trường!'}
+                    onChange={(e) => setFormData({ ...formData, reminder_message_template: e.target.value })}
+                    placeholder="Sử dụng {class_name} cho tên lớp và {date} cho ngày báo cáo"
+                    className="w-full px-3 py-2 text-sm border border-rose-300 rounded-xl bg-white text-slate-800 focus:ring-2 focus:ring-rose-500"
+                  />
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    Các biến tự động thay thế: <code className="bg-rose-100 text-rose-800 px-1 rounded">{'{class_name}'}</code> (Tên lớp), <code className="bg-rose-100 text-rose-800 px-1 rounded">{'{date}'}</code> (Ngày báo cáo).
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Section 8: Cấu hình Nhà phát triển & Chân trang */}
         <div className="pt-4 border-t border-slate-100">
           <h2 className="text-xs font-bold text-blue-700 uppercase tracking-wider mb-4 flex items-center gap-2">
-            <Code2 className="w-4 h-4" /> 7. THÔNG TIN NHÀ PHÁT TRIỂN & BẢN QUYỀN CHÂN TRANG
+            <Code2 className="w-4 h-4" /> 8. THÔNG TIN NHÀ PHÁT TRIỂN & BẢN QUYỀN CHÂN TRANG
           </h2>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

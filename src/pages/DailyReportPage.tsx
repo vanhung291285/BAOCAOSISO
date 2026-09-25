@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useSchool } from '../contexts/SchoolContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useNotifications } from '../contexts/NotificationContext';
 import { StorageService, subscribeRealtime } from '../services/storage';
 import { ClassReportRow } from '../types';
 import { DateNavigator } from '../components/DateNavigator';
@@ -19,6 +20,7 @@ import {
   CheckCircle,
   RefreshCw,
   CloudUpload,
+  BellRing,
 } from 'lucide-react';
 
 interface DailyReportPageProps {
@@ -77,6 +79,25 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
   const [isResetting, setIsResetting] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [syncingSupabase, setSyncingSupabase] = useState(false);
+  const { sendBGHManualReminder } = useNotifications();
+  const [isSendingReminder, setIsSendingReminder] = useState(false);
+
+  const handleSendRemindersFromDailyPage = async () => {
+    setIsSendingReminder(true);
+    try {
+      const res = await sendBGHManualReminder(managerDate || selectedDate);
+      if (res.sentCount > 0) {
+        setToastMessage(`🔔 Đã tự động báo về ${res.sentCount} tài khoản GVCN các lớp: ${res.remindedClasses.join(', ')}!`);
+      } else {
+        setToastMessage('Tất cả các GVCN của các lớp chưa nộp đều đã có thông báo nhắc nhở.');
+      }
+      setTimeout(() => setToastMessage(''), 7000);
+    } catch (err) {
+      console.error('Error sending reminders from daily page:', err);
+    } finally {
+      setIsSendingReminder(false);
+    }
+  };
 
   const handleSyncSupabase = async () => {
     setSyncingSupabase(true);
@@ -1305,12 +1326,27 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
                 />
               </div>
 
-              <div className="text-xs text-slate-600 font-medium">
-                Đã báo cáo:{' '}
-                <strong className="text-rose-700 font-black">
-                  {managerData?.rows.filter((r) => r.status !== 'NOT_REPORTED').length || 0}
-                </strong>
-                /{managerData?.rows.length || 0} lớp
+              <div className="flex flex-wrap items-center gap-2.5">
+                <div className="text-xs text-slate-600 font-medium">
+                  Đã báo cáo:{' '}
+                  <strong className="text-rose-700 font-black">
+                    {managerData?.rows.filter((r) => r.status !== 'NOT_REPORTED').length || 0}
+                  </strong>
+                  /{managerData?.rows.length || 0} lớp
+                </div>
+
+                {(isAdmin || isBGH) && (
+                  <button
+                    type="button"
+                    onClick={handleSendRemindersFromDailyPage}
+                    disabled={isSendingReminder}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-2xs transition-all active:scale-95 disabled:opacity-50"
+                    title="Tự động phát thông báo nhắc nhở đến tài khoản của tất cả GVCN các lớp chưa nộp"
+                  >
+                    <BellRing className="w-3.5 h-3.5 animate-bounce" />
+                    <span>{isSendingReminder ? 'Đang gửi nhắc...' : 'Tự động báo về tài khoản GVCN'}</span>
+                  </button>
+                )}
               </div>
             </div>
 

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useSchool } from '../contexts/SchoolContext';
 import { PWAInstallButton } from './PWAInstallButton';
+import { NotificationCenter } from './NotificationCenter';
 import {
   School,
   Menu,
@@ -176,6 +177,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentPath, onNavigate }) => {
               </div>
             )}
             <PWAInstallButton />
+            <NotificationCenter onNavigate={handleNav} />
 
             {currentUser && (
               <div className="hidden sm:flex items-center gap-2 pl-2 border-l border-slate-200 flex-shrink-0">

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useSchool } from '../contexts/SchoolContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useNotifications } from '../contexts/NotificationContext';
 import { StorageService, subscribeRealtime } from '../services/storage';
 import { ClassReportRow, ReportStatus, ClassAttendanceRank } from '../types';
 import { DateNavigator } from '../components/DateNavigator';
@@ -29,6 +30,7 @@ import {
   Trophy,
   Award,
   RotateCcw,
+  BellRing,
 } from 'lucide-react';
 
 interface DashboardPageProps {
@@ -39,6 +41,7 @@ interface DashboardPageProps {
 export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSelectClassForInput }) => {
   const { settings, classes, indicators, campuses } = useSchool();
   const { currentUser, isAdmin, isBGH, isGVCN } = useAuth();
+  const { sendBGHManualReminder } = useNotifications();
 
   const getCampusName = (campusId?: string) => {
     if (!campusId) return 'Khu chính';
@@ -94,6 +97,26 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSele
   const [resetTargetRow, setResetTargetRow] = useState<ClassReportRow | null>(null);
   const [isResetting, setIsResetting] = useState(false);
   const [toastNotice, setToastNotice] = useState<string>('');
+  const [isSendingReminders, setIsSendingReminders] = useState(false);
+
+  const handleSendManualReminders = async () => {
+    setIsSendingReminders(true);
+    try {
+      const res = await sendBGHManualReminder(selectedDate);
+      if (res.sentCount > 0) {
+        setToastNotice(`🔔 Đã tự động gửi thông báo nhắc nhở đến ${res.sentCount} tài khoản GVCN các lớp: ${res.remindedClasses.join(', ')}! Hệ thống đã phát tín hiệu cảnh báo trên màn hình của thầy/cô.`);
+      } else if (res.remindedClasses.length === 0 && res.skippedClasses.length > 0) {
+        setToastNotice(`Các lớp chưa nộp: ${res.skippedClasses.join(', ')} hiện chưa được gán tài khoản GVCN trong danh mục người dùng.`);
+      } else {
+        setToastNotice(`Tất cả các GVCN của các lớp chưa nộp đều đã nhận thông báo nhắc nhở trước đó.`);
+      }
+      setTimeout(() => setToastNotice(''), 7000);
+    } catch (err) {
+      console.error('Error sending manual reminders:', err);
+    } finally {
+      setIsSendingReminders(false);
+    }
+  };
 
   const loadData = async (dateStr: string, campusId: string) => {
     try {
@@ -422,6 +445,18 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSele
               )}
               {aggregateData.unreportedClasses > 0 && (
                 <>
+                  {(isBGH || isAdmin) && (
+                    <button
+                      type="button"
+                      onClick={handleSendManualReminders}
+                      disabled={isSendingReminders}
+                      className="text-xs font-black px-2.5 py-1.5 rounded-lg border border-rose-300 bg-rose-50 text-rose-800 hover:bg-rose-100 transition-colors flex items-center gap-1.5 shadow-2xs active:scale-95 disabled:opacity-50"
+                      title="Tự động phát thông báo nhắc nhở đến tài khoản của tất cả GVCN các lớp chưa nộp"
+                    >
+                      <BellRing className="w-3.5 h-3.5 text-rose-600 animate-bounce" />
+                      <span>{isSendingReminders ? 'Đang gửi nhắc...' : `Báo về tài khoản GVCN (${aggregateData.unreportedClasses})`}</span>
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => setSelectedStatus(selectedStatus === 'NOT_REPORTED' ? 'ALL' : 'NOT_REPORTED')}
@@ -466,12 +501,26 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSele
           {/* Quick Missing Classes Chip Strip (Crucial for BGH/Admin overview) */}
           {aggregateData.unreportedClasses > 0 && showUnreportedChips && (
             <div className="bg-amber-50/70 border border-amber-200/80 rounded-xl p-2.5">
-              <div className="flex items-center justify-between gap-2 mb-1.5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 mb-2">
                 <span className="text-[11px] font-bold text-amber-900 flex items-center gap-1">
                   <AlertCircle className="w-3.5 h-3.5 text-amber-600 flex-shrink-0" />
                   Các lớp chưa gửi báo cáo ({unreportedRows.length} lớp):
                 </span>
-                <span className="text-[10px] text-amber-700">Chạm vào lớp để nhập</span>
+                <div className="flex items-center gap-2">
+                  {(isBGH || isAdmin) && (
+                    <button
+                      type="button"
+                      onClick={handleSendManualReminders}
+                      disabled={isSendingReminders}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-bold shadow-2xs transition-all active:scale-95 disabled:opacity-50"
+                      title="Tự động phát thông báo cảnh báo về tài khoản các GVCN lớp này"
+                    >
+                      <BellRing className="w-3.5 h-3.5 animate-bounce" />
+                      <span>{isSendingReminders ? 'Đang gửi nhắc...' : 'Tự động báo về tài khoản GVCN'}</span>
+                    </button>
+                  )}
+                  <span className="text-[10px] text-amber-700 hidden sm:inline">Chạm vào lớp để nhập</span>
+                </div>
               </div>
               <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pr-1">
                 {unreportedRows.map((r) => (

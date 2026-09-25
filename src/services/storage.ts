@@ -16,6 +16,8 @@ import {
   AttendancePeriodType,
   CampusRankingSummary,
   SchoolWeekInfo,
+  AppNotification,
+  NotificationType,
 } from '../types';
 import { getSupabaseClient, isSupabaseConnected } from './supabase';
 import {
@@ -30,6 +32,7 @@ import {
   addDaysToDateStr,
   parseDateParts,
   getTodayDateStr,
+  formatDateVN,
 } from '../utils/schoolWeeks';
 
 const STORAGE_KEYS = {
@@ -44,6 +47,7 @@ const STORAGE_KEYS = {
   LOGS: 'sso_system_logs_v1',
   OFF_DAYS: 'sso_school_off_days_v1',
   STUDENTS: 'sso_students_v1',
+  NOTIFICATIONS: 'sso_notifications_v1',
 };
 
 export interface TableSyncStatus {
@@ -193,6 +197,9 @@ export function getInitialData() {
     early_report_deadline: DEFAULT_EARLY_REPORT_DEADLINE,
     early_report_bonus_points: DEFAULT_EARLY_REPORT_BONUS_PER_DAY,
     early_report_max_bonus: DEFAULT_EARLY_REPORT_MAX_BONUS,
+    enable_auto_reminder: true,
+    auto_reminder_time: '07:45',
+    reminder_message_template: 'Lớp {class_name} chưa nộp báo cáo sĩ số ngày hôm nay ({date}). Thầy/Cô vui lòng cập nhật sớm để BGH tổng hợp toàn trường!',
     created_at: now,
     updated_at: now,
   };
@@ -348,6 +355,12 @@ export const StorageService = {
     }
     if (s && !s.week1_start_date) {
       s.week1_start_date = DEFAULT_WEEK1_START_DATE;
+      needsSave = true;
+    }
+    if (s && s.enable_auto_reminder === undefined) {
+      s.enable_auto_reminder = true;
+      s.auto_reminder_time = '07:45';
+      s.reminder_message_template = 'Lớp {class_name} chưa nộp báo cáo sĩ số ngày hôm nay ({date}). Thầy/Cô vui lòng cập nhật sớm để BGH tổng hợp toàn trường!';
       needsSave = true;
     }
 
@@ -1204,6 +1217,9 @@ export const StorageService = {
       old_data: oldReport,
       new_data: { valuesByGroup, notes },
     }).catch(console.error);
+
+    // Auto-resolve any pending attendance reminders for this class and date
+    this.resolveAttendanceReminders(classId, reportDate, user, cls?.class_name || classId).catch(console.error);
 
     notifyRealtimeChange('daily_reports', { reportId, classId, reportDate });
     return { report, values: newValues };
@@ -2497,6 +2513,7 @@ export const StorageService = {
       { key: 'daily_reports', label: 'Sổ báo cáo sĩ số ngày (daily_reports)', storageKey: STORAGE_KEYS.REPORTS },
       { key: 'daily_report_values', label: 'Chi tiết số liệu chỉ tiêu (daily_report_values)', storageKey: STORAGE_KEYS.VALUES },
       { key: 'system_logs', label: 'Nhật ký thao tác & kiểm toán (system_logs)', storageKey: STORAGE_KEYS.LOGS },
+      { key: 'notifications', label: 'Thông báo hệ thống & Nhắc nhở (notifications)', storageKey: STORAGE_KEYS.NOTIFICATIONS },
     ];
 
     const results: TableSyncStatus[] = [];
@@ -2553,6 +2570,233 @@ export const StorageService = {
     }
 
     return results;
+  },
+
+  // --- HỆ THỐNG THÔNG BÁO TỰ ĐỘNG & NHẮC NHỞ GVCN CHƯA BÁO CÁO SĨ SỐ ---
+  async getNotifications(userId?: string): Promise<AppNotification[]> {
+    ensureInitialized();
+    const raw = localStorage.getItem(STORAGE_KEYS.NOTIFICATIONS);
+    let list: AppNotification[] = raw ? JSON.parse(raw) : [];
+    if (userId) {
+      list = list.filter((n) => n.user_id === userId);
+    }
+    // Sắp xếp thông báo mới nhất lên đầu
+    return list.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  },
+
+  async getUnreadNotificationCount(userId: string): Promise<number> {
+    const list = await this.getNotifications(userId);
+    return list.filter((n) => !n.read).length;
+  },
+
+  async saveNotification(notif: AppNotification): Promise<void> {
+    ensureInitialized();
+    const raw = localStorage.getItem(STORAGE_KEYS.NOTIFICATIONS);
+    const list: AppNotification[] = raw ? JSON.parse(raw) : [];
+    const idx = list.findIndex((n) => n.id === notif.id);
+    if (idx >= 0) {
+      list[idx] = notif;
+    } else {
+      list.unshift(notif);
+    }
+    // Giữ tối đa 100 thông báo gần nhất
+    localStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(list.slice(0, 100)));
+    notifyRealtimeChange('notifications', { notifId: notif.id, userId: notif.user_id });
+  },
+
+  async markNotificationAsRead(id: string): Promise<void> {
+    ensureInitialized();
+    const raw = localStorage.getItem(STORAGE_KEYS.NOTIFICATIONS);
+    if (!raw) return;
+    const list: AppNotification[] = JSON.parse(raw);
+    const target = list.find((n) => n.id === id);
+    if (target) {
+      target.read = true;
+      localStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(list));
+      notifyRealtimeChange('notifications', { notifId: id, userId: target.user_id });
+    }
+  },
+
+  async markAllNotificationsAsRead(userId: string): Promise<void> {
+    ensureInitialized();
+    const raw = localStorage.getItem(STORAGE_KEYS.NOTIFICATIONS);
+    if (!raw) return;
+    const list: AppNotification[] = JSON.parse(raw);
+    let changed = false;
+    list.forEach((n) => {
+      if (n.user_id === userId && !n.read) {
+        n.read = true;
+        changed = true;
+      }
+    });
+    if (changed) {
+      localStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(list));
+      notifyRealtimeChange('notifications', { userId });
+    }
+  },
+
+  async deleteNotification(id: string): Promise<void> {
+    ensureInitialized();
+    const raw = localStorage.getItem(STORAGE_KEYS.NOTIFICATIONS);
+    if (!raw) return;
+    const list: AppNotification[] = JSON.parse(raw);
+    const filtered = list.filter((n) => n.id !== id);
+    localStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(filtered));
+    notifyRealtimeChange('notifications', { notifId: id });
+  },
+
+  async clearAllNotifications(userId: string): Promise<void> {
+    ensureInitialized();
+    const raw = localStorage.getItem(STORAGE_KEYS.NOTIFICATIONS);
+    if (!raw) return;
+    const list: AppNotification[] = JSON.parse(raw);
+    const filtered = list.filter((n) => n.user_id !== userId);
+    localStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(filtered));
+    notifyRealtimeChange('notifications', { userId });
+  },
+
+  async resolveAttendanceReminders(classId: string, reportDate: string, user: Profile, className: string): Promise<void> {
+    ensureInitialized();
+    const raw = localStorage.getItem(STORAGE_KEYS.NOTIFICATIONS);
+    const list: AppNotification[] = raw ? JSON.parse(raw) : [];
+
+    list.forEach((n) => {
+      if (n.class_id === classId && n.date === reportDate && (n.type === 'ATTENDANCE_REMINDER' || n.type === 'BGH_ALERT')) {
+        n.read = true;
+      }
+    });
+
+    // Thêm thông báo xác nhận nộp báo cáo thành công cho tài khoản GVCN
+    const successNotif: AppNotification = {
+      id: `notif_success_${classId}_${reportDate}_${Date.now()}`,
+      user_id: user.id,
+      class_id: classId,
+      class_name: className,
+      type: 'ATTENDANCE_SUCCESS',
+      title: '✅ Đã nộp báo cáo sĩ số thành công',
+      message: `Đã nộp thành công báo cáo sĩ số lớp ${className} ngày ${formatDateVN(reportDate)}. Báo cáo đã được ghi nhận vào hệ thống.`,
+      date: reportDate,
+      read: false,
+      action_url: '/attendance',
+      created_at: new Date().toISOString(),
+      created_by_name: 'Hệ thống Báo cáo Sĩ số',
+    };
+    list.unshift(successNotif);
+
+    localStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(list.slice(0, 100)));
+    notifyRealtimeChange('notifications', { userId: user.id, classId, reportDate });
+  },
+
+  /**
+   * Tự động kiểm tra và gửi báo cáo/nhắc nhở về tài khoản GVCN nếu lớp chưa báo cáo sĩ số
+   * @param targetDate Ngày kiểm tra (mặc định hôm nay YYYY-MM-DD)
+   * @param forceTriggerByBGH Nếu BGH chủ động bấm nút "Nhắc nhở tự động"
+   * @param senderUser Thông tin BGH gửi nhắc nhở (nếu có)
+   */
+  async checkAndGenerateGVCNReminders(
+    targetDate?: string,
+    forceTriggerByBGH?: boolean,
+    senderUser?: Profile
+  ): Promise<{ sentCount: number; remindedClasses: string[]; skippedClasses: string[] }> {
+    ensureInitialized();
+    const dateToCheck = targetDate || getTodayDateStr();
+    const settings = await this.getSettings();
+
+    // Nếu không phải BGH bấm ép buộc và cài đặt đã tắt tự động nhắc nhở -> bỏ qua
+    if (!forceTriggerByBGH && settings.enable_auto_reminder === false) {
+      return { sentCount: 0, remindedClasses: [], skippedClasses: [] };
+    }
+
+    const classes = await this.getClasses();
+    const activeClasses = classes.filter((c) => c.active && !c.is_locked);
+    if (activeClasses.length === 0) {
+      return { sentCount: 0, remindedClasses: [], skippedClasses: [] };
+    }
+
+    const profiles = await this.getProfiles();
+    const aggregate = await this.getDailyAggregate(dateToCheck);
+    const existingNotifs = await this.getNotifications();
+
+    const remindedClasses: string[] = [];
+    const skippedClasses: string[] = [];
+    let sentCount = 0;
+
+    for (const cls of activeClasses) {
+      // Tìm xem lớp này đã báo cáo chưa
+      const row = aggregate.rows.find((r) => r.classItem.id === cls.id);
+      const isReported = row && row.status !== 'NOT_REPORTED';
+
+      if (isReported) {
+        continue; // Lớp đã nộp báo cáo
+      }
+
+      // Lớp chưa nộp -> Tìm giáo viên chủ nhiệm
+      let teacher = profiles.find((p) => p.id === cls.homeroom_teacher_id);
+      if (!teacher) {
+        teacher = profiles.find((p) => p.assigned_class_id === cls.id && p.role === 'GVCN');
+      }
+      if (!teacher) {
+        teacher = profiles.find((p) => p.assigned_class_id === cls.id);
+      }
+
+      if (!teacher) {
+        skippedClasses.push(cls.class_name);
+        continue;
+      }
+
+      // Kiểm tra xem đã có thông báo nhắc nhở chưa đọc cho lớp này và ngày này chưa
+      const alreadyHasUnreadReminder = existingNotifs.some(
+        (n) =>
+          n.user_id === teacher!.id &&
+          n.class_id === cls.id &&
+          n.date === dateToCheck &&
+          !n.read &&
+          (n.type === 'ATTENDANCE_REMINDER' || n.type === 'BGH_ALERT')
+      );
+
+      // Nếu không phải BGH ép buộc gửi và đã có thông báo nhắc nhở chưa đọc -> không gửi trùng lặp
+      if (!forceTriggerByBGH && alreadyHasUnreadReminder) {
+        continue;
+      }
+
+      const formattedDate = formatDateVN(dateToCheck);
+      const customTemplate = settings.reminder_message_template;
+      let reminderMsg = customTemplate
+        ? customTemplate.replace('{class_name}', cls.class_name).replace('{date}', formattedDate)
+        : `Lớp ${cls.class_name} chưa nộp báo cáo sĩ số ngày hôm nay (${formattedDate}). Thầy/Cô vui lòng cập nhật sớm để BGH tổng hợp toàn trường và không bị trừ điểm thi đua!`;
+
+      if (forceTriggerByBGH) {
+        reminderMsg = `🚨 Ban Giám Hiệu (${senderUser?.full_name || 'BGH'}) nhắc nhở: Lớp ${cls.class_name} chưa nộp báo cáo sĩ số ngày ${formattedDate}. Thầy/Cô vui lòng vào hệ thống và nộp báo cáo ngay!`;
+      }
+
+      const newNotif: AppNotification = {
+        id: `notif_remind_${cls.id}_${dateToCheck}_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        user_id: teacher.id,
+        class_id: cls.id,
+        class_name: cls.class_name,
+        type: forceTriggerByBGH ? 'BGH_ALERT' : 'ATTENDANCE_REMINDER',
+        title: forceTriggerByBGH
+          ? `🚨 BGH NHẮC NHỞ: Lớp ${cls.class_name} chưa báo cáo sĩ số`
+          : `⏰ Nhắc nhở tự động: Lớp ${cls.class_name} chưa báo cáo sĩ số`,
+        message: reminderMsg,
+        date: dateToCheck,
+        read: false,
+        action_url: `/attendance`,
+        created_at: new Date().toISOString(),
+        created_by_name: forceTriggerByBGH ? (senderUser?.full_name ? `BGH - ${senderUser.full_name}` : 'Ban Giám Hiệu') : 'Hệ thống tự động',
+        urgent: true,
+      };
+
+      await this.saveNotification(newNotif);
+      remindedClasses.push(cls.class_name);
+      sentCount++;
+    }
+
+    if (sentCount > 0) {
+      notifyRealtimeChange('notifications', { count: sentCount, targetDate: dateToCheck });
+    }
+
+    return { sentCount, remindedClasses, skippedClasses };
   },
 
   // --- Reset to Factory Default (Mặc định rỗng cấu hình mới) ---
