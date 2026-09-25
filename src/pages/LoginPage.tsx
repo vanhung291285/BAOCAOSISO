@@ -478,7 +478,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
               }}
               className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg text-xs font-bold transition-all ${
                 activeTab === 'GVCN'
-                  ? 'bg-white text-blue-700 shadow-sm border border-slate-200/80'
+                  ? 'bg-blue-50 text-blue-700 shadow-sm border border-blue-200'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
               }`}
             >
@@ -493,11 +493,11 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
               }}
               className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg text-xs font-bold transition-all ${
                 activeTab === 'ADMIN'
-                  ? 'bg-white text-purple-700 shadow-sm border border-slate-200/80'
+                  ? 'bg-orange-50 text-orange-700 shadow-sm border border-orange-200'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
               }`}
             >
-              <ShieldCheck className="w-3.5 h-3.5 text-purple-600" />
+              <ShieldCheck className="w-3.5 h-3.5 text-orange-600" />
               <span>BGH & QUẢN TRỊ</span>
             </button>
           </div>
