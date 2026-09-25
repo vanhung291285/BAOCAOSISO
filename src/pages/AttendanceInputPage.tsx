@@ -368,6 +368,20 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
     if (isLocked) return;
     const trimmedName = name.trim();
 
+    // Check if student exists in class and validate boarding status
+    const studentMatch = classStudents.find(
+      (s) => s.full_name.trim().toLowerCase() === trimmedName.toLowerCase()
+    );
+    if (studentMatch && studentMatch.isBoarding !== isBoarding) {
+      setToastMessage({
+        text: `Học sinh ${studentMatch.full_name} trong danh sách là học sinh ${
+          studentMatch.isBoarding ? 'Bán trú' : 'Ngoại trú'
+        }, vui lòng chọn đúng!`,
+        type: 'error',
+      });
+      return;
+    }
+
     setAbsentStudents((prev) => {
       const newLength = prev.length + 1;
 
@@ -449,6 +463,24 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
   // Update absent student row
   const handleUpdateAbsentStudent = (index: number, partial: Partial<AbsentStudent>) => {
     if (isLocked) return;
+
+    // Check if boarding status is being updated and validate against record
+    if (partial.isBoarding !== undefined) {
+      const student = absentStudents[index];
+      const studentMatch = classStudents.find(
+        (s) => s.full_name.trim().toLowerCase() === student.full_name.trim().toLowerCase()
+      );
+      if (studentMatch && studentMatch.isBoarding !== partial.isBoarding) {
+        setToastMessage({
+          text: `Học sinh ${studentMatch.full_name} trong danh sách là học sinh ${
+            studentMatch.isBoarding ? 'Bán trú' : 'Ngoại trú'
+          }, vui lòng chọn đúng!`,
+          type: 'error',
+        });
+        return;
+      }
+    }
+
     setAbsentStudents((prev) => {
       const nextList = [...prev];
       nextList[index] = { ...nextList[index], ...partial };
@@ -460,22 +492,44 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
   const isValid = useMemo(() => {
     if (!selectedClassId) return false;
     if (enabledIndicators.length === 0) return false;
+    
+    // Main indicator validation
     const mainId = enabledIndicators[0].id;
     const mainVal = formValues[mainId];
     if (!mainVal) return false;
     const total = Number(mainVal.total) || 0;
     const present = Number(mainVal.present) || 0;
     const absent = Number(mainVal.absent) || 0;
+    
     if (total <= 0) return false;
     if (present + absent !== total && inputMode !== 'MODE_3_ALL_THREE') {
       return false;
     }
+
+    // NEW: Absent list count validation
+    if (absent !== absentStudents.length) return false;
+
     return true;
-  }, [selectedClassId, enabledIndicators, formValues, inputMode]);
+  }, [selectedClassId, enabledIndicators, formValues, inputMode, absentStudents]);
 
   // Save report
   const handleSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
+    
+    // Check validation again to show specific error
+    const mainId = enabledIndicators[0]?.id;
+    if (mainId) {
+      const mainVal = formValues[mainId];
+      const absentReported = Number(mainVal?.absent) || 0;
+      if (absentReported !== absentStudents.length) {
+        setToastMessage({
+          text: `Số lượng vắng mặt báo cáo (${absentReported}) không khớp với danh sách học sinh vắng (${absentStudents.length}). Vui lòng kiểm tra lại!`,
+          type: 'error',
+        });
+        return;
+      }
+    }
+
     if (isLocked || !isValid || !currentUser || !selectedClassId) return;
 
     setIsSaving(true);
