@@ -30,6 +30,10 @@ function playNotificationChime() {
     if (!AudioContextClass) return;
     const ctx = new AudioContextClass();
 
+    if (ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
+    }
+
     const now = ctx.currentTime;
     // Pleasant two-tone chime (E5 -> A5)
     const osc1 = ctx.createOscillator();
@@ -54,7 +58,7 @@ function playNotificationChime() {
     osc2.start(now + 0.12);
     osc2.stop(now + 0.55);
   } catch (err) {
-    // Ignore audio autoplay restrictions
+    // Ignore audio autoplay restrictions or iframe policy
   }
 }
 
@@ -63,8 +67,14 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [loading, setLoading] = useState(true);
   const [browserPermission, setBrowserPermission] = useState<NotificationPermission | 'unsupported'>(() => {
-    if (typeof window !== 'undefined' && 'Notification' in window) {
-      return Notification.permission;
+    if (typeof window === 'undefined') return 'unsupported';
+    try {
+      if ('Notification' in window && typeof Notification !== 'undefined') {
+        return Notification.permission;
+      }
+    } catch (err) {
+      // In iframes or sandboxed documents, accessing Notification.permission throws DOMException
+      return 'unsupported';
     }
     return 'unsupported';
   });
@@ -86,22 +96,25 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     }
   }, [currentUser]);
 
-  // Request browser desktop notification permission
+  // Request browser desktop notification permission safely
   const requestBrowserPermission = async () => {
-    if (typeof window !== 'undefined' && 'Notification' in window) {
-      try {
+    if (typeof window === 'undefined') return;
+    try {
+      if ('Notification' in window && typeof Notification !== 'undefined' && typeof Notification.requestPermission === 'function') {
         const perm = await Notification.requestPermission();
         setBrowserPermission(perm);
-      } catch (err) {
-        console.error('Notification permission request error:', err);
       }
+    } catch (err) {
+      console.warn('Notification permission request error or restricted in iframe:', err);
+      setBrowserPermission('unsupported');
     }
   };
 
-  // Show desktop notification if permitted
+  // Show desktop notification if permitted safely
   const showDesktopNotification = (title: string, body: string, actionUrl?: string) => {
-    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
-      try {
+    if (typeof window === 'undefined') return;
+    try {
+      if ('Notification' in window && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
         const notif = new Notification(title, {
           body,
           icon: '/pwa-192x192.png',
@@ -114,9 +127,9 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
             window.location.hash = actionUrl;
           }
         };
-      } catch (err) {
-        console.error('Error showing desktop notification:', err);
       }
+    } catch (err) {
+      // Ignore desktop notification errors in iframe or restricted environment
     }
   };
 

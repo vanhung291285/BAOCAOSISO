@@ -64,35 +64,46 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
 
   const reloadUsers = async () => {
-    const users = await StorageService.getProfiles();
-    setAllUsers(users);
+    try {
+      const users = await StorageService.getProfiles();
+      setAllUsers(users);
 
-    let savedId = sessionStorage.getItem(CURRENT_USER_KEY) || localStorage.getItem(CURRENT_USER_KEY);
+      let savedId = sessionStorage.getItem(CURRENT_USER_KEY) || localStorage.getItem(CURRENT_USER_KEY);
 
-    if (savedId) {
-      const match = users.find((u) => u.id === savedId);
-      if (match) {
-        if (match.role === 'ADMIN' || match.role === 'BGH') {
-          const hasSessionId = sessionStorage.getItem(CURRENT_USER_KEY) === savedId;
-          const isRemembered = localStorage.getItem('sso_admin_remember_login') !== 'false';
-          if (!hasSessionId && !isRemembered) {
-            localStorage.removeItem(CURRENT_USER_KEY);
-            setCurrentUser(null);
-            return;
+      if (savedId) {
+        const match = users.find((u) => u.id === savedId);
+        if (match) {
+          if (match.role === 'ADMIN' || match.role === 'BGH') {
+            const hasSessionId = sessionStorage.getItem(CURRENT_USER_KEY) === savedId;
+            const isRemembered = localStorage.getItem('sso_admin_remember_login') !== 'false';
+            if (!hasSessionId && !isRemembered) {
+              localStorage.removeItem(CURRENT_USER_KEY);
+              setCurrentUser(null);
+              return;
+            }
           }
+          sessionStorage.setItem('sso_session_active', 'true');
+          sessionStorage.setItem(CURRENT_USER_KEY, match.id);
+          setCurrentUser(match);
+          return;
         }
-        sessionStorage.setItem('sso_session_active', 'true');
-        sessionStorage.setItem(CURRENT_USER_KEY, match.id);
-        setCurrentUser(match);
-        return;
       }
-    }
 
-    setCurrentUser(null);
+      setCurrentUser(null);
+    } catch (err) {
+      console.error('Error in reloadUsers:', err);
+      setCurrentUser(null);
+    }
   };
 
   useEffect(() => {
-    reloadUsers().finally(() => setLoading(false));
+    let mounted = true;
+    reloadUsers().finally(() => {
+      if (mounted) setLoading(false);
+    });
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   const login = async (email: string): Promise<boolean> => {

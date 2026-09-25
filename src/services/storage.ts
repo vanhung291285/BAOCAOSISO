@@ -626,6 +626,14 @@ export const StorageService = {
           column_header_override: 'Học sinh của lớp theo cấu hình',
         };
       }
+      const lower = `${g.name} ${g.code}`.toLowerCase();
+      if ((lower.includes('ngoại trú') || lower.includes('không ăn') || lower.includes('ngoai tru') || lower.includes('khong an')) && g.icon !== 'home') {
+        migrated = true;
+        return {
+          ...g,
+          icon: 'home',
+        };
+      }
       return g;
     });
 

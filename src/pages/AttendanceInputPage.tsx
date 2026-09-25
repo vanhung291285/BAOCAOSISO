@@ -19,6 +19,8 @@ import {
   ArrowLeft,
   Clock,
   Utensils,
+  Home,
+  Sparkles,
   ChevronDown,
   Check,
   FileText,
@@ -26,6 +28,7 @@ import {
   Info,
   ShieldCheck,
 } from 'lucide-react';
+import { getIndicatorMeta } from '../utils/indicatorIcons';
 
 interface AttendanceInputPageProps {
   initialClassId?: string;
@@ -104,7 +107,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null);
 
   // Form values: groupId -> { total, present, absent }
-  const [formValues, setFormValues] = useState<Record<string, { total: number; present: number; absent: number }>>({});
+  const [formValues, setFormValues] = useState<Record<string, { total: number | ''; present: number | ''; absent: number | '' }>>({});
   const [absentStudents, setAbsentStudents] = useState<AbsentStudent[]>([]);
   const [notes, setNotes] = useState<string>('');
   const [showResetConfirm, setShowResetConfirm] = useState<boolean>(false);
@@ -143,7 +146,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
         setNotes(report.notes || '');
         setAbsentStudents(report.absent_students || []);
 
-        const newVals: Record<string, { total: number; present: number; absent: number }> = {};
+        const newVals: Record<string, { total: number | ''; present: number | ''; absent: number | '' }> = {};
         values.forEach((v) => {
           newVals[v.indicator_group_id] = {
             total: v.total_count,
@@ -165,7 +168,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
         setNotes('');
         setAbsentStudents([]);
 
-        const newVals: Record<string, { total: number; present: number; absent: number }> = {};
+        const newVals: Record<string, { total: number | ''; present: number | ''; absent: number | '' }> = {};
         const enrolledCount = classStudents.length;
 
         // Try getting enrollment from latest class report or fallback to enrolled students
@@ -216,61 +219,107 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
   const handleValueChange = (
     groupId: string,
     field: 'total' | 'present' | 'absent',
-    val: number
+    val: number | ''
   ) => {
     if (isLocked) return;
-    const safeVal = Math.max(0, isNaN(val) ? 0 : val);
 
     setFormValues((prev) => {
       const cur = prev[groupId] || { total: 0, present: 0, absent: 0 };
-      let updated = { ...cur, [field]: safeVal };
+      const curTotal = cur.total === '' ? 0 : Number(cur.total);
+      const curPresent = cur.present === '' ? 0 : Number(cur.present);
+      const curAbsent = cur.absent === '' ? 0 : Number(cur.absent);
+
+      if (val === '') {
+        let updated: { total: number | ''; present: number | ''; absent: number | '' } = { ...cur, [field]: '' };
+        if (inputMode === 'MODE_2_TOTAL_ABSENT') {
+          if (field === 'total') {
+            updated = { total: '', absent: cur.absent, present: '' };
+          } else if (field === 'absent') {
+            // User cleared absent: present becomes equal to total (if total is entered)
+            updated = {
+              total: cur.total,
+              absent: '',
+              present: cur.total === '' ? '' : curTotal,
+            };
+          } else if (field === 'present') {
+            updated = {
+              total: cur.total,
+              present: '',
+              absent: cur.total === '' ? '' : curTotal,
+            };
+          }
+        } else if (inputMode === 'MODE_1_TOTAL_PRESENT') {
+          if (field === 'total') {
+            updated = { total: '', present: cur.present, absent: '' };
+          } else if (field === 'present') {
+            updated = {
+              total: cur.total,
+              present: '',
+              absent: cur.total === '' ? '' : curTotal,
+            };
+          } else if (field === 'absent') {
+            updated = {
+              total: cur.total,
+              absent: '',
+              present: cur.total === '' ? '' : curTotal,
+            };
+          }
+        }
+        return {
+          ...prev,
+          [groupId]: updated,
+        };
+      }
+
+      const safeVal = Math.max(0, isNaN(Number(val)) ? 0 : Number(val));
+      let updated: { total: number | ''; present: number | ''; absent: number | '' } = { ...cur, [field]: safeVal };
 
       if (inputMode === 'MODE_2_TOTAL_ABSENT') {
         // User inputs Total & Absent -> Present is auto-calculated
         if (field === 'total') {
-          const newAbsent = Math.min(cur.absent, safeVal);
+          const newAbsent = Math.min(curAbsent, safeVal);
           updated = {
             total: safeVal,
-            absent: newAbsent,
+            absent: cur.absent === '' ? '' : newAbsent,
             present: Math.max(0, safeVal - newAbsent),
           };
         } else if (field === 'absent') {
-          const safeAbsent = Math.min(safeVal, cur.total);
+          const safeAbsent = Math.min(safeVal, curTotal);
           updated = {
             total: cur.total,
             absent: safeAbsent,
-            present: Math.max(0, cur.total - safeAbsent),
+            present: Math.max(0, curTotal - safeAbsent),
           };
         } else if (field === 'present') {
-          const safePresent = Math.min(safeVal, cur.total);
+          const safePresent = Math.min(safeVal, curTotal);
           updated = {
             total: cur.total,
             present: safePresent,
-            absent: Math.max(0, cur.total - safePresent),
+            absent: Math.max(0, curTotal - safePresent),
           };
         }
       } else if (inputMode === 'MODE_1_TOTAL_PRESENT') {
         // User inputs Total & Present -> Absent is auto-calculated
         if (field === 'total') {
-          const newPresent = Math.min(cur.present, safeVal);
+          const newPresent = Math.min(curPresent, safeVal);
           updated = {
             total: safeVal,
-            present: newPresent,
+            present: cur.present === '' ? '' : newPresent,
             absent: Math.max(0, safeVal - newPresent),
           };
         } else if (field === 'present') {
-          const safePresent = Math.min(safeVal, cur.total);
+          const safePresent = Math.min(safeVal, curTotal);
           updated = {
             total: cur.total,
             present: safePresent,
-            absent: Math.max(0, cur.total - safePresent),
+            absent: Math.max(0, curTotal - safePresent),
           };
         } else if (field === 'absent') {
-          const safeAbsent = Math.min(safeVal, cur.total);
+          const safeAbsent = Math.min(safeVal, curTotal);
           updated = {
             total: cur.total,
             absent: safeAbsent,
-            present: Math.max(0, cur.total - safeAbsent),
+            present: Math.max(0, curTotal - safeAbsent),
           };
         }
       } else {
@@ -352,8 +401,9 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
         setFormValues((prevVals) => {
           const cur = prevVals[mainId] || { total: 0, present: 0, absent: 0 };
           const total = typeof cur.total === 'number' ? cur.total : 0;
+          const curAbsent = typeof cur.absent === 'number' ? cur.absent : 0;
           // Set absent to match new list length if absent was previously derived from list
-          const newAbsent = Math.min(cur.absent, Math.max(0, nextList.length));
+          const newAbsent = Math.min(curAbsent, Math.max(0, nextList.length));
           const newPresent = Math.max(0, total - newAbsent);
 
           return {
@@ -389,8 +439,11 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
     const mainId = enabledIndicators[0].id;
     const mainVal = formValues[mainId];
     if (!mainVal) return false;
-    if (mainVal.total <= 0) return false;
-    if (mainVal.present + mainVal.absent !== mainVal.total && inputMode !== 'MODE_3_ALL_THREE') {
+    const total = Number(mainVal.total) || 0;
+    const present = Number(mainVal.present) || 0;
+    const absent = Number(mainVal.absent) || 0;
+    if (total <= 0) return false;
+    if (present + absent !== total && inputMode !== 'MODE_3_ALL_THREE') {
       return false;
     }
     return true;
@@ -403,11 +456,20 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
 
     setIsSaving(true);
     try {
+      const cleanedValues: Record<string, { total: number; present: number; absent: number }> = {};
+      Object.entries(formValues).forEach(([k, v]) => {
+        cleanedValues[k] = {
+          total: Number(v.total) || 0,
+          present: Number(v.present) || 0,
+          absent: Number(v.absent) || 0,
+        };
+      });
+
       await StorageService.saveDailyReport(
         selectedClassId,
         selectedDate,
         currentUser,
-        formValues,
+        cleanedValues,
         notes,
         absentStudents
       );
@@ -636,8 +698,13 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
       <div className="space-y-4 mb-5">
         {enabledIndicators.map((indicator, idx) => {
           const isPrimary = idx === 0;
+          const meta = getIndicatorMeta(indicator, isPrimary);
+          const IndicatorIcon = meta.Icon;
           const vals = formValues[indicator.id] || { total: 0, present: 0, absent: 0 };
-          const presentRate = vals.total > 0 ? Math.round((vals.present / vals.total) * 100) : 0;
+          const totalNum = Number(vals.total) || 0;
+          const presentNum = Number(vals.present) || 0;
+          const absentNum = Number(vals.absent) || 0;
+          const presentRate = totalNum > 0 ? Math.round((presentNum / totalNum) * 100) : 0;
 
           return (
             <div
@@ -645,6 +712,8 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
               className={`bg-white rounded-2xl border transition-all ${
                 isPrimary
                   ? 'border-blue-200/80 shadow-xs ring-1 ring-blue-500/10'
+                  : meta.isNgoaiTru
+                  ? 'border-amber-200/80 shadow-xs'
                   : 'border-slate-200/80 shadow-xs'
               } p-4 sm:p-6`}
             >
@@ -652,13 +721,9 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4 pb-3 border-b border-slate-100">
                 <div className="flex items-center gap-2.5">
                   <div
-                    className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-sm ${
-                      isPrimary
-                        ? 'bg-blue-600 text-white shadow-xs'
-                        : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                    }`}
+                    className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-sm ${meta.badgeClass}`}
                   >
-                    {isPrimary ? <Users className="w-5 h-5" /> : <Utensils className="w-5 h-5" />}
+                    <IndicatorIcon className="w-5 h-5" />
                   </div>
                   <div>
                     <h2 className="text-base sm:text-lg font-bold text-slate-900 flex items-center gap-2">
@@ -668,17 +733,20 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                           Chỉ tiêu chính
                         </span>
                       )}
+                      {meta.isNgoaiTru && (
+                        <span className="text-[11px] font-semibold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full border border-amber-300">
+                          Ngoại trú
+                        </span>
+                      )}
                     </h2>
                     <p className="text-xs text-slate-500">
-                      {isPrimary
-                        ? 'Tổng sĩ số học sinh hiện diện và vắng mặt của toàn lớp'
-                        : 'Theo dõi sĩ số phục vụ ăn uống bán trú / nội trú hằng ngày'}
+                      {meta.description}
                     </p>
                   </div>
                 </div>
 
                 {/* Quick Percentage Progress */}
-                {vals.total > 0 && (
+                {totalNum > 0 && (
                   <div className="flex items-center gap-2 self-start sm:self-auto bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200/60">
                     <span className="text-xs font-medium text-slate-500">Tỷ lệ duy trì:</span>
                     <span
@@ -710,7 +778,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                     {!isLocked && (
                       <button
                         type="button"
-                        onClick={() => handleValueChange(indicator.id, 'total', vals.total - 1)}
+                        onClick={() => handleValueChange(indicator.id, 'total', Math.max(0, totalNum - 1))}
                         className="w-9 h-9 flex items-center justify-center rounded-lg bg-white border border-slate-200 text-slate-700 font-bold text-base hover:bg-slate-100 active:scale-95 transition-all shadow-2xs"
                       >
                         -
@@ -720,14 +788,29 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                       type="number"
                       min="0"
                       disabled={isLocked}
-                      value={vals.total}
-                      onChange={(e) => handleValueChange(indicator.id, 'total', parseInt(e.target.value) || 0)}
+                      placeholder="0"
+                      value={vals.total === '' ? '' : vals.total}
+                      onFocus={(e) => e.target.select()}
+                      onBlur={() => {
+                        if (vals.total === '') {
+                          handleValueChange(indicator.id, 'total', 0);
+                        }
+                      }}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === '') {
+                          handleValueChange(indicator.id, 'total', '');
+                        } else {
+                          const parsed = parseInt(val, 10);
+                          handleValueChange(indicator.id, 'total', isNaN(parsed) ? '' : parsed);
+                        }
+                      }}
                       className="flex-1 bg-white border border-slate-200 rounded-lg py-1.5 px-3 text-center text-lg font-black text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-inner"
                     />
                     {!isLocked && (
                       <button
                         type="button"
-                        onClick={() => handleValueChange(indicator.id, 'total', vals.total + 1)}
+                        onClick={() => handleValueChange(indicator.id, 'total', totalNum + 1)}
                         className="w-9 h-9 flex items-center justify-center rounded-lg bg-white border border-slate-200 text-slate-700 font-bold text-base hover:bg-slate-100 active:scale-95 transition-all shadow-2xs"
                       >
                         +
@@ -751,7 +834,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                     {!isLocked && inputMode !== 'MODE_2_TOTAL_ABSENT' && (
                       <button
                         type="button"
-                        onClick={() => handleValueChange(indicator.id, 'present', vals.present - 1)}
+                        onClick={() => handleValueChange(indicator.id, 'present', Math.max(0, presentNum - 1))}
                         className="w-9 h-9 flex items-center justify-center rounded-lg bg-white border border-emerald-200 text-emerald-800 font-bold text-base hover:bg-emerald-50 active:scale-95 transition-all shadow-2xs"
                       >
                         -
@@ -760,10 +843,25 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                     <input
                       type="number"
                       min="0"
-                      max={vals.total}
+                      max={totalNum > 0 ? totalNum : undefined}
                       disabled={isLocked || inputMode === 'MODE_2_TOTAL_ABSENT'}
-                      value={vals.present}
-                      onChange={(e) => handleValueChange(indicator.id, 'present', parseInt(e.target.value) || 0)}
+                      placeholder="0"
+                      value={vals.present === '' ? '' : vals.present}
+                      onFocus={(e) => e.target.select()}
+                      onBlur={() => {
+                        if (vals.present === '') {
+                          handleValueChange(indicator.id, 'present', 0);
+                        }
+                      }}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === '') {
+                          handleValueChange(indicator.id, 'present', '');
+                        } else {
+                          const parsed = parseInt(val, 10);
+                          handleValueChange(indicator.id, 'present', isNaN(parsed) ? '' : parsed);
+                        }
+                      }}
                       className={`flex-1 bg-white border border-emerald-200 rounded-lg py-1.5 px-3 text-center text-lg font-black text-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-inner ${
                         inputMode === 'MODE_2_TOTAL_ABSENT' ? 'bg-emerald-50/30' : ''
                       }`}
@@ -771,7 +869,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                     {!isLocked && inputMode !== 'MODE_2_TOTAL_ABSENT' && (
                       <button
                         type="button"
-                        onClick={() => handleValueChange(indicator.id, 'present', vals.present + 1)}
+                        onClick={() => handleValueChange(indicator.id, 'present', totalNum > 0 ? Math.min(totalNum, presentNum + 1) : presentNum + 1)}
                         className="w-9 h-9 flex items-center justify-center rounded-lg bg-white border border-emerald-200 text-emerald-800 font-bold text-base hover:bg-emerald-50 active:scale-95 transition-all shadow-2xs"
                       >
                         +
@@ -795,7 +893,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                     {!isLocked && inputMode !== 'MODE_1_TOTAL_PRESENT' && (
                       <button
                         type="button"
-                        onClick={() => handleValueChange(indicator.id, 'absent', vals.absent - 1)}
+                        onClick={() => handleValueChange(indicator.id, 'absent', Math.max(0, absentNum - 1))}
                         className="w-9 h-9 flex items-center justify-center rounded-lg bg-white border border-rose-200 text-rose-800 font-bold text-base hover:bg-rose-50 active:scale-95 transition-all shadow-2xs"
                       >
                         -
@@ -804,10 +902,25 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                     <input
                       type="number"
                       min="0"
-                      max={vals.total}
+                      max={totalNum > 0 ? totalNum : undefined}
                       disabled={isLocked || inputMode === 'MODE_1_TOTAL_PRESENT'}
-                      value={vals.absent}
-                      onChange={(e) => handleValueChange(indicator.id, 'absent', parseInt(e.target.value) || 0)}
+                      placeholder="0"
+                      value={vals.absent === '' ? '' : vals.absent}
+                      onFocus={(e) => e.target.select()}
+                      onBlur={() => {
+                        if (vals.absent === '') {
+                          handleValueChange(indicator.id, 'absent', 0);
+                        }
+                      }}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === '') {
+                          handleValueChange(indicator.id, 'absent', '');
+                        } else {
+                          const parsed = parseInt(val, 10);
+                          handleValueChange(indicator.id, 'absent', isNaN(parsed) ? '' : parsed);
+                        }
+                      }}
                       className={`flex-1 bg-white border border-rose-200 rounded-lg py-1.5 px-3 text-center text-lg font-black text-rose-700 focus:outline-none focus:ring-2 focus:ring-rose-500 shadow-inner ${
                         inputMode === 'MODE_1_TOTAL_PRESENT' ? 'bg-rose-50/30' : ''
                       }`}
@@ -815,7 +928,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                     {!isLocked && inputMode !== 'MODE_1_TOTAL_PRESENT' && (
                       <button
                         type="button"
-                        onClick={() => handleValueChange(indicator.id, 'absent', vals.absent + 1)}
+                        onClick={() => handleValueChange(indicator.id, 'absent', totalNum > 0 ? Math.min(totalNum, absentNum + 1) : absentNum + 1)}
                         className="w-9 h-9 flex items-center justify-center rounded-lg bg-white border border-rose-200 text-rose-800 font-bold text-base hover:bg-rose-50 active:scale-95 transition-all shadow-2xs"
                       >
                         +
@@ -828,6 +941,87 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
           );
         })}
       </div>
+
+      {/* Đối chiếu phân loại Sĩ số: Báo ăn (Bán trú) & Không ăn (Ngoại trú) chuẩn theo mẫu báo cáo */}
+      {(() => {
+        const primaryInd = enabledIndicators[0];
+        const boardingInd = enabledIndicators.find(
+          (i) => i.code === 'BOARDING_HALF' || i.id === 'ig_boarding_half' || i.name.toLowerCase().includes('bán trú')
+        );
+        const hasExplicitNgoaiTru = enabledIndicators.some(
+          (i) => i.name.toLowerCase().includes('ngoại trú') || i.name.toLowerCase().includes('không ăn')
+        );
+
+        if (!primaryInd || !boardingInd || hasExplicitNgoaiTru) return null;
+
+        const pTotal = Number(formValues[primaryInd.id]?.total) || 0;
+        const pAbsent = Number(formValues[primaryInd.id]?.absent) || 0;
+        const bTotal = Number(formValues[boardingInd.id]?.total) || 0;
+        const bAbsent = Number(formValues[boardingInd.id]?.absent) || 0;
+
+        const baoAn = Math.max(0, bTotal - bAbsent);
+        const ngoaiTruTotal = Math.max(0, pTotal - bTotal);
+        const ngoaiTruAbsent = Math.max(0, pAbsent - bAbsent);
+        const ngoaiTruPresent = Math.max(0, ngoaiTruTotal - ngoaiTruAbsent);
+
+        if (pTotal === 0 && bTotal === 0) return null;
+
+        return (
+          <div className="bg-gradient-to-r from-emerald-50/70 via-white to-amber-50/70 rounded-2xl border border-slate-200/80 p-4 mb-5 shadow-2xs">
+            <div className="flex items-center justify-between pb-2.5 mb-3 border-b border-slate-200/60">
+              <span className="text-xs font-black text-slate-800 uppercase tracking-tight flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+                Đối chiếu phân loại theo mẫu báo cáo BGH
+              </span>
+              <span className="text-[11px] text-slate-500 font-medium">Tự động tổng hợp</span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* Học sinh bán trú (Báo ăn) */}
+              <div className="bg-white/95 p-3 rounded-xl border border-emerald-200 shadow-2xs flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center justify-center font-bold">
+                    <Utensils className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-slate-800">HS bán trú (Báo ăn trưa)</div>
+                    <div className="text-[11px] text-slate-500">
+                      Tổng {bTotal} • Vắng {bAbsent}
+                    </div>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-base font-black text-emerald-700">{baoAn} suất</div>
+                  <div className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                    Báo ăn nhà bếp
+                  </div>
+                </div>
+              </div>
+
+              {/* Học sinh ngoại trú (Không ăn) - Biểu tượng Ngôi nhà phù hợp */}
+              <div className="bg-white/95 p-3 rounded-xl border border-amber-200 shadow-2xs flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-700 border border-amber-200 flex items-center justify-center font-bold">
+                    <Home className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-slate-800">HS ngoại trú (Không ăn tại trường)</div>
+                    <div className="text-[11px] text-slate-500">
+                      Có mặt {ngoaiTruPresent} • Vắng {ngoaiTruAbsent}
+                    </div>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-base font-black text-amber-800">{ngoaiTruTotal} em</div>
+                  <div className="text-[10px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                    Trưa về nhà
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Absent Students Card */}
       <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-4 sm:p-6 mb-5">
@@ -1063,10 +1257,10 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
             <span className={mainAbsent > 0 ? 'text-rose-600 font-bold' : 'text-emerald-600 font-medium'}>
               Vắng: {mainAbsent}
             </span>
-            {boardingVal && boardingVal.present > 0 && (
+            {boardingVal && Number(boardingVal.present) > 0 && (
               <>
                 <span className="text-slate-400">•</span>
-                <span className="text-amber-700 font-medium">{boardingVal.present} suất ăn</span>
+                <span className="text-amber-700 font-medium">{Number(boardingVal.present)} suất ăn</span>
               </>
             )}
           </div>

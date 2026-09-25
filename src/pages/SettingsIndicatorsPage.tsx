@@ -15,7 +15,11 @@ import {
   Save,
   X,
   Sparkles,
+  Home,
+  Utensils,
+  Users,
 } from 'lucide-react';
+import { getIndicatorMeta, INDICATOR_ICON_OPTIONS } from '../utils/indicatorIcons';
 
 export const SettingsIndicatorsPage: React.FC = () => {
   const { indicators, addIndicator, updateIndicator, deleteIndicator } = useSchool();
@@ -31,6 +35,7 @@ export const SettingsIndicatorsPage: React.FC = () => {
   const [formShowAbsent, setFormShowAbsent] = useState(true);
   const [formShowPercentage, setFormShowPercentage] = useState(true);
   const [formSortOrder, setFormSortOrder] = useState(1);
+  const [formIcon, setFormIcon] = useState('home');
 
   const handleOpenEdit = (ig: IndicatorGroup) => {
     setEditingItem(ig);
@@ -42,6 +47,8 @@ export const SettingsIndicatorsPage: React.FC = () => {
     setFormShowAbsent(ig.show_absent);
     setFormShowPercentage(ig.show_percentage);
     setFormSortOrder(ig.sort_order);
+    const meta = getIndicatorMeta(ig, ig.sort_order === 1);
+    setFormIcon(ig.icon || meta.typeKey);
     setIsCreating(false);
   };
 
@@ -55,6 +62,7 @@ export const SettingsIndicatorsPage: React.FC = () => {
     setFormShowAbsent(true);
     setFormShowPercentage(true);
     setFormSortOrder(indicators.length + 1);
+    setFormIcon('home');
     setIsCreating(true);
   };
 
@@ -77,6 +85,7 @@ export const SettingsIndicatorsPage: React.FC = () => {
         show_absent: formShowAbsent,
         show_percentage: formShowPercentage,
         sort_order: Number(formSortOrder),
+        icon: formIcon || undefined,
       });
     } else if (editingItem) {
       await updateIndicator(editingItem.id, {
@@ -88,6 +97,7 @@ export const SettingsIndicatorsPage: React.FC = () => {
         show_absent: formShowAbsent,
         show_percentage: formShowPercentage,
         sort_order: Number(formSortOrder),
+        icon: formIcon || undefined,
       });
     }
 
@@ -121,37 +131,48 @@ export const SettingsIndicatorsPage: React.FC = () => {
 
       {/* Indicators List */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {indicators.map((ig) => (
-          <div
-            key={ig.id}
-            className={`bg-white rounded-2xl p-5 border transition-all ${
-              ig.enabled ? 'border-slate-200 shadow-xs' : 'border-slate-200 bg-slate-50/60 opacity-60'
-            }`}
-          >
-            <div className="flex items-start justify-between">
-              <div className="flex items-center gap-2">
-                <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold text-xs ${
-                  ig.enabled ? 'bg-blue-100 text-blue-800' : 'bg-slate-200 text-slate-500'
-                }`}>
-                  #{ig.sort_order}
-                </div>
-                <div>
-                  <h3 className="font-black text-sm text-slate-900">{ig.name}</h3>
-                  <span className="font-mono text-[10px] text-slate-400">Mã: {ig.code}</span>
-                </div>
-              </div>
+        {indicators.map((ig, index) => {
+          const meta = getIndicatorMeta(ig, index === 0);
+          const IndicatorIcon = meta.Icon;
 
-              <button
-                type="button"
-                onClick={() => handleToggleEnabled(ig)}
-                className={`p-1 rounded-lg transition-colors ${
-                  ig.enabled ? 'text-emerald-600 hover:bg-emerald-50' : 'text-slate-400 hover:bg-slate-100'
-                }`}
-                title={ig.enabled ? 'Đang bật - Nhấn để tắt' : 'Đang tắt - Nhấn để bật'}
-              >
-                {ig.enabled ? <ToggleRight className="w-6 h-6" /> : <ToggleLeft className="w-6 h-6" />}
-              </button>
-            </div>
+          return (
+            <div
+              key={ig.id}
+              className={`bg-white rounded-2xl p-5 border transition-all ${
+                ig.enabled ? 'border-slate-200 shadow-xs' : 'border-slate-200 bg-slate-50/60 opacity-60'
+              }`}
+            >
+              <div className="flex items-start justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div
+                    className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-sm ${meta.badgeClass}`}
+                  >
+                    <IndicatorIcon className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="font-black text-sm text-slate-900 flex items-center gap-1.5">
+                      {ig.name}
+                      {meta.isNgoaiTru && (
+                        <span className="text-[10px] font-bold text-amber-800 bg-amber-100 px-1.5 py-0.5 rounded border border-amber-300">
+                          Ngoại trú
+                        </span>
+                      )}
+                    </h3>
+                    <span className="font-mono text-[10px] text-slate-400">Mã: {ig.code} • #{ig.sort_order}</span>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => handleToggleEnabled(ig)}
+                  className={`p-1 rounded-lg transition-colors ${
+                    ig.enabled ? 'text-emerald-600 hover:bg-emerald-50' : 'text-slate-400 hover:bg-slate-100'
+                  }`}
+                  title={ig.enabled ? 'Đang bật - Nhấn để tắt' : 'Đang tắt - Nhấn để bật'}
+                >
+                  {ig.enabled ? <ToggleRight className="w-6 h-6" /> : <ToggleLeft className="w-6 h-6" />}
+                </button>
+              </div>
 
             <div className="mt-4 pt-3 border-t border-slate-100 text-xs space-y-1.5 text-slate-600">
               <div className="flex justify-between">
@@ -211,8 +232,9 @@ export const SettingsIndicatorsPage: React.FC = () => {
               </div>
             </div>
           </div>
-        ))}
-      </div>
+        );
+      })}
+    </div>
 
       {/* Modal edit/create */}
       {(isCreating || editingItem) && (
@@ -270,7 +292,16 @@ export const SettingsIndicatorsPage: React.FC = () => {
                   <input
                     type="number"
                     value={formSortOrder}
-                    onChange={(e) => setFormSortOrder(Number(e.target.value))}
+                    onFocus={(e) => e.target.select()}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setFormSortOrder(val === '' ? ('' as any) : Number(val));
+                    }}
+                    onBlur={() => {
+                      if (formSortOrder === ('' as any)) {
+                        setFormSortOrder(0);
+                      }
+                    }}
                     className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
@@ -287,6 +318,44 @@ export const SettingsIndicatorsPage: React.FC = () => {
                   placeholder="Học sinh bán trú"
                   className="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500"
                 />
+              </div>
+
+              {/* Chọn Biểu tượng đại diện */}
+              <div>
+                <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Biểu tượng đại diện (Icon)
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {INDICATOR_ICON_OPTIONS.map((opt) => {
+                    const isSelected = formIcon === opt.id;
+                    const OptIcon = opt.Icon;
+
+                    return (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => setFormIcon(opt.id)}
+                        className={`p-2 rounded-xl border text-left transition-all flex items-center gap-2 ${
+                          isSelected
+                            ? 'bg-blue-50 border-blue-500 ring-2 ring-blue-500/20 shadow-2xs'
+                            : 'bg-white border-slate-200 hover:bg-slate-50'
+                        }`}
+                      >
+                        <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${opt.colorClass}`}>
+                          <OptIcon className="w-3.5 h-3.5" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className={`text-xs font-bold truncate ${isSelected ? 'text-blue-900' : 'text-slate-800'}`}>
+                            {opt.shortLabel}
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-[11px] text-slate-500 mt-1">
+                  Khuyên dùng: Chọn <strong>Ngôi nhà</strong> cho "HS ngoại trú không ăn", <strong>Dao thìa nĩa</strong> cho "HS bán trú", <strong>Nhóm học sinh</strong> cho "Cả lớp".
+                </p>
               </div>
 
               <div className="pt-2 border-t border-slate-100 space-y-2">

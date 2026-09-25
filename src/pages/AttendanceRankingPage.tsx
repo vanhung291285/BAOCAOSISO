@@ -2034,7 +2034,16 @@ export const AttendanceRankingPage: React.FC<AttendanceRankingPageProps> = ({ on
                         max={100}
                         step={0.1}
                         value={configThresholdExcellent}
-                        onChange={(e) => setConfigThresholdExcellent(parseFloat(e.target.value) || 0)}
+                        onFocus={(e) => e.target.select()}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setConfigThresholdExcellent(val === '' ? ('' as any) : parseFloat(val));
+                        }}
+                        onBlur={() => {
+                          if (configThresholdExcellent === ('' as any)) {
+                            setConfigThresholdExcellent(98);
+                          }
+                        }}
                         className="w-16 px-2 py-1 text-xs font-black text-center border border-emerald-300 rounded-lg bg-white"
                       />
                       <span className="font-bold text-slate-600">%</span>
@@ -2053,7 +2062,16 @@ export const AttendanceRankingPage: React.FC<AttendanceRankingPageProps> = ({ on
                         max={100}
                         step={0.1}
                         value={configThresholdGood}
-                        onChange={(e) => setConfigThresholdGood(parseFloat(e.target.value) || 0)}
+                        onFocus={(e) => e.target.select()}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setConfigThresholdGood(val === '' ? ('' as any) : parseFloat(val));
+                        }}
+                        onBlur={() => {
+                          if (configThresholdGood === ('' as any)) {
+                            setConfigThresholdGood(95);
+                          }
+                        }}
                         className="w-16 px-2 py-1 text-xs font-black text-center border border-blue-300 rounded-lg bg-white"
                       />
                       <span className="font-bold text-slate-600">%</span>
@@ -2072,7 +2090,16 @@ export const AttendanceRankingPage: React.FC<AttendanceRankingPageProps> = ({ on
                         max={100}
                         step={0.1}
                         value={configThresholdFair}
-                        onChange={(e) => setConfigThresholdFair(parseFloat(e.target.value) || 0)}
+                        onFocus={(e) => e.target.select()}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setConfigThresholdFair(val === '' ? ('' as any) : parseFloat(val));
+                        }}
+                        onBlur={() => {
+                          if (configThresholdFair === ('' as any)) {
+                            setConfigThresholdFair(90);
+                          }
+                        }}
                         className="w-16 px-2 py-1 text-xs font-black text-center border border-amber-300 rounded-lg bg-white"
                       />
                       <span className="font-bold text-slate-600">%</span>
@@ -2131,7 +2158,16 @@ export const AttendanceRankingPage: React.FC<AttendanceRankingPageProps> = ({ on
                             max={10}
                             step={0.1}
                             value={configEarlyBonusPoints}
-                            onChange={(e) => setConfigEarlyBonusPoints(parseFloat(e.target.value) || 0)}
+                            onFocus={(e) => e.target.select()}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setConfigEarlyBonusPoints(val === '' ? ('' as any) : parseFloat(val));
+                            }}
+                            onBlur={() => {
+                              if (configEarlyBonusPoints === ('' as any)) {
+                                setConfigEarlyBonusPoints(0.5);
+                              }
+                            }}
                             className="w-full px-2.5 py-1.5 text-xs font-black border border-amber-300 rounded-lg bg-white"
                           />
                           <span className="text-xs font-bold text-amber-900">đ/ngày</span>
@@ -2150,7 +2186,16 @@ export const AttendanceRankingPage: React.FC<AttendanceRankingPageProps> = ({ on
                             max={20}
                             step={0.1}
                             value={configEarlyMaxBonus}
-                            onChange={(e) => setConfigEarlyMaxBonus(parseFloat(e.target.value) || 0)}
+                            onFocus={(e) => e.target.select()}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setConfigEarlyMaxBonus(val === '' ? ('' as any) : parseFloat(val));
+                            }}
+                            onBlur={() => {
+                              if (configEarlyMaxBonus === ('' as any)) {
+                                setConfigEarlyMaxBonus(2.5);
+                              }
+                            }}
                             className="w-full px-2.5 py-1.5 text-xs font-black border border-amber-300 rounded-lg bg-white"
                           />
                           <span className="text-xs font-bold text-amber-900">đ/tuần</span>

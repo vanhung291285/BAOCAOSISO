@@ -650,7 +650,16 @@ export const SettingsSchoolPage: React.FC = () => {
                       max={100}
                       step={0.1}
                       value={formData.ranking_threshold_excellent ?? 98}
-                      onChange={(e) => setFormData({ ...formData, ranking_threshold_excellent: parseFloat(e.target.value) || 0 })}
+                      onFocus={(e) => e.target.select()}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setFormData({ ...formData, ranking_threshold_excellent: val === '' ? ('' as any) : parseFloat(val) });
+                      }}
+                      onBlur={() => {
+                        if (formData.ranking_threshold_excellent === ('' as any)) {
+                          setFormData({ ...formData, ranking_threshold_excellent: 98 });
+                        }
+                      }}
                       className="w-20 px-2 py-1 text-sm font-black text-emerald-800 border border-emerald-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
                     />
                     <span className="text-xs font-bold text-slate-600">%</span>
@@ -670,7 +679,16 @@ export const SettingsSchoolPage: React.FC = () => {
                       max={100}
                       step={0.1}
                       value={formData.ranking_threshold_good ?? 95}
-                      onChange={(e) => setFormData({ ...formData, ranking_threshold_good: parseFloat(e.target.value) || 0 })}
+                      onFocus={(e) => e.target.select()}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setFormData({ ...formData, ranking_threshold_good: val === '' ? ('' as any) : parseFloat(val) });
+                      }}
+                      onBlur={() => {
+                        if (formData.ranking_threshold_good === ('' as any)) {
+                          setFormData({ ...formData, ranking_threshold_good: 95 });
+                        }
+                      }}
                       className="w-20 px-2 py-1 text-sm font-black text-blue-800 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                     />
                     <span className="text-xs font-bold text-slate-600">%</span>
@@ -690,7 +708,16 @@ export const SettingsSchoolPage: React.FC = () => {
                       max={100}
                       step={0.1}
                       value={formData.ranking_threshold_fair ?? 90}
-                      onChange={(e) => setFormData({ ...formData, ranking_threshold_fair: parseFloat(e.target.value) || 0 })}
+                      onFocus={(e) => e.target.select()}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setFormData({ ...formData, ranking_threshold_fair: val === '' ? ('' as any) : parseFloat(val) });
+                      }}
+                      onBlur={() => {
+                        if (formData.ranking_threshold_fair === ('' as any)) {
+                          setFormData({ ...formData, ranking_threshold_fair: 90 });
+                        }
+                      }}
                       className="w-20 px-2 py-1 text-sm font-black text-amber-800 border border-amber-300 rounded-lg focus:ring-2 focus:ring-amber-500"
                     />
                     <span className="text-xs font-bold text-slate-600">%</span>
@@ -744,7 +771,16 @@ export const SettingsSchoolPage: React.FC = () => {
                         max={10}
                         step={0.1}
                         value={formData.early_report_bonus_points ?? 0.5}
-                        onChange={(e) => setFormData({ ...formData, early_report_bonus_points: parseFloat(e.target.value) || 0 })}
+                        onFocus={(e) => e.target.select()}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setFormData({ ...formData, early_report_bonus_points: val === '' ? ('' as any) : parseFloat(val) });
+                        }}
+                        onBlur={() => {
+                          if (formData.early_report_bonus_points === ('' as any)) {
+                            setFormData({ ...formData, early_report_bonus_points: 0.5 });
+                          }
+                        }}
                         className="w-full px-2.5 py-1.5 text-xs font-black border border-amber-300 rounded-lg bg-white text-slate-800 focus:ring-2 focus:ring-amber-500"
                       />
                       <span className="text-xs font-bold text-amber-900">đ/ngày</span>
@@ -763,7 +799,16 @@ export const SettingsSchoolPage: React.FC = () => {
                         max={20}
                         step={0.1}
                         value={formData.early_report_max_bonus ?? 2.5}
-                        onChange={(e) => setFormData({ ...formData, early_report_max_bonus: parseFloat(e.target.value) || 0 })}
+                        onFocus={(e) => e.target.select()}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setFormData({ ...formData, early_report_max_bonus: val === '' ? ('' as any) : parseFloat(val) });
+                        }}
+                        onBlur={() => {
+                          if (formData.early_report_max_bonus === ('' as any)) {
+                            setFormData({ ...formData, early_report_max_bonus: 2.5 });
+                          }
+                        }}
                         className="w-full px-2.5 py-1.5 text-xs font-black border border-amber-300 rounded-lg bg-white text-slate-800 focus:ring-2 focus:ring-amber-500"
                       />
                       <span className="text-xs font-bold text-amber-900">điểm</span>

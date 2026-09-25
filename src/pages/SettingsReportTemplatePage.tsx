@@ -118,7 +118,7 @@ export const SettingsReportTemplatePage: React.FC = () => {
 
             <label
               className={`p-4 rounded-xl border-2 cursor-pointer transition-all flex items-start gap-3 ${
-                inputMode === 'MODE_3_STRICT_ALL'
+                inputMode === 'MODE_3_ALL_THREE'
                   ? 'border-blue-600 bg-blue-50/50'
                   : 'border-slate-200 hover:border-slate-300'
               }`}
@@ -126,9 +126,9 @@ export const SettingsReportTemplatePage: React.FC = () => {
               <input
                 type="radio"
                 name="calcMode"
-                value="MODE_3_STRICT_ALL"
-                checked={inputMode === 'MODE_3_STRICT_ALL'}
-                onChange={() => setInputMode('MODE_3_STRICT_ALL')}
+                value="MODE_3_ALL_THREE"
+                checked={inputMode === 'MODE_3_ALL_THREE'}
+                onChange={() => setInputMode('MODE_3_ALL_THREE')}
                 className="mt-1 text-blue-600 focus:ring-blue-500"
               />
               <div>

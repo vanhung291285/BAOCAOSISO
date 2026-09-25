@@ -101,6 +101,7 @@ export interface IndicatorGroup {
   show_absent: boolean;
   show_percentage: boolean;
   column_header_override?: string;
+  icon?: string; // e.g. "users" | "utensils" | "home" | "backpack" | "bed" | "graduation-cap"
   created_at: string;
 }
 

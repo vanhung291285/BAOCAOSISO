@@ -58,8 +58,21 @@ const AppContent: React.FC = () => {
   }, [loading, currentUser, currentPath]);
 
   if (loading) {
-    // Keep a completely transparent state if strictly necessary, but avoid visual flash
-    return null;
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-14 h-14 rounded-2xl bg-blue-700 text-white flex items-center justify-center shadow-lg shadow-blue-700/25 animate-pulse">
+            <School className="w-7 h-7" />
+          </div>
+          <div className="text-center">
+            <h1 className="font-extrabold text-slate-900 text-base">
+              {settings?.school_name || 'Hệ Thống Báo Cáo Sĩ Số'}
+            </h1>
+            <p className="text-xs text-slate-500 mt-1">Đang tải dữ liệu trường học...</p>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   // If not logged in, show LoginPage
