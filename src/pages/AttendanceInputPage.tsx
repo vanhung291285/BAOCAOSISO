@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useSchool } from '../contexts/SchoolContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useNotifications } from '../contexts/NotificationContext';
 import { StorageService } from '../services/storage';
 import { AbsentStudent, DailyReport, DailyReportValue, Student } from '../types';
 import { DateNavigator } from '../components/DateNavigator';
@@ -29,6 +30,9 @@ import {
   ShieldCheck,
   User,
   MapPin,
+  Volume2,
+  Code2,
+  Phone,
 } from 'lucide-react';
 import { getIndicatorMeta } from '../utils/indicatorIcons';
 
@@ -47,6 +51,8 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
 }) => {
   const { settings, classes, campuses, indicators, students } = useSchool();
   const { currentUser, isGVCN, isAdmin, isBGH } = useAuth();
+  const { testSound, isSoundEnabled, isAudioBlocked } = useNotifications();
+  const [isPlayingSoundTest, setIsPlayingSoundTest] = useState(false);
 
   // Active indicators sorted by sort_order
   const enabledIndicators = useMemo(() => {
@@ -821,6 +827,33 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
               </span>
             )}
 
+            {/* Chuông nhắc nhở & Thử âm thanh */}
+            <button
+              type="button"
+              onClick={async () => {
+                setIsPlayingSoundTest(true);
+                await testSound();
+                setTimeout(() => setIsPlayingSoundTest(false), 1200);
+              }}
+              title="Bấm để thử âm thanh chuông báo và rung điện thoại"
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all border shadow-2xs active:scale-95 ${
+                isPlayingSoundTest
+                  ? 'bg-emerald-100 text-emerald-900 border-emerald-300 ring-2 ring-emerald-400'
+                  : isAudioBlocked
+                  ? 'bg-amber-100 text-amber-900 border-amber-300 animate-bounce'
+                  : 'bg-white text-slate-700 hover:bg-slate-50 border-slate-200'
+              }`}
+            >
+              <Volume2 className="w-3.5 h-3.5 text-blue-600" />
+              <span>
+                {isPlayingSoundTest
+                  ? 'Đang reo...'
+                  : isAudioBlocked
+                  ? 'Bật chuông'
+                  : 'Thử chuông'}
+              </span>
+            </button>
+
             {onNavigate && (
               <button
                 type="button"
@@ -883,6 +916,19 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                 <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               </div>
             )}
+          </div>
+        </div>
+
+        {/* Thông tin nhà phát triển ứng dụng - GVCN vào báo cáo */}
+        <div className="mt-4 pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2.5 text-xs">
+          <div className="inline-flex items-center gap-2 font-medium text-slate-700 bg-blue-50/70 border border-blue-200/80 px-3 py-1.5 rounded-xl shadow-2xs">
+            <Code2 className="w-4 h-4 text-blue-600 flex-shrink-0" />
+            <span>
+              Ứng dụng được phát triển bởi: <strong className="text-slate-900 font-bold">Vũ Văn Hùng</strong> - <a href="tel:0984246993" className="font-bold text-blue-700 hover:underline inline-flex items-center gap-1"><Phone className="w-3 h-3 text-blue-600 inline" />SĐT: 0984246993</a>
+            </span>
+          </div>
+          <div className="text-[11px] text-slate-400 font-medium hidden sm:block">
+            {settings?.school_name || 'Hệ thống Quản lý Báo cáo Sĩ số'}
           </div>
         </div>
 
@@ -1624,6 +1670,36 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
         />
       </div>
 
+      {/* Footer attribution card - Thông tin nhà phát triển */}
+      <div className="my-5 p-4 rounded-2xl bg-white border border-slate-200/90 shadow-2xs flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-600">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center flex-shrink-0 shadow-2xs">
+            <Code2 className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="font-black text-slate-900 text-sm">
+              Ứng dụng được phát triển bởi: <span className="text-blue-700">Vũ Văn Hùng</span>
+            </div>
+            <div className="text-[11px] text-slate-500 font-medium flex items-center gap-1.5 mt-0.5">
+              <span>Hỗ trợ kỹ thuật:</span>
+              <a href="tel:0984246993" className="font-bold text-blue-700 hover:underline inline-flex items-center gap-1">
+                <Phone className="w-3 h-3 text-blue-600" />
+                SĐT: 0984246993
+              </a>
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <a
+            href="tel:0984246993"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-xs transition-all active:scale-95"
+          >
+            <Phone className="w-3.5 h-3.5" />
+            <span>Gọi hỗ trợ: 0984246993</span>
+          </a>
+        </div>
+      </div>
+
       {/* Bottom Sticky Action Bar - Cố định thanh CẬP NHẬT BÁO CÁO sát đáy như hình gốc */}
       <div className="sticky bottom-0 z-30 -mx-3 sm:mx-0 bg-white/95 backdrop-blur-md rounded-t-2xl sm:rounded-2xl border-t sm:border border-slate-200/90 shadow-[0_-8px_20px_-6px_rgba(0,0,0,0.12)] sm:shadow-xl p-3 sm:p-4 flex flex-col gap-2.5 transition-all">
         {/* Row 1: Reset nhầm & Lần gửi gần nhất */}
@@ -1691,6 +1767,11 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
               )}
             </button>
           )}
+        </div>
+
+        {/* Caption dưới nút gửi báo cáo - Ứng dụng được phát triển bởi Vũ Văn Hùng-SĐT: 0984246993 */}
+        <div className="text-center text-[11px] text-slate-500 font-medium pt-0.5">
+          <span>Ứng dụng được phát triển bởi: <strong className="text-slate-800 font-bold">Vũ Văn Hùng</strong> - <a href="tel:0984246993" className="font-bold text-blue-700 hover:underline">SĐT: 0984246993</a></span>
         </div>
       </div>
 

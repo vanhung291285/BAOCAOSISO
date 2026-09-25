@@ -9,8 +9,8 @@ export const SettingsReportTemplatePage: React.FC = () => {
   const [reportTitle, setReportTitle] = useState(settings?.report_title || 'BÁO CÁO SĨ SỐ HỌC SINH');
   const [inputMode, setInputMode] = useState<InputCalculationMode>(settings?.input_mode || 'MODE_1_TOTAL_PRESENT');
   const [footerText, setFooterText] = useState(settings?.footer_text || 'Số liệu được tổng hợp tự động từ phần mềm báo cáo sĩ số hàng ngày.');
-  const [developerName, setDeveloperName] = useState(settings?.developer_name || 'Nguyễn Hùng');
-  const [developerContact, setDeveloperContact] = useState(settings?.developer_contact || 'hungthcsnongu@gmail.com');
+  const [developerName, setDeveloperName] = useState(settings?.developer_name || 'Vũ Văn Hùng');
+  const [developerContact, setDeveloperContact] = useState(settings?.developer_contact || 'SĐT: 0984246993');
   const [savedSuccess, setSavedSuccess] = useState(false);
 
   useEffect(() => {
@@ -18,8 +18,8 @@ export const SettingsReportTemplatePage: React.FC = () => {
       setReportTitle(settings.report_title || 'BÁO CÁO SĨ SỐ HỌC SINH');
       setInputMode(settings.input_mode || 'MODE_1_TOTAL_PRESENT');
       setFooterText(settings.footer_text || 'Số liệu được tổng hợp tự động từ phần mềm báo cáo sĩ số hàng ngày.');
-      setDeveloperName(settings.developer_name || 'Nguyễn Hùng');
-      setDeveloperContact(settings.developer_contact || 'hungthcsnongu@gmail.com');
+      setDeveloperName(settings.developer_name || 'Vũ Văn Hùng');
+      setDeveloperContact(settings.developer_contact || 'SĐT: 0984246993');
     }
   }, [settings]);
 

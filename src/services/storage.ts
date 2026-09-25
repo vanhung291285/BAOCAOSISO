@@ -142,6 +142,28 @@ export function subscribeRealtime(callback: (event: { table: string; payload?: a
         .on('postgres_changes', { event: '*', schema: 'public', table: 'indicator_groups' }, (payload) => {
           callback({ table: 'indicator_groups', payload });
         })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications' }, (payload) => {
+          try {
+            if (payload.new && (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE')) {
+              const newNotif = payload.new as AppNotification;
+              const raw = localStorage.getItem(STORAGE_KEYS.NOTIFICATIONS);
+              let notifs: AppNotification[] = raw ? JSON.parse(raw) : [];
+              const idx = notifs.findIndex(n => n.id === newNotif.id);
+              if (idx >= 0) notifs[idx] = newNotif;
+              else notifs.unshift(newNotif);
+              localStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(notifs.slice(0, 100)));
+            } else if (payload.old && payload.eventType === 'DELETE') {
+              const oldId = (payload.old as any).id;
+              const raw = localStorage.getItem(STORAGE_KEYS.NOTIFICATIONS);
+              let notifs: AppNotification[] = raw ? JSON.parse(raw) : [];
+              notifs = notifs.filter(n => n.id !== oldId);
+              localStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(notifs));
+            }
+          } catch (e) {
+            console.warn('Error merging realtime notifications:', e);
+          }
+          callback({ table: 'notifications', payload });
+        })
         .subscribe();
     } catch (e) {
       console.warn('Supabase realtime subscription failed:', e);
@@ -183,8 +205,8 @@ export function getInitialData() {
     reporter_title: 'Người lập biểu',
     report_title: 'BÁO CÁO SĨ SỐ HỌC SINH',
     footer_text: '',
-    developer_name: 'Nguyễn Hùng',
-    developer_contact: 'hungthcsnongu@gmail.com',
+    developer_name: 'Vũ Văn Hùng',
+    developer_contact: 'SĐT: 0984246993',
     primary_color: '#1d4ed8',
     input_mode: 'MODE_1_TOTAL_PRESENT',
     enable_campuses: false,
@@ -344,9 +366,13 @@ export const StorageService = {
       s.report_title = s.report_title.replace('BÁO CÁO HỌC SINH SĨ SỐ HỌC SINH', 'BÁO CÁO SĨ SỐ HỌC SINH');
       needsSave = true;
     }
-    if (s && s.developer_name === undefined) {
-      s.developer_name = 'Nguyễn Hùng';
-      s.developer_contact = 'hungthcsnongu@gmail.com';
+    if (s && (s.developer_name === undefined || s.developer_name === 'Nguyễn Hùng')) {
+      s.developer_name = 'Vũ Văn Hùng';
+      s.developer_contact = 'SĐT: 0984246993';
+      needsSave = true;
+    }
+    if (s && (!s.developer_contact || s.developer_contact === 'hungthcsnongu@gmail.com')) {
+      s.developer_contact = 'SĐT: 0984246993';
       needsSave = true;
     }
     if (s && s.address && s.address.includes('Huyện Điện Biên Đông')) {
@@ -3235,19 +3261,61 @@ export const StorageService = {
   },
 
   // --- HỆ THỐNG THÔNG BÁO TỰ ĐỘNG & NHẮC NHỞ GVCN CHƯA BÁO CÁO SĨ SỐ ---
-  async getNotifications(userId?: string): Promise<AppNotification[]> {
+  async getNotifications(userId?: string, classId?: string): Promise<AppNotification[]> {
     ensureInitialized();
     const raw = localStorage.getItem(STORAGE_KEYS.NOTIFICATIONS);
     let list: AppNotification[] = raw ? JSON.parse(raw) : [];
-    if (userId) {
-      list = list.filter((n) => n.user_id === userId);
+
+    // Nếu kết nối Supabase, đồng bộ thông báo từ Cloud về để thiết bị nhận được thông báo ngay lập tức
+    const supabase = getSupabaseClient();
+    if (supabase && isSupabaseConnected()) {
+      try {
+        let query = supabase
+          .from('notifications')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(100);
+
+        if (userId && classId) {
+          query = query.or(`user_id.eq.${userId},class_id.eq.${classId}`);
+        } else if (userId) {
+          query = query.eq('user_id', userId);
+        } else if (classId) {
+          query = query.eq('class_id', classId);
+        }
+
+        const { data, error } = await query;
+        if (!error && Array.isArray(data)) {
+          const cloudNotifs = data as AppNotification[];
+          for (const cNotif of cloudNotifs) {
+            const idx = list.findIndex((n) => n.id === cNotif.id);
+            if (idx >= 0) {
+              list[idx] = { ...list[idx], ...cNotif };
+            } else {
+              list.push(cNotif);
+            }
+          }
+          localStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(list.slice(0, 100)));
+        }
+      } catch (e) {
+        // Fallback local
+      }
     }
+
+    if (userId && classId) {
+      list = list.filter((n) => n.user_id === userId || n.class_id === classId);
+    } else if (userId) {
+      list = list.filter((n) => n.user_id === userId);
+    } else if (classId) {
+      list = list.filter((n) => n.class_id === classId);
+    }
+
     // Sắp xếp thông báo mới nhất lên đầu
     return list.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   },
 
-  async getUnreadNotificationCount(userId: string): Promise<number> {
-    const list = await this.getNotifications(userId);
+  async getUnreadNotificationCount(userId: string, classId?: string): Promise<number> {
+    const list = await this.getNotifications(userId, classId);
     return list.filter((n) => !n.read).length;
   },
 
@@ -3402,6 +3470,36 @@ export const StorageService = {
     list.unshift(successNotif);
 
     localStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(list.slice(0, 100)));
+
+    const supabase = getSupabaseClient();
+    if (supabase && isSupabaseConnected()) {
+      try {
+        await supabase
+          .from('notifications')
+          .update({ read: true })
+          .eq('class_id', classId)
+          .eq('date', reportDate);
+
+        await supabase.from('notifications').upsert({
+          id: successNotif.id,
+          user_id: successNotif.user_id,
+          class_id: successNotif.class_id || null,
+          class_name: successNotif.class_name || null,
+          type: successNotif.type,
+          title: successNotif.title,
+          message: successNotif.message,
+          date: successNotif.date || null,
+          read: Boolean(successNotif.read),
+          action_url: successNotif.action_url || null,
+          created_by_name: successNotif.created_by_name || null,
+          urgent: false,
+          created_at: successNotif.created_at,
+        });
+      } catch (e) {
+        console.warn('Supabase resolveAttendanceReminders error:', e);
+      }
+    }
+
     notifyRealtimeChange('notifications', { userId: user.id, classId, reportDate });
   },
 
@@ -3456,17 +3554,21 @@ export const StorageService = {
       if (!teacher) {
         teacher = profiles.find((p) => p.assigned_class_id === cls.id);
       }
-
       if (!teacher) {
-        skippedClasses.push(cls.class_name);
-        continue;
+        teacher = profiles.find(
+          (p) =>
+            p.role === 'GVCN' &&
+            (p.email.toLowerCase().includes(cls.class_name.toLowerCase()) ||
+              p.full_name.toLowerCase().includes(cls.class_name.toLowerCase()))
+        );
       }
+
+      const targetUserId = teacher ? teacher.id : `class_target_${cls.id}`;
 
       // Kiểm tra xem đã có thông báo nhắc nhở chưa đọc cho lớp này và ngày này chưa
       const alreadyHasUnreadReminder = existingNotifs.some(
         (n) =>
-          n.user_id === teacher!.id &&
-          n.class_id === cls.id &&
+          (n.class_id === cls.id || (teacher && n.user_id === teacher.id)) &&
           n.date === dateToCheck &&
           !n.read &&
           (n.type === 'ATTENDANCE_REMINDER' || n.type === 'BGH_ALERT')
@@ -3489,7 +3591,7 @@ export const StorageService = {
 
       const newNotif: AppNotification = {
         id: `notif_remind_${cls.id}_${dateToCheck}_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-        user_id: teacher.id,
+        user_id: targetUserId,
         class_id: cls.id,
         class_name: cls.class_name,
         type: forceTriggerByBGH ? 'BGH_ALERT' : 'ATTENDANCE_REMINDER',

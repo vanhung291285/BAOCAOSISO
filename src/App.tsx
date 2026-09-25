@@ -176,17 +176,11 @@ const AppContent: React.FC = () => {
             <div className="flex flex-wrap items-center justify-center md:justify-end gap-3 text-[11px]">
               <span>Năm học: <strong className="text-slate-700">{activeYear?.name || '2026-2027'}</strong></span>
               <span className="text-slate-300">|</span>
-              {settings?.developer_name ? (
-                <span className="inline-flex items-center gap-1.5 font-medium text-slate-700 bg-slate-100 px-2.5 py-1 rounded-full border border-slate-200">
-                  <Code2 className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
-                  <span>Phát triển bởi: <strong className="text-slate-900 font-bold">{settings.developer_name}</strong></span>
-                  {settings.developer_contact && (
-                    <span className="text-slate-500 font-normal">({settings.developer_contact})</span>
-                  )}
-                </span>
-              ) : (
-                <span>Phiên bản v2.0 - Chuẩn Excel PGD</span>
-              )}
+              <span className="inline-flex items-center gap-1.5 font-medium text-slate-700 bg-slate-100 px-2.5 py-1 rounded-full border border-slate-200">
+                <Code2 className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
+                <span>Ứng dụng được phát triển bởi: <strong className="text-slate-900 font-bold">{settings?.developer_name || 'Vũ Văn Hùng'}</strong></span>
+                <span className="text-slate-600 font-medium">({settings?.developer_contact || 'SĐT: 0984246993'})</span>
+              </span>
             </div>
           </div>
         </footer>

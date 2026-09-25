@@ -41,8 +41,8 @@ CREATE TABLE IF NOT EXISTS public.school_settings (
     reporter_title TEXT DEFAULT 'Người lập biểu',
     report_title TEXT DEFAULT 'BÁO CÁO SĨ SỐ HỌC SINH',
     footer_text TEXT DEFAULT '',
-    developer_name TEXT DEFAULT 'Nguyễn Hùng',
-    developer_contact TEXT DEFAULT 'hungthcsnongu@gmail.com',
+    developer_name TEXT DEFAULT 'Vũ Văn Hùng',
+    developer_contact TEXT DEFAULT 'SĐT: 0984246993',
     primary_color TEXT DEFAULT '#1d4ed8',
     input_mode TEXT DEFAULT 'MODE_1_TOTAL_PRESENT' CHECK (input_mode IN ('MODE_1_TOTAL_PRESENT', 'MODE_2_TOTAL_ABSENT', 'MODE_3_ALL_THREE')),
     enable_campuses BOOLEAN DEFAULT false,
@@ -213,11 +213,11 @@ BEGIN
     EXCEPTION WHEN duplicate_column THEN END;
 
     BEGIN
-        ALTER TABLE public.school_settings ADD COLUMN developer_name TEXT DEFAULT 'Nguyễn Hùng';
+        ALTER TABLE public.school_settings ADD COLUMN developer_name TEXT DEFAULT 'Vũ Văn Hùng';
     EXCEPTION WHEN duplicate_column THEN END;
 
     BEGIN
-        ALTER TABLE public.school_settings ADD COLUMN developer_contact TEXT DEFAULT 'hungthcsnongu@gmail.com';
+        ALTER TABLE public.school_settings ADD COLUMN developer_contact TEXT DEFAULT 'SĐT: 0984246993';
     EXCEPTION WHEN duplicate_column THEN END;
 
     BEGIN

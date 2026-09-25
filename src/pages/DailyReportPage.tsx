@@ -1270,12 +1270,10 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
         </div>
 
         {/* Developer attribution footnote */}
-        {settings?.developer_name && (
-          <div className="mt-8 pt-2 border-t border-dotted border-slate-300 flex flex-col sm:flex-row items-center justify-between gap-1 text-[10px] text-slate-400 font-sans print:text-black">
-            <span>Hệ thống Quản lý Báo cáo Sĩ số Học sinh Trực tuyến</span>
-            <span>Phần mềm phát triển bởi: <strong>{settings.developer_name}</strong>{settings.developer_contact ? ` - ${settings.developer_contact}` : ''}</span>
-          </div>
-        )}
+        <div className="mt-8 pt-2 border-t border-dotted border-slate-300 flex flex-col sm:flex-row items-center justify-between gap-1 text-[10px] text-slate-400 font-sans print:text-black">
+          <span>Hệ thống Quản lý Báo cáo Sĩ số Học sinh Trực tuyến</span>
+          <span>Ứng dụng được phát triển bởi: <strong>{settings?.developer_name || 'Vũ Văn Hùng'}</strong> - <strong>{settings?.developer_contact || 'SĐT: 0984246993'}</strong></span>
+        </div>
       </div>
 
       {/* Toast Notice */}

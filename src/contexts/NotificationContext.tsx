@@ -3,6 +3,28 @@ import { AppNotification } from '../types';
 import { StorageService, subscribeRealtime } from '../services/storage';
 import { useAuth } from './AuthContext';
 import { getTodayDateStr } from '../utils/schoolWeeks';
+import {
+  playNotificationChime,
+  testNotificationChime,
+  isSoundAlertEnabled,
+  setSoundAlertEnabled,
+  isAudioAutoplayBlocked,
+  subscribeAudioState,
+  showScreenAlert,
+  requestScreenNotificationPermission,
+  startDocumentTitleAlert,
+  stopDocumentTitleAlert,
+} from '../utils/notificationAudio';
+
+// Re-export sound helpers for external callers
+export {
+  playNotificationChime,
+  testNotificationChime,
+  isSoundAlertEnabled,
+  setSoundAlertEnabled,
+  showScreenAlert,
+  requestScreenNotificationPermission,
+};
 
 interface NotificationContextType {
   notifications: AppNotification[];
@@ -18,81 +40,70 @@ interface NotificationContextType {
   sendBGHManualReminder: (targetDate?: string) => Promise<{ sentCount: number; remindedClasses: string[]; skippedClasses: string[] }>;
   browserPermission: NotificationPermission | 'unsupported';
   requestBrowserPermission: () => Promise<void>;
-  playNotificationChime: () => void;
+  playNotificationChime: (options?: { force?: boolean }) => Promise<boolean>;
+  testSound: () => Promise<boolean>;
+  isSoundEnabled: boolean;
+  toggleSound: (enabled: boolean) => void;
+  isAudioBlocked: boolean;
+  monitoredClassId: string;
+  setMonitoredClassId: (classId: string) => void;
+  snoozeUrgentReminder: () => void;
 }
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
 
-// Web Audio API chime generator for pleasant notification sound and vibration on mobile
-export function playNotificationChime() {
-  if (typeof window === 'undefined') return;
-
-  // 1. Rung thiết bị điện thoại (Vibration API) nếu thiết bị hỗ trợ
-  try {
-    if ('vibrate' in navigator && typeof navigator.vibrate === 'function') {
-      // Nhịp rung cảnh báo rõ ràng: rung 250ms, nghỉ 100ms, rung 250ms
-      navigator.vibrate([250, 100, 250, 100, 400]);
-    }
-  } catch (err) {
-    // Không ảnh hưởng nếu thiết bị không hỗ trợ rung
-  }
-
-  // 2. Phát chuông âm thanh nhắc nhở qua Web Audio API (chuông 3 nốt ngân vang rõ ràng)
-  try {
-    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-    if (!AudioContextClass) return;
-    const ctx = new AudioContextClass();
-
-    if (ctx.state === 'suspended') {
-      ctx.resume().catch(() => {});
-    }
-
-    const now = ctx.currentTime;
-    
-    // Nốt 1: E5 (659.25Hz)
-    const osc1 = ctx.createOscillator();
-    const gain1 = ctx.createGain();
-    osc1.type = 'sine';
-    osc1.frequency.setValueAtTime(659.25, now);
-    gain1.gain.setValueAtTime(0.2, now);
-    gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
-    osc1.connect(gain1);
-    gain1.connect(ctx.destination);
-    osc1.start(now);
-    osc1.stop(now + 0.35);
-
-    // Nốt 2: G#5 (830.61Hz)
-    const osc2 = ctx.createOscillator();
-    const gain2 = ctx.createGain();
-    osc2.type = 'sine';
-    osc2.frequency.setValueAtTime(830.61, now + 0.15);
-    gain2.gain.setValueAtTime(0.22, now + 0.15);
-    gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.55);
-    osc2.connect(gain2);
-    gain2.connect(ctx.destination);
-    osc2.start(now + 0.15);
-    osc2.stop(now + 0.55);
-
-    // Nốt 3: B5 (987.77Hz) - ngân vang kết thúc
-    const osc3 = ctx.createOscillator();
-    const gain3 = ctx.createGain();
-    osc3.type = 'sine';
-    osc3.frequency.setValueAtTime(987.77, now + 0.32);
-    gain3.gain.setValueAtTime(0.25, now + 0.32);
-    gain3.gain.exponentialRampToValueAtTime(0.001, now + 0.95);
-    osc3.connect(gain3);
-    gain3.connect(ctx.destination);
-    osc3.start(now + 0.32);
-    osc3.stop(now + 0.95);
-  } catch (err) {
-    // Bỏ qua nếu trình duyệt chặn autoplay trước khi có tương tác
-  }
-}
-
 export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { currentUser, isGVCN, isBGH, isAdmin } = useAuth();
+  const { currentUser } = useAuth();
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Lớp đang theo dõi cảnh báo trên thiết bị này (kể cả khi chưa đăng nhập)
+  const [monitoredClassId, setMonitoredClassIdState] = useState<string>(() => {
+    if (typeof window === 'undefined') return '';
+    return localStorage.getItem('sso_device_alert_class_id') || localStorage.getItem('sso_saved_class_id') || '';
+  });
+
+  const setMonitoredClassId = useCallback((classId: string) => {
+    setMonitoredClassIdState(classId);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('sso_device_alert_class_id', classId);
+      localStorage.setItem('sso_saved_class_id', classId);
+    }
+  }, []);
+
+  // Tự động ghi nhớ lớp của GVCN khi đăng nhập
+  useEffect(() => {
+    if (currentUser?.role === 'GVCN' && currentUser.assigned_class_id) {
+      setMonitoredClassId(currentUser.assigned_class_id);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('sso_saved_teacher_id', currentUser.id);
+      }
+    }
+  }, [currentUser, setMonitoredClassId]);
+
+  // Trạng thái âm thanh chuông báo
+  const [isSoundEnabled, setIsSoundEnabledState] = useState<boolean>(() => isSoundAlertEnabled());
+  const [isAudioBlocked, setIsAudioBlockedState] = useState<boolean>(() => isAudioAutoplayBlocked());
+
+  useEffect(() => {
+    const unsub = subscribeAudioState(() => {
+      setIsSoundEnabledState(isSoundAlertEnabled());
+      setIsAudioBlockedState(isAudioAutoplayBlocked());
+    });
+    return unsub;
+  }, []);
+
+  const toggleSound = (enabled: boolean) => {
+    setSoundAlertEnabled(enabled);
+    setIsSoundEnabledState(enabled);
+  };
+
+  const testSound = async () => {
+    const ok = await testNotificationChime();
+    setIsAudioBlockedState(false);
+    return ok;
+  };
+
   const [browserPermission, setBrowserPermission] = useState<NotificationPermission | 'unsupported'>(() => {
     if (typeof window === 'undefined') return 'unsupported';
     try {
@@ -100,64 +111,41 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         return Notification.permission;
       }
     } catch (err) {
-      // In iframes or sandboxed documents, accessing Notification.permission throws DOMException
       return 'unsupported';
     }
     return 'unsupported';
   });
 
   const loadNotifications = useCallback(async () => {
-    if (!currentUser) {
-      setNotifications([]);
-      setLoading(false);
-      return;
-    }
-
     try {
-      const list = await StorageService.getNotifications(currentUser.id);
-      setNotifications(list);
+      if (currentUser) {
+        const assignedClassId = currentUser.role === 'GVCN' ? currentUser.assigned_class_id : undefined;
+        const list = await StorageService.getNotifications(currentUser.id, assignedClassId);
+        setNotifications(list);
+      } else {
+        // KHI CHƯA ĐĂNG NHẬP: Lấy thông báo theo lớp/giáo viên được lưu trên thiết bị này
+        const savedClass = (typeof window !== 'undefined'
+          ? localStorage.getItem('sso_device_alert_class_id') || localStorage.getItem('sso_saved_class_id')
+          : null) || monitoredClassId || undefined;
+        const savedTeacher = typeof window !== 'undefined' ? localStorage.getItem('sso_saved_teacher_id') || undefined : undefined;
+        const list = await StorageService.getNotifications(savedTeacher, savedClass);
+        setNotifications(list);
+      }
     } catch (err) {
       console.error('Failed to load notifications:', err);
     } finally {
       setLoading(false);
     }
-  }, [currentUser]);
+  }, [currentUser, monitoredClassId]);
 
   // Request browser desktop notification permission safely
   const requestBrowserPermission = async () => {
-    if (typeof window === 'undefined') return;
+    const perm = await requestScreenNotificationPermission();
+    setBrowserPermission(perm);
+    // Đồng thời kích hoạt âm thanh user gesture để mở khóa AudioContext
     try {
-      if ('Notification' in window && typeof Notification !== 'undefined' && typeof Notification.requestPermission === 'function') {
-        const perm = await Notification.requestPermission();
-        setBrowserPermission(perm);
-      }
-    } catch (err) {
-      console.warn('Notification permission request error or restricted in iframe:', err);
-      setBrowserPermission('unsupported');
-    }
-  };
-
-  // Show desktop notification if permitted safely
-  const showDesktopNotification = (title: string, body: string, actionUrl?: string) => {
-    if (typeof window === 'undefined') return;
-    try {
-      if ('Notification' in window && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-        const notif = new Notification(title, {
-          body,
-          icon: '/pwa-192x192.png',
-          badge: '/pwa-192x192.png',
-          tag: 'sso_attendance_reminder',
-        });
-        notif.onclick = () => {
-          window.focus();
-          if (actionUrl) {
-            window.location.hash = actionUrl;
-          }
-        };
-      }
-    } catch (err) {
-      // Ignore desktop notification errors in iframe or restricted environment
-    }
+      await testNotificationChime();
+    } catch (e) {}
   };
 
   // Run auto check for attendance reports
@@ -188,11 +176,11 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     }
   }, [currentUser, loadNotifications]);
 
-  // Initialize and listen to realtime updates
+  // Initialize and listen to realtime updates (Kể cả khi chưa đăng nhập)
   useEffect(() => {
     loadNotifications();
 
-    // Auto-check on login/mount for GVCN or BGH
+    // Auto-check on login/mount
     const today = getTodayDateStr();
     triggerAutoCheck(today);
 
@@ -203,10 +191,11 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       }
     });
 
-    // Run auto-check periodically every 2 minutes while app is open
+    // Kiểm tra định kỳ mỗi 60 giây để đảm bảo dù GVCN chưa đăng nhập,
+    // khi đến giờ chốt 07h30 hoặc BGH gửi lệnh thì máy vẫn phát chuông và cảnh báo ngay
     const interval = setInterval(() => {
       triggerAutoCheck();
-    }, 2 * 60 * 1000);
+    }, 60 * 1000);
 
     return () => {
       unsub();
@@ -214,9 +203,42 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     };
   }, [loadNotifications, triggerAutoCheck]);
 
-  // Detect unread urgent attendance reminder for currently logged-in user
+  // Phát hiện nhắc nhở sĩ số khẩn cấp hôm nay:
+  // - Nếu đã đăng nhập: Lọc theo user_id hoặc assigned_class_id
+  // - Nếu CHƯA ĐĂNG NHẬP: Lọc theo lớp/giáo viên được ghi nhớ trên thiết bị này (hoặc thông báo khẩn cấp bất kỳ)
   const today = getTodayDateStr();
   const urgentAttendanceReminder = React.useMemo(() => {
+    if (currentUser) {
+      return (
+        notifications.find(
+          (n) =>
+            !n.read &&
+            n.date === today &&
+            (n.type === 'ATTENDANCE_REMINDER' || n.type === 'BGH_ALERT') &&
+            (n.user_id === currentUser.id ||
+              (currentUser.role === 'GVCN' &&
+                currentUser.assigned_class_id &&
+                n.class_id === currentUser.assigned_class_id))
+        ) || null
+      );
+    }
+
+    // KHI CHƯA ĐĂNG NHẬP:
+    const targetClass = monitoredClassId || (typeof window !== 'undefined' ? localStorage.getItem('sso_device_alert_class_id') || localStorage.getItem('sso_saved_class_id') : null);
+    const targetTeacher = typeof window !== 'undefined' ? localStorage.getItem('sso_saved_teacher_id') : null;
+
+    if (targetClass || targetTeacher) {
+      const match = notifications.find(
+        (n) =>
+          !n.read &&
+          n.date === today &&
+          (n.type === 'ATTENDANCE_REMINDER' || n.type === 'BGH_ALERT') &&
+          ((targetClass && n.class_id === targetClass) || (targetTeacher && n.user_id === targetTeacher))
+      );
+      if (match) return match;
+    }
+
+    // Nếu chưa lưu lớp cụ thể, lấy thông báo khẩn cấp đầu tiên của ngày hôm nay
     return (
       notifications.find(
         (n) =>
@@ -225,31 +247,77 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
           (n.type === 'ATTENDANCE_REMINDER' || n.type === 'BGH_ALERT')
       ) || null
     );
-  }, [notifications, today]);
+  }, [notifications, today, currentUser, monitoredClassId]);
 
-  // When an urgent reminder appears, play audio chime and show browser notification
+  // Quản lý phát âm thanh, nhấp nháy tiêu đề tab và bật thông báo ra ngoài màn hình
   const previousUrgentIdRef = React.useRef<string | null>(null);
-  useEffect(() => {
-    if (urgentAttendanceReminder && urgentAttendanceReminder.id !== previousUrgentIdRef.current) {
-      previousUrgentIdRef.current = urgentAttendanceReminder.id;
-      playNotificationChime();
-      showDesktopNotification(
-        urgentAttendanceReminder.title,
-        urgentAttendanceReminder.message,
-        urgentAttendanceReminder.action_url
-      );
+  const [snoozedId, setSnoozedId] = useState<string | null>(null);
+
+  const snoozeUrgentReminder = useCallback(() => {
+    if (urgentAttendanceReminder) {
+      setSnoozedId(urgentAttendanceReminder.id);
+      stopDocumentTitleAlert();
     }
   }, [urgentAttendanceReminder]);
+
+  useEffect(() => {
+    if (!urgentAttendanceReminder) {
+      stopDocumentTitleAlert();
+      return;
+    }
+
+    if (snoozedId === urgentAttendanceReminder.id) {
+      return;
+    }
+
+    // 1. Nhấp nháy cảnh báo trên tiêu đề tab trình duyệt (thanh tác vụ Windows / điện thoại)
+    const alertLabel = urgentAttendanceReminder.class_name
+      ? `LỚP ${urgentAttendanceReminder.class_name} CHƯA BÁO CÁO!`
+      : 'CHƯA NỘP BÁO CÁO SĨ SỐ!';
+    startDocumentTitleAlert(alertLabel);
+
+    // 2. Phát chuông âm thanh và đẩy thông báo ra ngoài màn hình lần đầu
+    if (urgentAttendanceReminder.id !== previousUrgentIdRef.current) {
+      previousUrgentIdRef.current = urgentAttendanceReminder.id;
+      playNotificationChime({ force: false });
+      showScreenAlert({
+        title: urgentAttendanceReminder.title,
+        body: urgentAttendanceReminder.message,
+        actionUrl: urgentAttendanceReminder.action_url || '/attendance',
+      });
+    }
+
+    // 3. Nhắc chuông lại mỗi 60 giây nếu GVCN chưa xem hoặc chưa nộp báo cáo
+    const interval = setInterval(() => {
+      if (urgentAttendanceReminder && !urgentAttendanceReminder.read && snoozedId !== urgentAttendanceReminder.id) {
+        playNotificationChime({ force: false });
+        showScreenAlert({
+          title: urgentAttendanceReminder.title,
+          body: urgentAttendanceReminder.message,
+          actionUrl: urgentAttendanceReminder.action_url || '/attendance',
+        });
+      }
+    }, 60 * 1000);
+
+    return () => {
+      clearInterval(interval);
+      stopDocumentTitleAlert();
+    };
+  }, [urgentAttendanceReminder, snoozedId]);
 
   const markAsRead = async (id: string) => {
     await StorageService.markNotificationAsRead(id);
     setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
+    stopDocumentTitleAlert();
   };
 
   const markAllAsRead = async () => {
-    if (!currentUser) return;
-    await StorageService.markAllNotificationsAsRead(currentUser.id);
+    const targetUserId = currentUser?.id || localStorage.getItem('sso_saved_teacher_id') || '';
+    if (targetUserId) {
+      await StorageService.markAllNotificationsAsRead(targetUserId);
+    }
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    stopDocumentTitleAlert();
   };
 
   const deleteNotification = async (id: string) => {
@@ -258,9 +326,12 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   };
 
   const clearAll = async () => {
-    if (!currentUser) return;
-    await StorageService.clearAllNotifications(currentUser.id);
+    const targetUserId = currentUser?.id || localStorage.getItem('sso_saved_teacher_id') || '';
+    if (targetUserId) {
+      await StorageService.clearAllNotifications(targetUserId);
+    }
     setNotifications([]);
+    stopDocumentTitleAlert();
   };
 
   const unreadCount = notifications.filter((n) => !n.read).length;
@@ -282,6 +353,13 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         browserPermission,
         requestBrowserPermission,
         playNotificationChime,
+        testSound,
+        isSoundEnabled,
+        toggleSound,
+        isAudioBlocked,
+        monitoredClassId,
+        setMonitoredClassId,
+        snoozeUrgentReminder,
       }}
     >
       {children}
@@ -296,3 +374,4 @@ export const useNotifications = () => {
   }
   return ctx;
 };
+

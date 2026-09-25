@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useSchool } from '../contexts/SchoolContext';
+import { useNotifications } from '../contexts/NotificationContext';
 import {
   School,
   LogIn,
@@ -22,7 +23,13 @@ import {
   Unlock,
   Trash2,
   Eye,
-  EyeOff
+  EyeOff,
+  Bell,
+  BellRing,
+  Volume2,
+  VolumeX,
+  ClipboardList,
+  Code2
 } from 'lucide-react';
 import { SchoolYear } from '../types';
 import { PWAInstallButton } from '../components/PWAInstallButton';
@@ -34,6 +41,19 @@ interface LoginPageProps {
 
 export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
   const { currentUser, login, allUsers, switchUser } = useAuth();
+  const {
+    urgentAttendanceReminder,
+    markAsRead,
+    testSound,
+    isSoundEnabled,
+    toggleSound,
+    isAudioBlocked,
+    browserPermission,
+    requestBrowserPermission,
+    monitoredClassId,
+    setMonitoredClassId,
+    snoozeUrgentReminder,
+  } = useNotifications();
   const {
     settings,
     classes,
@@ -91,6 +111,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
     }
     if (savedClassId) {
       setSelectedClassId(savedClassId);
+    } else if (monitoredClassId) {
+      setSelectedClassId(monitoredClassId);
     }
     if (savedTeacherId) {
       setSelectedTeacherId(savedTeacherId);
@@ -116,8 +138,10 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
   useEffect(() => {
     if (selectedClassId) {
       localStorage.setItem('sso_saved_class_id', selectedClassId);
+      localStorage.setItem('sso_device_alert_class_id', selectedClassId);
+      setMonitoredClassId(selectedClassId);
     }
-  }, [selectedClassId]);
+  }, [selectedClassId, setMonitoredClassId]);
 
   // Save selected teacher
   useEffect(() => {
@@ -196,6 +220,42 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       setError('Không thể đăng nhập. Vui lòng thử lại.');
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  // Handle Direct One-Click Attendance from Urgent Alert Banner (Kể cả khi chưa đăng nhập)
+  const handleDirectAttendanceFromAlert = async () => {
+    if (!urgentAttendanceReminder) return;
+    const targetClassId = urgentAttendanceReminder.class_id || selectedClassId;
+    let teacher = allUsers.find(
+      (u) =>
+        u.role === 'GVCN' &&
+        (u.assigned_class_id === targetClassId ||
+          (targetClassId && classes.some((c) => c.id === targetClassId && c.homeroom_teacher_id === u.id)))
+    );
+    if (!teacher && selectedTeacherId) {
+      teacher = allUsers.find((u) => u.id === selectedTeacherId);
+    }
+    if (!teacher) {
+      teacher = allUsers.find((u) => u.role === 'GVCN');
+    }
+
+    if (teacher) {
+      setError('');
+      setIsSubmitting(true);
+      try {
+        await switchUser(teacher.id);
+        if (urgentAttendanceReminder) {
+          await markAsRead(urgentAttendanceReminder.id);
+        }
+        onLoginSuccess('/attendance');
+      } catch {
+        setError('Không thể tự động đăng nhập. Vui lòng thử lại.');
+      } finally {
+        setIsSubmitting(false);
+      }
+    } else {
+      setError('Vui lòng chọn lớp và giáo viên chủ nhiệm để vào điểm danh.');
     }
   };
 
@@ -460,6 +520,147 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
             <div className="flex items-center gap-1 text-[11px] font-semibold text-slate-500 bg-slate-50 border border-slate-200/80 px-2.5 py-1 rounded-lg">
               <ShieldCheck className="w-3.5 h-3.5 text-slate-400" />
               <span>Quản trị cấu hình</span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Urgent Attendance Warning Banner if unsubmitted report today (KỂ CẢ KHI CHƯA ĐĂNG NHẬP) */}
+      {urgentAttendanceReminder && (
+        <div className="mt-3 sm:mx-auto sm:w-full sm:max-w-lg">
+          <div className="bg-gradient-to-r from-red-600 via-rose-600 to-amber-600 text-white p-4 rounded-2xl shadow-xl border-2 border-amber-300 animate-in fade-in slide-in-from-top-3">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center flex-shrink-0 animate-bounce">
+                <BellRing className="w-6 h-6 text-amber-200" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[10px] font-black uppercase tracking-wider bg-white/25 px-2 py-0.5 rounded shadow-2xs">
+                    CẢNH BÁO ĐIỂM DANH (RA NGOÀI MÀN HÌNH)
+                  </span>
+                  <span className="text-xs font-black text-amber-200">
+                    {urgentAttendanceReminder.class_name ? `Lớp ${urgentAttendanceReminder.class_name}` : 'Lớp của bạn'}
+                  </span>
+                </div>
+                <h3 className="text-sm font-extrabold mt-1 text-white leading-tight">
+                  {urgentAttendanceReminder.title}
+                </h3>
+                <p className="text-xs text-rose-100 mt-0.5 line-clamp-2">
+                  {urgentAttendanceReminder.message}
+                </p>
+
+                <div className="flex flex-wrap items-center gap-2 mt-3 pt-2.5 border-t border-white/20">
+                  <button
+                    type="button"
+                    onClick={handleDirectAttendanceFromAlert}
+                    className="py-1.5 px-3.5 rounded-xl bg-amber-300 hover:bg-amber-200 text-slate-950 text-xs font-black shadow-sm active:scale-95 transition-all flex items-center gap-1.5"
+                  >
+                    <ClipboardList className="w-4 h-4" />
+                    <span>Vào Điểm Danh & Nộp Ngay</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={testSound}
+                    className="py-1.5 px-2.5 rounded-xl bg-white/20 hover:bg-white/30 text-white text-xs font-bold border border-white/30 flex items-center gap-1 active:scale-95 transition-all"
+                  >
+                    <Volume2 className="w-3.5 h-3.5" />
+                    <span>Nghe lại chuông</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={snoozeUrgentReminder}
+                    className="py-1.5 px-2.5 rounded-xl bg-black/20 hover:bg-black/30 text-rose-100 text-xs font-semibold ml-auto transition-colors"
+                  >
+                    Tắt chuông
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Device Screen Alert & Audio Settings Bar */}
+      <div className="mt-3 sm:mx-auto sm:w-full sm:max-w-lg">
+        <div className="bg-white/95 backdrop-blur-xs border border-blue-200/90 rounded-2xl p-3 shadow-xs">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg bg-blue-50 text-blue-700 flex items-center justify-center flex-shrink-0">
+                <Bell className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="text-[11px] font-black text-slate-800 flex items-center gap-1.5">
+                  <span>Cảnh báo ngoài màn hình & Chuông nhắc</span>
+                  {selectedClassId && currentClass && (
+                    <span className="text-[10px] font-bold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">
+                      Lớp {currentClass.class_name}
+                    </span>
+                  )}
+                </div>
+                <p className="text-[10px] text-slate-500">
+                  Phát chuông và đẩy thông báo ra ngoài màn hình dù GVCN chưa đăng nhập.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1.5 flex-wrap sm:flex-nowrap">
+              {/* Nút bật thông báo ra ngoài màn hình */}
+              {browserPermission !== 'granted' ? (
+                <button
+                  type="button"
+                  onClick={requestBrowserPermission}
+                  className="px-2.5 py-1 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold shadow-xs active:scale-95 transition-all flex items-center gap-1 animate-pulse"
+                  title="Bấm để cho phép trình duyệt gửi cảnh báo bật ra ngoài màn hình máy tính/điện thoại"
+                >
+                  <BellRing className="w-3.5 h-3.5" />
+                  <span>Bật báo ra màn hình</span>
+                </button>
+              ) : (
+                <span className="px-2 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10px] font-bold flex items-center gap-1">
+                  <Check className="w-3 h-3 text-emerald-600" />
+                  <span>Báo ngoài màn hình: BẬT</span>
+                </span>
+              )}
+
+              {/* Nút bật/tắt âm thanh chuông */}
+              <button
+                type="button"
+                onClick={() => toggleSound(!isSoundEnabled)}
+                className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition-colors flex items-center gap-1 ${
+                  isSoundEnabled
+                    ? 'bg-slate-100 text-slate-800 border-slate-300 hover:bg-slate-200'
+                    : 'bg-rose-50 text-rose-700 border-rose-200'
+                }`}
+                title={isSoundEnabled ? 'Tắt âm thanh chuông' : 'Bật âm thanh chuông'}
+              >
+                {isSoundEnabled ? <Volume2 className="w-3 h-3 text-blue-600" /> : <VolumeX className="w-3 h-3 text-rose-600" />}
+                <span>{isSoundEnabled ? 'Chuông: Bật' : 'Chuông: Tắt'}</span>
+              </button>
+
+              {/* Nút thử chuông */}
+              <button
+                type="button"
+                onClick={testSound}
+                className="px-2 py-1 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 text-[10px] font-bold flex items-center gap-1 active:scale-95 transition-all"
+                title="Bấm để nghe thử chuông ngân vang và mở khóa âm thanh trình duyệt"
+              >
+                <span>Thử chuông</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Cảnh báo nếu trình duyệt đang chặn Autoplay âm thanh */}
+          {isAudioBlocked && (
+            <div
+              onClick={testSound}
+              className="mt-2 p-2 bg-amber-50 hover:bg-amber-100 border border-amber-300 rounded-xl flex items-center gap-2 cursor-pointer transition-colors"
+            >
+              <Volume2 className="w-4 h-4 text-amber-700 animate-bounce flex-shrink-0" />
+              <span className="text-[11px] font-bold text-amber-900">
+                🔊 Trình duyệt đang chờ chạm để mở khóa chuông báo. Nhấp vào đây để kích hoạt ngay!
+              </span>
             </div>
           )}
         </div>
@@ -772,6 +973,17 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                 </div>
               </form>
             )}
+          </div>
+
+          {/* Footer Developer Credit */}
+          <div className="mt-5 text-center text-xs text-slate-500 space-y-1">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/80 border border-slate-200 shadow-2xs text-slate-700 font-medium">
+              <Code2 className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
+              <span>Ứng dụng được phát triển bởi: <strong className="text-slate-900 font-bold">Vũ Văn Hùng</strong> - <a href="tel:0984246993" className="font-bold text-blue-700 hover:underline">SĐT: 0984246993</a></span>
+            </div>
+            <p className="text-[11px] text-slate-400">
+              {settings?.school_name || 'Hệ thống Quản lý Báo cáo Sĩ số'} © {activeYear?.name || '2026-2027'}
+            </p>
           </div>
         </div>
       </div>
