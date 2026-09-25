@@ -52,7 +52,7 @@ export interface SchoolSettings {
   early_report_max_bonus?: number; // Điểm cộng tối đa mỗi tuần (mặc định: 2.5)
   // Cấu hình tự động nhắc nhở GVCN chưa báo cáo sĩ số
   enable_auto_reminder?: boolean; // Bật tính năng tự động báo về tài khoản GVCN (mặc định: true)
-  auto_reminder_time?: string; // Giờ tự động nhắc nhở (mặc định: '07:45')
+  auto_reminder_time?: string; // Giờ tự động nhắc nhở (mặc định: '07:30')
   reminder_message_template?: string; // Mẫu tin nhắn nhắc nhở
   created_at: string;
   updated_at: string;

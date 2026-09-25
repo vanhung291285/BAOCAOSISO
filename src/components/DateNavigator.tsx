@@ -48,24 +48,24 @@ export const DateNavigator: React.FC<DateNavigatorProps> = ({
 
   return (
     <div className={`flex flex-wrap items-center gap-2 ${className}`}>
-      <div className="inline-flex items-center rounded-lg bg-white border border-slate-200 shadow-xs p-1">
+      <div className="w-full sm:w-auto flex items-center justify-between sm:justify-start rounded-xl bg-white border border-slate-200 shadow-xs p-1">
         <button
           type="button"
           onClick={handlePrevDay}
           title="Ngày trước"
-          className="inline-flex items-center justify-center p-1.5 sm:p-2 rounded-md hover:bg-slate-100 text-slate-700 transition-colors"
+          className="inline-flex items-center justify-center p-2 rounded-lg hover:bg-slate-100 text-slate-700 active:scale-95 transition-all"
         >
           <ChevronLeft className="w-4 h-4" />
-          <span className="sr-only md:not-sr-only md:ml-1 text-xs font-medium">Ngày trước</span>
+          <span className="sr-only sm:not-sr-only sm:ml-1 text-xs font-semibold">Ngày trước</span>
         </button>
 
-        <div className="relative mx-1 flex items-center">
+        <div className="relative mx-1 flex items-center flex-1 sm:flex-initial justify-center">
           <Calendar className="w-4 h-4 text-blue-600 absolute left-2 pointer-events-none" />
           <input
             type="date"
             value={selectedDate}
             onChange={(e) => e.target.value && handleDateChange(e.target.value)}
-            className="pl-7 sm:pl-8 pr-1.5 py-1 text-xs sm:text-sm font-bold text-slate-800 bg-transparent border-0 focus:ring-0 focus:outline-hidden cursor-pointer"
+            className="w-full sm:w-auto pl-8 pr-2 py-1 text-xs sm:text-sm font-bold text-slate-800 bg-transparent border-0 focus:ring-0 focus:outline-hidden cursor-pointer text-center"
           />
         </div>
 
@@ -73,9 +73,9 @@ export const DateNavigator: React.FC<DateNavigatorProps> = ({
           type="button"
           onClick={handleNextDay}
           title="Ngày sau"
-          className="inline-flex items-center justify-center p-1.5 sm:p-2 rounded-md hover:bg-slate-100 text-slate-700 transition-colors"
+          className="inline-flex items-center justify-center p-2 rounded-lg hover:bg-slate-100 text-slate-700 active:scale-95 transition-all"
         >
-          <span className="sr-only md:not-sr-only md:mr-1 text-xs font-medium">Ngày sau</span>
+          <span className="sr-only sm:not-sr-only sm:mr-1 text-xs font-semibold">Ngày sau</span>
           <ChevronRight className="w-4 h-4" />
         </button>
       </div>
@@ -84,14 +84,14 @@ export const DateNavigator: React.FC<DateNavigatorProps> = ({
         <button
           type="button"
           onClick={handleToday}
-          className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 transition-colors"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 active:scale-95 transition-all shadow-2xs"
         >
           <RotateCcw className="w-3.5 h-3.5" />
           Về hôm nay
         </button>
       )}
 
-      <div className="text-xs font-medium text-slate-600 hidden md:block bg-slate-100 px-3 py-1.5 rounded-md">
+      <div className="text-xs font-medium text-slate-600 hidden md:block bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200/60">
         📅 {formatVietnameseDate(selectedDate)}
       </div>
     </div>

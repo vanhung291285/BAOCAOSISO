@@ -20,6 +20,7 @@ import {
   Printer,
   FileSpreadsheet,
   Trophy,
+  ChevronDown,
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -35,7 +36,8 @@ export const Navbar: React.FC<NavbarProps> = ({ currentPath, onNavigate }) => {
   // Find user's assigned class if GVCN
   const assignedClass = classes.find((c) => c.id === currentUser?.assigned_class_id);
 
-  const navItems = [
+  // Group navigation logically for desktop to ensure zero overlap and elegant UI
+  const mainNavItems = [
     { label: 'Tổng quan', path: '/dashboard', icon: BarChart3 },
     {
       label: 'Báo cáo sĩ số',
@@ -43,16 +45,29 @@ export const Navbar: React.FC<NavbarProps> = ({ currentPath, onNavigate }) => {
       icon: ClipboardList,
       highlight: isGVCN,
     },
-    { label: 'Báo cáo ngày', path: '/reports/daily', icon: FileSpreadsheet },
-    { label: 'Báo cáo tháng', path: '/reports/monthly', icon: Calendar },
-    { label: 'Thi đua sĩ số', path: '/reports/ranking', icon: Trophy },
-    { label: 'Biểu đồ', path: '/charts', icon: BarChart3 },
   ];
 
+  const reportItems = [
+    { label: 'Báo cáo ngày', path: '/reports/daily', icon: FileSpreadsheet, desc: 'Bảng tổng hợp sĩ số theo ngày' },
+    { label: 'Báo cáo tháng', path: '/reports/monthly', icon: Calendar, desc: 'Báo cáo số liệu chuyên cần tháng' },
+    { label: 'Thi đua sĩ số', path: '/reports/ranking', icon: Trophy, desc: 'Bảng xếp hạng thi đua nền nếp' },
+    { label: 'Biểu đồ trực quan', path: '/charts', icon: BarChart3, desc: 'Biểu đồ phân tích tỷ lệ đi học' },
+  ];
+
+  const manageItems = [];
   if (isBGH || isAdmin) {
-    navItems.push({ label: 'Lớp học', path: '/classes', icon: Layers });
-    navItems.push({ label: 'Tài khoản', path: '/users', icon: ShieldCheck });
+    manageItems.push({ label: 'Lớp học', path: '/classes', icon: Layers });
+    manageItems.push({ label: 'Tài khoản', path: '/users', icon: ShieldCheck });
   }
+
+  // All items for mobile drawer
+  const allNavItems = [
+    ...mainNavItems,
+    ...reportItems.map(r => ({ label: r.label, path: r.path, icon: r.icon, highlight: false })),
+    ...manageItems.map(m => ({ label: m.label, path: m.path, icon: m.icon, highlight: false })),
+  ];
+
+  const isReportActive = reportItems.some((r) => currentPath === r.path);
 
   const handleNav = (path: string) => {
     onNavigate(path);
@@ -63,9 +78,9 @@ export const Navbar: React.FC<NavbarProps> = ({ currentPath, onNavigate }) => {
     <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-2xs no-print pt-[env(safe-area-inset-top)]">
       <div className="max-w-[1600px] w-full mx-auto px-3 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 gap-2 xl:gap-4 w-full">
-          {/* Brand & School info - Protected with flex-shrink-0 so it is never squashed or covered */}
+          {/* Brand & School info - Balanced sizing so desktop menu is never squeezed */}
           <div
-            className="flex items-center gap-2 sm:gap-3 cursor-pointer flex-shrink xl:flex-shrink-0 max-w-[200px] sm:max-w-[250px] md:max-w-[350px] lg:max-w-[400px] xl:max-w-[400px] 2xl:max-w-[500px] min-w-0"
+            className="flex items-center gap-2 sm:gap-3 cursor-pointer flex-shrink-0 max-w-[200px] sm:max-w-[220px] md:max-w-[260px] lg:max-w-[280px] xl:max-w-[280px] 2xl:max-w-[340px] min-w-0"
             onClick={() => handleNav('/dashboard')}
           >
             <div
@@ -78,12 +93,12 @@ export const Navbar: React.FC<NavbarProps> = ({ currentPath, onNavigate }) => {
                 <School className="w-5 h-5 sm:w-6 sm:h-6" />
               )}
             </div>
-            <div className="flex flex-col justify-center min-w-0 flex-1">
-              <div className="text-[11px] font-bold text-blue-700 tracking-wide uppercase leading-tight truncate">
+            <div className="flex flex-col justify-center min-w-0 flex-1 pr-1">
+              <div className="text-[10px] sm:text-[11px] font-bold text-blue-700 tracking-wide uppercase leading-tight truncate">
                 {settings?.short_name || 'BÁO CÁO SĨ SỐ'}
               </div>
-              <h1 className="text-xs sm:text-sm lg:text-base font-black text-slate-900 tracking-tight leading-snug truncate">
-                {settings?.school_name || 'Hệ thống Báo cáo Sĩ số Học sinh'}
+              <h1 className="text-xs sm:text-sm font-black text-slate-900 tracking-tight leading-snug truncate" title={settings?.school_name}>
+                {settings?.school_name || 'Hệ thống Báo cáo Sĩ số'}
               </h1>
               <div className="flex items-center gap-1.5 text-[10px] sm:text-[11px] text-slate-500 font-medium leading-tight whitespace-nowrap">
                 {activeYear && (
@@ -95,16 +110,17 @@ export const Navbar: React.FC<NavbarProps> = ({ currentPath, onNavigate }) => {
             </div>
           </div>
 
-          {/* Desktop Navigation Links - Shown on xl screens (>=1280px) to ensure no overlap */}
-          <nav className="hidden xl:flex items-center gap-1 flex-1 min-w-0 overflow-x-auto no-scrollbar px-2">
-            {navItems.map((item) => {
+          {/* Desktop Navigation Links - Organized scientifically to ensure ample space, zero text loss */}
+          <nav className="hidden xl:flex items-center gap-1.5 flex-1 min-w-0 justify-center px-2">
+            {/* Primary Direct Actions */}
+            {mainNavItems.map((item) => {
               const Icon = item.icon;
               const isActive = currentPath === item.path;
               return (
                 <button
                   key={item.path}
                   onClick={() => handleNav(item.path)}
-                  className={`flex items-center gap-1 xl:gap-1.5 px-1.5 2xl:px-3 py-2 rounded-lg text-[11px] 2xl:text-xs font-semibold whitespace-nowrap transition-all flex-shrink-0 ${
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all flex-shrink-0 ${
                     item.highlight && !isActive
                       ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-xs'
                       : isActive
@@ -118,16 +134,74 @@ export const Navbar: React.FC<NavbarProps> = ({ currentPath, onNavigate }) => {
               );
             })}
 
-            
+            {/* Reports Group Dropdown */}
+            <div className="relative group">
+              <button
+                type="button"
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all flex-shrink-0 ${
+                  isReportActive
+                    ? 'bg-blue-50 text-blue-800 font-bold'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                }`}
+              >
+                <FileSpreadsheet className="w-4 h-4 text-slate-500" />
+                <span className="whitespace-nowrap">Báo cáo & Thống kê</span>
+                <ChevronDown className="w-3.5 h-3.5 text-slate-400 group-hover:rotate-180 transition-transform" />
+              </button>
+
+              <div className="absolute left-0 top-full mt-1 w-64 bg-white border border-slate-200 rounded-xl shadow-lg p-1.5 hidden group-hover:block z-50 animate-in fade-in duration-150">
+                {reportItems.map((rep) => {
+                  const Icon = rep.icon;
+                  const isActive = currentPath === rep.path;
+                  return (
+                    <button
+                      key={rep.path}
+                      onClick={() => handleNav(rep.path)}
+                      className={`w-full text-left flex items-start gap-2.5 px-3 py-2 rounded-lg text-xs transition-colors ${
+                        isActive
+                          ? 'bg-blue-50 text-blue-800 font-bold'
+                          : 'text-slate-700 hover:bg-slate-50'
+                      }`}
+                    >
+                      <Icon className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" />
+                      <div className="flex flex-col">
+                        <span className="font-semibold text-slate-800">{rep.label}</span>
+                        <span className="text-[10px] text-slate-400 leading-tight">{rep.desc}</span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Management for BGH/Admin */}
+            {manageItems.map((item) => {
+              const Icon = item.icon;
+              const isActive = currentPath === item.path;
+              return (
+                <button
+                  key={item.path}
+                  onClick={() => handleNav(item.path)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all flex-shrink-0 ${
+                    isActive
+                      ? 'bg-slate-100 text-blue-800 shadow-2xs font-bold'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                  }`}
+                >
+                  <Icon className="w-4 h-4 flex-shrink-0" />
+                  <span className="whitespace-nowrap">{item.label}</span>
+                </button>
+              );
+            })}
           </nav>
 
           {/* User profile & Quick Switcher */}
-          <div className="flex items-center gap-2 flex-shrink-0">
+          <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
             {isAdmin && (
               <div className="relative group hidden xl:block">
                 <button
                   onClick={() => handleNav('/settings/school')}
-                  className={`flex items-center gap-1 xl:gap-1.5 px-1.5 2xl:px-3 py-2 rounded-lg text-[11px] 2xl:text-xs font-semibold whitespace-nowrap transition-colors flex-shrink-0 ${
+                  className={`flex items-center gap-1.5 px-2.5 2xl:px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors flex-shrink-0 ${
                     currentPath.startsWith('/settings')
                       ? 'bg-slate-100 text-blue-800 font-bold'
                       : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
@@ -223,7 +297,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentPath, onNavigate }) => {
       {mobileMenuOpen && (
         <div className="xl:hidden border-t border-slate-200 bg-white px-4 pt-3 pb-6 space-y-2 animate-in slide-in-from-top-2 duration-150">
           <div className="space-y-1">
-            {navItems.map((item) => {
+            {allNavItems.map((item) => {
               const Icon = item.icon;
               const isActive = currentPath === item.path;
               return (
@@ -296,21 +370,26 @@ export const Navbar: React.FC<NavbarProps> = ({ currentPath, onNavigate }) => {
             )}
           </div>
 
-          <div className="pt-3 border-t border-slate-200 flex items-center justify-between">
-            <button
-              onClick={() => handleNav('/profile')}
-              className="flex items-center gap-2 text-sm font-medium text-slate-700"
-            >
-              <User className="w-4 h-4 text-slate-500" />
-              <span>{currentUser?.full_name}</span>
-            </button>
-            <button
-              onClick={logout}
-              className="flex items-center gap-1.5 text-xs font-semibold text-red-600 px-3 py-1.5 rounded-md hover:bg-red-50"
-            >
-              <LogOut className="w-3.5 h-3.5" />
-              <span>Đăng xuất</span>
-            </button>
+          <div className="pt-3 border-t border-slate-200 flex flex-col gap-2.5">
+            <div className="sm:hidden">
+              <PWAInstallButton showLabelOnMobile={true} />
+            </div>
+            <div className="flex items-center justify-between">
+              <button
+                onClick={() => handleNav('/profile')}
+                className="flex items-center gap-2 text-sm font-medium text-slate-700 hover:text-blue-700"
+              >
+                <User className="w-4 h-4 text-slate-500" />
+                <span>{currentUser?.full_name}</span>
+              </button>
+              <button
+                onClick={logout}
+                className="flex items-center gap-1.5 text-xs font-semibold text-red-600 px-3 py-1.5 rounded-md hover:bg-red-50"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span>Đăng xuất</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

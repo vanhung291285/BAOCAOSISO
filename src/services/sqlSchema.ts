@@ -55,6 +55,9 @@ CREATE TABLE IF NOT EXISTS public.school_settings (
     early_report_deadline TEXT DEFAULT '07:30',
     early_report_bonus_points NUMERIC DEFAULT 0.5,
     early_report_max_bonus NUMERIC DEFAULT 2.5,
+    enable_auto_reminder BOOLEAN DEFAULT true,
+    auto_reminder_time TEXT DEFAULT '07:30',
+    reminder_message_template TEXT DEFAULT 'Lớp {class_name} chưa nộp báo cáo sĩ số ngày hôm nay ({date}). Thầy/Cô vui lòng cập nhật sớm trước 07h30 để BGH tổng hợp toàn trường và không bị trừ điểm thi đua!',
     created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
 );
@@ -107,6 +110,7 @@ CREATE TABLE IF NOT EXISTS public.indicator_groups (
     show_absent BOOLEAN NOT NULL DEFAULT true,
     show_percentage BOOLEAN NOT NULL DEFAULT true,
     column_header_override TEXT,
+    icon TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
 );
 
@@ -150,6 +154,43 @@ CREATE TABLE IF NOT EXISTS public.system_logs (
     report_date DATE,
     old_data JSONB,
     new_data JSONB,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
+);
+
+-- 11. TABLE: students (Danh sách học sinh theo từng lớp)
+CREATE TABLE IF NOT EXISTS public.students (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    class_id TEXT NOT NULL REFERENCES public.classes(id) ON DELETE CASCADE,
+    full_name TEXT NOT NULL,
+    address TEXT,
+    is_boarding BOOLEAN DEFAULT false,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
+);
+
+-- 12. TABLE: school_off_days (Quản lý các ngày nghỉ học sinh - lễ, tết, thời tiết)
+CREATE TABLE IF NOT EXISTS public.school_off_days (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    date DATE NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    type TEXT NOT NULL DEFAULT 'HOLIDAY',
+    applies_to TEXT DEFAULT 'ALL',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
+);
+
+-- 13. TABLE: notifications (Thông báo hệ thống & Nhắc nhở sĩ số GVCN)
+CREATE TABLE IF NOT EXISTS public.notifications (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    user_id TEXT NOT NULL,
+    class_id TEXT,
+    class_name TEXT,
+    type TEXT NOT NULL,
+    title TEXT NOT NULL,
+    message TEXT NOT NULL,
+    date TEXT,
+    read BOOLEAN NOT NULL DEFAULT false,
+    action_url TEXT,
+    created_by_name TEXT,
+    urgent BOOLEAN DEFAULT false,
     created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
 );
 
@@ -216,7 +257,35 @@ BEGIN
     EXCEPTION WHEN duplicate_column THEN END;
 
     BEGIN
+        ALTER TABLE public.school_settings ADD COLUMN enable_auto_reminder BOOLEAN DEFAULT true;
+    EXCEPTION WHEN duplicate_column THEN END;
+
+    BEGIN
+        ALTER TABLE public.school_settings ADD COLUMN auto_reminder_time TEXT DEFAULT '07:30';
+    EXCEPTION WHEN duplicate_column THEN END;
+
+    BEGIN
+        ALTER TABLE public.school_settings ADD COLUMN reminder_message_template TEXT DEFAULT 'Lớp {class_name} chưa nộp báo cáo sĩ số ngày hôm nay ({date}). Thầy/Cô vui lòng cập nhật sớm trước 07h30 để BGH tổng hợp toàn trường và không bị trừ điểm thi đua!';
+    EXCEPTION WHEN duplicate_column THEN END;
+
+    BEGIN
         ALTER TABLE public.classes ADD COLUMN campus_id TEXT REFERENCES public.campuses(id) ON DELETE SET NULL;
+    EXCEPTION WHEN duplicate_column THEN END;
+
+    BEGIN
+        ALTER TABLE public.classes ADD COLUMN is_locked BOOLEAN DEFAULT false;
+    EXCEPTION WHEN duplicate_column THEN END;
+
+    BEGIN
+        ALTER TABLE public.classes ADD COLUMN sort_order INTEGER DEFAULT 0;
+    EXCEPTION WHEN duplicate_column THEN END;
+
+    BEGIN
+        ALTER TABLE public.school_years ADD COLUMN is_locked BOOLEAN DEFAULT false;
+    EXCEPTION WHEN duplicate_column THEN END;
+
+    BEGIN
+        ALTER TABLE public.indicator_groups ADD COLUMN icon TEXT;
     EXCEPTION WHEN duplicate_column THEN END;
 
     BEGIN
@@ -257,6 +326,9 @@ ALTER TABLE public.indicator_groups ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.daily_reports ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.daily_report_values ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.system_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.students ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.school_off_days ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
 
 -- Cấp quyền truy cập cho anon & authenticated
 GRANT USAGE ON SCHEMA public TO anon, authenticated;
@@ -291,6 +363,15 @@ CREATE POLICY "Allow all for daily_report_values" ON public.daily_report_values 
 DROP POLICY IF EXISTS "Allow all for system_logs" ON public.system_logs;
 CREATE POLICY "Allow all for system_logs" ON public.system_logs FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Allow all for students" ON public.students;
+CREATE POLICY "Allow all for students" ON public.students FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow all for school_off_days" ON public.school_off_days;
+CREATE POLICY "Allow all for school_off_days" ON public.school_off_days FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow all for notifications" ON public.notifications;
+CREATE POLICY "Allow all for notifications" ON public.notifications FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
 -- ==============================================================================
 -- REALTIME SUBSCRIPTIONS
 -- Tự động đẩy thông báo thời gian thực khi có báo cáo mới hoặc thay đổi cấu hình
@@ -312,7 +393,10 @@ DECLARE
         'public.classes', 
         'public.indicator_groups', 
         'public.daily_reports', 
-        'public.daily_report_values'
+        'public.daily_report_values',
+        'public.students',
+        'public.school_off_days',
+        'public.notifications'
     ];
 BEGIN
     FOR t IN SELECT unnest(tables) LOOP

@@ -94,7 +94,9 @@ const AppContent: React.FC = () => {
   }
 
   return (
-    <div className="min-h-[100dvh] bg-slate-100/80 flex flex-col font-sans antialiased text-slate-800 selection:bg-blue-600 selection:text-white pb-[calc(env(safe-area-inset-bottom)+4rem)] sm:pb-0">
+    <div className={`min-h-[100dvh] bg-slate-100/80 flex flex-col font-sans antialiased text-slate-800 selection:bg-blue-600 selection:text-white ${
+      currentPath === '/attendance' ? 'pb-0' : 'pb-[env(safe-area-inset-bottom)] sm:pb-0'
+    }`}>
       {/* Top Navbar */}
       <Navbar currentPath={currentPath} onNavigate={handleNavigate} />
 
@@ -102,7 +104,9 @@ const AppContent: React.FC = () => {
       <GVCNUnreportedAlertBanner onNavigate={handleNavigate} currentPath={currentPath} />
 
       {/* Main Content Area - Optimized spacing for phones */}
-      <main className="flex-1 max-w-[1600px] w-full mx-auto px-3 sm:px-6 lg:px-8 py-3.5 sm:py-8">
+      <main className={`flex-1 max-w-[1600px] w-full mx-auto px-3 sm:px-6 lg:px-8 ${
+        currentPath === '/attendance' ? 'pt-3.5 pb-0 sm:py-6' : 'py-3.5 sm:py-8'
+      }`}>
         {currentPath === '/dashboard' && (
           <DashboardPage
             onNavigate={handleNavigate}
@@ -152,39 +156,41 @@ const AppContent: React.FC = () => {
         {currentPath === '/profile' && <ProfilePage onNavigate={handleNavigate} />}
       </main>
 
-      {/* App Footer (Hidden when printing reports) */}
-      <footer className="mt-auto border-t border-slate-200 bg-white py-5 no-print text-xs text-slate-500">
-        <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row items-center justify-between gap-3 text-center md:text-left">
-          <div className="flex flex-wrap items-center justify-center md:justify-start gap-2">
-            <School className="w-4 h-4 text-blue-700 flex-shrink-0" />
-            <span className="font-extrabold text-slate-800">
-              {settings?.school_name || 'Hệ thống Quản lý Báo cáo Sĩ số'}
-            </span>
-            {(settings?.commune || settings?.province) && (
-              <>
-                <span className="text-slate-300 hidden sm:inline">|</span>
-                <span>{[settings.commune, settings.province].filter(Boolean).join(', ')}</span>
-              </>
-            )}
-          </div>
-
-          <div className="flex flex-wrap items-center justify-center md:justify-end gap-3 text-[11px]">
-            <span>Năm học: <strong className="text-slate-700">{activeYear?.name || '2026-2027'}</strong></span>
-            <span className="text-slate-300">|</span>
-            {settings?.developer_name ? (
-              <span className="inline-flex items-center gap-1.5 font-medium text-slate-700 bg-slate-100 px-2.5 py-1 rounded-full border border-slate-200">
-                <Code2 className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
-                <span>Phát triển bởi: <strong className="text-slate-900 font-bold">{settings.developer_name}</strong></span>
-                {settings.developer_contact && (
-                  <span className="text-slate-500 font-normal">({settings.developer_contact})</span>
-                )}
+      {/* App Footer (Hidden when printing reports or on attendance page where sticky bar is docked at bottom) */}
+      {currentPath !== '/attendance' && (
+        <footer className="mt-auto border-t border-slate-200 bg-white py-5 no-print text-xs text-slate-500">
+          <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row items-center justify-between gap-3 text-center md:text-left">
+            <div className="flex flex-wrap items-center justify-center md:justify-start gap-2">
+              <School className="w-4 h-4 text-blue-700 flex-shrink-0" />
+              <span className="font-extrabold text-slate-800">
+                {settings?.school_name || 'Hệ thống Quản lý Báo cáo Sĩ số'}
               </span>
-            ) : (
-              <span>Phiên bản v2.0 - Chuẩn Excel PGD</span>
-            )}
+              {(settings?.commune || settings?.province) && (
+                <>
+                  <span className="text-slate-300 hidden sm:inline">|</span>
+                  <span>{[settings.commune, settings.province].filter(Boolean).join(', ')}</span>
+                </>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center justify-center md:justify-end gap-3 text-[11px]">
+              <span>Năm học: <strong className="text-slate-700">{activeYear?.name || '2026-2027'}</strong></span>
+              <span className="text-slate-300">|</span>
+              {settings?.developer_name ? (
+                <span className="inline-flex items-center gap-1.5 font-medium text-slate-700 bg-slate-100 px-2.5 py-1 rounded-full border border-slate-200">
+                  <Code2 className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
+                  <span>Phát triển bởi: <strong className="text-slate-900 font-bold">{settings.developer_name}</strong></span>
+                  {settings.developer_contact && (
+                    <span className="text-slate-500 font-normal">({settings.developer_contact})</span>
+                  )}
+                </span>
+              ) : (
+                <span>Phiên bản v2.0 - Chuẩn Excel PGD</span>
+              )}
+            </div>
           </div>
-        </div>
-      </footer>
+        </footer>
+      )}
 
       {/* Persistent Mobile Bottom Navigation Bar (Dành riêng cho màn hình điện thoại) */}
       {currentPath !== '/attendance' && (

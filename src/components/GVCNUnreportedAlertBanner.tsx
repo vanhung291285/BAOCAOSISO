@@ -57,14 +57,14 @@ export const GVCNUnreportedAlertBanner: React.FC<GVCNUnreportedAlertBannerProps>
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-[10px] sm:text-xs font-black uppercase tracking-wider bg-white/25 px-2 py-0.5 rounded shadow-2xs">
-                  CẢNH BÁO TỰ ĐỘNG
+                  CẢNH BÁO TỰ ĐỘNG (TRƯỚC 07H30)
                 </span>
                 <span className="text-xs sm:text-sm font-black text-amber-200">
                   Lớp {assignedClass.class_name} chưa nộp báo cáo sĩ số hôm nay ({formattedToday})
                 </span>
               </div>
               <p className="text-[11px] sm:text-xs text-rose-100 mt-0.5 line-clamp-1">
-                Thầy/Cô {currentUser?.full_name} vui lòng cập nhật sĩ số có mặt, vắng mặt để BGH tổng hợp toàn trường và bảo toàn điểm thi đua báo cáo sớm!
+                Thầy/Cô {currentUser?.full_name} vui lòng hoàn thành báo cáo sĩ số trước 07h30 sáng để BGH tổng hợp toàn trường và bảo toàn điểm thi đua cộng sớm!
               </p>
             </div>
           </div>

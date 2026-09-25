@@ -852,12 +852,12 @@ export const SettingsSchoolPage: React.FC = () => {
                   </label>
                   <input
                     type="time"
-                    value={formData.auto_reminder_time || '07:45'}
+                    value={formData.auto_reminder_time || '07:30'}
                     onChange={(e) => setFormData({ ...formData, auto_reminder_time: e.target.value })}
                     className="w-full px-3 py-2 text-sm font-bold border border-rose-300 rounded-xl bg-white text-slate-800 focus:ring-2 focus:ring-rose-500"
                   />
                   <p className="text-[11px] text-slate-500 mt-1">
-                    Mặc định: <strong>07:45</strong> sáng mỗi ngày. Nếu lớp chưa nộp, hệ thống sẽ tự động tạo thông báo và rung chuông tài khoản GVCN.
+                    Mặc định: <strong>07:30</strong> sáng mỗi ngày. Nếu lớp chưa nộp báo cáo sĩ số trước giờ này, hệ thống sẽ tự động phát âm thanh chuông cảnh báo và gửi thông báo trực tiếp đến điện thoại của GVCN.
                   </p>
                 </div>
 

@@ -198,8 +198,8 @@ export function getInitialData() {
     early_report_bonus_points: DEFAULT_EARLY_REPORT_BONUS_PER_DAY,
     early_report_max_bonus: DEFAULT_EARLY_REPORT_MAX_BONUS,
     enable_auto_reminder: true,
-    auto_reminder_time: '07:45',
-    reminder_message_template: 'Lớp {class_name} chưa nộp báo cáo sĩ số ngày hôm nay ({date}). Thầy/Cô vui lòng cập nhật sớm để BGH tổng hợp toàn trường!',
+    auto_reminder_time: '07:30',
+    reminder_message_template: 'Lớp {class_name} chưa nộp báo cáo sĩ số ngày hôm nay ({date}). Thầy/Cô vui lòng cập nhật sớm trước 07h30 để BGH tổng hợp toàn trường và không bị trừ điểm thi đua!',
     created_at: now,
     updated_at: now,
   };
@@ -1019,29 +1019,37 @@ export const StorageService = {
   },
 
   async getLatestReport(
-    classId: string
+    classId: string,
+    beforeDate?: string
   ): Promise<{ report?: DailyReport; values: DailyReportValue[] }> {
     ensureInitialized();
     const supabase = getSupabaseClient();
 
     if (supabase && isSupabaseConnected()) {
       try {
-        const { data: rep, error: rErr } = await supabase
+        let query = supabase
           .from('daily_reports')
           .select('*')
-          .eq('class_id', classId)
+          .eq('class_id', classId);
+
+        if (beforeDate) {
+          query = query.lt('report_date', beforeDate);
+        }
+
+        const { data: reps, error: rErr } = await query
           .order('report_date', { ascending: false })
-          .limit(1)
-          .maybeSingle();
+          .limit(5);
 
-        if (!rErr && rep) {
-          const { data: vals, error: vErr } = await supabase
-            .from('daily_report_values')
-            .select('*')
-            .eq('report_id', rep.id);
+        if (!rErr && reps && reps.length > 0) {
+          for (const rep of reps) {
+            const { data: vals, error: vErr } = await supabase
+              .from('daily_report_values')
+              .select('*')
+              .eq('report_id', rep.id);
 
-          if (!vErr && vals) {
-            return { report: rep, values: vals };
+            if (!vErr && vals && vals.length > 0) {
+              return { report: rep, values: vals };
+            }
           }
         }
       } catch (err) {
@@ -1052,19 +1060,26 @@ export const StorageService = {
     const rawReports = localStorage.getItem(STORAGE_KEYS.REPORTS);
     const reports: DailyReport[] = rawReports ? JSON.parse(rawReports) : [];
     const classReports = reports
-      .filter((r) => r.class_id === classId)
+      .filter((r) => r.class_id === classId && (!beforeDate || r.report_date < beforeDate))
       .sort((a, b) => b.report_date.localeCompare(a.report_date));
-
-    const report = classReports[0];
-    if (!report) {
-      return { report: undefined, values: [] };
-    }
 
     const rawValues = localStorage.getItem(STORAGE_KEYS.VALUES);
     const allValues: DailyReportValue[] = rawValues ? JSON.parse(rawValues) : [];
-    const values = allValues.filter((v) => v.report_id === report.id);
 
-    return { report, values };
+    for (const report of classReports) {
+      const values = allValues.filter((v) => v.report_id === report.id);
+      if (values.length > 0 && values.some((v) => v.total_count > 0)) {
+        return { report, values };
+      }
+    }
+
+    const fallbackReport = classReports[0];
+    if (fallbackReport) {
+      const values = allValues.filter((v) => v.report_id === fallbackReport.id);
+      return { report: fallbackReport, values };
+    }
+
+    return { report: undefined, values: [] };
   },
 
   async getLatestReportForClass(
@@ -1760,6 +1775,21 @@ export const StorageService = {
       list.push(offDay);
     }
     localStorage.setItem(STORAGE_KEYS.OFF_DAYS, JSON.stringify(list));
+
+    const supabase = getSupabaseClient();
+    if (supabase && isSupabaseConnected()) {
+      try {
+        await supabase.from('school_off_days').upsert({
+          id: offDay.id,
+          date: offDay.date,
+          name: offDay.name,
+          type: offDay.type || 'HOLIDAY',
+          applies_to: offDay.applies_to || 'ALL',
+          created_at: offDay.created_at || new Date().toISOString(),
+        });
+      } catch (e) {}
+    }
+
     notifyRealtimeChange('off_days', list);
   },
 
@@ -1767,6 +1797,14 @@ export const StorageService = {
     const list = await this.getOffDays();
     const updated = list.filter((o) => o.id !== id);
     localStorage.setItem(STORAGE_KEYS.OFF_DAYS, JSON.stringify(updated));
+
+    const supabase = getSupabaseClient();
+    if (supabase && isSupabaseConnected()) {
+      try {
+        await supabase.from('school_off_days').delete().eq('id', id);
+      } catch (e) {}
+    }
+
     notifyRealtimeChange('off_days', updated);
   },
 
@@ -2304,13 +2342,32 @@ export const StorageService = {
     try {
       // 1. school_settings
       const settings = await this.getSettings();
-      const { error: sErr } = await supabase.from('school_settings').upsert(settings);
+      let { error: sErr } = await supabase.from('school_settings').upsert(settings);
+      if (sErr && (sErr.message?.includes('auto_reminder') || sErr.message?.includes('early_report') || sErr.code === 'PGRST204')) {
+        const {
+          enable_auto_reminder: _e1,
+          auto_reminder_time: _e2,
+          reminder_message_template: _e3,
+          enable_early_report_bonus: _e4,
+          early_report_deadline: _e5,
+          early_report_bonus_points: _e6,
+          early_report_max_bonus: _e7,
+          ...settingsFallback
+        } = settings;
+        const retrySettings = await supabase.from('school_settings').upsert(settingsFallback);
+        sErr = retrySettings.error;
+      }
       details.school_settings = { count: 1, error: sErr?.message };
 
       // 2. school_years
       const years = await this.getSchoolYears();
       if (years.length > 0) {
-        const { error: yErr } = await supabase.from('school_years').upsert(years);
+        let { error: yErr } = await supabase.from('school_years').upsert(years);
+        if (yErr && yErr.message?.includes('is_locked')) {
+          const yearsClean = years.map(({ is_locked: _l, ...rest }) => rest);
+          const retryY = await supabase.from('school_years').upsert(yearsClean);
+          yErr = retryY.error;
+        }
         details.school_years = { count: years.length, error: yErr?.message };
       }
 
@@ -2328,57 +2385,298 @@ export const StorageService = {
         details.profiles = { count: profiles.length, error: pErr?.message };
       }
 
-      // 5. classes
+      // 5. classes (Sanitize foreign keys so PostgreSQL does not throw foreign key errors)
       const classes = await this.getClasses();
-      if (classes.length > 0) {
-        const { error: clErr } = await supabase.from('classes').upsert(classes);
-        details.classes = { count: classes.length, error: clErr?.message };
+      const validYearIds = new Set(years.map((y) => y.id));
+      const validCampusIds = new Set(campuses.map((c) => c.id));
+      const validProfileIds = new Set(profiles.map((p) => p.id));
+
+      const cleanedClasses = classes.map((cls) => ({
+        ...cls,
+        school_year_id: cls.school_year_id && validYearIds.has(cls.school_year_id) ? cls.school_year_id : (years[0]?.id || null),
+        campus_id: cls.campus_id && validCampusIds.has(cls.campus_id) ? cls.campus_id : null,
+        homeroom_teacher_id: cls.homeroom_teacher_id && validProfileIds.has(cls.homeroom_teacher_id) ? cls.homeroom_teacher_id : null,
+        is_locked: Boolean(cls.is_locked),
+        sort_order: Number(cls.sort_order || 0),
+      }));
+
+      if (cleanedClasses.length > 0) {
+        let { error: clErr } = await supabase.from('classes').upsert(cleanedClasses);
+        if (clErr && (clErr.message?.includes('is_locked') || clErr.message?.includes('campus_id') || clErr.message?.includes('sort_order'))) {
+          const fallbackClasses = cleanedClasses.map(({ is_locked: _l, campus_id: _c, sort_order: _s, ...rest }) => rest);
+          const retryCl = await supabase.from('classes').upsert(fallbackClasses);
+          clErr = retryCl.error;
+        }
+        details.classes = { count: cleanedClasses.length, error: clErr?.message };
       }
 
-      // 6. indicator_groups
+      const validClassIds = new Set(cleanedClasses.map((c) => c.id));
+
+      // 6. indicator_groups (Tự động loại bỏ icon nếu Supabase schema chưa có cột icon)
       const indicators = await this.getIndicatorGroups();
       if (indicators.length > 0) {
-        const { error: iErr } = await supabase.from('indicator_groups').upsert(indicators);
+        let { error: iErr } = await supabase.from('indicator_groups').upsert(indicators);
+        if (iErr && (iErr.message?.includes('icon') || iErr.code === 'PGRST204')) {
+          const indicatorsClean = indicators.map(({ icon: _i, ...rest }) => rest);
+          const retryI = await supabase.from('indicator_groups').upsert(indicatorsClean);
+          iErr = retryI.error;
+        }
         details.indicator_groups = { count: indicators.length, error: iErr?.message };
       }
 
-      // 7. daily_reports
+      // 7. students (Danh sách học sinh của các lớp)
+      const rawStudents = localStorage.getItem(STORAGE_KEYS.STUDENTS);
+      const students: import('../types').Student[] = rawStudents ? JSON.parse(rawStudents) : [];
+      const validStudents = students
+        .filter((s) => validClassIds.has(s.class_id))
+        .map((s) => ({
+          id: s.id,
+          class_id: s.class_id,
+          full_name: s.full_name,
+          address: s.address || '',
+          is_boarding: Boolean(s.isBoarding ?? (s as any).is_boarding),
+          created_at: s.created_at || new Date().toISOString(),
+        }));
+
+      if (validStudents.length > 0) {
+        let stErrors: string | undefined;
+        for (let i = 0; i < validStudents.length; i += 50) {
+          const batch = validStudents.slice(i, i + 50);
+          const { error: stErr } = await supabase.from('students').upsert(batch);
+          if (stErr) {
+            stErrors = stErr.message;
+          }
+        }
+        details.students = { count: validStudents.length, error: stErrors };
+      } else {
+        details.students = { count: 0 };
+      }
+
+      // 8. daily_reports (Khớp ID từ Cloud theo class_id + report_date và giải quyết triệt để unique constraint)
       const rawReports = localStorage.getItem(STORAGE_KEYS.REPORTS);
       const reports: DailyReport[] = rawReports ? JSON.parse(rawReports) : [];
-      if (reports.length > 0) {
-        // Upsert in batches of 50
+      const successfulReportIds = new Set<string>();
+      const reportIdRemap = new Map<string, string>(); // localReportId -> cloudReportId
+      const cloudRepsKeyMap = new Map<string, string>();
+
+      // Lấy danh sách báo cáo đã có trên Cloud để tái sử dụng đúng ID, tránh vi phạm UNIQUE (class_id, report_date)
+      try {
+        const { data: cloudReps } = await supabase.from('daily_reports').select('id, class_id, report_date');
+        if (cloudReps) {
+          cloudReps.forEach((cr) => {
+            const dateStr = String(cr.report_date).split('T')[0];
+            cloudRepsKeyMap.set(`${cr.class_id}_${dateStr}`, cr.id);
+          });
+        }
+      } catch (e) {
+        console.warn('Lỗi lấy cloud reports map:', e);
+      }
+
+      const validReports = reports
+        .filter((r) => validClassIds.has(r.class_id))
+        .map((r) => {
+          const dateStr = String(r.report_date).split('T')[0];
+          const cloudKey = `${r.class_id}_${dateStr}`;
+          const finalId = cloudRepsKeyMap.get(cloudKey) || r.id;
+          reportIdRemap.set(r.id, finalId);
+          return {
+            ...r,
+            id: finalId,
+            report_date: dateStr,
+            created_by: r.created_by && validProfileIds.has(r.created_by) ? r.created_by : null,
+            reported_time: r.reported_time || null,
+            status: (r.status === 'DRAFT' || r.status === 'LOCKED') ? r.status : 'SUBMITTED',
+          };
+        });
+
+      if (validReports.length > 0) {
         let repErrors: string | undefined;
-        for (let i = 0; i < reports.length; i += 50) {
-          const batch = reports.slice(i, i + 50);
-          let { error: rErr } = await supabase.from('daily_reports').upsert(batch);
-          if (rErr && (rErr.message?.includes('reported_time') || rErr.code === 'PGRST204')) {
-            const batchCleaned = batch.map(({ reported_time, ...rest }) => rest);
-            const retryRes = await supabase.from('daily_reports').upsert(batchCleaned);
+        for (let i = 0; i < validReports.length; i += 50) {
+          const batch = validReports.slice(i, i + 50);
+          let { error: rErr } = await supabase.from('daily_reports').upsert(batch, { onConflict: 'class_id,report_date' });
+          if (rErr && (rErr.message?.includes('reported_time') || rErr.message?.includes('locked_at') || rErr.code === 'PGRST204')) {
+            const batchCleaned = batch.map(({ reported_time: _rt, locked_at: _la, ...rest }) => rest);
+            const retryRes = await supabase.from('daily_reports').upsert(batchCleaned, { onConflict: 'class_id,report_date' });
             rErr = retryRes.error;
           }
-          if (rErr) repErrors = rErr.message;
+          if (!rErr) {
+            batch.forEach((r) => successfulReportIds.add(r.id));
+          } else {
+            for (const singleReport of batch) {
+              const { error: sRepErr } = await supabase.from('daily_reports').upsert(singleReport, { onConflict: 'class_id,report_date' });
+              if (!sRepErr) {
+                successfulReportIds.add(singleReport.id);
+              }
+            }
+            repErrors = rErr.message;
+          }
         }
-        details.daily_reports = { count: reports.length, error: repErrors };
+        details.daily_reports = { count: validReports.length, error: repErrors };
+      } else {
+        details.daily_reports = { count: 0 };
       }
 
-      // 8. daily_report_values
+      // 9. daily_report_values (Khớp ID từ Cloud theo report_id + indicator_group_id và giải quyết triệt để foreign key)
       const rawValues = localStorage.getItem(STORAGE_KEYS.VALUES);
       const values: DailyReportValue[] = rawValues ? JSON.parse(rawValues) : [];
-      if (values.length > 0) {
-        let valErrors: string | undefined;
-        for (let i = 0; i < values.length; i += 100) {
-          const batch = values.slice(i, i + 100);
-          const { error: vErr } = await supabase.from('daily_report_values').upsert(batch);
-          if (vErr) valErrors = vErr.message;
+
+      // Lấy danh sách ID báo cáo thực tế đang có trên Cloud sau khi vừa đẩy daily_reports
+      let existingCloudReportIds = new Set<string>();
+      const cloudKeyToId = new Map<string, string>();
+      try {
+        const { data: cloudReps } = await supabase.from('daily_reports').select('id, class_id, report_date');
+        if (cloudReps && cloudReps.length > 0) {
+          cloudReps.forEach((cr) => {
+            existingCloudReportIds.add(cr.id);
+            const dateStr = String(cr.report_date).split('T')[0];
+            cloudKeyToId.set(`${cr.class_id}_${dateStr}`, cr.id);
+          });
         }
-        details.daily_report_values = { count: values.length, error: valErrors };
+      } catch (e) {
+        console.warn('Lỗi lấy cloud daily_reports:', e);
       }
 
-      // 9. system_logs
+      // Lấy danh sách chỉ tiêu thực tế trên Cloud
+      let existingCloudIndIds = new Set<string>();
+      try {
+        const { data: cloudInds } = await supabase.from('indicator_groups').select('id');
+        if (cloudInds && cloudInds.length > 0) {
+          cloudInds.forEach((ci) => existingCloudIndIds.add(ci.id));
+        } else {
+          indicators.forEach((i) => existingCloudIndIds.add(i.id));
+        }
+      } catch (e) {
+        indicators.forEach((i) => existingCloudIndIds.add(i.id));
+      }
+
+      // Lấy danh sách values hiện có trên Cloud để tái sử dụng ID nếu có
+      const cloudValuesKeyMap = new Map<string, string>();
+      try {
+        const { data: cloudVals } = await supabase.from('daily_report_values').select('id, report_id, indicator_group_id');
+        if (cloudVals) {
+          cloudVals.forEach((cv) => {
+            cloudValuesKeyMap.set(`${cv.report_id}_${cv.indicator_group_id}`, cv.id);
+          });
+        }
+      } catch (e) {
+        console.warn('Lỗi lấy cloud values map:', e);
+      }
+
+      // Map local report ID -> local report
+      const localRepMap = new Map(reports.map((r) => [r.id, r]));
+
+      const validValues: DailyReportValue[] = [];
+      for (const val of values) {
+        let targetReportId = reportIdRemap.get(val.report_id) || val.report_id;
+        if (!existingCloudReportIds.has(targetReportId)) {
+          const locRep = localRepMap.get(val.report_id);
+          if (locRep) {
+            const key = `${locRep.class_id}_${String(locRep.report_date).split('T')[0]}`;
+            const mappedId = cloudKeyToId.get(key);
+            if (mappedId) {
+              targetReportId = mappedId;
+            }
+          }
+        }
+
+        // BẮT BUỘC: targetReportId phải thực sự tồn tại trong bảng daily_reports trên Cloud
+        // VÀ indicator_group_id phải tồn tại trong bảng indicator_groups trên Cloud
+        if (existingCloudReportIds.has(targetReportId) && existingCloudIndIds.has(val.indicator_group_id)) {
+          const key = `${targetReportId}_${val.indicator_group_id}`;
+          const finalValId = cloudValuesKeyMap.get(key) || val.id;
+          validValues.push({
+            ...val,
+            id: finalValId,
+            report_id: targetReportId,
+            total_count: Math.max(0, Number(val.total_count) || 0),
+            present_count: Math.max(0, Number(val.present_count) || 0),
+            absent_count: Math.max(0, Number(val.absent_count) || 0),
+          });
+        }
+      }
+
+      if (validValues.length > 0) {
+        let valErrors: string | undefined;
+        for (let i = 0; i < validValues.length; i += 100) {
+          const batch = validValues.slice(i, i + 100);
+          try {
+            const { error: vErr } = await supabase.from('daily_report_values').upsert(batch, { onConflict: 'report_id,indicator_group_id' });
+            if (vErr) {
+              let individualErrors = 0;
+              for (const singleVal of batch) {
+                try {
+                  const { error: singleErr } = await supabase.from('daily_report_values').upsert(singleVal, { onConflict: 'report_id,indicator_group_id' });
+                  if (singleErr) individualErrors++;
+                } catch {
+                  individualErrors++;
+                }
+              }
+              if (individualErrors > 0 && individualErrors === batch.length) {
+                valErrors = vErr.message;
+              }
+            }
+          } catch (bErr: any) {
+            valErrors = bErr?.message;
+          }
+        }
+        details.daily_report_values = { count: validValues.length, error: valErrors };
+      } else {
+        details.daily_report_values = { count: 0 };
+      }
+
+      // 10. school_off_days (Quản lý ngày nghỉ lễ, tết, thời tiết)
+      const offDays = await this.getOffDays();
+      if (offDays.length > 0) {
+        const cleanedOffDays = offDays.map((o) => ({
+          id: o.id,
+          date: o.date,
+          name: o.name,
+          type: o.type || 'HOLIDAY',
+          applies_to: o.applies_to || 'ALL',
+          created_at: o.created_at || new Date().toISOString(),
+        }));
+        const { error: oErr } = await supabase.from('school_off_days').upsert(cleanedOffDays);
+        details.school_off_days = { count: offDays.length, error: oErr?.message };
+      } else {
+        details.school_off_days = { count: 0 };
+      }
+
+      // 11. notifications (Thông báo hệ thống & Nhắc nhở sĩ số GVCN)
+      const rawNotifs = localStorage.getItem(STORAGE_KEYS.NOTIFICATIONS);
+      const notifications: AppNotification[] = rawNotifs ? JSON.parse(rawNotifs) : [];
+      if (notifications.length > 0) {
+        const cleanedNotifs = notifications.map((n) => ({
+          id: n.id,
+          user_id: n.user_id,
+          class_id: n.class_id && validClassIds.has(n.class_id) ? n.class_id : null,
+          class_name: n.class_name || null,
+          type: n.type,
+          title: n.title,
+          message: n.message,
+          date: n.date || null,
+          read: Boolean(n.read),
+          action_url: n.action_url || null,
+          created_by_name: n.created_by_name || null,
+          urgent: Boolean(n.urgent),
+          created_at: n.created_at || new Date().toISOString(),
+        }));
+        const { error: nErr } = await supabase.from('notifications').upsert(cleanedNotifs);
+        details.notifications = { count: notifications.length, error: nErr?.message };
+      } else {
+        details.notifications = { count: 0 };
+      }
+
+      // 12. system_logs
       const logs = await this.getLogs(100);
       if (logs.length > 0) {
-        const { error: lErr } = await supabase.from('system_logs').upsert(logs);
+        const cleanedLogs = logs.map((l) => ({
+          ...l,
+          report_date: l.report_date && l.report_date.trim() !== '' ? l.report_date : null,
+        }));
+        const { error: lErr } = await supabase.from('system_logs').upsert(cleanedLogs);
         details.system_logs = { count: logs.length, error: lErr?.message };
+      } else {
+        details.system_logs = { count: 0 };
       }
 
       const hasError = Object.values(details).some((d) => Boolean(d.error));
@@ -2389,7 +2687,7 @@ export const StorageService = {
           .filter(([_, d]) => Boolean(d.error))
           .map(([table, d]) => `${table}: ${d.error}`)
           .join(' | ');
-        errorDetailsString = ` (Chi tiết: ${errorList}. Gợi ý: Hãy thử Copy kịch bản tạo bảng bên dưới và chạy lại trong Supabase SQL Editor để cập nhật cột mới).`;
+        errorDetailsString = ` (Chi tiết: ${errorList}. Gợi ý: Hãy thử Copy kịch bản tạo bảng bên dưới và chạy lại trong Supabase SQL Editor để cập nhật bảng/cột mới).`;
       }
 
       return {
@@ -2405,6 +2703,342 @@ export const StorageService = {
         message: `Lỗi đồng bộ lên Supabase: ${err?.message || err}`,
         details,
       };
+    }
+  },
+
+  /**
+   * Đồng bộ riêng lẻ 1 bảng cụ thể lên Supabase Cloud
+   */
+  async syncTableToSupabase(tableKey: string): Promise<{ success: boolean; message: string; count: number }> {
+    ensureInitialized();
+    const supabase = getSupabaseClient();
+    if (!supabase || !isSupabaseConnected()) {
+      return { success: false, message: 'Chưa kết nối tới Supabase Cloud.', count: 0 };
+    }
+
+    try {
+      if (tableKey === 'school_settings') {
+        const settings = await this.getSettings();
+        let { error } = await supabase.from('school_settings').upsert(settings);
+        if (error && (error.message?.includes('auto_reminder') || error.message?.includes('early_report') || error.code === 'PGRST204')) {
+          const {
+            enable_auto_reminder: _e1,
+            auto_reminder_time: _e2,
+            reminder_message_template: _e3,
+            enable_early_report_bonus: _e4,
+            early_report_deadline: _e5,
+            early_report_bonus_points: _e6,
+            early_report_max_bonus: _e7,
+            ...settingsFallback
+          } = settings;
+          const retry = await supabase.from('school_settings').upsert(settingsFallback);
+          error = retry.error;
+        }
+        if (error) throw new Error(error.message);
+        return { success: true, message: 'Đã đẩy cấu hình nhà trường lên Supabase!', count: 1 };
+      }
+
+      if (tableKey === 'school_years') {
+        const years = await this.getSchoolYears();
+        let { error } = await supabase.from('school_years').upsert(years);
+        if (error && error.message?.includes('is_locked')) {
+          const clean = years.map(({ is_locked: _l, ...rest }) => rest);
+          const retry = await supabase.from('school_years').upsert(clean);
+          error = retry.error;
+        }
+        if (error) throw new Error(error.message);
+        return { success: true, message: `Đã đẩy ${years.length} năm học lên Supabase!`, count: years.length };
+      }
+
+      if (tableKey === 'campuses') {
+        const campuses = await this.getCampuses();
+        const { error } = await supabase.from('campuses').upsert(campuses);
+        if (error) throw new Error(error.message);
+        return { success: true, message: `Đã đẩy ${campuses.length} phân hiệu lên Supabase!`, count: campuses.length };
+      }
+
+      if (tableKey === 'profiles') {
+        const profiles = await this.getProfiles();
+        const { error } = await supabase.from('profiles').upsert(profiles);
+        if (error) throw new Error(error.message);
+        return { success: true, message: `Đã đẩy ${profiles.length} tài khoản lên Supabase!`, count: profiles.length };
+      }
+
+      if (tableKey === 'classes') {
+        const [classes, years, campuses, profiles] = await Promise.all([
+          this.getClasses(),
+          this.getSchoolYears(),
+          this.getCampuses(),
+          this.getProfiles(),
+        ]);
+        const validYearIds = new Set(years.map((y) => y.id));
+        const validCampusIds = new Set(campuses.map((c) => c.id));
+        const validProfileIds = new Set(profiles.map((p) => p.id));
+
+        const cleanedClasses = classes.map((cls) => ({
+          ...cls,
+          school_year_id: cls.school_year_id && validYearIds.has(cls.school_year_id) ? cls.school_year_id : (years[0]?.id || null),
+          campus_id: cls.campus_id && validCampusIds.has(cls.campus_id) ? cls.campus_id : null,
+          homeroom_teacher_id: cls.homeroom_teacher_id && validProfileIds.has(cls.homeroom_teacher_id) ? cls.homeroom_teacher_id : null,
+          is_locked: Boolean(cls.is_locked),
+          sort_order: Number(cls.sort_order || 0),
+        }));
+
+        let { error } = await supabase.from('classes').upsert(cleanedClasses);
+        if (error && (error.message?.includes('is_locked') || error.message?.includes('campus_id') || error.message?.includes('sort_order'))) {
+          const fallback = cleanedClasses.map(({ is_locked: _l, campus_id: _c, sort_order: _s, ...rest }) => rest);
+          const retry = await supabase.from('classes').upsert(fallback);
+          error = retry.error;
+        }
+        if (error) throw new Error(error.message);
+        return { success: true, message: `Đã đẩy ${cleanedClasses.length} lớp học lên Supabase!`, count: cleanedClasses.length };
+      }
+
+      if (tableKey === 'indicator_groups') {
+        const indicators = await this.getIndicatorGroups();
+        let { error } = await supabase.from('indicator_groups').upsert(indicators);
+        if (error && (error.message?.includes('icon') || error.code === 'PGRST204')) {
+          const indicatorsClean = indicators.map(({ icon: _i, ...rest }) => rest);
+          const retry = await supabase.from('indicator_groups').upsert(indicatorsClean);
+          error = retry.error;
+        }
+        if (error) throw new Error(error.message);
+        return { success: true, message: `Đã đẩy ${indicators.length} nhóm chỉ tiêu lên Supabase!`, count: indicators.length };
+      }
+
+      if (tableKey === 'students') {
+        const classes = await this.getClasses();
+        const validClassIds = new Set(classes.map((c) => c.id));
+        const rawStudents = localStorage.getItem(STORAGE_KEYS.STUDENTS);
+        const students: import('../types').Student[] = rawStudents ? JSON.parse(rawStudents) : [];
+        const validStudents = students
+          .filter((s) => validClassIds.has(s.class_id))
+          .map((s) => ({
+            id: s.id,
+            class_id: s.class_id,
+            full_name: s.full_name,
+            address: s.address || '',
+            is_boarding: Boolean(s.isBoarding ?? (s as any).is_boarding),
+            created_at: s.created_at || new Date().toISOString(),
+          }));
+
+        if (validStudents.length > 0) {
+          const { error } = await supabase.from('students').upsert(validStudents, { onConflict: 'id' });
+          if (error) throw new Error(error.message);
+        }
+        return { success: true, message: `Đã đẩy ${validStudents.length} học sinh lên Supabase!`, count: validStudents.length };
+      }
+
+      if (tableKey === 'daily_reports') {
+        const [classes, profiles] = await Promise.all([this.getClasses(), this.getProfiles()]);
+        const validClassIds = new Set(classes.map((c) => c.id));
+        const validProfileIds = new Set(profiles.map((p) => p.id));
+        const rawReports = localStorage.getItem(STORAGE_KEYS.REPORTS);
+        const reports: DailyReport[] = rawReports ? JSON.parse(rawReports) : [];
+
+        // Khớp ID báo cáo trên cloud theo (class_id, report_date)
+        const cloudRepsKeyMap = new Map<string, string>();
+        try {
+          const { data: cloudReps } = await supabase.from('daily_reports').select('id, class_id, report_date');
+          if (cloudReps) {
+            cloudReps.forEach((cr) => {
+              const dateStr = String(cr.report_date).split('T')[0];
+              cloudRepsKeyMap.set(`${cr.class_id}_${dateStr}`, cr.id);
+            });
+          }
+        } catch (e) {}
+
+        const validReports = reports
+          .filter((r) => validClassIds.has(r.class_id))
+          .map((r) => {
+            const dateStr = String(r.report_date).split('T')[0];
+            const cloudKey = `${r.class_id}_${dateStr}`;
+            const finalId = cloudRepsKeyMap.get(cloudKey) || r.id;
+            return {
+              ...r,
+              id: finalId,
+              report_date: dateStr,
+              created_by: r.created_by && validProfileIds.has(r.created_by) ? r.created_by : null,
+              reported_time: r.reported_time || null,
+              status: (r.status === 'DRAFT' || r.status === 'LOCKED') ? r.status : 'SUBMITTED',
+            };
+          });
+
+        if (validReports.length > 0) {
+          for (let i = 0; i < validReports.length; i += 50) {
+            const batch = validReports.slice(i, i + 50);
+            let { error } = await supabase.from('daily_reports').upsert(batch, { onConflict: 'class_id,report_date' });
+            if (error && (error.message?.includes('reported_time') || error.message?.includes('locked_at') || error.code === 'PGRST204')) {
+              const batchCleaned = batch.map(({ reported_time: _rt, locked_at: _la, ...rest }) => rest);
+              const retry = await supabase.from('daily_reports').upsert(batchCleaned, { onConflict: 'class_id,report_date' });
+              error = retry.error;
+            }
+            if (error) throw new Error(error.message);
+          }
+        }
+        return { success: true, message: `Đã đẩy ${validReports.length} báo cáo sĩ số ngày lên Supabase!`, count: validReports.length };
+      }
+
+      if (tableKey === 'daily_report_values') {
+        const rawValues = localStorage.getItem(STORAGE_KEYS.VALUES);
+        const values: DailyReportValue[] = rawValues ? JSON.parse(rawValues) : [];
+        const rawReports = localStorage.getItem(STORAGE_KEYS.REPORTS);
+        const localReports: DailyReport[] = rawReports ? JSON.parse(rawReports) : [];
+        const localRepMap = new Map(localReports.map((r) => [r.id, r]));
+
+        // Tự động kiểm tra: nếu Cloud chưa có daily_reports hoặc ít hơn trên máy, tự động đẩy daily_reports trước
+        let { data: cloudReps } = await supabase.from('daily_reports').select('id, class_id, report_date');
+        if ((!cloudReps || cloudReps.length === 0) && localReports.length > 0) {
+          await this.syncTableToSupabase('daily_reports');
+          const refetch = await supabase.from('daily_reports').select('id, class_id, report_date');
+          cloudReps = refetch.data || [];
+        }
+
+        const existingCloudReportIds = new Set<string>();
+        const cloudKeyToId = new Map<string, string>();
+        if (cloudReps && cloudReps.length > 0) {
+          cloudReps.forEach((cr) => {
+            existingCloudReportIds.add(cr.id);
+            const dateStr = String(cr.report_date).split('T')[0];
+            cloudKeyToId.set(`${cr.class_id}_${dateStr}`, cr.id);
+          });
+        }
+
+        // Lấy danh sách chỉ tiêu thực tế trên Cloud
+        let { data: cloudInds } = await supabase.from('indicator_groups').select('id');
+        if (!cloudInds || cloudInds.length === 0) {
+          await this.syncTableToSupabase('indicator_groups');
+          const refetchInd = await supabase.from('indicator_groups').select('id');
+          cloudInds = refetchInd.data || [];
+        }
+        const existingCloudIndIds = new Set(cloudInds?.map((ci) => ci.id) || []);
+
+        const cloudValuesKeyMap = new Map<string, string>();
+        try {
+          const { data: cloudVals } = await supabase.from('daily_report_values').select('id, report_id, indicator_group_id');
+          if (cloudVals) {
+            cloudVals.forEach((cv) => {
+              cloudValuesKeyMap.set(`${cv.report_id}_${cv.indicator_group_id}`, cv.id);
+            });
+          }
+        } catch (e) {}
+
+        const validValues: DailyReportValue[] = [];
+        for (const val of values) {
+          let targetReportId = val.report_id;
+          if (!existingCloudReportIds.has(targetReportId)) {
+            const locRep = localRepMap.get(val.report_id);
+            if (locRep) {
+              const key = `${locRep.class_id}_${String(locRep.report_date).split('T')[0]}`;
+              const mappedId = cloudKeyToId.get(key);
+              if (mappedId) {
+                targetReportId = mappedId;
+              }
+            }
+          }
+
+          // BẮT BUỘC: targetReportId phải thực sự tồn tại trong daily_reports trên Cloud
+          if (existingCloudReportIds.has(targetReportId) && existingCloudIndIds.has(val.indicator_group_id)) {
+            const key = `${targetReportId}_${val.indicator_group_id}`;
+            const finalValId = cloudValuesKeyMap.get(key) || val.id;
+            validValues.push({
+              ...val,
+              id: finalValId,
+              report_id: targetReportId,
+              total_count: Math.max(0, Number(val.total_count) || 0),
+              present_count: Math.max(0, Number(val.present_count) || 0),
+              absent_count: Math.max(0, Number(val.absent_count) || 0),
+            });
+          }
+        }
+
+        let syncedCount = 0;
+        if (validValues.length > 0) {
+          for (let i = 0; i < validValues.length; i += 100) {
+            const batch = validValues.slice(i, i + 100);
+            try {
+              const { error } = await supabase.from('daily_report_values').upsert(batch, { onConflict: 'report_id,indicator_group_id' });
+              if (!error) {
+                syncedCount += batch.length;
+              } else {
+                for (const singleVal of batch) {
+                  try {
+                    const { error: sErr } = await supabase.from('daily_report_values').upsert(singleVal, { onConflict: 'report_id,indicator_group_id' });
+                    if (!sErr) syncedCount++;
+                  } catch {}
+                }
+              }
+            } catch {
+              for (const singleVal of batch) {
+                try {
+                  const { error: sErr } = await supabase.from('daily_report_values').upsert(singleVal, { onConflict: 'report_id,indicator_group_id' });
+                  if (!sErr) syncedCount++;
+                } catch {}
+              }
+            }
+          }
+        }
+        return { success: true, message: `Đã đẩy thành công ${syncedCount} chi tiết số liệu chỉ tiêu lên Supabase!`, count: syncedCount };
+      }
+
+      if (tableKey === 'school_off_days') {
+        const offDays = await this.getOffDays();
+        if (offDays.length > 0) {
+          const cleanedOffDays = offDays.map((o) => ({
+            id: o.id,
+            date: o.date,
+            name: o.name,
+            type: o.type || 'HOLIDAY',
+            applies_to: o.applies_to || 'ALL',
+            created_at: o.created_at || new Date().toISOString(),
+          }));
+          const { error } = await supabase.from('school_off_days').upsert(cleanedOffDays, { onConflict: 'date' });
+          if (error) throw new Error(error.message);
+        }
+        return { success: true, message: `Đã đẩy ${offDays.length} ngày nghỉ lên Supabase!`, count: offDays.length };
+      }
+
+      if (tableKey === 'notifications') {
+        const rawNotifs = localStorage.getItem(STORAGE_KEYS.NOTIFICATIONS);
+        const notifications: AppNotification[] = rawNotifs ? JSON.parse(rawNotifs) : [];
+        if (notifications.length > 0) {
+          const cleanedNotifs = notifications.map((n) => ({
+            id: n.id,
+            user_id: n.user_id,
+            class_id: n.class_id || null,
+            class_name: n.class_name || null,
+            type: n.type,
+            title: n.title,
+            message: n.message,
+            date: n.date || null,
+            read: Boolean(n.read),
+            action_url: n.action_url || null,
+            created_by_name: n.created_by_name || null,
+            urgent: Boolean(n.urgent),
+            created_at: n.created_at || new Date().toISOString(),
+          }));
+          const { error } = await supabase.from('notifications').upsert(cleanedNotifs);
+          if (error) throw new Error(error.message);
+        }
+        return { success: true, message: `Đã đẩy ${notifications.length} thông báo lên Supabase!`, count: notifications.length };
+      }
+
+      if (tableKey === 'system_logs') {
+        const logs = await this.getLogs(100);
+        if (logs.length > 0) {
+          const cleanedLogs = logs.map((l) => ({
+            ...l,
+            report_date: l.report_date && l.report_date.trim() !== '' ? l.report_date : null,
+          }));
+          const { error } = await supabase.from('system_logs').upsert(cleanedLogs);
+          if (error) throw new Error(error.message);
+        }
+        return { success: true, message: `Đã đẩy ${logs.length} dòng nhật ký lên Supabase!`, count: logs.length };
+      }
+
+      return { success: false, message: `Bảng "${tableKey}" không hợp lệ.`, count: 0 };
+    } catch (err: any) {
+      return { success: false, message: `Lỗi đẩy bảng ${tableKey}: ${err?.message || err}`, count: 0 };
     }
   },
 
@@ -2435,8 +3069,11 @@ export const StorageService = {
         { data: profiles },
         { data: classes },
         { data: indicators },
+        { data: students },
         { data: reports },
         { data: values },
+        { data: offDays },
+        { data: notifications },
         { data: logs },
       ] = await Promise.all([
         supabase.from('school_settings').select('*').limit(1).maybeSingle(),
@@ -2445,8 +3082,11 @@ export const StorageService = {
         supabase.from('profiles').select('*'),
         supabase.from('classes').select('*'),
         supabase.from('indicator_groups').select('*'),
+        supabase.from('students').select('*'),
         supabase.from('daily_reports').select('*'),
         supabase.from('daily_report_values').select('*'),
+        supabase.from('school_off_days').select('*'),
+        supabase.from('notifications').select('*').limit(100),
         supabase.from('system_logs').select('*').limit(200),
       ]);
 
@@ -2474,6 +3114,10 @@ export const StorageService = {
         localStorage.setItem(STORAGE_KEYS.INDICATORS, JSON.stringify(indicators));
         counts.indicator_groups = indicators.length;
       }
+      if (students && students.length > 0) {
+        localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(students));
+        counts.students = students.length;
+      }
       if (reports && reports.length > 0) {
         localStorage.setItem(STORAGE_KEYS.REPORTS, JSON.stringify(reports));
         counts.daily_reports = reports.length;
@@ -2481,6 +3125,14 @@ export const StorageService = {
       if (values && values.length > 0) {
         localStorage.setItem(STORAGE_KEYS.VALUES, JSON.stringify(values));
         counts.daily_report_values = values.length;
+      }
+      if (offDays && offDays.length > 0) {
+        localStorage.setItem(STORAGE_KEYS.OFF_DAYS, JSON.stringify(offDays));
+        counts.school_off_days = offDays.length;
+      }
+      if (notifications && notifications.length > 0) {
+        localStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(notifications));
+        counts.notifications = notifications.length;
       }
       if (logs && logs.length > 0) {
         localStorage.setItem(STORAGE_KEYS.LOGS, JSON.stringify(logs));
@@ -2518,10 +3170,12 @@ export const StorageService = {
       { key: 'profiles', label: 'Tài khoản người dùng (profiles)', storageKey: STORAGE_KEYS.PROFILES },
       { key: 'classes', label: 'Danh sách lớp học (classes)', storageKey: STORAGE_KEYS.CLASSES },
       { key: 'indicator_groups', label: 'Nhóm chỉ tiêu sĩ số (indicator_groups)', storageKey: STORAGE_KEYS.INDICATORS },
+      { key: 'students', label: 'Danh sách học sinh (students)', storageKey: STORAGE_KEYS.STUDENTS },
       { key: 'daily_reports', label: 'Sổ báo cáo sĩ số ngày (daily_reports)', storageKey: STORAGE_KEYS.REPORTS },
       { key: 'daily_report_values', label: 'Chi tiết số liệu chỉ tiêu (daily_report_values)', storageKey: STORAGE_KEYS.VALUES },
-      { key: 'system_logs', label: 'Nhật ký thao tác & kiểm toán (system_logs)', storageKey: STORAGE_KEYS.LOGS },
+      { key: 'school_off_days', label: 'Lịch nghỉ học sinh (school_off_days)', storageKey: STORAGE_KEYS.OFF_DAYS },
       { key: 'notifications', label: 'Thông báo hệ thống & Nhắc nhở (notifications)', storageKey: STORAGE_KEYS.NOTIFICATIONS },
+      { key: 'system_logs', label: 'Nhật ký thao tác & kiểm toán (system_logs)', storageKey: STORAGE_KEYS.LOGS },
     ];
 
     const results: TableSyncStatus[] = [];
@@ -2609,6 +3263,30 @@ export const StorageService = {
     }
     // Giữ tối đa 100 thông báo gần nhất
     localStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(list.slice(0, 100)));
+
+    const supabase = getSupabaseClient();
+    if (supabase && isSupabaseConnected()) {
+      try {
+        await supabase.from('notifications').upsert({
+          id: notif.id,
+          user_id: notif.user_id,
+          class_id: notif.class_id || null,
+          class_name: notif.class_name || null,
+          type: notif.type,
+          title: notif.title,
+          message: notif.message,
+          date: notif.date || null,
+          read: Boolean(notif.read),
+          action_url: notif.action_url || null,
+          created_by_name: notif.created_by_name || null,
+          urgent: Boolean(notif.urgent),
+          created_at: notif.created_at || new Date().toISOString(),
+        });
+      } catch (e) {
+        // Fallback silently if table does not exist yet
+      }
+    }
+
     notifyRealtimeChange('notifications', { notifId: notif.id, userId: notif.user_id });
   },
 
@@ -2621,6 +3299,14 @@ export const StorageService = {
     if (target) {
       target.read = true;
       localStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(list));
+
+      const supabase = getSupabaseClient();
+      if (supabase && isSupabaseConnected()) {
+        try {
+          await supabase.from('notifications').update({ read: true }).eq('id', id);
+        } catch (e) {}
+      }
+
       notifyRealtimeChange('notifications', { notifId: id, userId: target.user_id });
     }
   },
@@ -2639,6 +3325,14 @@ export const StorageService = {
     });
     if (changed) {
       localStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(list));
+
+      const supabase = getSupabaseClient();
+      if (supabase && isSupabaseConnected()) {
+        try {
+          await supabase.from('notifications').update({ read: true }).eq('user_id', userId);
+        } catch (e) {}
+      }
+
       notifyRealtimeChange('notifications', { userId });
     }
   },
@@ -2650,6 +3344,14 @@ export const StorageService = {
     const list: AppNotification[] = JSON.parse(raw);
     const filtered = list.filter((n) => n.id !== id);
     localStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(filtered));
+
+    const supabase = getSupabaseClient();
+    if (supabase && isSupabaseConnected()) {
+      try {
+        await supabase.from('notifications').delete().eq('id', id);
+      } catch (e) {}
+    }
+
     notifyRealtimeChange('notifications', { notifId: id });
   },
 
@@ -2660,6 +3362,14 @@ export const StorageService = {
     const list: AppNotification[] = JSON.parse(raw);
     const filtered = list.filter((n) => n.user_id !== userId);
     localStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(filtered));
+
+    const supabase = getSupabaseClient();
+    if (supabase && isSupabaseConnected()) {
+      try {
+        await supabase.from('notifications').delete().eq('user_id', userId);
+      } catch (e) {}
+    }
+
     notifyRealtimeChange('notifications', { userId });
   },
 

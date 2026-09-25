@@ -32,6 +32,7 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ onNaviga
     clearAll,
     browserPermission,
     requestBrowserPermission,
+    playNotificationChime,
   } = useNotifications();
   const { isGVCN } = useAuth();
 
@@ -92,11 +93,11 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ onNaviga
         type="button"
         onClick={() => setIsOpen(!isOpen)}
         title="Thông báo hệ thống"
-        className={`relative p-2 rounded-xl transition-all flex items-center justify-center ${
+        className={`relative p-2 rounded-xl transition-all flex items-center justify-center shrink-0 ${
           urgentAttendanceReminder
-            ? 'bg-rose-50 text-rose-700 hover:bg-rose-100 ring-2 ring-rose-400 ring-offset-1 animate-pulse'
+            ? 'bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 shadow-2xs'
             : unreadCount > 0
-            ? 'bg-amber-50 text-amber-700 hover:bg-amber-100'
+            ? 'bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200 shadow-2xs'
             : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
         }`}
       >
@@ -113,7 +114,7 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ onNaviga
         {urgentAttendanceReminder && (
           <span className="absolute top-1 right-1 flex h-2 w-2">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-600"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
           </span>
         )}
       </button>
@@ -399,9 +400,18 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ onNaviga
             )}
           </div>
 
-          {/* Footer */}
+          {/* Footer with Sound Preview */}
           <div className="px-4 py-2.5 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-[11px] text-slate-500">
-            <span>Hệ thống tự động phát hiện lớp chưa báo cáo</span>
+            <button
+              type="button"
+              onClick={() => playNotificationChime()}
+              className="inline-flex items-center gap-1.5 text-slate-600 hover:text-blue-700 font-medium px-2 py-1 rounded-lg hover:bg-slate-200/60 transition-colors"
+              title="Bấm để thử âm thanh chuông nhắc nhở và rung điện thoại"
+            >
+              <Volume2 className="w-3.5 h-3.5 text-blue-600" />
+              <span>Thử chuông nhắc nhở 07h30</span>
+            </button>
+
             {isGVCN && (
               <button
                 type="button"

@@ -18,13 +18,26 @@ interface NotificationContextType {
   sendBGHManualReminder: (targetDate?: string) => Promise<{ sentCount: number; remindedClasses: string[]; skippedClasses: string[] }>;
   browserPermission: NotificationPermission | 'unsupported';
   requestBrowserPermission: () => Promise<void>;
+  playNotificationChime: () => void;
 }
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
 
-// Web Audio API chime generator for pleasant notification sound
-function playNotificationChime() {
+// Web Audio API chime generator for pleasant notification sound and vibration on mobile
+export function playNotificationChime() {
   if (typeof window === 'undefined') return;
+
+  // 1. Rung thiết bị điện thoại (Vibration API) nếu thiết bị hỗ trợ
+  try {
+    if ('vibrate' in navigator && typeof navigator.vibrate === 'function') {
+      // Nhịp rung cảnh báo rõ ràng: rung 250ms, nghỉ 100ms, rung 250ms
+      navigator.vibrate([250, 100, 250, 100, 400]);
+    }
+  } catch (err) {
+    // Không ảnh hưởng nếu thiết bị không hỗ trợ rung
+  }
+
+  // 2. Phát chuông âm thanh nhắc nhở qua Web Audio API (chuông 3 nốt ngân vang rõ ràng)
   try {
     const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
     if (!AudioContextClass) return;
@@ -35,30 +48,44 @@ function playNotificationChime() {
     }
 
     const now = ctx.currentTime;
-    // Pleasant two-tone chime (E5 -> A5)
+    
+    // Nốt 1: E5 (659.25Hz)
     const osc1 = ctx.createOscillator();
     const gain1 = ctx.createGain();
     osc1.type = 'sine';
-    osc1.frequency.setValueAtTime(659.25, now); // E5
-    gain1.gain.setValueAtTime(0.12, now);
+    osc1.frequency.setValueAtTime(659.25, now);
+    gain1.gain.setValueAtTime(0.2, now);
     gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
     osc1.connect(gain1);
     gain1.connect(ctx.destination);
     osc1.start(now);
     osc1.stop(now + 0.35);
 
+    // Nốt 2: G#5 (830.61Hz)
     const osc2 = ctx.createOscillator();
     const gain2 = ctx.createGain();
     osc2.type = 'sine';
-    osc2.frequency.setValueAtTime(880.0, now + 0.12); // A5
-    gain2.gain.setValueAtTime(0.15, now + 0.12);
+    osc2.frequency.setValueAtTime(830.61, now + 0.15);
+    gain2.gain.setValueAtTime(0.22, now + 0.15);
     gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.55);
     osc2.connect(gain2);
     gain2.connect(ctx.destination);
-    osc2.start(now + 0.12);
+    osc2.start(now + 0.15);
     osc2.stop(now + 0.55);
+
+    // Nốt 3: B5 (987.77Hz) - ngân vang kết thúc
+    const osc3 = ctx.createOscillator();
+    const gain3 = ctx.createGain();
+    osc3.type = 'sine';
+    osc3.frequency.setValueAtTime(987.77, now + 0.32);
+    gain3.gain.setValueAtTime(0.25, now + 0.32);
+    gain3.gain.exponentialRampToValueAtTime(0.001, now + 0.95);
+    osc3.connect(gain3);
+    gain3.connect(ctx.destination);
+    osc3.start(now + 0.32);
+    osc3.stop(now + 0.95);
   } catch (err) {
-    // Ignore audio autoplay restrictions or iframe policy
+    // Bỏ qua nếu trình duyệt chặn autoplay trước khi có tương tác
   }
 }
 
@@ -254,6 +281,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         sendBGHManualReminder,
         browserPermission,
         requestBrowserPermission,
+        playNotificationChime,
       }}
     >
       {children}

@@ -2,7 +2,11 @@ import React, { useState } from 'react';
 import { usePWAInstall } from '../hooks/usePWAInstall';
 import { Download } from 'lucide-react';
 
-export const PWAInstallButton: React.FC = () => {
+interface PWAInstallButtonProps {
+  showLabelOnMobile?: boolean;
+}
+
+export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({ showLabelOnMobile = false }) => {
   const { isInstallable, isInstalled, isIOS, install } = usePWAInstall();
   const [showIOSGuide, setShowIOSGuide] = useState(false);
 
@@ -14,11 +18,20 @@ export const PWAInstallButton: React.FC = () => {
   return (
     <>
       <button
+        type="button"
         onClick={isInstallable ? install : () => setShowIOSGuide(true)}
-        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 text-white font-bold text-xs hover:bg-blue-700 transition-colors shadow-md"
+        className={`flex items-center justify-center gap-1.5 rounded-xl bg-blue-600 text-white font-bold transition-all shadow-xs hover:bg-blue-700 active:scale-95 ${
+          showLabelOnMobile
+            ? 'w-full py-2.5 px-3 text-xs'
+            : 'p-2 sm:px-3 sm:py-1.5 text-xs'
+        }`}
+        title="Cài đặt ứng dụng vào điện thoại / máy tính"
+        aria-label="Cài đặt ứng dụng"
       >
-        <Download className="w-3.5 h-3.5" />
-        <span className="whitespace-nowrap">Cài đặt ứng dụng</span>
+        <Download className="w-4 h-4 sm:w-3.5 sm:h-3.5 shrink-0" />
+        <span className={showLabelOnMobile ? 'inline whitespace-nowrap' : 'hidden md:inline whitespace-nowrap'}>
+          Cài đặt ứng dụng
+        </span>
       </button>
 
       {showIOSGuide && (

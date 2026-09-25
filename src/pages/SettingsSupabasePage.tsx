@@ -46,6 +46,7 @@ export const SettingsSupabasePage: React.FC = () => {
   // Sync actions
   const [syncingToCloud, setSyncingToCloud] = useState(false);
   const [syncingFromCloud, setSyncingFromCloud] = useState(false);
+  const [syncingTableKey, setSyncingTableKey] = useState<string | null>(null);
   const [syncMessage, setSyncMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
 
   useEffect(() => {
@@ -181,6 +182,31 @@ export const SettingsSupabasePage: React.FC = () => {
       });
     } finally {
       setSyncingToCloud(false);
+    }
+  };
+
+  const handleSyncSingleTable = async (tableKey: string) => {
+    if (!connStatus?.connected) {
+      alert('Vui lòng kiểm tra và đảm bảo kết nối Supabase thành công trước khi đẩy dữ liệu.');
+      return;
+    }
+
+    setSyncingTableKey(tableKey);
+    setSyncMessage({ type: 'info', text: `Đang đẩy dữ liệu bảng "${tableKey}" lên Supabase Cloud...` });
+
+    try {
+      const res = await StorageService.syncTableToSupabase(tableKey);
+      if (res.success) {
+        setSyncMessage({ type: 'success', text: res.message });
+      } else {
+        setSyncMessage({ type: 'error', text: res.message });
+      }
+      const tableStatuses = await StorageService.getSupabaseSyncStatus();
+      setSyncStatusList(tableStatuses);
+    } catch (err: any) {
+      setSyncMessage({ type: 'error', text: `Lỗi đồng bộ bảng ${tableKey}: ${err?.message || err}` });
+    } finally {
+      setSyncingTableKey(null);
     }
   };
 
@@ -401,13 +427,46 @@ export const SettingsSupabasePage: React.FC = () => {
         </div>
 
         {/* Sync Status Table by Entity */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between text-xs font-bold text-slate-800">
+        <div className="space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between text-xs font-bold text-slate-800 gap-2">
             <span>Chi tiết kiểm toán dữ liệu các bảng (Supabase vs Bộ nhớ cục bộ):</span>
-            <span className="text-[11px] text-slate-500 font-normal">
+            <span className={`text-[11px] px-2.5 py-0.5 rounded-full font-extrabold ${
+              syncStatusList.filter((s) => s.inSync).length === syncStatusList.length
+                ? 'bg-emerald-100 text-emerald-800'
+                : 'bg-amber-100 text-amber-800'
+            }`}>
               {syncStatusList.filter((s) => s.inSync).length}/{syncStatusList.length} bảng khớp 100%
             </span>
           </div>
+
+          {/* Quick Notice if there are unsynced tables */}
+          {syncStatusList.some((s) => !s.inSync) && (
+            <div className="bg-amber-50 border border-amber-300 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+              <div className="flex items-start gap-2.5 text-amber-900">
+                <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-extrabold">
+                    Còn {syncStatusList.filter((s) => !s.inSync).length} bảng chưa đồng bộ hoàn tất:
+                  </span>
+                  <span className="ml-1 text-amber-800 font-semibold">
+                    {syncStatusList.filter((s) => !s.inSync).map((s) => s.label.split('(')[0].trim()).join(', ')}
+                  </span>
+                  <p className="text-[11px] text-amber-700 mt-0.5">
+                    Hệ thống đã kích hoạt chế độ tự động khớp ID và bỏ qua xung đột khóa ngoại. Bạn có thể bấm nút bên phải để đẩy ngay.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleUploadAllToCloud}
+                disabled={syncingToCloud || !connStatus?.connected}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-black text-white bg-amber-600 hover:bg-amber-700 shadow-xs transition-colors flex-shrink-0 disabled:opacity-50"
+              >
+                {syncingToCloud ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <UploadCloud className="w-3.5 h-3.5" />}
+                <span>ĐẨY CÁC BẢNG NÀY LÊN CLOUD</span>
+              </button>
+            </div>
+          )}
 
           <div className="border border-slate-200 rounded-xl overflow-hidden text-xs">
             <table className="w-full text-left divide-y divide-slate-200">
@@ -417,51 +476,76 @@ export const SettingsSupabasePage: React.FC = () => {
                   <th className="px-3.5 py-2.5 text-center">Bản ghi máy này</th>
                   <th className="px-3.5 py-2.5 text-center">Bản ghi Supabase Cloud</th>
                   <th className="px-3.5 py-2.5 text-center">Trạng thái đồng bộ</th>
+                  <th className="px-3.5 py-2.5 text-center">Thao tác</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 bg-white">
-                {syncStatusList.map((st) => (
-                  <tr key={st.table} className="hover:bg-slate-50/70">
-                    <td className="px-3.5 py-2.5">
-                      <div className="font-bold text-slate-800">{st.label}</div>
-                      <div className="font-mono text-[10px] text-slate-400">
-                        {st.table}
-                        {st.table === 'system_logs' && (
-                          <span className="text-slate-400 font-sans block text-[9px] mt-0.5 leading-normal max-w-md">
-                            * Trình duyệt chỉ lưu tối đa 100-200 dòng mới nhất để tránh đầy bộ nhớ máy, đám mây lưu trữ toàn bộ lịch sử vĩnh viễn.
+                {syncStatusList.map((st) => {
+                  const isSyncingThis = syncingTableKey === st.table;
+                  return (
+                    <tr key={st.table} className="hover:bg-slate-50/70 transition-colors">
+                      <td className="px-3.5 py-2.5">
+                        <div className="font-bold text-slate-800">{st.label}</div>
+                        <div className="font-mono text-[10px] text-slate-400">
+                          {st.table}
+                          {st.table === 'system_logs' && (
+                            <span className="text-slate-400 font-sans block text-[9px] mt-0.5 leading-normal max-w-md">
+                              * Trình duyệt chỉ lưu tối đa 100-200 dòng mới nhất để tránh đầy bộ nhớ máy, đám mây lưu trữ toàn bộ lịch sử vĩnh viễn.
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-3.5 py-2.5 text-center font-bold text-slate-700">
+                        {st.localCount}
+                      </td>
+                      <td className="px-3.5 py-2.5 text-center font-bold text-blue-700">
+                        {st.error ? (
+                          <span className="text-amber-600 text-[10px]">Chưa tạo</span>
+                        ) : (
+                          st.cloudCount
+                        )}
+                      </td>
+                      <td className="px-3.5 py-2.5 text-center">
+                        {st.inSync ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                            <Check className="w-3 h-3 text-emerald-600" />
+                            Đồng bộ hoàn hảo
+                          </span>
+                        ) : st.error ? (
+                          <div className="inline-flex flex-col items-center gap-0.5">
+                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                              <AlertTriangle className="w-3 h-3 text-amber-600" />
+                              Cần chạy SQL Schema
+                            </span>
+                            <span className="text-[9px] text-amber-800/80 max-w-[170px] truncate" title={st.error}>
+                              {st.error}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-full">
+                            Chờ đồng bộ ({st.localCount} / {st.cloudCount})
                           </span>
                         )}
-                      </div>
-                    </td>
-                    <td className="px-3.5 py-2.5 text-center font-bold text-slate-700">
-                      {st.localCount}
-                    </td>
-                    <td className="px-3.5 py-2.5 text-center font-bold text-blue-700">
-                      {st.error ? (
-                        <span className="text-amber-600 text-[10px]">Chưa tạo</span>
-                      ) : (
-                        st.cloudCount
-                      )}
-                    </td>
-                    <td className="px-3.5 py-2.5 text-center">
-                      {st.inSync ? (
-                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                          <Check className="w-3 h-3 text-emerald-600" />
-                          Đồng bộ hoàn hảo
-                        </span>
-                      ) : st.error ? (
-                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
-                          <AlertTriangle className="w-3 h-3 text-amber-600" />
-                          Cần chạy SQL Schema
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-full">
-                          Chờ đồng bộ ({st.localCount} / {st.cloudCount})
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className="px-3.5 py-2.5 text-center">
+                        <button
+                          type="button"
+                          onClick={() => handleSyncSingleTable(st.table)}
+                          disabled={isSyncingThis || syncingToCloud || !connStatus?.connected}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 transition-colors disabled:opacity-40"
+                          title={`Đẩy dữ liệu bảng ${st.table} lên Supabase`}
+                        >
+                          {isSyncingThis ? (
+                            <Loader2 className="w-3 h-3 animate-spin text-blue-600" />
+                          ) : (
+                            <UploadCloud className="w-3 h-3 text-blue-600" />
+                          )}
+                          <span>{isSyncingThis ? 'Đang đẩy...' : 'Đẩy bảng này'}</span>
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

@@ -27,6 +27,8 @@ import {
   AlertTriangle,
   Info,
   ShieldCheck,
+  User,
+  MapPin,
 } from 'lucide-react';
 import { getIndicatorMeta } from '../utils/indicatorIcons';
 
@@ -102,6 +104,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
 
   // Existing report & values
   const [existingReport, setExistingReport] = useState<DailyReport | null>(null);
+  const [inheritedReport, setInheritedReport] = useState<{ report: DailyReport; values: DailyReportValue[] } | null>(null);
   const [isLoadingReport, setIsLoadingReport] = useState<boolean>(true);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null);
@@ -143,6 +146,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
       setExistingReport(report || null);
 
       if (report) {
+        setInheritedReport(null);
         setNotes(report.notes || '');
         setAbsentStudents(report.absent_students || []);
 
@@ -164,17 +168,19 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
 
         setFormValues(newVals);
       } else {
-        // No report for this date: Try to inherit from latest report
-        const { report: latestReport, values: latestValues } = await StorageService.getLatestReport(selectedClassId);
+        // No report for this date: Kế thừa dữ liệu từ báo cáo ngày hôm trước gần nhất
+        const { report: latestReport, values: latestValues } = await StorageService.getLatestReport(selectedClassId, selectedDate);
 
-        if (latestReport) {
-          // Inherit structure from latest report
+        if (latestReport && latestValues.length > 0) {
+          setInheritedReport({ report: latestReport, values: latestValues });
+
+          // Inherit previous day's report data: totals, present counts, absent counts
           const newVals: Record<string, { total: number | ''; present: number | ''; absent: number | '' }> = {};
           latestValues.forEach((v) => {
             newVals[v.indicator_group_id] = {
               total: v.total_count,
-              present: v.total_count, // Reset present to total
-              absent: 0, // Reset absent to 0
+              present: v.present_count,
+              absent: v.absent_count,
             };
           });
 
@@ -186,9 +192,10 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
           });
 
           setFormValues(newVals);
-          setNotes(''); // Clear notes for new day
-          setAbsentStudents([]); // Clear absent students for new day
+          setNotes(latestReport.notes || '');
+          setAbsentStudents(latestReport.absent_students ? [...latestReport.absent_students] : []);
         } else {
+          setInheritedReport(null);
           // Fallback to smart defaults
           setNotes('');
           setAbsentStudents([]);
@@ -233,12 +240,105 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
     }
   }, [selectedClassId, selectedDate, enabledIndicators, classStudents]);
 
+  // Set all present (0 absent) for today
+  const handleResetAllPresent = () => {
+    if (isLocked) return;
+    setFormValues((prev) => {
+      const next: Record<string, { total: number | ''; present: number | ''; absent: number | '' }> = {};
+      Object.entries(prev).forEach(([k, v]) => {
+        const tot = typeof v.total === 'number' ? v.total : Number(v.total) || 0;
+        next[k] = {
+          total: v.total,
+          present: tot,
+          absent: 0,
+        };
+      });
+      return next;
+    });
+    setAbsentStudents([]);
+    setToastMessage({
+      text: 'Đã đặt lại về trạng thái cả lớp có mặt đầy đủ (0 vắng)!',
+      type: 'info',
+    });
+  };
+
+  // Re-inherit previous day data
+  const handleReinheritPreviousDay = () => {
+    if (isLocked || !inheritedReport) return;
+    const newVals: Record<string, { total: number | ''; present: number | ''; absent: number | '' }> = {};
+    inheritedReport.values.forEach((v) => {
+      newVals[v.indicator_group_id] = {
+        total: v.total_count,
+        present: v.present_count,
+        absent: v.absent_count,
+      };
+    });
+    enabledIndicators.forEach((ig) => {
+      if (!newVals[ig.id]) {
+        newVals[ig.id] = { total: 0, present: 0, absent: 0 };
+      }
+    });
+    setFormValues(newVals);
+    setNotes(inheritedReport.report.notes || '');
+    setAbsentStudents(inheritedReport.report.absent_students ? [...inheritedReport.report.absent_students] : []);
+    setToastMessage({
+      text: `Đã khôi phục dữ liệu từ báo cáo ngày ${formatDateVN(inheritedReport.report.report_date)}!`,
+      type: 'success',
+    });
+  };
+
   useEffect(() => {
     loadClassReport();
   }, [loadClassReport]);
 
   // Calculation mode logic
   const inputMode = settings?.input_mode || 'MODE_2_TOTAL_ABSENT';
+
+  // Helper to sync indicators from absent students list
+  const syncIndicatorsWithAbsentStudents = useCallback(
+    (studentsList: AbsentStudent[]) => {
+      const totalAbsent = studentsList.length;
+      const bAbsent = studentsList.filter((s) => s.isBoarding).length;
+
+      setFormValues((prev) => {
+        const next = { ...prev };
+
+        // 1. Sync primary indicator
+        if (enabledIndicators[0]) {
+          const pId = enabledIndicators[0].id;
+          const pCur = prev[pId] || { total: 0, present: 0, absent: 0 };
+          const pTotal = typeof pCur.total === 'number' ? pCur.total : Number(pCur.total) || 0;
+          next[pId] = {
+            total: pCur.total,
+            absent: totalAbsent,
+            present: Math.max(0, pTotal - totalAbsent),
+          };
+        }
+
+        // 2. Sync boarding indicator
+        const bInd = enabledIndicators.find(
+          (i) =>
+            i.id === 'ig_boarding' ||
+            i.id === 'ig_boarding_half' ||
+            i.code.includes('BOARDING') ||
+            i.name.toLowerCase().includes('bán trú') ||
+            i.name.toLowerCase().includes('ăn trưa')
+        );
+        if (bInd && prev[bInd.id]) {
+          const bCur = prev[bInd.id];
+          const bTotal = typeof bCur.total === 'number' ? bCur.total : Number(bCur.total) || 0;
+          next[bInd.id] = {
+            total: bCur.total,
+            absent: bAbsent,
+            present: Math.max(0, bTotal - bAbsent),
+          };
+        }
+
+        return next;
+      });
+    },
+    [enabledIndicators]
+  );
 
   const handleValueChange = (
     groupId: string,
@@ -259,7 +359,6 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
           if (field === 'total') {
             updated = { total: '', absent: cur.absent, present: '' };
           } else if (field === 'absent') {
-            // User cleared absent: present becomes equal to total (if total is entered)
             updated = {
               total: cur.total,
               absent: '',
@@ -351,6 +450,41 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
         updated = { ...cur, [field]: safeVal };
       }
 
+      // Auto-synchronize absent student list slots when primary indicator absent count changes
+      if (groupId === enabledIndicators[0]?.id && updated.absent !== '') {
+        const targetAbsent = Number(updated.absent) || 0;
+        setAbsentStudents((prevAbsent) => {
+          const currentCount = prevAbsent.length;
+          if (targetAbsent === currentCount) return prevAbsent;
+
+          if (targetAbsent > currentCount) {
+            const toAdd = targetAbsent - currentCount;
+            const newSlots: AbsentStudent[] = Array.from({ length: toAdd }, () => ({
+              full_name: '',
+              address: '',
+              reason: 'Ốm',
+              isBoarding: false,
+            }));
+            return [...prevAbsent, ...newSlots];
+          } else {
+            if (targetAbsent === 0) return [];
+            let list = [...prevAbsent];
+            while (list.length > targetAbsent) {
+              const emptyIdx = list
+                .map((s, idx) => ({ s, idx }))
+                .reverse()
+                .find((x) => !x.s.full_name.trim())?.idx;
+              if (emptyIdx !== undefined) {
+                list.splice(emptyIdx, 1);
+              } else {
+                list.pop();
+              }
+            }
+            return list;
+          }
+        });
+      }
+
       return {
         ...prev,
         [groupId]: updated,
@@ -368,57 +502,40 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
     if (isLocked) return;
     const trimmedName = name.trim();
 
-    // Check if student exists in class and validate boarding status
     const studentMatch = classStudents.find(
       (s) => s.full_name.trim().toLowerCase() === trimmedName.toLowerCase()
     );
-    if (studentMatch && studentMatch.isBoarding !== isBoarding) {
-      setToastMessage({
-        text: `Học sinh ${studentMatch.full_name} trong danh sách là học sinh ${
-          studentMatch.isBoarding ? 'Bán trú' : 'Ngoại trú'
-        }, vui lòng chọn đúng!`,
-        type: 'error',
-      });
-      return;
-    }
+    const finalAddress = address.trim() || studentMatch?.address || '';
+    const finalBoarding = isBoarding !== undefined ? isBoarding : !!studentMatch?.isBoarding;
 
     setAbsentStudents((prev) => {
-      const newLength = prev.length + 1;
-
-      // Automatically sync absent count to primary indicator if enabled
-      if (enabledIndicators[0]) {
-        const mainId = enabledIndicators[0].id;
-        setFormValues((prevVals) => {
-          const cur = prevVals[mainId] || { total: 0, present: 0, absent: 0 };
-          const total = typeof cur.total === 'number' ? cur.total : 0;
-          const curAbsent = typeof cur.absent === 'number' ? cur.absent : 0;
-          const newAbsent = Math.max(curAbsent, newLength);
-          const newPresent = Math.max(0, total - newAbsent);
-
-          return {
-            ...prevVals,
-            [mainId]: {
-              ...cur,
-              total,
-              absent: newAbsent,
-              present: newPresent,
-            },
-          };
-        });
+      // Find first empty slot if any to fill it
+      const emptyIdx = prev.findIndex((s) => !s.full_name.trim());
+      let nextList: AbsentStudent[];
+      if (emptyIdx !== -1) {
+        nextList = [...prev];
+        nextList[emptyIdx] = {
+          full_name: trimmedName,
+          address: finalAddress,
+          reason: reason || 'Ốm',
+          isBoarding: finalBoarding,
+        };
+      } else {
+        nextList = [
+          ...prev,
+          {
+            full_name: trimmedName,
+            address: finalAddress,
+            reason: reason || 'Ốm',
+            isBoarding: finalBoarding,
+          },
+        ];
       }
 
-      return [
-        ...prev,
-        {
-          full_name: trimmedName,
-          address: address.trim(),
-          reason: reason || 'Ốm',
-          isBoarding: !!isBoarding,
-        },
-      ];
+      syncIndicatorsWithAbsentStudents(nextList);
+      return nextList;
     });
 
-    // Reset quick input fields
     setNewAbsentName('');
     setNewAbsentAddress('');
     setNewAbsentReason('Ốm');
@@ -432,30 +549,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
 
     setAbsentStudents((prev) => {
       const nextList = prev.filter((_, i) => i !== index);
-
-      // Synchronize with main indicator
-      if (enabledIndicators[0]) {
-        const mainId = enabledIndicators[0].id;
-        setFormValues((prevVals) => {
-          const cur = prevVals[mainId] || { total: 0, present: 0, absent: 0 };
-          const total = typeof cur.total === 'number' ? cur.total : 0;
-          const curAbsent = typeof cur.absent === 'number' ? cur.absent : 0;
-          // Set absent to match new list length if absent was previously derived from list
-          const newAbsent = Math.min(curAbsent, Math.max(0, nextList.length));
-          const newPresent = Math.max(0, total - newAbsent);
-
-          return {
-            ...prevVals,
-            [mainId]: {
-              ...cur,
-              total,
-              absent: newAbsent,
-              present: newPresent,
-            },
-          };
-        });
-      }
-
+      syncIndicatorsWithAbsentStudents(nextList);
       return nextList;
     });
   };
@@ -464,26 +558,33 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
   const handleUpdateAbsentStudent = (index: number, partial: Partial<AbsentStudent>) => {
     if (isLocked) return;
 
-    // Check if boarding status is being updated and validate against record
-    if (partial.isBoarding !== undefined) {
-      const student = absentStudents[index];
-      const studentMatch = classStudents.find(
-        (s) => s.full_name.trim().toLowerCase() === student.full_name.trim().toLowerCase()
-      );
-      if (studentMatch && studentMatch.isBoarding !== partial.isBoarding) {
-        setToastMessage({
-          text: `Học sinh ${studentMatch.full_name} trong danh sách là học sinh ${
-            studentMatch.isBoarding ? 'Bán trú' : 'Ngoại trú'
-          }, vui lòng chọn đúng!`,
-          type: 'error',
-        });
-        return;
-      }
-    }
-
     setAbsentStudents((prev) => {
+      if (!prev[index]) return prev;
       const nextList = [...prev];
-      nextList[index] = { ...nextList[index], ...partial };
+
+      let extra: Partial<AbsentStudent> = {};
+      if (partial.full_name !== undefined) {
+        const trimmed = partial.full_name.trim();
+        const match = classStudents.find(
+          (s) => s.full_name.trim().toLowerCase() === trimmed.toLowerCase()
+        );
+        if (match) {
+          if (!nextList[index].address && match.address) {
+            extra.address = match.address;
+          }
+          if (partial.isBoarding === undefined) {
+            extra.isBoarding = !!match.isBoarding;
+          }
+        }
+      }
+
+      nextList[index] = {
+        ...nextList[index],
+        ...partial,
+        ...extra,
+      };
+
+      syncIndicatorsWithAbsentStudents(nextList);
       return nextList;
     });
   };
@@ -506,8 +607,14 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
       return false;
     }
 
-    // NEW: Absent list count validation
+    // Absent list count validation
     if (absent !== absentStudents.length) return false;
+
+    // All absent students must have non-empty name
+    if (absent > 0) {
+      const allNamed = absentStudents.every((s) => s.full_name.trim().length > 0);
+      if (!allNamed) return false;
+    }
 
     return true;
   }, [selectedClassId, enabledIndicators, formValues, inputMode, absentStudents]);
@@ -527,6 +634,17 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
           type: 'error',
         });
         return;
+      }
+
+      if (absentReported > 0) {
+        const emptyIdx = absentStudents.findIndex((s) => !s.full_name.trim());
+        if (emptyIdx !== -1) {
+          setToastMessage({
+            text: `Vui lòng nhập hoặc chọn họ tên cho học sinh vắng thứ ${emptyIdx + 1} trước khi gửi!`,
+            type: 'error',
+          });
+          return;
+        }
       }
     }
 
@@ -614,12 +732,28 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
 
   // Students not currently marked absent for quick-click tagging
   const availableStudentsForAbsent = useMemo(() => {
-    const markedNames = new Set(absentStudents.map((s) => s.full_name.trim().toLowerCase()));
+    const markedNames = new Set(
+      absentStudents
+        .filter((s) => s.full_name && s.full_name.trim().length > 0)
+        .map((s) => s.full_name.trim().toLowerCase())
+    );
     return classStudents.filter((s) => !markedNames.has(s.full_name.trim().toLowerCase()));
   }, [classStudents, absentStudents]);
 
+  const boardingAbsentCount = useMemo(() => {
+    return absentStudents.filter((s) => s.isBoarding).length;
+  }, [absentStudents]);
+
+  const nonBoardingAbsentCount = useMemo(() => {
+    return absentStudents.filter((s) => !s.isBoarding).length;
+  }, [absentStudents]);
+
+  const allAbsentNamed = useMemo(() => {
+    return absentStudents.length > 0 && absentStudents.every((s) => s.full_name.trim().length > 0);
+  }, [absentStudents]);
+
   return (
-    <div className="max-w-5xl mx-auto pb-36 sm:pb-12 animate-in fade-in duration-200">
+    <div className="max-w-5xl mx-auto pb-4 sm:pb-6 animate-in fade-in duration-200">
       {/* Toast Notification */}
       {toastMessage && (
         <div
@@ -770,6 +904,51 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
             )}
           </div>
         )}
+
+        {/* Banner Kế thừa Dữ liệu Ngày Hôm Trước */}
+        {!existingReport && inheritedReport && !isLocked && (
+          <div className="mt-4 p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-blue-50/95 via-indigo-50/90 to-sky-50 border border-blue-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3 animate-in fade-in duration-200">
+            <div className="flex items-start gap-3">
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white flex items-center justify-center flex-shrink-0 shadow-xs mt-0.5">
+                <Sparkles className="w-5 h-5 text-yellow-300" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-black text-blue-950 text-sm">
+                    Kế thừa số liệu từ ngày hôm trước
+                  </span>
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-600 text-white shadow-xs">
+                    {formatDateVN(inheritedReport.report.report_date)}
+                  </span>
+                </div>
+                <p className="text-xs text-blue-800/80 mt-1 leading-relaxed">
+                  Đã tự động điền sĩ số, số có mặt, số vắng và danh sách học sinh nghỉ của ngày hôm trước. Thầy/cô chỉ cần điều chỉnh nếu hôm nay có thay đổi.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 self-end md:self-auto flex-shrink-0 pt-1 md:pt-0">
+              <button
+                type="button"
+                onClick={handleResetAllPresent}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-blue-200 text-blue-700 font-bold text-xs hover:bg-blue-50 active:scale-95 transition-all shadow-xs cursor-pointer"
+                title="Đặt số vắng = 0 cho cả lớp và xóa danh sách vắng nếu hôm nay cả lớp đi học đủ"
+              >
+                <UserCheck className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Hôm nay đi học đủ (0 vắng)</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleReinheritPreviousDay}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-100/80 border border-blue-200 text-blue-800 font-bold text-xs hover:bg-blue-200 active:scale-95 transition-all shadow-xs cursor-pointer"
+                title="Khôi phục lại dữ liệu gốc từ báo cáo ngày hôm trước"
+              >
+                <RotateCcw className="w-3.5 h-3.5 text-blue-700" />
+                <span>Nạp lại hôm trước</span>
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Main Indicators Form Cards */}
@@ -793,31 +972,31 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                   : meta.isNgoaiTru
                   ? 'border-amber-200/80 shadow-xs'
                   : 'border-slate-200/80 shadow-xs'
-              } p-4 sm:p-6`}
+              } p-3.5 sm:p-6`}
             >
               {/* Card Header */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4 pb-3 border-b border-slate-100">
-                <div className="flex items-center gap-2.5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3.5 sm:mb-4 pb-2.5 sm:pb-3 border-b border-slate-100">
+                <div className="flex items-center gap-2 sm:gap-2.5">
                   <div
-                    className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-sm ${meta.badgeClass}`}
+                    className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center font-bold text-sm ${meta.badgeClass} shrink-0`}
                   >
-                    <IndicatorIcon className="w-5 h-5" />
+                    <IndicatorIcon className="w-4 h-4 sm:w-5 sm:h-5" />
                   </div>
                   <div>
-                    <h2 className="text-base sm:text-lg font-bold text-slate-900 flex items-center gap-2">
+                    <h2 className="text-sm sm:text-lg font-bold text-slate-900 flex items-center gap-1.5 sm:gap-2 flex-wrap">
                       {indicator.name}
                       {isPrimary && (
-                        <span className="text-[11px] font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">
+                        <span className="text-[10px] sm:text-[11px] font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">
                           Chỉ tiêu chính
                         </span>
                       )}
                       {meta.isNgoaiTru && (
-                        <span className="text-[11px] font-semibold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full border border-amber-300">
+                        <span className="text-[10px] sm:text-[11px] font-semibold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full border border-amber-300">
                           Ngoại trú
                         </span>
                       )}
                     </h2>
-                    <p className="text-xs text-slate-500">
+                    <p className="text-[11px] sm:text-xs text-slate-500">
                       {meta.description}
                     </p>
                   </div>
@@ -825,10 +1004,10 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
 
                 {/* Quick Percentage Progress */}
                 {totalNum > 0 && (
-                  <div className="flex items-center gap-2 self-start sm:self-auto bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200/60">
-                    <span className="text-xs font-medium text-slate-500">Tỷ lệ duy trì:</span>
+                  <div className="flex items-center gap-1.5 self-start sm:self-auto bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-200/60">
+                    <span className="text-[11px] font-medium text-slate-500">Duy trì:</span>
                     <span
-                      className={`text-sm font-black ${
+                      className={`text-xs sm:text-sm font-black ${
                         presentRate >= 95
                           ? 'text-emerald-600'
                           : presentRate >= 90
@@ -842,177 +1021,132 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                 )}
               </div>
 
-              {/* Number Inputs Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
-                {/* 1. Tổng số */}
-                <div className="bg-slate-50/70 p-3.5 rounded-xl border border-slate-200/70">
-                  <label className="flex items-center justify-between text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                    <span className="flex items-center gap-1.5">
-                      <Users className="w-3.5 h-3.5 text-slate-500" />
-                      Tổng số (Sĩ số)
+              {/* Number Inputs Grid - Responsive 3 Columns on all devices, compact and perfectly aligned without bottom dead space */}
+              <div className="grid grid-cols-3 gap-2 sm:gap-3.5">
+                {/* 1. Tổng số (Sĩ số) */}
+                <div className="bg-slate-50/90 sm:bg-slate-50/70 p-2 sm:p-3 rounded-xl border border-slate-200/80 flex flex-col">
+                  {/* Fixed-height header for perfect vertical alignment */}
+                  <div className="flex items-center justify-between h-5 sm:h-6 mb-1.5 sm:mb-2">
+                    <span className="flex items-center gap-1 sm:gap-1.5 text-[11px] sm:text-xs font-bold text-slate-700 uppercase tracking-tight truncate">
+                      <Users className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                      <span className="sm:hidden">Sĩ số</span>
+                      <span className="hidden sm:inline">Tổng số (Sĩ số)</span>
                     </span>
-                  </label>
-                  <div className="flex items-center gap-2">
-                    {!isLocked && (
-                      <button
-                        type="button"
-                        onClick={() => handleValueChange(indicator.id, 'total', Math.max(0, totalNum - 1))}
-                        className="w-9 h-9 flex items-center justify-center rounded-lg bg-white border border-slate-200 text-slate-700 font-bold text-base hover:bg-slate-100 active:scale-95 transition-all shadow-2xs"
-                      >
-                        -
-                      </button>
-                    )}
-                    <input
-                      type="number"
-                      min="0"
-                      disabled={isLocked}
-                      placeholder="0"
-                      value={vals.total === '' ? '' : vals.total}
-                      onFocus={(e) => e.target.select()}
-                      onBlur={() => {
-                        if (vals.total === '') {
-                          handleValueChange(indicator.id, 'total', 0);
-                        }
-                      }}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        if (val === '') {
-                          handleValueChange(indicator.id, 'total', '');
-                        } else {
-                          const parsed = parseInt(val, 10);
-                          handleValueChange(indicator.id, 'total', isNaN(parsed) ? '' : parsed);
-                        }
-                      }}
-                      className="flex-1 bg-white border border-slate-200 rounded-lg py-1.5 px-3 text-center text-lg font-black text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-inner"
-                    />
-                    {!isLocked && (
-                      <button
-                        type="button"
-                        onClick={() => handleValueChange(indicator.id, 'total', totalNum + 1)}
-                        className="w-9 h-9 flex items-center justify-center rounded-lg bg-white border border-slate-200 text-slate-700 font-bold text-base hover:bg-slate-100 active:scale-95 transition-all shadow-2xs"
-                      >
-                        +
-                      </button>
-                    )}
                   </div>
+
+                  {/* Number Input */}
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    disabled={isLocked}
+                    placeholder="0"
+                    value={vals.total === '' ? '' : vals.total}
+                    onFocus={(e) => e.target.select()}
+                    onBlur={() => {
+                      if (vals.total === '') {
+                        handleValueChange(indicator.id, 'total', 0);
+                      }
+                    }}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/[^0-9]/g, '');
+                      if (val === '') {
+                        handleValueChange(indicator.id, 'total', '');
+                      } else {
+                        const parsed = parseInt(val, 10);
+                        handleValueChange(indicator.id, 'total', isNaN(parsed) ? '' : parsed);
+                      }
+                    }}
+                    className="w-full bg-white border border-slate-300 rounded-lg sm:rounded-xl h-10 sm:h-11 text-center text-lg sm:text-xl font-black text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-inner"
+                  />
                 </div>
 
                 {/* 2. Có mặt */}
-                <div className="bg-emerald-50/50 p-3.5 rounded-xl border border-emerald-200/60">
-                  <label className="flex items-center justify-between text-xs font-bold text-emerald-800 uppercase tracking-wider mb-2">
-                    <span className="flex items-center gap-1.5">
-                      <UserCheck className="w-3.5 h-3.5 text-emerald-600" />
-                      Có mặt
+                <div className="bg-emerald-50/70 sm:bg-emerald-50/50 p-2 sm:p-3 rounded-xl border border-emerald-200/80 flex flex-col">
+                  {/* Fixed-height header */}
+                  <div className="flex items-center justify-between h-5 sm:h-6 mb-1.5 sm:mb-2">
+                    <span className="flex items-center gap-1 sm:gap-1.5 text-[11px] sm:text-xs font-bold text-emerald-800 uppercase tracking-tight truncate">
+                      <UserCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                      <span>Có mặt</span>
                     </span>
                     {inputMode === 'MODE_2_TOTAL_ABSENT' && (
-                      <span className="text-[10px] text-emerald-600 font-normal lowercase">(tự tính)</span>
-                    )}
-                  </label>
-                  <div className="flex items-center gap-2">
-                    {!isLocked && inputMode !== 'MODE_2_TOTAL_ABSENT' && (
-                      <button
-                        type="button"
-                        onClick={() => handleValueChange(indicator.id, 'present', Math.max(0, presentNum - 1))}
-                        className="w-9 h-9 flex items-center justify-center rounded-lg bg-white border border-emerald-200 text-emerald-800 font-bold text-base hover:bg-emerald-50 active:scale-95 transition-all shadow-2xs"
-                      >
-                        -
-                      </button>
-                    )}
-                    <input
-                      type="number"
-                      min="0"
-                      max={totalNum > 0 ? totalNum : undefined}
-                      disabled={isLocked || inputMode === 'MODE_2_TOTAL_ABSENT'}
-                      placeholder="0"
-                      value={vals.present === '' ? '' : vals.present}
-                      onFocus={(e) => e.target.select()}
-                      onBlur={() => {
-                        if (vals.present === '') {
-                          handleValueChange(indicator.id, 'present', 0);
-                        }
-                      }}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        if (val === '') {
-                          handleValueChange(indicator.id, 'present', '');
-                        } else {
-                          const parsed = parseInt(val, 10);
-                          handleValueChange(indicator.id, 'present', isNaN(parsed) ? '' : parsed);
-                        }
-                      }}
-                      className={`flex-1 bg-white border border-emerald-200 rounded-lg py-1.5 px-3 text-center text-lg font-black text-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-inner ${
-                        inputMode === 'MODE_2_TOTAL_ABSENT' ? 'bg-emerald-50/30' : ''
-                      }`}
-                    />
-                    {!isLocked && inputMode !== 'MODE_2_TOTAL_ABSENT' && (
-                      <button
-                        type="button"
-                        onClick={() => handleValueChange(indicator.id, 'present', totalNum > 0 ? Math.min(totalNum, presentNum + 1) : presentNum + 1)}
-                        className="w-9 h-9 flex items-center justify-center rounded-lg bg-white border border-emerald-200 text-emerald-800 font-bold text-base hover:bg-emerald-50 active:scale-95 transition-all shadow-2xs"
-                      >
-                        +
-                      </button>
+                      <span className="text-[10px] text-emerald-600 font-semibold lowercase shrink-0">
+                        (tự tính)
+                      </span>
                     )}
                   </div>
+
+                  {/* Number Input */}
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    disabled={isLocked || inputMode === 'MODE_2_TOTAL_ABSENT'}
+                    placeholder="0"
+                    value={vals.present === '' ? '' : vals.present}
+                    onFocus={(e) => e.target.select()}
+                    onBlur={() => {
+                      if (vals.present === '') {
+                        handleValueChange(indicator.id, 'present', 0);
+                      }
+                    }}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/[^0-9]/g, '');
+                      if (val === '') {
+                        handleValueChange(indicator.id, 'present', '');
+                      } else {
+                        const parsed = parseInt(val, 10);
+                        handleValueChange(indicator.id, 'present', isNaN(parsed) ? '' : parsed);
+                      }
+                    }}
+                    className={`w-full bg-white border border-emerald-300 rounded-lg sm:rounded-xl h-10 sm:h-11 text-center text-lg sm:text-xl font-black text-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-inner ${
+                      inputMode === 'MODE_2_TOTAL_ABSENT' ? 'bg-emerald-100/50 cursor-not-allowed text-emerald-800' : ''
+                    }`}
+                  />
                 </div>
 
                 {/* 3. Vắng mặt */}
-                <div className="bg-rose-50/50 p-3.5 rounded-xl border border-rose-200/60">
-                  <label className="flex items-center justify-between text-xs font-bold text-rose-800 uppercase tracking-wider mb-2">
-                    <span className="flex items-center gap-1.5">
-                      <UserX className="w-3.5 h-3.5 text-rose-600" />
-                      Vắng mặt
+                <div className="bg-rose-50/70 sm:bg-rose-50/50 p-2 sm:p-3 rounded-xl border border-rose-200/80 flex flex-col">
+                  {/* Fixed-height header */}
+                  <div className="flex items-center justify-between h-5 sm:h-6 mb-1.5 sm:mb-2">
+                    <span className="flex items-center gap-1 sm:gap-1.5 text-[11px] sm:text-xs font-bold text-rose-800 uppercase tracking-tight truncate">
+                      <UserX className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                      <span>Vắng</span>
                     </span>
                     {inputMode === 'MODE_1_TOTAL_PRESENT' && (
-                      <span className="text-[10px] text-rose-600 font-normal lowercase">(tự tính)</span>
-                    )}
-                  </label>
-                  <div className="flex items-center gap-2">
-                    {!isLocked && inputMode !== 'MODE_1_TOTAL_PRESENT' && (
-                      <button
-                        type="button"
-                        onClick={() => handleValueChange(indicator.id, 'absent', Math.max(0, absentNum - 1))}
-                        className="w-9 h-9 flex items-center justify-center rounded-lg bg-white border border-rose-200 text-rose-800 font-bold text-base hover:bg-rose-50 active:scale-95 transition-all shadow-2xs"
-                      >
-                        -
-                      </button>
-                    )}
-                    <input
-                      type="number"
-                      min="0"
-                      max={totalNum > 0 ? totalNum : undefined}
-                      disabled={isLocked || inputMode === 'MODE_1_TOTAL_PRESENT'}
-                      placeholder="0"
-                      value={vals.absent === '' ? '' : vals.absent}
-                      onFocus={(e) => e.target.select()}
-                      onBlur={() => {
-                        if (vals.absent === '') {
-                          handleValueChange(indicator.id, 'absent', 0);
-                        }
-                      }}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        if (val === '') {
-                          handleValueChange(indicator.id, 'absent', '');
-                        } else {
-                          const parsed = parseInt(val, 10);
-                          handleValueChange(indicator.id, 'absent', isNaN(parsed) ? '' : parsed);
-                        }
-                      }}
-                      className={`flex-1 bg-white border border-rose-200 rounded-lg py-1.5 px-3 text-center text-lg font-black text-rose-700 focus:outline-none focus:ring-2 focus:ring-rose-500 shadow-inner ${
-                        inputMode === 'MODE_1_TOTAL_PRESENT' ? 'bg-rose-50/30' : ''
-                      }`}
-                    />
-                    {!isLocked && inputMode !== 'MODE_1_TOTAL_PRESENT' && (
-                      <button
-                        type="button"
-                        onClick={() => handleValueChange(indicator.id, 'absent', totalNum > 0 ? Math.min(totalNum, absentNum + 1) : absentNum + 1)}
-                        className="w-9 h-9 flex items-center justify-center rounded-lg bg-white border border-rose-200 text-rose-800 font-bold text-base hover:bg-rose-50 active:scale-95 transition-all shadow-2xs"
-                      >
-                        +
-                      </button>
+                      <span className="text-[10px] text-rose-600 font-semibold lowercase shrink-0">
+                        (tự tính)
+                      </span>
                     )}
                   </div>
+
+                  {/* Number Input */}
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    disabled={isLocked || inputMode === 'MODE_1_TOTAL_PRESENT'}
+                    placeholder="0"
+                    value={vals.absent === '' ? '' : vals.absent}
+                    onFocus={(e) => e.target.select()}
+                    onBlur={() => {
+                      if (vals.absent === '') {
+                        handleValueChange(indicator.id, 'absent', 0);
+                      }
+                    }}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/[^0-9]/g, '');
+                      if (val === '') {
+                        handleValueChange(indicator.id, 'absent', '');
+                      } else {
+                        const parsed = parseInt(val, 10);
+                        handleValueChange(indicator.id, 'absent', isNaN(parsed) ? '' : parsed);
+                      }
+                    }}
+                    className={`w-full bg-white border border-rose-300 rounded-lg sm:rounded-xl h-10 sm:h-11 text-center text-lg sm:text-xl font-black text-rose-700 focus:outline-none focus:ring-2 focus:ring-rose-500 shadow-inner ${
+                      inputMode === 'MODE_1_TOTAL_PRESENT' ? 'bg-rose-100/50 cursor-not-allowed text-rose-800' : ''
+                    }`}
+                  />
                 </div>
               </div>
             </div>
@@ -1105,18 +1239,23 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
       <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-4 sm:p-6 mb-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 pb-3 border-b border-slate-100">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-rose-50 text-rose-600 border border-rose-200 flex items-center justify-center font-bold text-sm">
+            <div className="w-9 h-9 rounded-xl bg-rose-50 text-rose-600 border border-rose-200 flex items-center justify-center font-bold text-sm shadow-2xs">
               <UserX className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-base sm:text-lg font-bold text-slate-900 flex items-center gap-2">
-                Danh sách học sinh vắng mặt
-                <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-rose-100 text-rose-700">
-                  {absentStudents.length}
+              <h2 className="text-base sm:text-lg font-bold text-slate-900 flex items-center gap-2 flex-wrap">
+                <span>Danh sách học sinh vắng mặt</span>
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-rose-100 text-rose-700 border border-rose-200">
+                  {absentStudents.length} HS vắng
                 </span>
+                {absentStudents.length > 0 && (
+                  <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">
+                    {boardingAbsentCount} Bán trú • {nonBoardingAbsentCount} Ngoại trú
+                  </span>
+                )}
               </h2>
-              <p className="text-xs text-slate-500">
-                Ghi danh học sinh nghỉ học, địa chỉ cư trú và lý do cụ thể gửi BGH
+              <p className="text-xs text-slate-500 mt-0.5">
+                Tự động đồng bộ số lượng khi nhập sĩ số vắng. Ghi rõ địa chỉ và lý do cụ thể gửi BGH
               </p>
             </div>
           </div>
@@ -1124,8 +1263,22 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
           {!isLocked && (
             <button
               type="button"
-              onClick={() => setShowQuickAddModal(true)}
-              className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 font-bold text-xs transition-colors self-start sm:self-auto"
+              onClick={() => {
+                setAbsentStudents((prev) => {
+                  const nextList = [
+                    ...prev,
+                    {
+                      full_name: '',
+                      address: '',
+                      reason: 'Ốm',
+                      isBoarding: false,
+                    },
+                  ];
+                  syncIndicatorsWithAbsentStudents(nextList);
+                  return nextList;
+                });
+              }}
+              className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 font-bold text-xs transition-all active:scale-95 self-start sm:self-auto cursor-pointer shadow-2xs"
             >
               <Plus className="w-4 h-4" />
               Thêm học sinh vắng
@@ -1133,28 +1286,81 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
           )}
         </div>
 
-        {/* Quick Tagging Chips of Enrolled Students */}
-        {!isLocked && availableStudentsForAbsent.length > 0 && (
-          <div className="mb-4 p-3 rounded-xl bg-slate-50 border border-slate-200/70">
-            <div className="text-xs font-semibold text-slate-600 mb-2 flex items-center gap-1.5">
-              <span>Bấm nhanh để đánh dấu vắng:</span>
-              <span className="text-[11px] text-slate-400 font-normal">({availableStudentsForAbsent.length} học sinh trong lớp)</span>
+        {/* Sync Status Banner */}
+        {absentStudents.length > 0 && (
+          <div
+            className={`p-3 rounded-xl border mb-4 text-xs font-semibold flex items-center justify-between gap-2 shadow-2xs ${
+              allAbsentNamed
+                ? 'bg-emerald-50/90 border-emerald-200 text-emerald-800'
+                : 'bg-amber-50/90 border-amber-200 text-amber-800'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              {allAbsentNamed ? (
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              ) : (
+                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 animate-bounce" />
+              )}
+              <span>
+                {allAbsentNamed
+                  ? `Đã điền đầy đủ thông tin ${absentStudents.length} học sinh vắng (${boardingAbsentCount} Bán trú, ${nonBoardingAbsentCount} Ngoại trú). Sẵn sàng gửi BGH!`
+                  : `Đang có ${absentStudents.length} học sinh vắng. Vui lòng nhập hoặc chọn tên cho học sinh còn trống bên dưới.`}
+              </span>
             </div>
-            <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto pr-1">
-              {availableStudentsForAbsent.map((st) => (
-                <button
-                  key={st.id}
-                  type="button"
-                  onClick={() => handleAddAbsentStudent(st.full_name, st.address || '', 'Ốm', !!st.isBoarding)}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-white hover:bg-rose-50 text-slate-700 hover:text-rose-700 border border-slate-200 hover:border-rose-200 transition-colors shadow-2xs group"
-                >
-                  <Plus className="w-3 h-3 text-slate-400 group-hover:text-rose-600" />
-                  <span>{st.full_name}</span>
-                  {st.isBoarding && (
-                    <span className="text-[10px] text-amber-600 font-semibold">(BT)</span>
-                  )}
-                </button>
-              ))}
+            <div className="text-[11px] font-black shrink-0 bg-white/80 px-2 py-0.5 rounded border border-current/20">
+              {absentStudents.filter((s) => s.full_name.trim()).length}/{absentStudents.length} đã điền
+            </div>
+          </div>
+        )}
+
+        {/* Quick Tagging Chips of Enrolled Students */}
+        {!isLocked && classStudents.length > 0 && (
+          <div className="mb-4 p-3 rounded-xl bg-slate-50 border border-slate-200/70">
+            <div className="text-xs font-semibold text-slate-700 mb-2 flex items-center justify-between flex-wrap gap-1">
+              <span className="flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+                <span>Bấm nhanh để chọn học sinh vắng trong danh sách lớp:</span>
+              </span>
+              <span className="text-[11px] text-slate-500 font-normal">
+                ({availableStudentsForAbsent.length}/{classStudents.length} em chưa chọn)
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto pr-1">
+              {classStudents.map((st) => {
+                const isMarked = absentStudents.some(
+                  (s) => s.full_name.trim().toLowerCase() === st.full_name.trim().toLowerCase()
+                );
+                return (
+                  <button
+                    key={st.id}
+                    type="button"
+                    disabled={isMarked}
+                    onClick={() => handleAddAbsentStudent(st.full_name, st.address || '', 'Ốm', !!st.isBoarding)}
+                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium transition-all shadow-2xs ${
+                      isMarked
+                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 opacity-80 cursor-default'
+                        : 'bg-white hover:bg-rose-50 text-slate-700 hover:text-rose-700 border border-slate-200 hover:border-rose-200 cursor-pointer active:scale-95'
+                    }`}
+                    title={
+                      isMarked
+                        ? 'Đã có trong danh sách vắng'
+                        : `Bấm để ghi nhận vắng: ${st.full_name} (${st.isBoarding ? 'Bán trú' : 'Ngoại trú'})`
+                    }
+                  >
+                    {isMarked ? (
+                      <Check className="w-3 h-3 text-emerald-600" />
+                    ) : (
+                      <Plus className="w-3 h-3 text-slate-400 group-hover:text-rose-600" />
+                    )}
+                    <span>{st.full_name}</span>
+                    {st.isBoarding ? (
+                      <span className="text-[10px] text-emerald-600 font-semibold">(BT)</span>
+                    ) : (
+                      <span className="text-[10px] text-amber-600 font-semibold">(NT)</span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
           </div>
         )}
@@ -1163,9 +1369,9 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
         {absentStudents.length === 0 ? (
           <div className="text-center py-8 px-4 rounded-xl border border-dashed border-slate-200 bg-slate-50/50">
             <UserCheck className="w-10 h-10 text-emerald-500 mx-auto mb-2 opacity-80" />
-            <h3 className="text-sm font-bold text-slate-700">Hôm nay lớp đi học đầy đủ</h3>
+            <h3 className="text-sm font-bold text-slate-700">Hôm nay lớp đi học đầy đủ 100%</h3>
             <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-              Không có học sinh nào vắng mặt. Bấm "Thêm học sinh vắng" hoặc bấm tên học sinh ở trên nếu có em nghỉ học.
+              Không có học sinh nào vắng mặt. Khi nhập số vắng ở bảng trên hoặc bấm nút "Thêm học sinh vắng", danh sách sẽ tự động mở để thầy/cô điền thông tin.
             </p>
           </div>
         ) : (
@@ -1173,74 +1379,229 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
             {absentStudents.map((st, index) => (
               <div
                 key={index}
-                className="flex flex-col sm:flex-row sm:items-center gap-2.5 p-3 rounded-xl bg-slate-50/80 border border-slate-200 transition-colors"
+                className="p-3.5 sm:p-4 rounded-2xl bg-white border border-slate-200 shadow-2xs hover:border-blue-200 transition-all space-y-3"
               >
-                {/* Index & Name */}
-                <div className="flex items-center gap-2 flex-1 min-w-0">
-                  <span className="w-6 h-6 rounded-full bg-slate-200 text-slate-700 flex items-center justify-center text-xs font-bold flex-shrink-0">
-                    {index + 1}
-                  </span>
-                  <input
-                    type="text"
-                    disabled={isLocked}
-                    value={st.full_name}
-                    placeholder="Họ và tên học sinh"
-                    onChange={(e) => handleUpdateAbsentStudent(index, { full_name: e.target.value })}
-                    className="flex-1 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs sm:text-sm font-bold text-slate-900 focus:outline-none focus:ring-1 focus:ring-blue-500 min-w-[120px]"
-                  />
+                {/* Card Header: Index badge + Quick Class Select + Delete Button */}
+                <div className="flex items-center justify-between gap-2 pb-2.5 border-b border-slate-100">
+                  <div className="flex items-center gap-2">
+                    <span className="w-6 h-6 rounded-full bg-rose-100 text-rose-700 flex items-center justify-center text-xs font-black shrink-0">
+                      {index + 1}
+                    </span>
+                    <span className="text-xs font-bold text-slate-800">
+                      Học sinh vắng #{index + 1}
+                    </span>
+                    {st.isBoarding ? (
+                      <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded">
+                        Bán trú
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">
+                        Ngoại trú
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {/* Quick Select from Class Dropdown */}
+                    {!isLocked && classStudents.length > 0 && (
+                      <div className="relative">
+                        <select
+                          value=""
+                          onChange={(e) => {
+                            const selectedSt = classStudents.find((s) => s.id === e.target.value);
+                            if (selectedSt) {
+                              handleUpdateAbsentStudent(index, {
+                                full_name: selectedSt.full_name,
+                                address: selectedSt.address || '',
+                                isBoarding: !!selectedSt.isBoarding,
+                              });
+                            }
+                          }}
+                          className="text-[11px] font-semibold text-blue-700 bg-blue-50/80 hover:bg-blue-100/80 border border-blue-200 rounded-lg px-2 py-1 pr-6 cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-500 appearance-none max-w-[170px] sm:max-w-none truncate shadow-2xs"
+                          title="Chọn nhanh từ danh sách học sinh của lớp"
+                        >
+                          <option value="">+ Chọn từ DS lớp ({classStudents.length} HS)...</option>
+                          {classStudents.map((cs) => (
+                            <option key={cs.id} value={cs.id}>
+                              {cs.full_name} {cs.isBoarding ? '• [Bán trú]' : '• [Ngoại trú]'} {cs.address ? `- ${cs.address}` : ''}
+                            </option>
+                          ))}
+                        </select>
+                        <ChevronDown className="w-3 h-3 text-blue-600 absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      </div>
+                    )}
+
+                    {/* Delete / Remove Button */}
+                    {!isLocked && (
+                      <button
+                        type="button"
+                        title="Xóa học sinh này khỏi danh sách vắng"
+                        onClick={() => handleRemoveAbsentStudent(index)}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 active:scale-95 transition-all shrink-0 cursor-pointer"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
                 </div>
 
-                {/* Address */}
-                <div className="flex-1 min-w-0">
+                {/* Row 1: Họ và tên học sinh */}
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-tight mb-1 flex items-center justify-between">
+                    <span className="flex items-center gap-1">
+                      <User className="w-3.5 h-3.5 text-slate-400" />
+                      Họ và tên học sinh <span className="text-rose-500">*</span>
+                    </span>
+                    {!st.full_name.trim() && (
+                      <span className="text-[10px] text-amber-600 font-semibold animate-pulse">
+                        Cần nhập họ tên
+                      </span>
+                    )}
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      disabled={isLocked}
+                      value={st.full_name}
+                      list={`students-list-${index}`}
+                      placeholder="Nhập họ tên hoặc chọn từ danh sách lớp ở trên..."
+                      onChange={(e) => handleUpdateAbsentStudent(index, { full_name: e.target.value })}
+                      className="w-full bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all placeholder:font-normal placeholder:text-slate-400 shadow-inner"
+                    />
+                    <datalist id={`students-list-${index}`}>
+                      {classStudents.map((cs) => (
+                        <option key={cs.id} value={cs.full_name}>
+                          {cs.isBoarding ? 'Học sinh Bán trú' : 'Học sinh Ngoại trú'} {cs.address ? `- ${cs.address}` : ''}
+                        </option>
+                      ))}
+                    </datalist>
+                  </div>
+                </div>
+
+                {/* Row 2: Bản / Thôn / Địa chỉ cư trú */}
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-tight mb-1 flex items-center gap-1">
+                    <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                    Bản / Thôn / Địa chỉ cư trú
+                  </label>
                   <input
                     type="text"
                     disabled={isLocked}
                     value={st.address || ''}
-                    placeholder="Bản/Thôn/Địa chỉ"
+                    placeholder="Ví dụ: Bản Tào La- Tia Dình, Bản Pú Nhi..."
                     onChange={(e) => handleUpdateAbsentStudent(index, { address: e.target.value })}
-                    className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    className="w-full bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs sm:text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all placeholder:text-slate-400 shadow-inner"
                   />
                 </div>
 
-                {/* Reason Quick Buttons & Custom Input */}
-                <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                  <select
-                    disabled={isLocked}
-                    value={st.reason || 'Ốm'}
-                    onChange={(e) => handleUpdateAbsentStudent(index, { reason: e.target.value })}
-                    className="bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-medium text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  >
-                    <option value="Ốm">Ốm</option>
-                    <option value="Có phép">Có phép</option>
-                    <option value="Không phép">Không phép</option>
-                    <option value="Gia đình">Gia đình có việc</option>
-                    <option value="Thời tiết/Mưa rét">Mưa rét/Đường xa</option>
-                    <option value="Khác">Lý do khác</option>
-                  </select>
-
-                  {/* Boarding Toggle */}
-                  <label className="flex items-center gap-1 text-[11px] font-semibold text-slate-600 bg-white px-2 py-1.5 rounded-lg border border-slate-200 cursor-pointer select-none">
-                    <input
-                      type="checkbox"
+                {/* Row 3: Lý do vắng & Toggle Bán trú / Ngoài bán trú */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-0.5">
+                  {/* Lý do vắng */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-tight mb-1 flex items-center gap-1">
+                      <Clock className="w-3.5 h-3.5 text-slate-400" />
+                      Lý do vắng mặt
+                    </label>
+                    <select
                       disabled={isLocked}
-                      checked={!!st.isBoarding}
-                      onChange={(e) => handleUpdateAbsentStudent(index, { isBoarding: e.target.checked })}
-                      className="rounded text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
-                    />
-                    <span>Bán trú</span>
-                  </label>
-
-                  {/* Remove Button */}
-                  {!isLocked && (
-                    <button
-                      type="button"
-                      title="Xóa"
-                      onClick={() => handleRemoveAbsentStudent(index)}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors ml-auto flex-shrink-0"
+                      value={st.reason || 'Ốm'}
+                      onChange={(e) => handleUpdateAbsentStudent(index, { reason: e.target.value })}
+                      className="w-full bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs sm:text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all shadow-inner"
                     >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  )}
+                      <option value="Ốm">Ốm</option>
+                      <option value="Có phép">Có phép</option>
+                      <option value="Không phép">Không phép</option>
+                      <option value="Gia đình">Gia đình có việc</option>
+                      <option value="Thời tiết/Mưa rét">Mưa rét/Đường xa</option>
+                      <option value="Khác">Lý do khác</option>
+                    </select>
+                  </div>
+
+                  {/* Phân loại Bán trú hay Ngoại trú dạng tích chọn */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-tight mb-1 flex items-center justify-between">
+                      <span className="flex items-center gap-1">
+                        <Utensils className="w-3.5 h-3.5 text-slate-400" />
+                        Phân loại bán trú / ngoại trú
+                      </span>
+                      <span className="text-[10px] text-slate-500 font-medium">
+                        {st.isBoarding ? 'Đang chọn: HS bán trú' : 'Đang chọn: HS ngoại trú'}
+                      </span>
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {/* Tích chọn HS bán trú */}
+                      <div
+                        onClick={() => {
+                          if (!isLocked) {
+                            handleUpdateAbsentStudent(index, { isBoarding: true });
+                          }
+                        }}
+                        className={`flex items-center gap-2 px-2.5 sm:px-3 py-2 rounded-xl border cursor-pointer select-none transition-all ${
+                          st.isBoarding
+                            ? 'bg-emerald-50 border-emerald-400 text-emerald-950 shadow-xs ring-2 ring-emerald-500/20'
+                            : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                        }`}
+                      >
+                        <div
+                          className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-all ${
+                            st.isBoarding
+                              ? 'bg-emerald-600 border-emerald-600 text-white shadow-2xs'
+                              : 'bg-white border-slate-300'
+                          }`}
+                        >
+                          {st.isBoarding && <Check className="w-3 h-3 stroke-[3]" />}
+                        </div>
+                        <div className="flex flex-col min-w-0">
+                          <span className="text-xs sm:text-sm font-bold whitespace-normal leading-tight">
+                            HS bán trú
+                          </span>
+                          <span
+                            className={`text-[10px] truncate ${
+                              st.isBoarding ? 'text-emerald-700 font-semibold' : 'text-slate-400 font-normal'
+                            }`}
+                          >
+                            Báo ăn
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Tích chọn HS ngoại trú */}
+                      <div
+                        onClick={() => {
+                          if (!isLocked) {
+                            handleUpdateAbsentStudent(index, { isBoarding: false });
+                          }
+                        }}
+                        className={`flex items-center gap-2 px-2.5 sm:px-3 py-2 rounded-xl border cursor-pointer select-none transition-all ${
+                          !st.isBoarding
+                            ? 'bg-amber-50 border-amber-400 text-amber-950 shadow-xs ring-2 ring-amber-500/20'
+                            : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                        }`}
+                      >
+                        <div
+                          className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-all ${
+                            !st.isBoarding
+                              ? 'bg-amber-600 border-amber-600 text-white shadow-2xs'
+                              : 'bg-white border-slate-300'
+                          }`}
+                        >
+                          {!st.isBoarding && <Check className="w-3 h-3 stroke-[3]" />}
+                        </div>
+                        <div className="flex flex-col min-w-0">
+                          <span className="text-xs sm:text-sm font-bold whitespace-normal leading-tight">
+                            HS ngoại trú
+                          </span>
+                          <span
+                            className={`text-[10px] truncate ${
+                              !st.isBoarding ? 'text-amber-700 font-semibold' : 'text-slate-400 font-normal'
+                            }`}
+                          >
+                            Trưa về nhà
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             ))}
@@ -1249,7 +1610,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
       </div>
 
       {/* Notes / Ghi chú của GVCN */}
-      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-4 sm:p-6 mb-5">
+      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-3.5 sm:p-6 mb-5">
         <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
           Ghi chú báo cáo tới Ban Giám Hiệu
         </label>
@@ -1263,35 +1624,46 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
         />
       </div>
 
-      {/* Desktop Bottom Action Bar */}
-      <div className="hidden sm:flex items-center justify-between gap-4 p-4 bg-white rounded-2xl border border-slate-200/80 shadow-xs">
-        <div className="flex items-center gap-3">
-          {existingReport && !isLocked && (
-            <button
-              type="button"
-              onClick={() => setShowResetConfirm(true)}
-              disabled={isSaving}
-              className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-rose-200 bg-rose-50 text-rose-700 font-bold text-xs hover:bg-rose-100 transition-colors disabled:opacity-50"
-            >
-              <RotateCcw className="w-4 h-4 text-rose-600" />
-              <span>Reset nhầm</span>
-            </button>
-          )}
-
-          <div className="text-xs text-slate-500">
-            {isLocked ? (
-              <span className="text-slate-600 font-medium">Báo cáo đã khóa sổ.</span>
-            ) : existingReport ? (
-              <span>Lần gửi gần nhất: {existingReport.reported_time || formatDateVN(existingReport.updated_at.split('T')[0])}</span>
+      {/* Bottom Sticky Action Bar - Cố định thanh CẬP NHẬT BÁO CÁO sát đáy như hình gốc */}
+      <div className="sticky bottom-0 z-30 -mx-3 sm:mx-0 bg-white/95 backdrop-blur-md rounded-t-2xl sm:rounded-2xl border-t sm:border border-slate-200/90 shadow-[0_-8px_20px_-6px_rgba(0,0,0,0.12)] sm:shadow-xl p-3 sm:p-4 flex flex-col gap-2.5 transition-all">
+        {/* Row 1: Reset nhầm & Lần gửi gần nhất */}
+        <div className="flex items-center justify-between gap-3 min-h-[32px]">
+          <div>
+            {existingReport && !isLocked ? (
+              <button
+                type="button"
+                onClick={() => setShowResetConfirm(true)}
+                disabled={isSaving}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-rose-200 bg-rose-50/90 text-rose-700 font-bold text-xs hover:bg-rose-100 transition-colors disabled:opacity-50 active:scale-95 cursor-pointer shadow-2xs"
+                title="Bấm nếu trước đó báo nhầm để đưa về trạng thái chưa báo"
+              >
+                <RotateCcw className="w-3.5 h-3.5 text-rose-600 stroke-[2.5]" />
+                <span>Reset nhầm</span>
+              </button>
             ) : (
-              <span>Vui lòng kiểm tra kỹ số liệu trước khi gửi.</span>
+              <span className="text-[11px] sm:text-xs text-slate-500 font-medium">
+                {isLocked ? 'Báo cáo đã khóa sổ' : 'Kiểm tra thông tin trước khi gửi'}
+              </span>
+            )}
+          </div>
+
+          <div className="text-xs sm:text-sm text-slate-600 font-normal text-right">
+            {isLocked ? (
+              <span className="text-slate-600 font-semibold">Đã khóa</span>
+            ) : existingReport ? (
+              <span>
+                Lần gửi gần nhất: <span className="text-slate-700 font-semibold">{existingReport.reported_time || formatDateVN(existingReport.updated_at.split('T')[0])}</span>
+              </span>
+            ) : (
+              <span className="text-slate-400 italic">Chưa gửi báo cáo hôm nay</span>
             )}
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        {/* Row 2: Nút CẬP NHẬT BÁO CÁO / GỬI BÁO CÁO (Full-width như hình gốc) */}
+        <div>
           {isLocked ? (
-            <div className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-slate-100 text-slate-500 font-bold text-sm border border-slate-200">
+            <div className="w-full h-11 sm:h-12 flex items-center justify-center gap-2 rounded-xl sm:rounded-2xl bg-slate-100 text-slate-500 font-bold text-sm sm:text-base border border-slate-200 select-none">
               <Lock className="w-4 h-4" />
               Báo cáo đã khóa
             </div>
@@ -1300,11 +1672,9 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
               type="button"
               onClick={handleSubmit}
               disabled={!isValid || isSaving}
-              className={`inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl font-bold text-sm text-white shadow-md transition-all active:scale-[0.98] ${
+              className={`w-full h-11 sm:h-12 flex items-center justify-center gap-2 px-6 rounded-xl sm:rounded-2xl font-black text-sm sm:text-base text-white tracking-wide transition-all active:scale-[0.99] cursor-pointer shadow-md ${
                 isValid && !isSaving
-                  ? existingReport
-                    ? 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 shadow-emerald-500/25'
-                    : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-blue-500/25'
+                  ? 'bg-[#00875a] hover:bg-[#00744e] active:bg-[#006041] shadow-emerald-700/25'
                   : 'bg-slate-300 text-slate-500 cursor-not-allowed shadow-none'
               }`}
             >
@@ -1315,78 +1685,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                 </>
               ) : (
                 <>
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span>{existingReport ? 'CẬP NHẬT BÁO CÁO' : 'GỬI BÁO CÁO'}</span>
-                </>
-              )}
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Mobile Sticky Bottom Action Bar (Fixed, Two-Row Layout, No Squashing) */}
-      <div className="sm:hidden fixed bottom-0 left-0 right-0 z-30 bg-white/95 backdrop-blur-md border-t border-slate-200 px-3 pb-[calc(env(safe-area-inset-bottom)+0.625rem)] pt-2.5 shadow-xl">
-        {/* Row 1: Summary stats */}
-        <div className="flex items-center justify-between text-xs font-semibold text-slate-700 mb-2 px-1">
-          <div className="flex items-center gap-1.5 truncate">
-            <span className="font-bold text-slate-900">{selectedClass?.class_name}:</span>
-            <span className="text-blue-700">{mainPresent}/{mainTotal}</span>
-            <span className="text-slate-400">•</span>
-            <span className={mainAbsent > 0 ? 'text-rose-600 font-bold' : 'text-emerald-600 font-medium'}>
-              Vắng: {mainAbsent}
-            </span>
-            {boardingVal && Number(boardingVal.present) > 0 && (
-              <>
-                <span className="text-slate-400">•</span>
-                <span className="text-amber-700 font-medium">{Number(boardingVal.present)} suất ăn</span>
-              </>
-            )}
-          </div>
-          <div className="text-[11px] font-bold text-slate-500 whitespace-nowrap ml-2">
-            {mainTotal > 0 ? `${Math.round((mainPresent / mainTotal) * 100)}%` : '0%'}
-          </div>
-        </div>
-
-        {/* Row 2: Action buttons */}
-        <div className="flex items-center gap-2">
-          {existingReport && !isLocked && (
-            <button
-              type="button"
-              onClick={() => setShowResetConfirm(true)}
-              disabled={isSaving}
-              className="flex items-center justify-center gap-1 px-3 py-2.5 rounded-xl border border-rose-200 bg-rose-50 text-rose-700 font-semibold text-xs active:bg-rose-100 transition-colors flex-shrink-0"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              <span>Reset nhầm</span>
-            </button>
-          )}
-
-          {isLocked ? (
-            <div className="flex-1 flex items-center justify-center gap-1.5 py-2.5 px-4 rounded-xl bg-slate-100 text-slate-600 text-xs font-bold border border-slate-200">
-              <Lock className="w-4 h-4 text-slate-500" />
-              <span>Báo cáo đã khóa</span>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={handleSubmit}
-              disabled={!isValid || isSaving}
-              className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-bold text-xs sm:text-sm text-white shadow-md transition-all active:scale-[0.98] ${
-                isValid && !isSaving
-                  ? existingReport
-                    ? 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 shadow-emerald-500/25'
-                    : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-blue-500/25'
-                  : 'bg-slate-300 text-slate-500 cursor-not-allowed shadow-none'
-              }`}
-            >
-              {isSaving ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  <span>Đang lưu...</span>
-                </>
-              ) : (
-                <>
-                  <CheckCircle2 className="w-4 h-4" />
+                  <CheckCircle2 className="w-5 h-5 text-white stroke-[2.2]" />
                   <span>{existingReport ? 'CẬP NHẬT BÁO CÁO' : 'GỬI BÁO CÁO'}</span>
                 </>
               )}
@@ -1471,7 +1770,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                   placeholder="Ví dụ: Vàng A Sinh"
                   value={newAbsentName}
                   onChange={(e) => setNewAbsentName(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-base sm:text-sm text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
 
@@ -1484,7 +1783,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                   placeholder="Ví dụ: Bản Nà Sản A"
                   value={newAbsentAddress}
                   onChange={(e) => setNewAbsentAddress(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-base sm:text-sm text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
 
@@ -1496,7 +1795,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                   <select
                     value={newAbsentReason}
                     onChange={(e) => setNewAbsentReason(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-2 text-xs font-medium text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-2 text-xs sm:text-sm font-medium text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="Ốm">Ốm</option>
                     <option value="Có phép">Có phép</option>
@@ -1507,16 +1806,61 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                   </select>
                 </div>
 
-                <div className="flex flex-col justify-end">
-                  <label className="flex items-center gap-2 p-2 rounded-xl bg-slate-50 border border-slate-200 cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={newAbsentIsBoarding}
-                      onChange={(e) => setNewAbsentIsBoarding(e.target.checked)}
-                      className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4"
-                    />
-                    <span className="text-xs font-semibold text-slate-700">Ăn bán trú</span>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Hình thức ăn nghỉ (Tích chọn)
                   </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div
+                      onClick={() => setNewAbsentIsBoarding(true)}
+                      className={`flex items-center gap-2 p-2 rounded-xl border cursor-pointer select-none transition-all ${
+                        newAbsentIsBoarding
+                          ? 'bg-emerald-50 border-emerald-400 text-emerald-950 font-bold ring-1 ring-emerald-500/20'
+                          : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                      }`}
+                    >
+                      <div
+                        className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${
+                          newAbsentIsBoarding
+                            ? 'bg-emerald-600 border-emerald-600 text-white'
+                            : 'bg-white border-slate-300'
+                        }`}
+                      >
+                        {newAbsentIsBoarding && <Check className="w-3 h-3 stroke-[3]" />}
+                      </div>
+                      <div className="flex flex-col min-w-0">
+                        <span className="text-xs font-bold whitespace-normal leading-tight">HS bán trú</span>
+                        <span className={`text-[10px] leading-tight ${newAbsentIsBoarding ? 'text-emerald-700 font-semibold' : 'text-slate-400 font-normal'}`}>
+                          Báo ăn
+                        </span>
+                      </div>
+                    </div>
+
+                    <div
+                      onClick={() => setNewAbsentIsBoarding(false)}
+                      className={`flex items-center gap-2 p-2 rounded-xl border cursor-pointer select-none transition-all ${
+                        !newAbsentIsBoarding
+                          ? 'bg-amber-50 border-amber-400 text-amber-950 font-bold ring-1 ring-amber-500/20'
+                          : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                      }`}
+                    >
+                      <div
+                        className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${
+                          !newAbsentIsBoarding
+                            ? 'bg-amber-600 border-amber-600 text-white'
+                            : 'bg-white border-slate-300'
+                        }`}
+                      >
+                        {!newAbsentIsBoarding && <Check className="w-3 h-3 stroke-[3]" />}
+                      </div>
+                      <div className="flex flex-col min-w-0">
+                        <span className="text-xs font-bold whitespace-normal leading-tight">HS ngoại trú</span>
+                        <span className={`text-[10px] leading-tight ${!newAbsentIsBoarding ? 'text-amber-700 font-semibold' : 'text-slate-400 font-normal'}`}>
+                          Trưa về nhà
+                        </span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
 
