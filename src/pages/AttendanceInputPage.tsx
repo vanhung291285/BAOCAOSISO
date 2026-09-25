@@ -164,42 +164,66 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
 
         setFormValues(newVals);
       } else {
-        // No report yet: Initialize with smart defaults from class student enrollment
-        setNotes('');
-        setAbsentStudents([]);
+        // No report for this date: Try to inherit from latest report
+        const { report: latestReport, values: latestValues } = await StorageService.getLatestReport(selectedClassId);
 
-        const newVals: Record<string, { total: number | ''; present: number | ''; absent: number | '' }> = {};
-        const enrolledCount = classStudents.length;
-
-        // Try getting enrollment from latest class report or fallback to enrolled students
-        const defaultTotal = enrolledCount > 0 ? enrolledCount : 35; // reasonable fallback
-        const boardingStudentsCount = classStudents.filter((s) => s.isBoarding).length;
-
-        enabledIndicators.forEach((ig, idx) => {
-          if (idx === 0) {
-            // Main school indicator
-            newVals[ig.id] = {
-              total: defaultTotal,
-              present: defaultTotal,
-              absent: 0,
+        if (latestReport) {
+          // Inherit structure from latest report
+          const newVals: Record<string, { total: number | ''; present: number | ''; absent: number | '' }> = {};
+          latestValues.forEach((v) => {
+            newVals[v.indicator_group_id] = {
+              total: v.total_count,
+              present: v.total_count, // Reset present to total
+              absent: 0, // Reset absent to 0
             };
-          } else if (ig.code.includes('BOARDING') || ig.name.toLowerCase().includes('bán trú') || ig.name.toLowerCase().includes('ăn trưa')) {
-            const boardingTotal = boardingStudentsCount > 0 ? boardingStudentsCount : Math.min(defaultTotal, 20);
-            newVals[ig.id] = {
-              total: boardingTotal,
-              present: boardingTotal,
-              absent: 0,
-            };
-          } else {
-            newVals[ig.id] = {
-              total: 0,
-              present: 0,
-              absent: 0,
-            };
-          }
-        });
+          });
 
-        setFormValues(newVals);
+          // Ensure all active indicator groups have entry
+          enabledIndicators.forEach((ig) => {
+            if (!newVals[ig.id]) {
+              newVals[ig.id] = { total: 0, present: 0, absent: 0 };
+            }
+          });
+
+          setFormValues(newVals);
+          setNotes(''); // Clear notes for new day
+          setAbsentStudents([]); // Clear absent students for new day
+        } else {
+          // Fallback to smart defaults
+          setNotes('');
+          setAbsentStudents([]);
+
+          const newVals: Record<string, { total: number | ''; present: number | ''; absent: number | '' }> = {};
+          const enrolledCount = classStudents.length;
+
+          const defaultTotal = enrolledCount > 0 ? enrolledCount : 35;
+          const boardingStudentsCount = classStudents.filter((s) => s.isBoarding).length;
+
+          enabledIndicators.forEach((ig, idx) => {
+            if (idx === 0) {
+              newVals[ig.id] = {
+                total: defaultTotal,
+                present: defaultTotal,
+                absent: 0,
+              };
+            } else if (ig.code.includes('BOARDING') || ig.name.toLowerCase().includes('bán trú') || ig.name.toLowerCase().includes('ăn trưa')) {
+              const boardingTotal = boardingStudentsCount > 0 ? boardingStudentsCount : Math.min(defaultTotal, 20);
+              newVals[ig.id] = {
+                total: boardingTotal,
+                present: boardingTotal,
+                absent: 0,
+              };
+            } else {
+              newVals[ig.id] = {
+                total: 0,
+                present: 0,
+                absent: 0,
+              };
+            }
+          });
+
+          setFormValues(newVals);
+        }
       }
     } catch (err) {
       console.error('Error loading report for input:', err);
