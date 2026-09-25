@@ -79,7 +79,7 @@ export function getSharedAudioContext(): AudioContext | null {
 }
 
 /**
- * Tự động mở khóa AudioContext ngay khi người dùng chạm hoặc nhấp chuột lần đầu vào trang
+ * Tự động mở khóa AudioContext ngay khi người dùng chạm hoặc nhấp chuột lần đầu vào trang trên điện thoại hoặc máy tính
  */
 function initAutoplayUnlocker() {
   if (typeof window === 'undefined') return;
@@ -104,15 +104,13 @@ function initAutoplayUnlocker() {
       }
     }
 
-    // Loại bỏ các listener sau khi đã tương tác
-    window.removeEventListener('click', unlock, true);
-    window.removeEventListener('touchstart', unlock, true);
-    window.removeEventListener('keydown', unlock, true);
+    // Giữ lại các listener nhẹ nhàng nếu cần hoặc loại bỏ sau khi đã resume thành công
   };
 
-  window.addEventListener('click', unlock, true);
-  window.addEventListener('touchstart', unlock, true);
-  window.addEventListener('keydown', unlock, true);
+  ['click', 'touchstart', 'touchend', 'pointerdown', 'keydown', 'scroll', 'visibilitychange'].forEach((ev) => {
+    window.addEventListener(ev, unlock, { capture: true, passive: true });
+    document.addEventListener(ev, unlock, { capture: true, passive: true });
+  });
 }
 
 // Kích hoạt unlocker khi import

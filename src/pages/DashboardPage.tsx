@@ -31,6 +31,12 @@ import {
   Award,
   RotateCcw,
   BellRing,
+  ExternalLink,
+  Globe,
+  FileCheck2,
+  School,
+  Code2,
+  Phone,
 } from 'lucide-react';
 
 interface DashboardPageProps {
@@ -1196,6 +1202,55 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSele
           </div>
         </div>
       )}
+      {/* Portal External Links Quick Access Bar for Teachers & School Staff */}
+      <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-2xs">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center font-bold">
+              <Globe className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-xs sm:text-sm font-bold text-slate-900">
+                Cổng Tra Cứu & Liên Kết Tiện Ích Nhà Trường
+              </h3>
+              <p className="text-[11px] sm:text-xs text-slate-500">
+                Truy cập nhanh trang thông tin điện tử và hệ thống kết quả học tập của học sinh
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <a
+              href="https://thcsxadung.db.edu.vn"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 text-xs font-bold transition-all shadow-2xs group"
+            >
+              <School className="w-4 h-4 text-blue-600" />
+              <span>Trang TT Điện tử nhà trường</span>
+              <ExternalLink className="w-3.5 h-3.5 text-blue-500 group-hover:translate-x-0.5 transition-transform" />
+            </a>
+
+            <a
+              href="https://kqht.db.edu.vn"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-bold transition-all shadow-2xs group"
+            >
+              <FileCheck2 className="w-4 h-4 text-emerald-600" />
+              <span>Trang Kết quả học tập HS</span>
+              <ExternalLink className="w-3.5 h-3.5 text-emerald-500 group-hover:translate-x-0.5 transition-transform" />
+            </a>
+          </div>
+        </div>
+      </div>
+
+      {/* Developer Credit Footer */}
+      <footer className="text-center py-2 text-xs text-slate-500 font-medium">
+        <span>
+          Ứng dụng được phát triển bởi: <strong className="text-slate-800 font-bold">Vũ Văn Hùng</strong> - <a href="tel:0984246993" className="font-bold text-blue-700 hover:underline inline-flex items-center gap-1"><Phone className="w-3 h-3 text-blue-600 inline" />SĐT: 0984246993</a>
+        </span>
+      </footer>
     </div>
   );
 };

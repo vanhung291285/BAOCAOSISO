@@ -33,6 +33,10 @@ import {
   Volume2,
   Code2,
   Phone,
+  ExternalLink,
+  Globe,
+  FileCheck2,
+  School,
 } from 'lucide-react';
 import { getIndicatorMeta } from '../utils/indicatorIcons';
 
@@ -919,19 +923,6 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
           </div>
         </div>
 
-        {/* Thông tin nhà phát triển ứng dụng - GVCN vào báo cáo */}
-        <div className="mt-4 pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2.5 text-xs">
-          <div className="inline-flex items-center gap-2 font-medium text-slate-700 bg-blue-50/70 border border-blue-200/80 px-3 py-1.5 rounded-xl shadow-2xs">
-            <Code2 className="w-4 h-4 text-blue-600 flex-shrink-0" />
-            <span>
-              Ứng dụng được phát triển bởi: <strong className="text-slate-900 font-bold">Vũ Văn Hùng</strong> - <a href="tel:0984246993" className="font-bold text-blue-700 hover:underline inline-flex items-center gap-1"><Phone className="w-3 h-3 text-blue-600 inline" />SĐT: 0984246993</a>
-            </span>
-          </div>
-          <div className="text-[11px] text-slate-400 font-medium hidden sm:block">
-            {settings?.school_name || 'Hệ thống Quản lý Báo cáo Sĩ số'}
-          </div>
-        </div>
-
         {/* Lock Alert Banner */}
         {isLocked && (
           <div className="mt-4 p-3.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center gap-3 text-sm text-slate-700">
@@ -948,51 +939,6 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                 Về bảng điều khiển
               </button>
             )}
-          </div>
-        )}
-
-        {/* Banner Kế thừa Dữ liệu Ngày Hôm Trước */}
-        {!existingReport && inheritedReport && !isLocked && (
-          <div className="mt-4 p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-blue-50/95 via-indigo-50/90 to-sky-50 border border-blue-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3 animate-in fade-in duration-200">
-            <div className="flex items-start gap-3">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white flex items-center justify-center flex-shrink-0 shadow-xs mt-0.5">
-                <Sparkles className="w-5 h-5 text-yellow-300" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-black text-blue-950 text-sm">
-                    Kế thừa số liệu từ ngày hôm trước
-                  </span>
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-600 text-white shadow-xs">
-                    {formatDateVN(inheritedReport.report.report_date)}
-                  </span>
-                </div>
-                <p className="text-xs text-blue-800/80 mt-1 leading-relaxed">
-                  Đã tự động điền sĩ số, số có mặt, số vắng và danh sách học sinh nghỉ của ngày hôm trước. Thầy/cô chỉ cần điều chỉnh nếu hôm nay có thay đổi.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 self-end md:self-auto flex-shrink-0 pt-1 md:pt-0">
-              <button
-                type="button"
-                onClick={handleResetAllPresent}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-blue-200 text-blue-700 font-bold text-xs hover:bg-blue-50 active:scale-95 transition-all shadow-xs cursor-pointer"
-                title="Đặt số vắng = 0 cho cả lớp và xóa danh sách vắng nếu hôm nay cả lớp đi học đủ"
-              >
-                <UserCheck className="w-3.5 h-3.5 text-emerald-600" />
-                <span>Hôm nay đi học đủ (0 vắng)</span>
-              </button>
-              <button
-                type="button"
-                onClick={handleReinheritPreviousDay}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-100/80 border border-blue-200 text-blue-800 font-bold text-xs hover:bg-blue-200 active:scale-95 transition-all shadow-xs cursor-pointer"
-                title="Khôi phục lại dữ liệu gốc từ báo cáo ngày hôm trước"
-              >
-                <RotateCcw className="w-3.5 h-3.5 text-blue-700" />
-                <span>Nạp lại hôm trước</span>
-              </button>
-            </div>
           </div>
         )}
       </div>

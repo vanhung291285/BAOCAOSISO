@@ -21,6 +21,9 @@ import {
   FileSpreadsheet,
   Trophy,
   ChevronDown,
+  Globe,
+  ExternalLink,
+  FileCheck2,
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -174,6 +177,52 @@ export const Navbar: React.FC<NavbarProps> = ({ currentPath, onNavigate }) => {
               </div>
             </div>
 
+            {/* Portal External Links Group Dropdown */}
+            <div className="relative group">
+              <button
+                type="button"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all flex-shrink-0 text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+              >
+                <Globe className="w-4 h-4 text-blue-600" />
+                <span className="whitespace-nowrap">Cổng liên kết</span>
+                <ChevronDown className="w-3.5 h-3.5 text-slate-400 group-hover:rotate-180 transition-transform" />
+              </button>
+
+              <div className="absolute left-0 top-full mt-1 w-72 bg-white border border-slate-200 rounded-xl shadow-lg p-1.5 hidden group-hover:block z-50 animate-in fade-in duration-150">
+                <a
+                  href="https://thcsxadung.db.edu.vn"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full text-left flex items-start gap-2.5 px-3 py-2 rounded-lg text-xs hover:bg-blue-50/70 transition-colors group/item"
+                >
+                  <School className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" />
+                  <div className="flex flex-col flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-slate-800 group-hover/item:text-blue-700">Trang TT Điện tử trường</span>
+                      <ExternalLink className="w-3 h-3 text-slate-400" />
+                    </div>
+                    <span className="text-[10px] text-slate-400 leading-tight truncate">thcsxadung.db.edu.vn</span>
+                  </div>
+                </a>
+
+                <a
+                  href="https://kqht.db.edu.vn"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full text-left flex items-start gap-2.5 px-3 py-2 rounded-lg text-xs hover:bg-emerald-50/70 transition-colors group/item"
+                >
+                  <FileCheck2 className="w-4 h-4 text-emerald-600 mt-0.5 shrink-0" />
+                  <div className="flex flex-col flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-slate-800 group-hover/item:text-emerald-700">Kết quả học tập HS</span>
+                      <ExternalLink className="w-3 h-3 text-slate-400" />
+                    </div>
+                    <span className="text-[10px] text-slate-400 leading-tight truncate">kqht.db.edu.vn</span>
+                  </div>
+                </a>
+              </div>
+            </div>
+
             {/* Management for BGH/Admin */}
             {manageItems.map((item) => {
               const Icon = item.icon;
@@ -317,6 +366,36 @@ export const Navbar: React.FC<NavbarProps> = ({ currentPath, onNavigate }) => {
                 </button>
               );
             })}
+
+            {/* Cổng liên kết ngoài cho GVCN & Nhà trường trên di động */}
+            <div className="pt-2 border-t border-slate-100 space-y-1">
+              <div className="px-3 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Cổng liên kết tiện ích</div>
+              <a
+                href="https://thcsxadung.db.edu.vn"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium text-blue-700 bg-blue-50/50 hover:bg-blue-100/70 transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <School className="w-4 h-4 text-blue-600" />
+                  <span>Trang TT Điện tử trường</span>
+                </div>
+                <ExternalLink className="w-3.5 h-3.5 text-blue-400" />
+              </a>
+
+              <a
+                href="https://kqht.db.edu.vn"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium text-emerald-700 bg-emerald-50/50 hover:bg-emerald-100/70 transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <FileCheck2 className="w-4 h-4 text-emerald-600" />
+                  <span>Kết quả học tập HS</span>
+                </div>
+                <ExternalLink className="w-3.5 h-3.5 text-emerald-400" />
+              </a>
+            </div>
 
             {isAdmin && (
               <div className="pt-2 border-t border-slate-100 space-y-1">

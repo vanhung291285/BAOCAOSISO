@@ -26,7 +26,8 @@ export interface SchoolSettings {
   province: string;
   phone: string;
   email: string;
-  website: string;
+  website: string; // e.g. "https://thcsxadung.db.edu.vn"
+  student_results_url?: string; // e.g. "https://kqht.db.edu.vn"
   logo_url: string;
   principal_name: string;
   principal_title: string;
