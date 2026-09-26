@@ -118,9 +118,67 @@ export interface Student {
   id: string;
   class_id: string;
   full_name: string;
+  student_code?: string;
   address?: string;
+  village?: string;
+  gender?: 'Nam' | 'Nữ' | string;
+  birth_date?: string;
+  ethnicity?: string;
   isBoarding?: boolean;
+  notes?: string;
   created_at?: string;
+}
+
+export interface BoardingMealRecord {
+  id: string;
+  class_id: string;
+  date: string;
+  student_id: string;
+  student_name: string;
+  gender?: string;
+  village?: string;
+  breakfast: boolean;
+  lunch: boolean;
+  dinner: boolean;
+  is_absent: boolean;
+  absent_reason?: string;
+  notes?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface BoardingDailyReport {
+  id: string;
+  class_id: string;
+  date: string;
+  status: 'DRAFT' | 'SUBMITTED' | 'LOCKED';
+  total_boarding_students: number;
+  breakfast_count: number;
+  lunch_count: number;
+  dinner_count: number;
+  absent_count: number;
+  total_meals: number;
+  notes?: string;
+  records: BoardingMealRecord[];
+  submitted_by?: string;
+  submitted_by_name?: string;
+  submitted_at?: string;
+  locked_at?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BoardingMealSummaryRow {
+  classItem: ClassItem;
+  teacher?: Profile;
+  totalBoarding: number;
+  breakfastCount: number;
+  lunchCount: number;
+  dinnerCount: number;
+  absentCount: number;
+  totalMeals: number;
+  status: 'NOT_REPORTED' | 'REPORTED' | 'LOCKED';
+  report?: BoardingDailyReport;
 }
 
 export interface DailyReport {
