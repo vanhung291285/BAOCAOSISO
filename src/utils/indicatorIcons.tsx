@@ -31,10 +31,10 @@ export const INDICATOR_ICON_OPTIONS: Array<{
 }> = [
   {
     id: 'home',
-    label: 'Ngôi nhà (HS ngoại trú không ăn / Về nhà)',
-    shortLabel: 'Ngoại trú / Về nhà',
+    label: 'Ngôi nhà (HS ngoại trú không ăn bán trú)',
+    shortLabel: 'Ngoại trú',
     Icon: Home,
-    desc: 'Học sinh ngoại trú, trưa về nhà ăn cơm, không ăn bán trú tại trường',
+    desc: 'Học sinh ngoại trú, không ăn bán trú tại trường',
     colorClass: 'bg-amber-50 text-amber-700 border-amber-200',
   },
   {
@@ -82,7 +82,7 @@ export const INDICATOR_ICON_OPTIONS: Array<{
 /**
  * Phân tích và trả về Icon, Badge màu và Mô tả phù hợp cho từng nhóm chỉ tiêu
  * Đảm bảo:
- * - "HS ngoại trú không ăn" / "Ngoại trú" -> Loại bỏ biểu tượng dao nĩa (Utensils), thay bằng Ngôi nhà (Home)
+ * - "HS ngoại trú không ăn" / "Ngoại trú" -> Biểu tượng Ngôi nhà (Home)
  * - "Học sinh bán trú" -> Biểu tượng Dao thìa nĩa (Utensils)
  * - "Chỉ tiêu chính" / "Toàn trường" -> Biểu tượng Nhóm học sinh (Users)
  */
@@ -94,7 +94,7 @@ export function getIndicatorMeta(indicator: IndicatorGroup, isPrimary: boolean):
     return {
       Icon: Home,
       badgeClass: 'bg-amber-50 text-amber-800 border border-amber-200',
-      description: 'Theo dõi sĩ số học sinh ngoại trú (về nhà, không ăn bán trú tại trường)',
+      description: 'Theo dõi sĩ số học sinh ngoại trú (không ăn bán trú tại trường)',
       typeKey: 'home',
       isNgoaiTru: true,
       isBoarding: false,
@@ -169,7 +169,7 @@ export function getIndicatorMeta(indicator: IndicatorGroup, isPrimary: boolean):
     return {
       Icon: Home,
       badgeClass: 'bg-amber-50 text-amber-800 border border-amber-200',
-      description: 'Theo dõi sĩ số học sinh ngoại trú (về nhà, không ăn bán trú tại trường)',
+      description: 'Theo dõi sĩ số học sinh ngoại trú (không ăn bán trú tại trường)',
       typeKey: 'home',
       isNgoaiTru: true,
       isBoarding: false,
