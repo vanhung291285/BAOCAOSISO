@@ -1523,9 +1523,6 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                 </div>
                 <div className="text-right">
                   <div className="text-base font-black text-amber-800">{ngoaiTruTotal} em</div>
-                  <div className="text-[10px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
-                    Trưa về nhà
-                  </div>
                 </div>
               </div>
             </div>
@@ -1885,16 +1882,9 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                         >
                           {!st.isBoarding && <Check className="w-3 h-3 stroke-[3]" />}
                         </div>
-                        <div className="flex flex-col min-w-0">
+                        <div className="flex items-center min-w-0">
                           <span className="text-xs sm:text-sm font-bold whitespace-normal leading-tight">
                             HS ngoại trú
-                          </span>
-                          <span
-                            className={`text-[10px] truncate ${
-                              !st.isBoarding ? 'text-amber-700 font-semibold' : 'text-slate-400 font-normal'
-                            }`}
-                          >
-                            Trưa về nhà
                           </span>
                         </div>
                       </div>
@@ -2194,11 +2184,8 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                       >
                         {!newAbsentIsBoarding && <Check className="w-3 h-3 stroke-[3]" />}
                       </div>
-                      <div className="flex flex-col min-w-0">
+                      <div className="flex items-center min-w-0">
                         <span className="text-xs font-bold whitespace-normal leading-tight">HS ngoại trú</span>
-                        <span className={`text-[10px] leading-tight ${!newAbsentIsBoarding ? 'text-amber-700 font-semibold' : 'text-slate-400 font-normal'}`}>
-                          Trưa về nhà
-                        </span>
                       </div>
                     </div>
                   </div>
