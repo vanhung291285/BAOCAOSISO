@@ -22,6 +22,7 @@ import {
   FileCheck2,
   School,
   Sparkles,
+  Utensils,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -58,6 +59,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: ClipboardList,
       allowed: true,
       highlight: isGVCN,
+    },
+    {
+      id: 'boarding',
+      label: isGVCN && assignedClass ? `Báo ăn Lớp ${assignedClass.class_name}` : 'Báo ăn Bán trú',
+      path: '/boarding',
+      icon: Utensils,
+      allowed: true,
+      highlight: true,
     },
   ];
 
