@@ -1362,7 +1362,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                     placeholder="0"
                     value={vals.total === '' ? '' : vals.total}
                     onFocus={() => {
-                      if (vals.total === 0 || vals.total === '0') {
+                      if (vals.total === 0) {
                         handleValueChange(indicator.id, 'total', '');
                       }
                     }}
@@ -1411,7 +1411,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                     placeholder="0"
                     value={vals.present === '' ? '' : vals.present}
                     onFocus={() => {
-                      if (vals.present === 0 || vals.present === '0') {
+                      if (vals.present === 0) {
                         handleValueChange(indicator.id, 'present', '');
                       }
                     }}
@@ -1462,7 +1462,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                     placeholder="0"
                     value={vals.absent === '' ? '' : vals.absent}
                     onFocus={() => {
-                      if (vals.absent === 0 || vals.absent === '0') {
+                      if (vals.absent === 0) {
                         handleValueChange(indicator.id, 'absent', '');
                       }
                     }}

@@ -23,14 +23,19 @@ import {
   Globe,
   ExternalLink,
   FileCheck2,
+  Sparkles,
+  LayoutDashboard,
+  CalendarRange,
+  Users,
 } from 'lucide-react';
 
 interface NavbarProps {
   currentPath: string;
   onNavigate: (path: string) => void;
+  onToggleSidebar?: () => void;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({ currentPath, onNavigate }) => {
+export const Navbar: React.FC<NavbarProps> = ({ currentPath, onNavigate, onToggleSidebar }) => {
   const { currentUser, logout, isAdmin, isBGH, isGVCN } = useAuth();
   const { settings, activeYear, classes } = useSchool();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -51,31 +56,20 @@ export const Navbar: React.FC<NavbarProps> = ({ currentPath, onNavigate }) => {
   // Find user's assigned class if GVCN
   const assignedClass = classes.find((c) => c.id === currentUser?.assigned_class_id);
 
-  // Grouped Reports
-  const reportItems = [
-    { label: 'Báo cáo ngày', path: '/reports/daily', icon: FileSpreadsheet, desc: 'Tổng hợp sĩ số theo ngày' },
-    { label: 'Báo cáo tháng', path: '/reports/monthly', icon: Calendar, desc: 'Số liệu chuyên cần tháng' },
-    { label: 'Thi đua sĩ số', path: '/reports/ranking', icon: Trophy, desc: 'Bảng xếp hạng thi đua nền nếp' },
-    { label: 'Biểu đồ trực quan', path: '/charts', icon: BarChart3, desc: 'Biểu đồ phân tích tỷ lệ đi học' },
-  ];
+  const getRoleLabel = () => {
+    if (!currentUser) return '';
+    if (currentUser.role === 'ADMIN') return 'Quản trị viên';
+    if (currentUser.role === 'BGH') return 'Ban Giám Hiệu';
+    if (assignedClass) return `GVCN Lớp ${assignedClass.class_name}`;
+    return 'Giáo viên';
+  };
 
-  // Grouped Management & Settings for BGH / Admin
-  const managementItems = [];
-  if (isBGH || isAdmin) {
-    managementItems.push({ label: 'Quản lý lớp học', path: '/classes', icon: Layers, desc: 'Danh sách lớp & phân công GVCN' });
-    managementItems.push({ label: 'Quản lý tài khoản', path: '/users', icon: ShieldCheck, desc: 'Phân quyền GVCN & BGH' });
-  }
-  if (isAdmin) {
-    managementItems.push({ label: 'Cấu hình trường & Năm học', path: '/settings/school', icon: Settings, desc: 'Thông tin trường & học kỳ' });
-    managementItems.push({ label: 'Phân hiệu / Điểm trường', path: '/settings/campuses', icon: MapPin, desc: 'Quản lý các điểm trường' });
-    managementItems.push({ label: 'Nhóm chỉ tiêu', path: '/settings/indicators', icon: Layers, desc: 'Bán trú, nội trú, các diện' });
-    managementItems.push({ label: 'Biểu mẫu báo cáo', path: '/settings/report-template', icon: FileSpreadsheet, desc: 'Mẫu in ấn & xuất excel' });
-    managementItems.push({ label: 'Đồng bộ Supabase Cloud', path: '/settings/supabase', icon: Database, desc: 'Kết nối cơ sở dữ liệu cloud' });
-  }
-
-  // All nav items for mobile drawer
-  const isReportActive = reportItems.some((r) => currentPath === r.path);
-  const isManagementActive = managementItems.some((m) => currentPath === m.path);
+  const getRoleBadgeColor = () => {
+    if (!currentUser) return '';
+    if (currentUser.role === 'ADMIN') return 'bg-rose-100 text-rose-800 border-rose-200';
+    if (currentUser.role === 'BGH') return 'bg-purple-100 text-purple-800 border-purple-200';
+    return 'bg-emerald-100 text-emerald-800 border-emerald-200';
+  };
 
   const handleNav = (path: string) => {
     onNavigate(path);
@@ -84,251 +78,12 @@ export const Navbar: React.FC<NavbarProps> = ({ currentPath, onNavigate }) => {
   };
 
   return (
-    <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-2xs no-print pt-[env(safe-area-inset-top)]">
-      <div className="max-w-[1600px] w-full mx-auto px-3 sm:px-4 lg:px-6">
+    <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-xs no-print pt-[env(safe-area-inset-top)]">
+      <div className="w-full px-3 sm:px-5 lg:px-6">
         <div className="flex items-center justify-between h-15 gap-2 w-full">
-          {/* 1. Brand & School info */}
-          <div
-            className="flex items-center gap-2.5 cursor-pointer flex-shrink-0 min-w-0 max-w-[220px] sm:max-w-[280px]"
-            onClick={() => handleNav('/dashboard')}
-          >
-            <div
-              className="w-8.5 h-8.5 rounded-xl flex items-center justify-center text-white shadow-2xs flex-shrink-0"
-              style={{ backgroundColor: settings?.primary_color || '#1e40af' }}
-            >
-              {settings?.logo_url ? (
-                <img src={settings.logo_url} alt="Logo" className="w-6.5 h-6.5 object-contain rounded-lg" />
-              ) : (
-                <School className="w-5 h-5" />
-              )}
-            </div>
-            <div className="flex flex-col justify-center min-w-0 pr-1">
-              <h1 className="text-xs sm:text-sm font-black text-slate-900 tracking-tight leading-tight truncate">
-                {settings?.school_name || 'Báo Cáo Sĩ Số'}
-              </h1>
-              <div className="text-[10px] sm:text-[11px] text-slate-500 font-medium leading-tight truncate">
-                {activeYear ? `Năm học ${activeYear.name}` : settings?.short_name || 'Hệ thống báo cáo'}
-              </div>
-            </div>
-          </div>
-
-          {/* 2. Desktop Navigation Links - Compact, elegant & zero overlapping */}
-          <nav className="hidden lg:flex items-center gap-1 flex-1 min-w-0 justify-center px-1">
-            {/* Tổng quan */}
-            <button
-              onClick={() => handleNav('/dashboard')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all flex-shrink-0 ${
-                currentPath === '/dashboard'
-                  ? 'bg-blue-50 text-blue-800 font-bold'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
-              }`}
-            >
-              <BarChart3 className="w-3.5 h-3.5 flex-shrink-0 text-blue-600" />
-              <span>Tổng quan</span>
-            </button>
-
-            {/* Báo cáo sĩ số (Nổi bật cho GVCN) */}
-            <button
-              onClick={() => handleNav('/attendance')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all flex-shrink-0 ${
-                currentPath === '/attendance'
-                  ? 'bg-blue-600 text-white font-bold shadow-xs'
-                  : isGVCN
-                  ? 'bg-blue-50 text-blue-700 font-bold hover:bg-blue-100/80'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
-              }`}
-            >
-              <ClipboardList className="w-3.5 h-3.5 flex-shrink-0" />
-              <span>Báo cáo sĩ số</span>
-            </button>
-
-            {/* Dropdown: Báo cáo & Thống kê */}
-            <div className="relative group">
-              <button
-                type="button"
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all flex-shrink-0 ${
-                  isReportActive
-                    ? 'bg-blue-50 text-blue-800 font-bold'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
-                }`}
-              >
-                <FileSpreadsheet className="w-3.5 h-3.5 text-slate-500" />
-                <span>Báo cáo & Thống kê</span>
-                <ChevronDown className="w-3 h-3 text-slate-400 group-hover:rotate-180 transition-transform" />
-              </button>
-
-              <div className="absolute left-0 top-full mt-1 w-60 bg-white border border-slate-200 rounded-xl shadow-lg p-1.5 hidden group-hover:block z-50 animate-in fade-in duration-150">
-                {reportItems.map((rep) => {
-                  const Icon = rep.icon;
-                  const isActive = currentPath === rep.path;
-                  return (
-                    <button
-                      key={rep.path}
-                      onClick={() => handleNav(rep.path)}
-                      className={`w-full text-left flex items-start gap-2.5 px-2.5 py-2 rounded-lg text-xs transition-colors ${
-                        isActive
-                          ? 'bg-blue-50 text-blue-800 font-bold'
-                          : 'text-slate-700 hover:bg-slate-50'
-                      }`}
-                    >
-                      <Icon className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" />
-                      <div className="flex flex-col min-w-0">
-                        <span className="font-semibold text-slate-800 leading-tight">{rep.label}</span>
-                        <span className="text-[10px] text-slate-400 leading-tight truncate">{rep.desc}</span>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Dropdown: Quản lý & Cài đặt (BGH / Admin) */}
-            {managementItems.length > 0 && (
-              <div className="relative group">
-                <button
-                  type="button"
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all flex-shrink-0 ${
-                    isManagementActive
-                      ? 'bg-blue-50 text-blue-800 font-bold'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
-                  }`}
-                >
-                  <Settings className="w-3.5 h-3.5 text-slate-500" />
-                  <span>Quản lý & Cài đặt</span>
-                  <ChevronDown className="w-3 h-3 text-slate-400 group-hover:rotate-180 transition-transform" />
-                </button>
-
-                <div className="absolute left-0 top-full mt-1 w-64 bg-white border border-slate-200 rounded-xl shadow-lg p-1.5 hidden group-hover:block z-50 animate-in fade-in duration-150 max-h-[75vh] overflow-y-auto">
-                  {managementItems.map((m) => {
-                    const Icon = m.icon;
-                    const isActive = currentPath === m.path;
-                    return (
-                      <button
-                        key={m.path}
-                        onClick={() => handleNav(m.path)}
-                        className={`w-full text-left flex items-start gap-2.5 px-2.5 py-2 rounded-lg text-xs transition-colors ${
-                          isActive
-                            ? 'bg-blue-50 text-blue-800 font-bold'
-                            : 'text-slate-700 hover:bg-slate-50'
-                        }`}
-                      >
-                        <Icon className="w-4 h-4 text-slate-500 mt-0.5 shrink-0" />
-                        <div className="flex flex-col min-w-0">
-                          <span className="font-semibold text-slate-800 leading-tight">{m.label}</span>
-                          <span className="text-[10px] text-slate-400 leading-tight truncate">{m.desc}</span>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* Dropdown: Cổng liên kết ngoài */}
-            <div className="relative group">
-              <button
-                type="button"
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all flex-shrink-0 text-slate-600 hover:text-slate-900 hover:bg-slate-100/80"
-              >
-                <Globe className="w-3.5 h-3.5 text-blue-600" />
-                <span>Cổng liên kết</span>
-                <ChevronDown className="w-3 h-3 text-slate-400 group-hover:rotate-180 transition-transform" />
-              </button>
-
-              <div className="absolute left-0 top-full mt-1 w-64 bg-white border border-slate-200 rounded-xl shadow-lg p-1.5 hidden group-hover:block z-50 animate-in fade-in duration-150">
-                <a
-                  href="https://thcsxadung.db.edu.vn"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full text-left flex items-start gap-2.5 px-2.5 py-2 rounded-lg text-xs hover:bg-blue-50/70 transition-colors group/item"
-                >
-                  <School className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" />
-                  <div className="flex flex-col flex-1 min-w-0">
-                    <div className="flex items-center justify-between">
-                      <span className="font-semibold text-slate-800 group-hover/item:text-blue-700 leading-tight">TT Điện tử trường</span>
-                      <ExternalLink className="w-3 h-3 text-slate-400" />
-                    </div>
-                    <span className="text-[10px] text-slate-400 leading-tight truncate">thcsxadung.db.edu.vn</span>
-                  </div>
-                </a>
-
-                <a
-                  href="https://kqht.db.edu.vn"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full text-left flex items-start gap-2.5 px-2.5 py-2 rounded-lg text-xs hover:bg-emerald-50/70 transition-colors group/item"
-                >
-                  <FileCheck2 className="w-4 h-4 text-emerald-600 mt-0.5 shrink-0" />
-                  <div className="flex flex-col flex-1 min-w-0">
-                    <div className="flex items-center justify-between">
-                      <span className="font-semibold text-slate-800 group-hover/item:text-emerald-700 leading-tight">Kết quả học tập HS</span>
-                      <ExternalLink className="w-3 h-3 text-slate-400" />
-                    </div>
-                    <span className="text-[10px] text-slate-400 leading-tight truncate">kqht.db.edu.vn</span>
-                  </div>
-                </a>
-              </div>
-            </div>
-          </nav>
-
-          {/* 3. Right Actions: Notifications, PWA, User Menu */}
-          <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
-            <PWAInstallButton />
-            <NotificationCenter onNavigate={handleNav} />
-
-            {/* Compact User Menu Popover */}
-            {currentUser && (
-              <div className="relative" ref={userDropdownRef}>
-                <button
-                  type="button"
-                  onClick={() => setUserDropdownOpen(!userDropdownOpen)}
-                  className="flex items-center gap-1.5 p-1 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer border border-transparent hover:border-slate-200"
-                  title="Tài khoản cá nhân"
-                >
-                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-600 to-indigo-700 text-white flex items-center justify-center font-bold text-xs shadow-2xs">
-                    {currentUser.full_name.charAt(0)}
-                  </div>
-                  <div className="hidden xl:block text-left max-w-[120px]">
-                    <div className="text-xs font-bold text-slate-800 truncate leading-tight">{currentUser.full_name}</div>
-                    <div className="text-[10px] text-slate-500 truncate leading-tight">
-                      {currentUser.role === 'ADMIN' ? 'Quản trị' : currentUser.role === 'BGH' ? 'Ban giám hiệu' : assignedClass ? `Lớp ${assignedClass.class_name}` : 'GVCN'}
-                    </div>
-                  </div>
-                  <ChevronDown className="w-3.5 h-3.5 text-slate-400 hidden xl:block" />
-                </button>
-
-                {userDropdownOpen && (
-                  <div className="absolute right-0 top-full mt-1.5 w-60 bg-white border border-slate-200 rounded-2xl shadow-xl p-2 z-50 animate-in fade-in zoom-in-95 duration-150">
-                    <div className="px-3 py-2 border-b border-slate-100 mb-1">
-                      <div className="text-xs font-bold text-slate-900 truncate">{currentUser.full_name}</div>
-                      <div className="text-[11px] text-blue-600 font-medium truncate">
-                        {currentUser.role === 'ADMIN' ? 'Quản trị viên' : currentUser.role === 'BGH' ? 'Ban Giám Hiệu' : assignedClass ? `GVCN Lớp ${assignedClass.class_name}` : 'Giáo viên'}
-                      </div>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => handleNav('/profile')}
-                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-slate-700 hover:bg-slate-100 transition-colors"
-                    >
-                      <User className="w-4 h-4 text-slate-500" />
-                      <span>Thông tin tài khoản</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={logout}
-                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-rose-600 hover:bg-rose-50 transition-colors mt-1"
-                    >
-                      <LogOut className="w-4 h-4" />
-                      <span>Đăng xuất</span>
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Mobile / Tablet menu toggle button (screens < lg) */}
+          {/* 1. Left: School Brand, Logo & Titles */}
+          <div className="flex items-center gap-3 flex-shrink-0 min-w-0">
+            {/* Mobile menu hamburger toggle */}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               className="lg:hidden p-1.5 rounded-xl text-slate-600 hover:bg-slate-100 focus:outline-none flex-shrink-0"
@@ -336,11 +91,131 @@ export const Navbar: React.FC<NavbarProps> = ({ currentPath, onNavigate }) => {
             >
               {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
+
+            <div
+              className="flex items-center gap-2.5 cursor-pointer select-none group"
+              onClick={() => handleNav('/dashboard')}
+            >
+              <div
+                className="w-9 h-9 rounded-xl flex items-center justify-center text-white shadow-sm flex-shrink-0 transition-transform group-hover:scale-105"
+                style={{ backgroundColor: settings?.primary_color || '#1e40af' }}
+              >
+                {settings?.logo_url ? (
+                  <img
+                    src={settings.logo_url}
+                    alt="Logo"
+                    className="w-7 h-7 object-contain rounded-lg"
+                    referrerPolicy="no-referrer"
+                  />
+                ) : (
+                  <School className="w-5 h-5" />
+                )}
+              </div>
+
+              <div className="flex flex-col justify-center min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <h1 className="text-xs sm:text-sm font-extrabold text-slate-900 tracking-tight leading-tight uppercase truncate">
+                    SỔ BÁO CÁO SĨ SỐ
+                  </h1>
+                </div>
+                <div className="text-[10px] sm:text-xs text-blue-700 font-bold leading-tight truncate">
+                  {settings?.school_name?.toUpperCase() || 'TRƯỜNG PTDTBT THCS XA DUNG'}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 2. Middle quick badge for active year (Desktop) */}
+          {activeYear && (
+            <div className="hidden 2xl:flex items-center gap-1.5 px-3 py-1 bg-slate-50 border border-slate-200/80 rounded-full text-xs font-semibold text-slate-600">
+              <Calendar className="w-3.5 h-3.5 text-blue-600" />
+              <span>Năm học: <strong className="text-slate-900">{activeYear.name}</strong></span>
+            </div>
+          )}
+
+          {/* 3. Right: Notification, PWA, User Profile & Menu */}
+          <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
+            {/* PWA Install Button */}
+            <PWAInstallButton />
+
+            {/* Notification Bell Center */}
+            <NotificationCenter onNavigate={handleNav} />
+
+            {/* User Profile Card & Dropdown */}
+            {currentUser && (
+              <div className="relative" ref={userDropdownRef}>
+                <button
+                  type="button"
+                  onClick={() => setUserDropdownOpen(!userDropdownOpen)}
+                  className="flex items-center gap-2 p-1 sm:px-2.5 sm:py-1.5 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer border border-slate-200/80 hover:border-slate-300 bg-white"
+                  title="Tài khoản cá nhân"
+                >
+                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-600 to-indigo-700 text-white flex items-center justify-center font-bold text-xs shadow-2xs shrink-0">
+                    {currentUser.full_name.charAt(0)}
+                  </div>
+                  <div className="hidden md:block text-left max-w-[130px] lg:max-w-[150px]">
+                    <div className="text-xs font-bold text-slate-900 truncate leading-tight">
+                      {currentUser.full_name}
+                    </div>
+                    <div className="text-[10px] text-slate-500 font-medium truncate leading-tight mt-0.5">
+                      {getRoleLabel()}
+                    </div>
+                  </div>
+                  <ChevronDown className="w-3.5 h-3.5 text-slate-400 hidden sm:block shrink-0" />
+                </button>
+
+                {userDropdownOpen && (
+                  <div className="absolute right-0 top-full mt-2 w-64 bg-white border border-slate-200 rounded-2xl shadow-xl p-2 z-50 animate-in fade-in zoom-in-95 duration-150">
+                    {/* User info box */}
+                    <div className="px-3 py-2.5 bg-slate-50 rounded-xl mb-1 border border-slate-100">
+                      <div className="text-xs font-bold text-slate-900 truncate">{currentUser.full_name}</div>
+                      <div className="text-[11px] text-slate-500 truncate mt-0.5">{currentUser.email}</div>
+                      <div className="mt-1.5 flex items-center gap-1.5">
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${getRoleBadgeColor()}`}>
+                          {getRoleLabel()}
+                        </span>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleNav('/profile')}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-colors"
+                    >
+                      <User className="w-4 h-4 text-slate-500" />
+                      <span>Thông tin tài khoản</span>
+                    </button>
+
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => handleNav('/settings/school')}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-colors"
+                      >
+                        <Settings className="w-4 h-4 text-slate-500" />
+                        <span>Cấu hình nhà trường</span>
+                      </button>
+                    )}
+
+                    <div className="border-t border-slate-100 my-1 pt-1">
+                      <button
+                        type="button"
+                        onClick={logout}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-rose-600 hover:bg-rose-50 transition-colors"
+                      >
+                        <LogOut className="w-4 h-4 text-rose-600" />
+                        <span>Đăng xuất tài khoản</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
 
-      {/* 4. Mobile / Tablet Drawer Menu - Categorized and beautiful */}
+      {/* 4. Mobile / Tablet Drawer Menu */}
       {mobileMenuOpen && (
         <div className="lg:hidden border-t border-slate-200 bg-white px-4 pt-3 pb-6 space-y-3 animate-in slide-in-from-top-2 duration-150 max-h-[85vh] overflow-y-auto">
           {/* Main Direct Pages */}
@@ -348,10 +223,10 @@ export const Navbar: React.FC<NavbarProps> = ({ currentPath, onNavigate }) => {
             <button
               onClick={() => handleNav('/dashboard')}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-colors ${
-                currentPath === '/dashboard' ? 'bg-blue-50 text-blue-800 font-bold' : 'text-slate-700 hover:bg-slate-100'
+                currentPath === '/dashboard' ? 'bg-blue-600 text-white font-bold' : 'text-slate-700 hover:bg-slate-100'
               }`}
             >
-              <BarChart3 className="w-4 h-4 text-blue-600" />
+              <LayoutDashboard className="w-4 h-4" />
               <span>Tổng quan</span>
             </button>
 
@@ -364,85 +239,137 @@ export const Navbar: React.FC<NavbarProps> = ({ currentPath, onNavigate }) => {
               }`}
             >
               <ClipboardList className="w-4 h-4" />
-              <span>Báo cáo sĩ số</span>
+              <span>{isGVCN && assignedClass ? `Báo cáo Lớp ${assignedClass.class_name}` : 'Báo cáo sĩ số'}</span>
             </button>
           </div>
 
           {/* Reports */}
           <div className="pt-2 border-t border-slate-100 space-y-1">
-            <div className="px-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Báo cáo & Thống kê</div>
-            {reportItems.map((rep) => {
-              const Icon = rep.icon;
-              const isActive = currentPath === rep.path;
-              return (
-                <button
-                  key={rep.path}
-                  onClick={() => handleNav(rep.path)}
-                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold transition-colors ${
-                    isActive ? 'bg-blue-50 text-blue-800 font-bold' : 'text-slate-700 hover:bg-slate-100'
-                  }`}
-                >
-                  <Icon className="w-4 h-4 text-blue-600" />
-                  <span>{rep.label}</span>
-                </button>
-              );
-            })}
+            <div className="px-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+              Báo cáo & Thống kê
+            </div>
+            <button
+              onClick={() => handleNav('/reports/daily')}
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold transition-colors ${
+                currentPath === '/reports/daily' || currentPath === '/daily-report'
+                  ? 'bg-blue-50 text-blue-800 font-bold'
+                  : 'text-slate-700 hover:bg-slate-100'
+              }`}
+            >
+              <Calendar className="w-4 h-4 text-blue-600" />
+              <span>Báo cáo theo ngày</span>
+            </button>
+            <button
+              onClick={() => handleNav('/reports/monthly')}
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold transition-colors ${
+                currentPath === '/reports/monthly' ? 'bg-blue-50 text-blue-800 font-bold' : 'text-slate-700 hover:bg-slate-100'
+              }`}
+            >
+              <CalendarRange className="w-4 h-4 text-blue-600" />
+              <span>Báo cáo theo tháng</span>
+            </button>
+            <button
+              onClick={() => handleNav('/reports/ranking')}
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold transition-colors ${
+                currentPath === '/reports/ranking' ? 'bg-blue-50 text-blue-800 font-bold' : 'text-slate-700 hover:bg-slate-100'
+              }`}
+            >
+              <Trophy className="w-4 h-4 text-amber-600" />
+              <span>Thi đua sĩ số</span>
+            </button>
+            <button
+              onClick={() => handleNav('/charts')}
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold transition-colors ${
+                currentPath === '/charts' ? 'bg-blue-50 text-blue-800 font-bold' : 'text-slate-700 hover:bg-slate-100'
+              }`}
+            >
+              <BarChart3 className="w-4 h-4 text-indigo-600" />
+              <span>Thống kê biểu đồ</span>
+            </button>
           </div>
 
           {/* Management for BGH/Admin */}
-          {managementItems.length > 0 && (
+          {(isBGH || isAdmin) && (
             <div className="pt-2 border-t border-slate-100 space-y-1">
-              <div className="px-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Quản lý & Cài đặt</div>
-              {managementItems.map((m) => {
-                const Icon = m.icon;
-                const isActive = currentPath === m.path;
-                return (
-                  <button
-                    key={m.path}
-                    onClick={() => handleNav(m.path)}
-                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold transition-colors ${
-                      isActive ? 'bg-blue-50 text-blue-800 font-bold' : 'text-slate-700 hover:bg-slate-100'
-                    }`}
-                  >
-                    <Icon className="w-4 h-4 text-slate-500" />
-                    <span>{m.label}</span>
-                  </button>
-                );
-              })}
+              <div className="px-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                Quản lý hệ thống
+              </div>
+              <button
+                onClick={() => handleNav('/classes')}
+                className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold transition-colors ${
+                  currentPath === '/classes' ? 'bg-blue-50 text-blue-800 font-bold' : 'text-slate-700 hover:bg-slate-100'
+                }`}
+              >
+                <Layers className="w-4 h-4 text-slate-500" />
+                <span>Quản lý lớp học</span>
+              </button>
+              <button
+                onClick={() => handleNav('/users')}
+                className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold transition-colors ${
+                  currentPath === '/users' ? 'bg-blue-50 text-blue-800 font-bold' : 'text-slate-700 hover:bg-slate-100'
+                }`}
+              >
+                <Users className="w-4 h-4 text-slate-500" />
+                <span>Quản lý giáo viên</span>
+              </button>
             </div>
           )}
 
-          {/* External Links */}
-          <div className="pt-2 border-t border-slate-100 space-y-1">
-            <div className="px-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Cổng liên kết tiện ích</div>
-            <a
-              href="https://thcsxadung.db.edu.vn"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium text-blue-700 bg-blue-50/50 hover:bg-blue-100/70 transition-colors"
-            >
-              <div className="flex items-center gap-2.5">
-                <School className="w-4 h-4 text-blue-600" />
-                <span>Trang TT Điện tử trường</span>
+          {/* Settings for Admin */}
+          {isAdmin && (
+            <div className="pt-2 border-t border-slate-100 space-y-1">
+              <div className="px-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                Cấu hình
               </div>
-              <ExternalLink className="w-3.5 h-3.5 text-blue-400" />
-            </a>
+              <button
+                onClick={() => handleNav('/settings/school')}
+                className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold transition-colors ${
+                  currentPath === '/settings/school' ? 'bg-blue-50 text-blue-800 font-bold' : 'text-slate-700 hover:bg-slate-100'
+                }`}
+              >
+                <Settings className="w-4 h-4 text-slate-500" />
+                <span>Cấu hình nhà trường</span>
+              </button>
+              <button
+                onClick={() => handleNav('/settings/campuses')}
+                className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold transition-colors ${
+                  currentPath === '/settings/campuses' ? 'bg-blue-50 text-blue-800 font-bold' : 'text-slate-700 hover:bg-slate-100'
+                }`}
+              >
+                <MapPin className="w-4 h-4 text-slate-500" />
+                <span>Điểm trường / Phân hiệu</span>
+              </button>
+              <button
+                onClick={() => handleNav('/settings/indicators')}
+                className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold transition-colors ${
+                  currentPath === '/settings/indicators' ? 'bg-blue-50 text-blue-800 font-bold' : 'text-slate-700 hover:bg-slate-100'
+                }`}
+              >
+                <Layers className="w-4 h-4 text-slate-500" />
+                <span>Nhóm chỉ tiêu</span>
+              </button>
+              <button
+                onClick={() => handleNav('/settings/report-template')}
+                className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold transition-colors ${
+                  currentPath === '/settings/report-template' ? 'bg-blue-50 text-blue-800 font-bold' : 'text-slate-700 hover:bg-slate-100'
+                }`}
+              >
+                <FileSpreadsheet className="w-4 h-4 text-slate-500" />
+                <span>Biểu mẫu báo cáo</span>
+              </button>
+              <button
+                onClick={() => handleNav('/settings/supabase')}
+                className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold transition-colors ${
+                  currentPath === '/settings/supabase' ? 'bg-blue-50 text-blue-800 font-bold' : 'text-slate-700 hover:bg-slate-100'
+                }`}
+              >
+                <Database className="w-4 h-4 text-slate-500" />
+                <span>Đồng bộ dữ liệu Supabase</span>
+              </button>
+            </div>
+          )}
 
-            <a
-              href="https://kqht.db.edu.vn"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium text-emerald-700 bg-emerald-50/50 hover:bg-emerald-100/70 transition-colors"
-            >
-              <div className="flex items-center gap-2.5">
-                <FileCheck2 className="w-4 h-4 text-emerald-600" />
-                <span>Kết quả học tập HS</span>
-              </div>
-              <ExternalLink className="w-3.5 h-3.5 text-emerald-400" />
-            </a>
-          </div>
-
-          {/* Account and Logout in mobile */}
+          {/* Account & Logout */}
           <div className="pt-3 border-t border-slate-200 flex items-center justify-between">
             <button
               onClick={() => handleNav('/profile')}

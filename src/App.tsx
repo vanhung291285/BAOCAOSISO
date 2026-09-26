@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { SchoolProvider, useSchool } from './contexts/SchoolContext';
 import { NotificationProvider } from './contexts/NotificationContext';
 import { Navbar } from './components/Navbar';
+import { Sidebar } from './components/Sidebar';
 import { GVCNUnreportedAlertBanner } from './components/GVCNUnreportedAlertBanner';
 import { LoginPage } from './pages/LoginPage';
 import { DashboardPage } from './pages/DashboardPage';
@@ -19,16 +20,44 @@ import { SettingsIndicatorsPage } from './pages/SettingsIndicatorsPage';
 import { SettingsReportTemplatePage } from './pages/SettingsReportTemplatePage';
 import { SettingsSupabasePage } from './pages/SettingsSupabasePage';
 import { ProfilePage } from './pages/ProfilePage';
-import { Heart, School, ShieldAlert, Sparkles, BarChart3, ClipboardList, FileSpreadsheet, User, Code2 } from 'lucide-react';
+import {
+  School,
+  LayoutDashboard,
+  ClipboardList,
+  Calendar,
+  User,
+  Code2,
+} from 'lucide-react';
 
 const AppContent: React.FC = () => {
-  const { currentUser, isGVCN, loading } = useAuth();
+  const { currentUser, isGVCN, isAdmin, isBGH, loading } = useAuth();
   const { settings, activeYear, classes } = useSchool();
 
   // Navigation state
   const [currentPath, setCurrentPath] = useState<string>(() => {
     return '/dashboard';
   });
+
+  // Desktop sidebar collapsed state
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('app_sidebar_collapsed') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const handleToggleSidebar = () => {
+    setSidebarCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('app_sidebar_collapsed', String(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  };
 
   // Selected class & date for direct navigation to attendance
   const [selectedClassForInput, setSelectedClassForInput] = useState<{ classId?: string; date?: string }>({});
@@ -50,10 +79,11 @@ const AppContent: React.FC = () => {
   // Find user's assigned class name if GVCN
   const assignedClass = classes.find((c) => c.id === currentUser?.assigned_class_id);
 
-  // Default routing for GVCN on app load or navigation
+  // Default routing for GVCN on app load
   useEffect(() => {
     if (!loading && currentUser?.role === 'GVCN' && currentPath === '/dashboard') {
-      setCurrentPath('/attendance');
+      // GVCN can access dashboard, but default to attendance if needed
+      // setCurrentPath('/attendance');
     }
   }, [loading, currentUser, currentPath]);
 
@@ -66,9 +96,9 @@ const AppContent: React.FC = () => {
           </div>
           <div className="text-center">
             <h1 className="font-extrabold text-slate-900 text-base">
-              {settings?.school_name || 'Hệ Thống Báo Cáo Sĩ Số'}
+              {settings?.school_name || 'Sổ Báo Cáo Sĩ Số'}
             </h1>
-            <p className="text-xs text-slate-500 mt-1">Đang tải dữ liệu trường học...</p>
+            <p className="text-xs text-slate-500 mt-1">Đang kết nối hệ thống dữ liệu...</p>
           </div>
         </div>
       </div>
@@ -94,101 +124,120 @@ const AppContent: React.FC = () => {
   }
 
   return (
-    <div className={`min-h-[100dvh] bg-slate-100/80 flex flex-col font-sans antialiased text-slate-800 selection:bg-blue-600 selection:text-white ${
-      currentPath === '/attendance' ? 'pb-0' : 'pb-[env(safe-area-inset-bottom)] sm:pb-0'
-    }`}>
-      {/* Top Navbar */}
-      <Navbar currentPath={currentPath} onNavigate={handleNavigate} />
+    <div className="min-h-[100dvh] bg-slate-100/70 flex flex-col font-sans antialiased text-slate-800 selection:bg-blue-600 selection:text-white">
+      {/* Top Navbar Header */}
+      <Navbar
+        currentPath={currentPath}
+        onNavigate={handleNavigate}
+        onToggleSidebar={handleToggleSidebar}
+      />
 
-      {/* Automatic Alert Banner for GVCN when class has not reported attendance */}
-      <GVCNUnreportedAlertBanner onNavigate={handleNavigate} currentPath={currentPath} />
+      {/* Main Layout Body with Sidebar + Viewport */}
+      <div className="flex-1 flex flex-row w-full min-w-0">
+        {/* Left Desktop Sidebar */}
+        <Sidebar
+          currentPath={currentPath}
+          onNavigate={handleNavigate}
+          collapsed={sidebarCollapsed}
+          onToggleCollapse={handleToggleSidebar}
+        />
 
-      {/* Main Content Area - Optimized spacing for phones */}
-      <main className={`flex-1 max-w-[1600px] w-full mx-auto px-3 sm:px-6 lg:px-8 ${
-        currentPath === '/attendance' ? 'pt-3.5 pb-0 sm:py-6' : 'py-3.5 sm:py-8'
-      }`}>
-        {currentPath === '/dashboard' && (
-          <DashboardPage
-            onNavigate={handleNavigate}
-            onSelectClassForInput={handleSelectClassForInput}
-          />
-        )}
+        {/* Center Main Viewport */}
+        <div className="flex-1 flex flex-col min-w-0">
+          {/* Automatic Alert Banner for GVCN when class has not reported attendance */}
+          <GVCNUnreportedAlertBanner onNavigate={handleNavigate} currentPath={currentPath} />
 
-        {currentPath === '/attendance' && (
-          <AttendanceInputPage
-            initialClassId={selectedClassForInput.classId}
-            initialDate={selectedClassForInput.date}
-            onSavedSuccess={() => {
-              // Optional callback
-            }}
-            onNavigate={handleNavigate}
-          />
-        )}
+          <main
+            className={`flex-1 w-full max-w-[1600px] mx-auto px-3 sm:px-6 lg:px-8 ${
+              currentPath === '/attendance'
+                ? 'pt-3.5 pb-0 sm:py-6'
+                : 'py-3.5 sm:py-6 pb-20 sm:pb-8'
+            }`}
+          >
+            {currentPath === '/dashboard' && (
+              <DashboardPage
+                onNavigate={handleNavigate}
+                onSelectClassForInput={handleSelectClassForInput}
+              />
+            )}
 
-        {(currentPath === '/reports/daily' || currentPath === '/daily-report' || currentPath === '/reports') && (
-          <DailyReportPage onNavigate={handleNavigate} />
-        )}
+            {currentPath === '/attendance' && (
+              <AttendanceInputPage
+                initialClassId={selectedClassForInput.classId}
+                initialDate={selectedClassForInput.date}
+                onSavedSuccess={() => {
+                  // Optional callback
+                }}
+                onNavigate={handleNavigate}
+              />
+            )}
 
-        {currentPath === '/reports/monthly' && (
-          <MonthlyReportPage onNavigate={handleNavigate} />
-        )}
+            {(currentPath === '/reports/daily' || currentPath === '/daily-report' || currentPath === '/reports') && (
+              <DailyReportPage onNavigate={handleNavigate} />
+            )}
 
-        {currentPath === '/reports/ranking' && (
-          <AttendanceRankingPage onNavigate={handleNavigate} />
-        )}
+            {currentPath === '/reports/monthly' && (
+              <MonthlyReportPage onNavigate={handleNavigate} />
+            )}
 
-        {currentPath === '/charts' && <ChartsPage />}
+            {currentPath === '/reports/ranking' && (
+              <AttendanceRankingPage onNavigate={handleNavigate} />
+            )}
 
-        {currentPath === '/classes' && <ClassesManagementPage />}
+            {currentPath === '/charts' && <ChartsPage />}
 
-        {currentPath === '/users' && <UsersManagementPage />}
+            {currentPath === '/classes' && (isAdmin || isBGH ? <ClassesManagementPage /> : <DashboardPage onNavigate={handleNavigate} onSelectClassForInput={handleSelectClassForInput} />)}
 
-        {currentPath === '/settings/school' && <SettingsSchoolPage />}
+            {currentPath === '/users' && (isAdmin || isBGH ? <UsersManagementPage /> : <DashboardPage onNavigate={handleNavigate} onSelectClassForInput={handleSelectClassForInput} />)}
 
-        {currentPath === '/settings/campuses' && <SettingsCampusesPage />}
+            {currentPath === '/settings/school' && (isAdmin ? <SettingsSchoolPage /> : <DashboardPage onNavigate={handleNavigate} onSelectClassForInput={handleSelectClassForInput} />)}
 
-        {currentPath === '/settings/indicators' && <SettingsIndicatorsPage />}
+            {currentPath === '/settings/campuses' && (isAdmin ? <SettingsCampusesPage /> : <DashboardPage onNavigate={handleNavigate} onSelectClassForInput={handleSelectClassForInput} />)}
 
-        {currentPath === '/settings/report-template' && <SettingsReportTemplatePage />}
+            {currentPath === '/settings/indicators' && (isAdmin ? <SettingsIndicatorsPage /> : <DashboardPage onNavigate={handleNavigate} onSelectClassForInput={handleSelectClassForInput} />)}
 
-        {currentPath === '/settings/supabase' && <SettingsSupabasePage />}
+            {currentPath === '/settings/report-template' && (isAdmin ? <SettingsReportTemplatePage /> : <DashboardPage onNavigate={handleNavigate} onSelectClassForInput={handleSelectClassForInput} />)}
 
-        {currentPath === '/profile' && <ProfilePage onNavigate={handleNavigate} />}
-      </main>
+            {currentPath === '/settings/supabase' && (isAdmin ? <SettingsSupabasePage /> : <DashboardPage onNavigate={handleNavigate} onSelectClassForInput={handleSelectClassForInput} />)}
 
-      {/* App Footer (Hidden when printing reports or on attendance page where sticky bar is docked at bottom) */}
+            {currentPath === '/profile' && <ProfilePage onNavigate={handleNavigate} />}
+          </main>
+
+          {/* App Footer */}
+          {currentPath !== '/attendance' && (
+            <footer className="mt-auto border-t border-slate-200 bg-white py-4 no-print text-xs text-slate-500">
+              <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row items-center justify-between gap-2.5 text-center md:text-left">
+                <div className="flex flex-wrap items-center justify-center md:justify-start gap-2">
+                  <School className="w-4 h-4 text-blue-700 flex-shrink-0" />
+                  <span className="font-extrabold text-slate-800">
+                    {settings?.school_name || 'Hệ thống Quản lý Báo cáo Sĩ số'}
+                  </span>
+                  {(settings?.commune || settings?.province) && (
+                    <>
+                      <span className="text-slate-300 hidden sm:inline">|</span>
+                      <span>{[settings.commune, settings.province].filter(Boolean).join(', ')}</span>
+                    </>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap items-center justify-center md:justify-end gap-3 text-[11px]">
+                  <span>Năm học: <strong className="text-slate-700">{activeYear?.name || '2026-2027'}</strong></span>
+                  <span className="text-slate-300">|</span>
+                  <span className="inline-flex items-center gap-1.5 font-medium text-slate-700 bg-slate-50 px-2.5 py-1 rounded-full border border-slate-200">
+                    <Code2 className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
+                    <span>Ứng dụng phát triển bởi: <strong className="text-slate-900 font-bold">{settings?.developer_name || 'Vũ Văn Hùng'}</strong></span>
+                    <span className="text-slate-600 font-medium">({settings?.developer_contact || 'SĐT: 0984246993'})</span>
+                  </span>
+                </div>
+              </div>
+            </footer>
+          )}
+        </div>
+      </div>
+
+      {/* Persistent Mobile Bottom Navigation Bar (Hidden when on /attendance page where docked actions exist) */}
       {currentPath !== '/attendance' && (
-        <footer className="mt-auto border-t border-slate-200 bg-white py-5 no-print text-xs text-slate-500">
-          <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row items-center justify-between gap-3 text-center md:text-left">
-            <div className="flex flex-wrap items-center justify-center md:justify-start gap-2">
-              <School className="w-4 h-4 text-blue-700 flex-shrink-0" />
-              <span className="font-extrabold text-slate-800">
-                {settings?.school_name || 'Hệ thống Quản lý Báo cáo Sĩ số'}
-              </span>
-              {(settings?.commune || settings?.province) && (
-                <>
-                  <span className="text-slate-300 hidden sm:inline">|</span>
-                  <span>{[settings.commune, settings.province].filter(Boolean).join(', ')}</span>
-                </>
-              )}
-            </div>
-
-            <div className="flex flex-wrap items-center justify-center md:justify-end gap-3 text-[11px]">
-              <span>Năm học: <strong className="text-slate-700">{activeYear?.name || '2026-2027'}</strong></span>
-              <span className="text-slate-300">|</span>
-              <span className="inline-flex items-center gap-1.5 font-medium text-slate-700 bg-slate-100 px-2.5 py-1 rounded-full border border-slate-200">
-                <Code2 className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
-                <span>Ứng dụng được phát triển bởi: <strong className="text-slate-900 font-bold">{settings?.developer_name || 'Vũ Văn Hùng'}</strong></span>
-                <span className="text-slate-600 font-medium">({settings?.developer_contact || 'SĐT: 0984246993'})</span>
-              </span>
-            </div>
-          </div>
-        </footer>
-      )}
-
-      {/* Persistent Mobile Bottom Navigation Bar (Dành riêng cho màn hình điện thoại) */}
-      {currentPath !== '/attendance' && (
-        <nav className="sm:hidden fixed bottom-0 left-0 right-0 z-30 bg-white/95 backdrop-blur-md border-t border-slate-200 px-3 py-1.5 flex items-center justify-around shadow-lg no-print">
+        <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-30 bg-white/95 backdrop-blur-md border-t border-slate-200 px-3 py-1.5 flex items-center justify-around shadow-lg no-print pb-[env(safe-area-inset-bottom)]">
           <button
             type="button"
             onClick={() => handleNavigate('/dashboard')}
@@ -196,7 +245,7 @@ const AppContent: React.FC = () => {
               currentPath === '/dashboard' ? 'text-blue-600 font-bold' : 'text-slate-500 font-medium'
             }`}
           >
-            <BarChart3 className="w-5 h-5 mb-0.5" />
+            <LayoutDashboard className="w-5 h-5 mb-0.5" />
             <span className="text-[10px] whitespace-nowrap">Tổng quan</span>
           </button>
 
@@ -217,11 +266,11 @@ const AppContent: React.FC = () => {
             type="button"
             onClick={() => handleNavigate('/reports/daily')}
             className={`flex flex-col items-center justify-center min-w-[64px] py-1 transition-all ${
-              currentPath === '/reports/daily' ? 'text-blue-600 font-bold' : 'text-slate-500 font-medium'
+              currentPath === '/reports/daily' || currentPath === '/daily-report' ? 'text-blue-600 font-bold' : 'text-slate-500 font-medium'
             }`}
           >
-            <FileSpreadsheet className="w-5 h-5 mb-0.5" />
-            <span className="text-[10px] whitespace-nowrap">Mẫu biểu</span>
+            <Calendar className="w-5 h-5 mb-0.5" />
+            <span className="text-[10px] whitespace-nowrap">Theo ngày</span>
           </button>
 
           <button

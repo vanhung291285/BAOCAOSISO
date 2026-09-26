@@ -60,7 +60,7 @@ export const GVCNUnreportedAlertBanner: React.FC<GVCNUnreportedAlertBannerProps>
       const todayStr = getTodayDateStr();
       const checkReport = () => {
         const local = StorageService.getLocalDailyReport(assignedClass.id, todayStr);
-        if (local.report && local.report.status !== 'NOT_REPORTED') {
+        if (local.report && (local.report.status === 'SUBMITTED' || local.report.status === 'LOCKED')) {
           setHasReportedToday(true);
         } else {
           setHasReportedToday(false);

@@ -1652,7 +1652,7 @@ export const StorageService = {
       let unreportedDays = 0;
       evaluationDates.forEach((d) => {
         const hasDRep = reports.some(
-          (r) => r.class_id === cls.id && r.report_date === d && r.status !== 'NOT_REPORTED'
+          (r) => r.class_id === cls.id && r.report_date === d && (r.status === 'SUBMITTED' || r.status === 'LOCKED')
         );
         if (!hasDRep) unreportedDays++;
       });
@@ -3869,7 +3869,7 @@ export const StorageService = {
 
     if (classId) {
       distinctDates.forEach((d) => {
-        const hasRep = reports.some((r) => r.class_id === classId && r.report_date === d && r.status !== 'NOT_REPORTED');
+        const hasRep = reports.some((r) => r.class_id === classId && r.report_date === d && (r.status === 'SUBMITTED' || r.status === 'LOCKED'));
         if (hasRep) reportedDays++;
         else unreportedDays++;
       });

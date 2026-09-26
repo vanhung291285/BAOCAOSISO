@@ -39,7 +39,7 @@ interface NotificationContextType {
   triggerAutoCheck: (targetDate?: string) => Promise<{ sentCount: number; remindedClasses: string[] }>;
   sendBGHManualReminder: (targetDate?: string) => Promise<{ sentCount: number; remindedClasses: string[]; skippedClasses: string[] }>;
   browserPermission: NotificationPermission | 'unsupported';
-  requestBrowserPermission: () => Promise<void>;
+  requestBrowserPermission: () => Promise<NotificationPermission | 'unsupported'>;
   playNotificationChime: (options?: { force?: boolean }) => Promise<boolean>;
   testSound: () => Promise<boolean>;
   isSoundEnabled: boolean;
@@ -146,6 +146,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     try {
       await testNotificationChime();
     } catch (e) {}
+    return perm;
   };
 
   // Run auto check for attendance reports
