@@ -1069,46 +1069,50 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
       )}
 
       {/* Top Header Card */}
-      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-4 sm:p-6 mb-5">
+      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-4 sm:p-6 mb-5 relative overflow-hidden">
+        <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-blue-600 via-emerald-500 to-amber-500" />
+        
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-100">
           <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+            <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200 shadow-2xs">
                 <FileText className="w-3.5 h-3.5" />
-                Phiếu Báo Cáo Sĩ Số Hằng Ngày
+                PHIẾU ĐIỂM DANH & BÁO CÁO SĨ SỐ HẰNG NGÀY
               </span>
               {selectedCampus && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-700">
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200">
                   {selectedCampus.name}
                 </span>
               )}
             </div>
             <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-              <span>Điểm danh lớp</span>
-              <span className="text-blue-700">{selectedClass?.class_name || '...'}</span>
+              <span>Báo cáo điểm danh:</span>
+              <span className="text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-xl border border-blue-200">
+                Lớp {selectedClass?.class_name || '...'}
+              </span>
             </h1>
           </div>
 
-          {/* Status Badge */}
-          <div className="flex items-center gap-2 self-start md:self-auto">
+          {/* Status Badge & Controls */}
+          <div className="flex items-center gap-2 self-start md:self-auto flex-wrap">
             {isLoadingReport ? (
-              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 text-slate-500">
+              <span className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-slate-100 text-slate-500 border border-slate-200">
                 <div className="w-3.5 h-3.5 border-2 border-slate-400 border-t-transparent rounded-full animate-spin" />
                 Đang tải...
               </span>
             ) : isLocked ? (
-              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-100 text-slate-700 border border-slate-300">
-                <Lock className="w-3.5 h-3.5 text-slate-500" />
+              <span className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-extrabold bg-slate-100 text-slate-700 border border-slate-300 shadow-2xs">
+                <Lock className="w-4 h-4 text-slate-600" />
                 Báo cáo đã khóa
               </span>
             ) : existingReport ? (
-              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+              <span className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-extrabold bg-emerald-50 text-emerald-800 border-2 border-emerald-300 shadow-2xs">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 stroke-[2.5]" />
                 Đã nộp {existingReport.reported_time ? `(${existingReport.reported_time})` : ''}
               </span>
             ) : (
-              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200">
-                <Clock className="w-3.5 h-3.5 text-amber-600" />
+              <span className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-extrabold bg-amber-50 text-amber-900 border-2 border-amber-300 shadow-2xs">
+                <Clock className="w-4 h-4 text-amber-600" />
                 Chưa nộp báo cáo
               </span>
             )}
@@ -1122,15 +1126,15 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                 setTimeout(() => setIsPlayingSoundTest(false), 1200);
               }}
               title="Bấm để thử âm thanh chuông báo và rung điện thoại"
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all border shadow-2xs active:scale-95 ${
+              className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all border shadow-2xs active:scale-95 cursor-pointer ${
                 isPlayingSoundTest
                   ? 'bg-emerald-100 text-emerald-900 border-emerald-300 ring-2 ring-emerald-400'
                   : isAudioBlocked
                   ? 'bg-amber-100 text-amber-900 border-amber-300 animate-bounce'
-                  : 'bg-white text-slate-700 hover:bg-slate-50 border-slate-200'
+                  : 'bg-slate-50 text-slate-700 hover:bg-slate-100 border-slate-300'
               }`}
             >
-              <Volume2 className="w-3.5 h-3.5 text-blue-600" />
+              <Volume2 className="w-4 h-4 text-blue-600" />
               <span>
                 {isPlayingSoundTest
                   ? 'Đang reo...'
@@ -1144,10 +1148,10 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
               <button
                 type="button"
                 onClick={() => onNavigate('/dashboard')}
-                className="hidden sm:inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors border border-slate-200"
+                className="hidden sm:inline-flex items-center gap-1 px-3 py-2 rounded-xl text-xs font-bold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors border border-slate-200"
               >
                 <ArrowLeft className="w-3.5 h-3.5" />
-                Bảng tổng quan
+                Tổng quan
               </button>
             )}
           </div>
@@ -1157,7 +1161,8 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-4">
           {/* Date Navigator */}
           <div>
-            <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
+            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+              <Calendar className="w-3.5 h-3.5 text-blue-600" />
               Ngày điểm danh
             </label>
             <DateNavigator
@@ -1168,21 +1173,22 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
 
           {/* Class Selector */}
           <div>
-            <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
+            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+              <School className="w-3.5 h-3.5 text-blue-600" />
               Lớp học
             </label>
             {isGVCN && currentUser?.assigned_class_id ? (
-              <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-200">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-sm">
+              <div className="flex items-center justify-between p-2.5 rounded-xl bg-blue-50/50 border border-blue-200 shadow-2xs">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center font-black text-sm shadow-xs">
                     {selectedClass?.class_name}
                   </div>
                   <div>
-                    <div className="text-sm font-bold text-slate-900">{selectedClass?.class_name}</div>
-                    <div className="text-[11px] text-slate-500">GVCN: {currentUser.full_name}</div>
+                    <div className="text-sm font-black text-slate-900">Lớp {selectedClass?.class_name}</div>
+                    <div className="text-[11px] text-slate-600 font-medium">GVCN: {currentUser.full_name}</div>
                   </div>
                 </div>
-                <span className="text-[11px] font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200">
+                <span className="text-[11px] font-bold text-blue-700 bg-white px-2.5 py-1 rounded-lg border border-blue-200 shadow-2xs">
                   Lớp chủ nhiệm
                 </span>
               </div>
@@ -1191,7 +1197,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                 <select
                   value={selectedClassId}
                   onChange={(e) => setSelectedClassId(e.target.value)}
-                  className="w-full appearance-none bg-white border border-slate-200 rounded-xl px-3.5 py-2.5 pr-9 text-sm font-semibold text-slate-800 shadow-xs focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full appearance-none bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 pr-9 text-sm font-bold text-slate-800 shadow-xs focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 >
                   {classes.map((cls) => (
                     <option key={cls.id} value={cls.id}>
@@ -1207,7 +1213,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
 
         {/* Lock Alert Banner */}
         {isLocked && (
-          <div className="mt-4 p-3.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center gap-3 text-sm text-slate-700">
+          <div className="mt-4 p-3.5 rounded-xl bg-slate-100 border border-slate-300 flex items-center gap-3 text-sm text-slate-700">
             <Lock className="w-5 h-5 text-slate-500 flex-shrink-0" />
             <div className="flex-1">
               <span className="font-bold text-slate-900">Báo cáo lớp này đã khóa.</span> Không thể chỉnh sửa hoặc xóa dữ liệu. Liên hệ Quản trị viên/BGH nếu cần cập nhật.
@@ -1225,7 +1231,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
         )}
       </div>
 
-      {/* Main Indicators Form Cards */}
+      {/* Main Indicators Form Cards - PHÂN BIỆT MÀU SẮC RÕ RÀNG TỪNG KHU VỰC */}
       <div className="space-y-4 mb-5">
         {enabledIndicators.map((indicator, idx) => {
           const isPrimary = idx === 0;
@@ -1237,40 +1243,76 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
           const absentNum = Number(vals.absent) || 0;
           const presentRate = totalNum > 0 ? Math.round((presentNum / totalNum) * 100) : 0;
 
+          // Distinct Color Theme per Category
+          const isBoarding = meta.isBoarding || indicator.code.includes('BOARDING') || indicator.name.toLowerCase().includes('bán trú');
+          const isNgoaiTru = meta.isNgoaiTru || indicator.code.includes('NON_BOARDING') || indicator.code.includes('DAY') || indicator.name.toLowerCase().includes('ngoại trú');
+
+          const cardThemeClass = isPrimary
+            ? 'border-2 border-blue-300 bg-gradient-to-b from-blue-50/40 via-white to-white shadow-xs ring-1 ring-blue-500/10'
+            : isBoarding
+            ? 'border-2 border-emerald-300 bg-gradient-to-b from-emerald-50/50 via-white to-white shadow-xs ring-1 ring-emerald-500/15'
+            : isNgoaiTru
+            ? 'border-2 border-amber-300 bg-gradient-to-b from-amber-50/50 via-white to-white shadow-xs ring-1 ring-amber-500/15'
+            : 'border-2 border-slate-200 bg-white shadow-xs';
+
+          const headerIconBadgeClass = isPrimary
+            ? 'bg-gradient-to-br from-blue-600 to-indigo-700 text-white shadow-sm'
+            : isBoarding
+            ? 'bg-gradient-to-br from-emerald-600 to-teal-700 text-white shadow-sm'
+            : isNgoaiTru
+            ? 'bg-gradient-to-br from-amber-500 to-orange-600 text-white shadow-sm'
+            : 'bg-slate-700 text-white';
+
+          const tagBadgeClass = isPrimary
+            ? 'bg-blue-100 text-blue-900 border border-blue-300'
+            : isBoarding
+            ? 'bg-emerald-100 text-emerald-950 border border-emerald-300 font-extrabold'
+            : isNgoaiTru
+            ? 'bg-amber-100 text-amber-950 border border-amber-300 font-extrabold'
+            : 'bg-slate-100 text-slate-800 border border-slate-300';
+
+          const tagLabel = isPrimary
+            ? '👥 CHỈ TIÊU CHÍNH CẢ LỚP'
+            : isBoarding
+            ? '🍽️ BÁN TRÚ (ĂN TRƯA TẠI TRƯỜNG)'
+            : isNgoaiTru
+            ? '🏡 NGOẠI TRÚ (KHÔNG ĂN BÁN TRÚ)'
+            : 'CHỈ TIÊU BÁO CÁO';
+
           return (
             <div
               key={indicator.id}
-              className={`bg-white rounded-2xl border transition-all ${
-                isPrimary
-                  ? 'border-blue-200/80 shadow-xs ring-1 ring-blue-500/10'
-                  : meta.isNgoaiTru
-                  ? 'border-amber-200/80 shadow-xs'
-                  : 'border-slate-200/80 shadow-xs'
-              } p-3.5 sm:p-6`}
+              className={`rounded-2xl transition-all ${cardThemeClass} p-3.5 sm:p-5 relative overflow-hidden`}
             >
+              {/* Top Accent Strip */}
+              <div
+                className={`absolute top-0 left-0 right-0 h-1 ${
+                  isPrimary
+                    ? 'bg-blue-600'
+                    : isBoarding
+                    ? 'bg-emerald-600'
+                    : isNgoaiTru
+                    ? 'bg-amber-500'
+                    : 'bg-slate-400'
+                }`}
+              />
+
               {/* Card Header */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3.5 sm:mb-4 pb-2.5 sm:pb-3 border-b border-slate-100">
-                <div className="flex items-center gap-2 sm:gap-2.5">
-                  <div
-                    className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center font-bold text-sm ${meta.badgeClass} shrink-0`}
-                  >
-                    <IndicatorIcon className="w-4 h-4 sm:w-5 sm:h-5" />
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3.5 pb-3 border-b border-slate-200/80">
+                <div className="flex items-center gap-2.5 sm:gap-3">
+                  <div className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center font-bold text-sm shrink-0 ${headerIconBadgeClass}`}>
+                    <IndicatorIcon className="w-5 h-5" />
                   </div>
                   <div>
-                    <h2 className="text-sm sm:text-lg font-bold text-slate-900 flex items-center gap-1.5 sm:gap-2 flex-wrap">
-                      {indicator.name}
-                      {isPrimary && (
-                        <span className="text-[10px] sm:text-[11px] font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">
-                          Chỉ tiêu chính
-                        </span>
-                      )}
-                      {meta.isNgoaiTru && (
-                        <span className="text-[10px] sm:text-[11px] font-semibold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full border border-amber-300">
-                          Ngoại trú
-                        </span>
-                      )}
-                    </h2>
-                    <p className="text-[11px] sm:text-xs text-slate-500">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h2 className="text-base sm:text-lg font-black text-slate-900">
+                        {indicator.name}
+                      </h2>
+                      <span className={`text-[10px] sm:text-[11px] px-2.5 py-0.5 rounded-full ${tagBadgeClass}`}>
+                        {tagLabel}
+                      </span>
+                    </div>
+                    <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5">
                       {meta.description}
                     </p>
                   </div>
@@ -1278,15 +1320,15 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
 
                 {/* Quick Percentage Progress */}
                 {totalNum > 0 && (
-                  <div className="flex items-center gap-1.5 self-start sm:self-auto bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-200/60">
-                    <span className="text-[11px] font-medium text-slate-500">Duy trì:</span>
+                  <div className="flex items-center gap-1.5 self-start sm:self-auto bg-white px-3 py-1.5 rounded-xl border border-slate-200 shadow-2xs">
+                    <span className="text-[11px] font-bold text-slate-500">Tỷ lệ duy trì:</span>
                     <span
                       className={`text-xs sm:text-sm font-black ${
                         presentRate >= 95
-                          ? 'text-emerald-600'
+                          ? 'text-emerald-700'
                           : presentRate >= 90
-                          ? 'text-blue-600'
-                          : 'text-amber-600'
+                          ? 'text-blue-700'
+                          : 'text-amber-700'
                       }`}
                     >
                       {presentRate}%
@@ -1295,12 +1337,11 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                 )}
               </div>
 
-              {/* Number Inputs Grid - Responsive 3 Columns on all devices, compact and perfectly aligned without bottom dead space */}
+              {/* Number Inputs Grid - 3 Columns: Sĩ số (Tổng), Có mặt, Vắng */}
               <div className="grid grid-cols-3 gap-2 sm:gap-3.5">
                 {/* 1. Tổng số (Sĩ số) */}
-                <div className="bg-slate-50/90 sm:bg-slate-50/70 p-2 sm:p-3 rounded-xl border border-slate-200/80 flex flex-col">
-                  {/* Fixed-height header for perfect vertical alignment */}
-                  <div className="flex items-center justify-between h-5 sm:h-6 mb-1.5 sm:mb-2">
+                <div className="bg-slate-50/90 p-2.5 sm:p-3 rounded-xl border border-slate-200 flex flex-col shadow-2xs">
+                  <div className="flex items-center justify-between h-5 sm:h-6 mb-1.5">
                     <span className="flex items-center gap-1 sm:gap-1.5 text-[11px] sm:text-xs font-bold text-slate-700 uppercase tracking-tight truncate">
                       <Users className="w-3.5 h-3.5 text-slate-500 shrink-0" />
                       <span className="sm:hidden">Sĩ số</span>
@@ -1344,16 +1385,15 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                 </div>
 
                 {/* 2. Có mặt */}
-                <div className="bg-emerald-50/70 sm:bg-emerald-50/50 p-2 sm:p-3 rounded-xl border border-emerald-200/80 flex flex-col">
-                  {/* Fixed-height header */}
-                  <div className="flex items-center justify-between h-5 sm:h-6 mb-1.5 sm:mb-2">
+                <div className="bg-emerald-50/80 p-2.5 sm:p-3 rounded-xl border border-emerald-200 flex flex-col shadow-2xs">
+                  <div className="flex items-center justify-between h-5 sm:h-6 mb-1.5">
                     <span className="flex items-center gap-1 sm:gap-1.5 text-[11px] sm:text-xs font-bold text-emerald-800 uppercase tracking-tight truncate">
                       <UserCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                       <span>Có mặt</span>
                     </span>
                     {inputMode === 'MODE_2_TOTAL_ABSENT' && (
-                      <span className="text-[10px] text-emerald-600 font-semibold lowercase shrink-0">
-                        (tự tính)
+                      <span className="text-[10px] text-emerald-600 font-bold lowercase shrink-0 bg-emerald-100/70 px-1 rounded">
+                        tự tính
                       </span>
                     )}
                   </div>
@@ -1396,16 +1436,15 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                 </div>
 
                 {/* 3. Vắng mặt */}
-                <div className="bg-rose-50/70 sm:bg-rose-50/50 p-2 sm:p-3 rounded-xl border border-rose-200/80 flex flex-col">
-                  {/* Fixed-height header */}
-                  <div className="flex items-center justify-between h-5 sm:h-6 mb-1.5 sm:mb-2">
+                <div className="bg-rose-50/80 p-2.5 sm:p-3 rounded-xl border border-rose-200 flex flex-col shadow-2xs">
+                  <div className="flex items-center justify-between h-5 sm:h-6 mb-1.5">
                     <span className="flex items-center gap-1 sm:gap-1.5 text-[11px] sm:text-xs font-bold text-rose-800 uppercase tracking-tight truncate">
                       <UserX className="w-3.5 h-3.5 text-rose-600 shrink-0" />
                       <span>Vắng</span>
                     </span>
                     {inputMode === 'MODE_1_TOTAL_PRESENT' && (
-                      <span className="text-[10px] text-rose-600 font-semibold lowercase shrink-0">
-                        (tự tính)
+                      <span className="text-[10px] text-rose-600 font-bold lowercase shrink-0 bg-rose-100/70 px-1 rounded">
+                        tự tính
                       </span>
                     )}
                   </div>
@@ -1477,52 +1516,61 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
         if (pTotal === 0 && bTotal === 0) return null;
 
         return (
-          <div className="bg-gradient-to-r from-emerald-50/70 via-white to-amber-50/70 rounded-2xl border border-slate-200/80 p-4 mb-5 shadow-2xs">
-            <div className="flex items-center justify-between pb-2.5 mb-3 border-b border-slate-200/60">
-              <span className="text-xs font-black text-slate-800 uppercase tracking-tight flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-blue-600" />
-                Đối chiếu phân loại theo mẫu báo cáo BGH
+          <div className="bg-white rounded-2xl border-2 border-slate-200 shadow-sm p-4 sm:p-5 mb-5 overflow-hidden">
+            <div className="flex items-center justify-between pb-3 mb-3.5 border-b border-slate-100">
+              <span className="text-xs font-black text-slate-900 uppercase tracking-tight flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-blue-600" />
+                ĐỐI CHIẾU PHÂN LOẠI THEO MẪU BÁO CÁO BGH & NHÀ BẾP
               </span>
-              <span className="text-[11px] text-slate-500 font-medium">Tự động tổng hợp</span>
+              <span className="text-[11px] font-bold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-200">
+                Tự động cân đối số liệu
+              </span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {/* Học sinh bán trú (Báo ăn) */}
-              <div className="bg-white/95 p-3 rounded-xl border border-emerald-200 shadow-2xs flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center justify-center font-bold">
-                    <Utensils className="w-4 h-4" />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+              {/* CỘT 1: Học sinh bán trú (Báo ăn) - MÀU XANH EMERALD ĐẶC TRƯNG */}
+              <div className="bg-gradient-to-br from-emerald-50/80 to-teal-50/40 p-4 rounded-xl border-2 border-emerald-300 shadow-2xs flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-600 to-teal-700 text-white flex items-center justify-center font-bold shadow-xs">
+                    <Utensils className="w-5 h-5" />
                   </div>
                   <div>
-                    <div className="text-xs font-bold text-slate-800">HS bán trú (Báo ăn trưa)</div>
-                    <div className="text-[11px] text-slate-500">
-                      Tổng {bTotal} • Vắng {bAbsent}
+                    <div className="text-xs font-black text-emerald-950 uppercase">
+                      Học sinh Bán trú
+                    </div>
+                    <div className="text-[11px] font-semibold text-emerald-800 mt-0.5">
+                      Tổng: {bTotal} • Có mặt: {baoAn} • Vắng: {bAbsent}
                     </div>
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="text-base font-black text-emerald-700">{baoAn} suất</div>
-                  <div className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
-                    Báo ăn nhà bếp
+                  <div className="text-xl font-black text-emerald-700">{baoAn} suất</div>
+                  <div className="text-[10px] font-extrabold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded border border-emerald-300 inline-block mt-0.5">
+                    BÁO ĂN NHÀ BẾP
                   </div>
                 </div>
               </div>
 
-              {/* Học sinh ngoại trú (Không ăn) - Biểu tượng Ngôi nhà phù hợp */}
-              <div className="bg-white/95 p-3 rounded-xl border border-amber-200 shadow-2xs flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-700 border border-amber-200 flex items-center justify-center font-bold">
-                    <Home className="w-4 h-4" />
+              {/* CỘT 2: Học sinh ngoại trú (Không ăn) - MÀU VÀNG CAM AMBER ĐẶC TRƯNG */}
+              <div className="bg-gradient-to-br from-amber-50/80 to-orange-50/40 p-4 rounded-xl border-2 border-amber-300 shadow-2xs flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 text-white flex items-center justify-center font-bold shadow-xs">
+                    <Home className="w-5 h-5" />
                   </div>
                   <div>
-                    <div className="text-xs font-bold text-slate-800">HS ngoại trú (Không ăn tại trường)</div>
-                    <div className="text-[11px] text-slate-500">
-                      Có mặt {ngoaiTruPresent} • Vắng {ngoaiTruAbsent}
+                    <div className="text-xs font-black text-amber-950 uppercase">
+                      Học sinh Ngoại trú
+                    </div>
+                    <div className="text-[11px] font-semibold text-amber-800 mt-0.5">
+                      Tổng: {ngoaiTruTotal} • Có mặt: {ngoaiTruPresent} • Vắng: {ngoaiTruAbsent}
                     </div>
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="text-base font-black text-amber-800">{ngoaiTruTotal} em</div>
+                  <div className="text-xl font-black text-amber-800">{ngoaiTruTotal} em</div>
+                  <div className="text-[10px] font-extrabold text-amber-800 bg-amber-100 px-2 py-0.5 rounded border border-amber-300 inline-block mt-0.5">
+                    KHÔNG ĂN TẠI TRƯỜNG
+                  </div>
                 </div>
               </div>
             </div>
@@ -1530,27 +1578,27 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
         );
       })()}
 
-      {/* Absent Students Card */}
-      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-4 sm:p-6 mb-5">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 pb-3 border-b border-slate-100">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-rose-50 text-rose-600 border border-rose-200 flex items-center justify-center font-bold text-sm shadow-2xs">
+      {/* Absent Students Card - MÀU ĐỎ HỒNG ROSE RÕ NÉT */}
+      <div className="bg-white rounded-2xl border-2 border-rose-200 shadow-xs p-4 sm:p-6 mb-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 pb-3 border-b border-rose-100">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-rose-500 to-red-600 text-white flex items-center justify-center font-bold text-sm shadow-xs">
               <UserX className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-base sm:text-lg font-bold text-slate-900 flex items-center gap-2 flex-wrap">
+              <h2 className="text-base sm:text-lg font-black text-slate-900 flex items-center gap-2 flex-wrap">
                 <span>Danh sách học sinh vắng mặt</span>
-                <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-rose-100 text-rose-700 border border-rose-200">
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-rose-100 text-rose-800 border border-rose-300">
                   {absentStudents.length} HS vắng
                 </span>
                 {absentStudents.length > 0 && (
-                  <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">
-                    {boardingAbsentCount} Bán trú • {nonBoardingAbsentCount} Ngoại trú
+                  <span className="text-[11px] font-bold text-slate-600 bg-slate-100 px-2.5 py-0.5 rounded-full border border-slate-200">
+                    <strong className="text-emerald-700">{boardingAbsentCount} Bán trú</strong> • <strong className="text-amber-700">{nonBoardingAbsentCount} Ngoại trú</strong>
                   </span>
                 )}
               </h2>
               <p className="text-xs text-slate-500 mt-0.5">
-                Tự động đồng bộ số lượng khi nhập sĩ số vắng. Ghi rõ địa chỉ và lý do cụ thể gửi BGH
+                Tự động đồng bộ số lượng khi nhập sĩ số vắng. Ghi rõ lý do và địa chỉ gửi BGH
               </p>
             </div>
           </div>
@@ -1573,7 +1621,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                   return nextList;
                 });
               }}
-              className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 font-bold text-xs transition-all active:scale-95 self-start sm:self-auto cursor-pointer shadow-2xs"
+              className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 font-extrabold text-xs transition-all active:scale-95 self-start sm:self-auto cursor-pointer shadow-2xs"
             >
               <Plus className="w-4 h-4" />
               Thêm học sinh vắng
@@ -1586,13 +1634,13 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
           <div
             className={`p-3 rounded-xl border mb-4 text-xs font-semibold flex items-center justify-between gap-2 shadow-2xs ${
               allAbsentNamed
-                ? 'bg-emerald-50/90 border-emerald-200 text-emerald-800'
-                : 'bg-amber-50/90 border-amber-200 text-amber-800'
+                ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
+                : 'bg-amber-50 border-amber-300 text-amber-900'
             }`}
           >
             <div className="flex items-center gap-2">
               {allAbsentNamed ? (
-                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 stroke-[2.5]" />
               ) : (
                 <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 animate-bounce" />
               )}
@@ -1602,7 +1650,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                   : `Đang có ${absentStudents.length} học sinh vắng. Vui lòng nhập hoặc chọn tên cho học sinh còn trống bên dưới.`}
               </span>
             </div>
-            <div className="text-[11px] font-black shrink-0 bg-white/80 px-2 py-0.5 rounded border border-current/20">
+            <div className="text-[11px] font-black shrink-0 bg-white px-2 py-0.5 rounded border border-current/30 shadow-2xs">
               {absentStudents.filter((s) => s.full_name.trim()).length}/{absentStudents.length} đã điền
             </div>
           </div>
@@ -1610,8 +1658,8 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
 
         {/* Quick Tagging Chips of Enrolled Students */}
         {!isLocked && classStudents.length > 0 && (
-          <div className="mb-4 p-3 rounded-xl bg-slate-50 border border-slate-200/70">
-            <div className="text-xs font-semibold text-slate-700 mb-2 flex items-center justify-between flex-wrap gap-1">
+          <div className="mb-4 p-3 rounded-xl bg-slate-50 border border-slate-200">
+            <div className="text-xs font-bold text-slate-700 mb-2 flex items-center justify-between flex-wrap gap-1">
               <span className="flex items-center gap-1.5">
                 <Sparkles className="w-3.5 h-3.5 text-blue-600" />
                 <span>Bấm nhanh để chọn học sinh vắng trong danh sách lớp:</span>
@@ -1631,10 +1679,10 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                     type="button"
                     disabled={isMarked}
                     onClick={() => handleAddAbsentStudent(st.full_name, st.address || '', 'Ốm', !!st.isBoarding)}
-                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium transition-all shadow-2xs ${
+                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all shadow-2xs ${
                       isMarked
-                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 opacity-80 cursor-default'
-                        : 'bg-white hover:bg-rose-50 text-slate-700 hover:text-rose-700 border border-slate-200 hover:border-rose-200 cursor-pointer active:scale-95'
+                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 opacity-70 cursor-default'
+                        : 'bg-white hover:bg-rose-50 text-slate-700 hover:text-rose-700 border border-slate-200 hover:border-rose-300 cursor-pointer active:scale-95'
                     }`}
                     title={
                       isMarked
@@ -1645,13 +1693,13 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                     {isMarked ? (
                       <Check className="w-3 h-3 text-emerald-600" />
                     ) : (
-                      <Plus className="w-3 h-3 text-slate-400 group-hover:text-rose-600" />
+                      <Plus className="w-3 h-3 text-slate-400" />
                     )}
                     <span>{st.full_name}</span>
                     {st.isBoarding ? (
-                      <span className="text-[10px] text-emerald-600 font-semibold">(BT)</span>
+                      <span className="text-[10px] text-emerald-700 font-black bg-emerald-50 px-1 rounded border border-emerald-200">BT</span>
                     ) : (
-                      <span className="text-[10px] text-amber-600 font-semibold">(NT)</span>
+                      <span className="text-[10px] text-amber-700 font-black bg-amber-50 px-1 rounded border border-amber-200">NT</span>
                     )}
                   </button>
                 );
@@ -1662,11 +1710,11 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
 
         {/* Absent Students List / Table */}
         {absentStudents.length === 0 ? (
-          <div className="text-center py-8 px-4 rounded-xl border border-dashed border-slate-200 bg-slate-50/50">
-            <UserCheck className="w-10 h-10 text-emerald-500 mx-auto mb-2 opacity-80" />
-            <h3 className="text-sm font-bold text-slate-700">Hôm nay lớp đi học đầy đủ 100%</h3>
-            <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-              Không có học sinh nào vắng mặt. Khi nhập số vắng ở bảng trên hoặc bấm nút "Thêm học sinh vắng", danh sách sẽ tự động mở để thầy/cô điền thông tin.
+          <div className="text-center py-8 px-4 rounded-xl border-2 border-dashed border-emerald-200 bg-emerald-50/30">
+            <UserCheck className="w-10 h-10 text-emerald-600 mx-auto mb-2" />
+            <h3 className="text-sm font-black text-emerald-900">Hôm nay lớp đi học đầy đủ 100%</h3>
+            <p className="text-xs text-emerald-700 mt-1 max-w-sm mx-auto">
+              Không có học sinh nào vắng mặt. Khi nhập số vắng ở các khung trên hoặc bấm "Thêm học sinh vắng", danh sách sẽ tự động mở để thầy/cô điền tên và lý do.
             </p>
           </div>
         ) : (
@@ -1674,24 +1722,24 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
             {absentStudents.map((st, index) => (
               <div
                 key={index}
-                className="p-3.5 sm:p-4 rounded-2xl bg-white border border-slate-200 shadow-2xs hover:border-blue-200 transition-all space-y-3"
+                className="p-3.5 sm:p-4 rounded-2xl bg-white border border-slate-200 shadow-2xs hover:border-blue-300 transition-all space-y-3"
               >
                 {/* Card Header: Index badge + Quick Class Select + Delete Button */}
                 <div className="flex items-center justify-between gap-2 pb-2.5 border-b border-slate-100">
                   <div className="flex items-center gap-2">
-                    <span className="w-6 h-6 rounded-full bg-rose-100 text-rose-700 flex items-center justify-center text-xs font-black shrink-0">
+                    <span className="w-6 h-6 rounded-full bg-rose-600 text-white flex items-center justify-center text-xs font-black shrink-0 shadow-2xs">
                       {index + 1}
                     </span>
-                    <span className="text-xs font-bold text-slate-800">
+                    <span className="text-xs font-black text-slate-900">
                       Học sinh vắng #{index + 1}
                     </span>
                     {st.isBoarding ? (
-                      <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded">
-                        Bán trú
+                      <span className="text-[10px] font-black text-emerald-800 bg-emerald-100 border border-emerald-300 px-2 py-0.5 rounded-full">
+                        🍽️ Bán trú
                       </span>
                     ) : (
-                      <span className="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">
-                        Ngoại trú
+                      <span className="text-[10px] font-black text-amber-800 bg-amber-100 border border-amber-300 px-2 py-0.5 rounded-full">
+                        🏡 Ngoại trú
                       </span>
                     )}
                   </div>
@@ -1712,7 +1760,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                               });
                             }
                           }}
-                          className="text-[11px] font-semibold text-blue-700 bg-blue-50/80 hover:bg-blue-100/80 border border-blue-200 rounded-lg px-2 py-1 pr-6 cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-500 appearance-none max-w-[170px] sm:max-w-none truncate shadow-2xs"
+                          className="text-[11px] font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg px-2.5 py-1 pr-6 cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-500 appearance-none max-w-[170px] sm:max-w-none truncate shadow-2xs"
                           title="Chọn nhanh từ danh sách học sinh của lớp"
                         >
                           <option value="">+ Chọn từ DS lớp ({classStudents.length} HS)...</option>
@@ -1742,14 +1790,14 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
 
                 {/* Row 1: Họ và tên học sinh */}
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-tight mb-1 flex items-center justify-between">
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-tight mb-1 flex items-center justify-between">
                     <span className="flex items-center gap-1">
                       <User className="w-3.5 h-3.5 text-slate-400" />
                       Họ và tên học sinh <span className="text-rose-500">*</span>
                     </span>
                     {!st.full_name.trim() && (
-                      <span className="text-[10px] text-amber-600 font-semibold animate-pulse">
-                        Cần nhập họ tên
+                      <span className="text-[10px] text-rose-600 font-bold animate-pulse">
+                        ⚠️ Cần điền họ tên
                       </span>
                     )}
                   </label>
@@ -1761,7 +1809,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                       list={`students-list-${index}`}
                       placeholder="Nhập họ tên hoặc chọn từ danh sách lớp ở trên..."
                       onChange={(e) => handleUpdateAbsentStudent(index, { full_name: e.target.value })}
-                      className="w-full bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all placeholder:font-normal placeholder:text-slate-400 shadow-inner"
+                      className="w-full bg-slate-50/70 focus:bg-white border border-slate-300 rounded-xl px-3 py-2 text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all placeholder:font-normal placeholder:text-slate-400 shadow-inner"
                     />
                     <datalist id={`students-list-${index}`}>
                       {classStudents.map((cs) => (
@@ -1775,7 +1823,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
 
                 {/* Row 2: Bản / Thôn / Địa chỉ cư trú */}
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-tight mb-1 flex items-center gap-1">
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-tight mb-1 flex items-center gap-1">
                     <MapPin className="w-3.5 h-3.5 text-slate-400" />
                     Bản / Thôn / Địa chỉ cư trú
                   </label>
@@ -1785,7 +1833,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                     value={st.address || ''}
                     placeholder="Ví dụ: Bản Tào La- Tia Dình, Bản Pú Nhi..."
                     onChange={(e) => handleUpdateAbsentStudent(index, { address: e.target.value })}
-                    className="w-full bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs sm:text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all placeholder:text-slate-400 shadow-inner"
+                    className="w-full bg-slate-50/70 focus:bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs sm:text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all placeholder:text-slate-400 shadow-inner"
                   />
                 </div>
 
@@ -1793,7 +1841,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-0.5">
                   {/* Lý do vắng */}
                   <div>
-                    <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-tight mb-1 flex items-center gap-1">
+                    <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-tight mb-1 flex items-center gap-1">
                       <Clock className="w-3.5 h-3.5 text-slate-400" />
                       Lý do vắng mặt
                     </label>
@@ -1801,7 +1849,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                       disabled={isLocked}
                       value={st.reason || 'Ốm'}
                       onChange={(e) => handleUpdateAbsentStudent(index, { reason: e.target.value })}
-                      className="w-full bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs sm:text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all shadow-inner"
+                      className="w-full bg-slate-50/70 focus:bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs sm:text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all shadow-inner"
                     >
                       <option value="Ốm">Ốm</option>
                       <option value="Có phép">Có phép</option>
@@ -1812,28 +1860,25 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                     </select>
                   </div>
 
-                  {/* Phân loại Bán trú hay Ngoại trú dạng tích chọn */}
+                  {/* Phân loại Bán trú hay Ngoại trú dạng tích chọn MÀU SẮC RÕ RÀNG */}
                   <div>
-                    <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-tight mb-1 flex items-center justify-between">
+                    <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-tight mb-1 flex items-center justify-between">
                       <span className="flex items-center gap-1">
                         <Utensils className="w-3.5 h-3.5 text-slate-400" />
-                        Phân loại bán trú / ngoại trú
-                      </span>
-                      <span className="text-[10px] text-slate-500 font-medium">
-                        {st.isBoarding ? 'Đang chọn: HS bán trú' : 'Đang chọn: HS ngoại trú'}
+                        Hình thức ăn nghỉ (Tích chọn)
                       </span>
                     </label>
                     <div className="grid grid-cols-2 gap-2">
-                      {/* Tích chọn HS bán trú */}
+                      {/* Tích chọn HS bán trú - MÀU XANH EMERALD */}
                       <div
                         onClick={() => {
                           if (!isLocked) {
                             handleUpdateAbsentStudent(index, { isBoarding: true });
                           }
                         }}
-                        className={`flex items-center gap-2 px-2.5 sm:px-3 py-2 rounded-xl border cursor-pointer select-none transition-all ${
+                        className={`flex items-center gap-2 px-2.5 sm:px-3 py-2 rounded-xl border-2 cursor-pointer select-none transition-all ${
                           st.isBoarding
-                            ? 'bg-emerald-50 border-emerald-400 text-emerald-950 shadow-xs ring-2 ring-emerald-500/20'
+                            ? 'bg-emerald-50 border-emerald-500 text-emerald-950 shadow-xs ring-2 ring-emerald-500/20'
                             : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
                         }`}
                       >
@@ -1847,12 +1892,12 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                           {st.isBoarding && <Check className="w-3 h-3 stroke-[3]" />}
                         </div>
                         <div className="flex flex-col min-w-0">
-                          <span className="text-xs sm:text-sm font-bold whitespace-normal leading-tight">
+                          <span className="text-xs sm:text-sm font-black whitespace-normal leading-tight text-emerald-950">
                             HS bán trú
                           </span>
                           <span
-                            className={`text-[10px] truncate ${
-                              st.isBoarding ? 'text-emerald-700 font-semibold' : 'text-slate-400 font-normal'
+                            className={`text-[10px] truncate font-bold ${
+                              st.isBoarding ? 'text-emerald-700' : 'text-slate-400'
                             }`}
                           >
                             Báo ăn
@@ -1860,16 +1905,16 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                         </div>
                       </div>
 
-                      {/* Tích chọn HS ngoại trú */}
+                      {/* Tích chọn HS ngoại trú - MÀU VÀNG CAM AMBER */}
                       <div
                         onClick={() => {
                           if (!isLocked) {
                             handleUpdateAbsentStudent(index, { isBoarding: false });
                           }
                         }}
-                        className={`flex items-center gap-2 px-2.5 sm:px-3 py-2 rounded-xl border cursor-pointer select-none transition-all ${
+                        className={`flex items-center gap-2 px-2.5 sm:px-3 py-2 rounded-xl border-2 cursor-pointer select-none transition-all ${
                           !st.isBoarding
-                            ? 'bg-amber-50 border-amber-400 text-amber-950 shadow-xs ring-2 ring-amber-500/20'
+                            ? 'bg-amber-50 border-amber-500 text-amber-950 shadow-xs ring-2 ring-amber-500/20'
                             : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
                         }`}
                       >
@@ -1883,7 +1928,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                           {!st.isBoarding && <Check className="w-3 h-3 stroke-[3]" />}
                         </div>
                         <div className="flex items-center min-w-0">
-                          <span className="text-xs sm:text-sm font-bold whitespace-normal leading-tight">
+                          <span className="text-xs sm:text-sm font-black whitespace-normal leading-tight text-amber-950">
                             HS ngoại trú
                           </span>
                         </div>
