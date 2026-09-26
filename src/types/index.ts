@@ -169,6 +169,11 @@ export interface ClassReportRow {
   values: Record<string, { total: number; present: number; absent: number; rate: number }>;
   overallRate: number; // Tỷ lệ vắng % toàn lớp
   overallPresentRate: number;
+  reminderStats?: {
+    todayReminders: number;
+    totalReminders: number;
+    unreportedDays: number;
+  };
 }
 
 export type AttendancePeriodType = 'WEEK' | 'MONTH' | 'YEAR';

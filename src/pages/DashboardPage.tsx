@@ -540,10 +540,17 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSele
                         onNavigate('/attendance');
                       }
                     }}
-                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white border border-amber-300 text-amber-900 text-xs font-bold hover:bg-amber-100 transition-colors shadow-2xs"
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white border border-amber-300 text-amber-900 text-xs font-bold hover:bg-amber-100 transition-colors shadow-2xs"
+                    title={`Lớp ${r.classItem.class_name} - Đã nhận ${r.reminderStats?.todayReminders || 1} lần nhắc, chưa báo ${r.reminderStats?.unreportedDays || 1} lần`}
                   >
                     <span>Lớp {r.classItem.class_name}</span>
-                    <span className="text-[10px] text-slate-400 font-normal">({r.teacher?.full_name.split(' ').pop() || 'GVCN'})</span>
+                    <span className="text-[10px] text-slate-500 font-normal">({r.teacher?.full_name.split(' ').pop() || 'GVCN'})</span>
+                    <span className="text-[10px] bg-rose-50 text-rose-700 border border-rose-200 px-1 rounded font-semibold">
+                      🔔 {r.reminderStats?.todayReminders || 1} lần
+                    </span>
+                    <span className="text-[10px] bg-amber-100 text-amber-900 border border-amber-300 px-1 rounded font-semibold">
+                      Chưa báo: {r.reminderStats?.unreportedDays || 1}
+                    </span>
                   </button>
                 ))}
               </div>
@@ -835,8 +842,18 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSele
                   {/* Attendance figures row */}
                   <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
                     {row.status === 'NOT_REPORTED' ? (
-                      <div className="text-xs text-amber-700 font-semibold italic">
-                        Chưa có dữ liệu báo cáo sĩ số
+                      <div className="flex flex-col gap-0.5">
+                        <div className="text-xs text-amber-700 font-semibold italic">
+                          Chưa có dữ liệu báo cáo sĩ số
+                        </div>
+                        <div className="text-[11px] text-slate-600 flex items-center gap-1.5 flex-wrap mt-0.5">
+                          <span className="inline-flex items-center gap-1 bg-rose-50 text-rose-700 px-1.5 py-0.5 rounded border border-rose-200 font-bold">
+                            🔔 Nhắc: {row.reminderStats?.todayReminders || 1} lần
+                          </span>
+                          <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-800 px-1.5 py-0.5 rounded border border-amber-200 font-bold">
+                            ⚠️ Chưa báo: {row.reminderStats?.unreportedDays || 1} lần
+                          </span>
+                        </div>
                       </div>
                     ) : (
                       <div className="flex items-center gap-3 text-xs">
@@ -1001,9 +1018,19 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSele
                           </span>
                         )}
                         {row.status === 'NOT_REPORTED' && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800">
-                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span> Chưa báo cáo
-                          </span>
+                          <div className="flex flex-col gap-1 items-start">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800">
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span> Chưa báo cáo
+                            </span>
+                            <div className="flex items-center gap-1 text-[10px] text-slate-500 font-medium">
+                              <span className="bg-rose-50 text-rose-700 border border-rose-200 px-1.5 py-0.2 rounded font-semibold" title="Số lần thông báo nhắc nhở">
+                                🔔 {row.reminderStats?.todayReminders || 1} lần
+                              </span>
+                              <span className="bg-amber-50 text-amber-900 border border-amber-200 px-1.5 py-0.2 rounded font-semibold" title="Số lần/ngày chưa nộp báo cáo">
+                                Chưa báo: {row.reminderStats?.unreportedDays || 1}
+                              </span>
+                            </div>
+                          </div>
                         )}
                         {row.status === 'LOCKED' && (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-slate-200 text-slate-800">

@@ -1516,15 +1516,20 @@ export const StorageService = {
       }
     }
 
-    const [classes, profiles, indicators] = await Promise.all([
+    const [classes, profiles, indicators, allNotifs] = await Promise.all([
       this.getClasses(),
       this.getProfiles(),
       this.getIndicatorGroups(),
+      this.getNotifications(),
     ]);
 
     const rawReports = localStorage.getItem(STORAGE_KEYS.REPORTS);
     const reports: DailyReport[] = rawReports ? JSON.parse(rawReports) : [];
     const dayReports = reports.filter((r) => r.report_date === reportDate);
+
+    // Calculate distinct past report dates to determine unreported days count
+    const distinctDates = Array.from(new Set(reports.map((r) => r.report_date))).filter((d) => d <= reportDate);
+    const evaluationDates = distinctDates.length > 0 ? distinctDates : [reportDate];
 
     const rawValues = localStorage.getItem(STORAGE_KEYS.VALUES);
     const allValues: DailyReportValue[] = rawValues ? JSON.parse(rawValues) : [];
@@ -1542,7 +1547,7 @@ export const StorageService = {
     });
 
     const rows: ClassReportRow[] = activeClasses.map((cls) => {
-      const teacher = profiles.find((p) => p.id === cls.homeroom_teacher_id);
+      const teacher = profiles.find((p) => p.id === cls.homeroom_teacher_id) || profiles.find((p) => p.assigned_class_id === cls.id);
       const rep = dayReports.find((r) => r.class_id === cls.id);
       const repValues = rep ? allValues.filter((v) => v.report_id === rep.id) : [];
       const hasRealData = repValues.some((v) => (v.total_count || 0) > 0);
@@ -1557,6 +1562,26 @@ export const StorageService = {
 
       if (isReported) {
         reportedClasses++;
+      }
+
+      // Calculate reminder & unsubmitted stats for this specific class
+      const classNotifs = allNotifs.filter(
+        (n) =>
+          (n.type === 'ATTENDANCE_REMINDER' || n.type === 'BGH_ALERT') &&
+          (n.class_id === cls.id || (teacher && n.user_id === teacher.id))
+      );
+      const todayReminders = classNotifs.filter((n) => n.date === reportDate).length;
+      const totalReminders = classNotifs.length;
+
+      let unreportedDays = 0;
+      evaluationDates.forEach((d) => {
+        const hasDRep = reports.some(
+          (r) => r.class_id === cls.id && r.report_date === d && r.status !== 'NOT_REPORTED'
+        );
+        if (!hasDRep) unreportedDays++;
+      });
+      if (status === 'NOT_REPORTED' && unreportedDays === 0) {
+        unreportedDays = 1;
       }
 
       const values: Record<string, { total: number; present: number; absent: number; rate: number }> = {};
@@ -1593,6 +1618,11 @@ export const StorageService = {
         values,
         overallRate,
         overallPresentRate,
+        reminderStats: {
+          todayReminders,
+          totalReminders,
+          unreportedDays,
+        },
       };
     });
 
@@ -3618,6 +3648,55 @@ export const StorageService = {
     }
 
     return { sentCount, remindedClasses, skippedClasses };
+  },
+
+  /**
+   * Thống kê chi tiết số lần thông báo và số lần không báo cáo của GVCN / Lớp học
+   */
+  async getClassUnreportedStats(classId?: string, teacherId?: string): Promise<{
+    todayReminders: number;
+    totalReminders: number;
+    unreportedDays: number;
+    reportedDays: number;
+    totalSchoolDays: number;
+  }> {
+    ensureInitialized();
+    const notifs = await this.getNotifications();
+    const rawReports = localStorage.getItem(STORAGE_KEYS.REPORTS);
+    const reports: DailyReport[] = rawReports ? JSON.parse(rawReports) : [];
+    const today = getTodayDateStr();
+
+    const classNotifs = notifs.filter(
+      (n) =>
+        (n.type === 'ATTENDANCE_REMINDER' || n.type === 'BGH_ALERT') &&
+        ((classId && n.class_id === classId) || (teacherId && n.user_id === teacherId))
+    );
+
+    const todayReminders = classNotifs.filter((n) => n.date === today).length;
+    const totalReminders = classNotifs.length;
+
+    // Lấy danh sách các ngày học đã diễn ra
+    const allReportDates = Array.from(new Set(reports.map((r) => r.report_date))).sort();
+    const distinctDates = allReportDates.length > 0 ? allReportDates : [today];
+
+    let reportedDays = 0;
+    let unreportedDays = 0;
+
+    if (classId) {
+      distinctDates.forEach((d) => {
+        const hasRep = reports.some((r) => r.class_id === classId && r.report_date === d && r.status !== 'NOT_REPORTED');
+        if (hasRep) reportedDays++;
+        else unreportedDays++;
+      });
+    }
+
+    return {
+      todayReminders,
+      totalReminders,
+      unreportedDays: Math.max(unreportedDays, todayReminders > 0 ? 1 : 0),
+      reportedDays,
+      totalSchoolDays: distinctDates.length,
+    };
   },
 
   // --- Reset to Factory Default (Mặc định rỗng cấu hình mới) ---
