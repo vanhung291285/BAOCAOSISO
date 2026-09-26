@@ -216,6 +216,9 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
           const defaultTotal = enrolledCount > 0 ? enrolledCount : 35;
           const boardingStudentsCount = classStudents.filter((s) => s.isBoarding).length;
 
+          const boardingTotal = boardingStudentsCount > 0 ? boardingStudentsCount : Math.min(defaultTotal, 20);
+          const nonBoardingTotal = Math.max(0, defaultTotal - boardingTotal);
+
           enabledIndicators.forEach((ig, idx) => {
             if (idx === 0) {
               newVals[ig.id] = {
@@ -223,11 +226,30 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                 present: defaultTotal,
                 absent: 0,
               };
-            } else if (ig.code.includes('BOARDING') || ig.name.toLowerCase().includes('bán trú') || ig.name.toLowerCase().includes('ăn trưa')) {
-              const boardingTotal = boardingStudentsCount > 0 ? boardingStudentsCount : Math.min(defaultTotal, 20);
+            } else if (
+              ig.id === 'ig_boarding' ||
+              ig.id === 'ig_boarding_half' ||
+              ig.code.includes('BOARDING') ||
+              ig.name.toLowerCase().includes('bán trú') ||
+              ig.name.toLowerCase().includes('ăn trưa')
+            ) {
               newVals[ig.id] = {
                 total: boardingTotal,
                 present: boardingTotal,
+                absent: 0,
+              };
+            } else if (
+              ig.id === 'ig_day' ||
+              ig.id === 'ig_ngoaitru' ||
+              ig.code.includes('NON_BOARDING') ||
+              ig.code.includes('DAY') ||
+              ig.name.toLowerCase().includes('ngoại trú') ||
+              ig.name.toLowerCase().includes('không ăn') ||
+              ig.name.toLowerCase().includes('về nhà')
+            ) {
+              newVals[ig.id] = {
+                total: nonBoardingTotal,
+                present: nonBoardingTotal,
                 absent: 0,
               };
             } else {
@@ -302,6 +324,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
   }, [loadClassReport]);
 
   // Calculation mode logic
+  // Calculation mode logic
   const inputMode = settings?.input_mode || 'MODE_2_TOTAL_ABSENT';
 
   // Helper to sync indicators from absent students list
@@ -309,6 +332,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
     (studentsList: AbsentStudent[]) => {
       const totalAbsent = studentsList.length;
       const bAbsent = studentsList.filter((s) => s.isBoarding).length;
+      const ntAbsent = studentsList.filter((s) => !s.isBoarding).length;
 
       setFormValues((prev) => {
         const next = { ...prev };
@@ -344,6 +368,27 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
           };
         }
 
+        // 3. Sync day student / ngoai tru indicator
+        const ntInd = enabledIndicators.find(
+          (i) =>
+            i.id === 'ig_day' ||
+            i.id === 'ig_ngoaitru' ||
+            i.code.includes('NON_BOARDING') ||
+            i.code.includes('DAY') ||
+            i.name.toLowerCase().includes('ngoại trú') ||
+            i.name.toLowerCase().includes('không ăn') ||
+            i.name.toLowerCase().includes('về nhà')
+        );
+        if (ntInd && prev[ntInd.id]) {
+          const ntCur = prev[ntInd.id];
+          const ntTotal = typeof ntCur.total === 'number' ? ntCur.total : Number(ntCur.total) || 0;
+          next[ntInd.id] = {
+            total: ntCur.total,
+            absent: ntAbsent,
+            present: Math.max(0, ntTotal - ntAbsent),
+          };
+        }
+
         return next;
       });
     },
@@ -363,142 +408,248 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
       const curPresent = cur.present === '' ? 0 : Number(cur.present);
       const curAbsent = cur.absent === '' ? 0 : Number(cur.absent);
 
+      const isPrimaryGroup = groupId === enabledIndicators[0]?.id;
+      const bInd = enabledIndicators.find(
+        (i) =>
+          i.id === 'ig_boarding' ||
+          i.id === 'ig_boarding_half' ||
+          i.code.includes('BOARDING') ||
+          i.name.toLowerCase().includes('bán trú') ||
+          i.name.toLowerCase().includes('ăn trưa')
+      );
+      const isBoardingGroup = bInd && groupId === bInd.id;
+
+      const ntInd = enabledIndicators.find(
+        (i) =>
+          i.id === 'ig_day' ||
+          i.id === 'ig_ngoaitru' ||
+          i.code.includes('NON_BOARDING') ||
+          i.code.includes('DAY') ||
+          i.name.toLowerCase().includes('ngoại trú') ||
+          i.name.toLowerCase().includes('không ăn') ||
+          i.name.toLowerCase().includes('về nhà')
+      );
+      const isNgoaiTruGroup = ntInd && groupId === ntInd.id;
+
+      let updated: { total: number | ''; present: number | ''; absent: number | '' };
+
       if (val === '') {
-        let updated: { total: number | ''; present: number | ''; absent: number | '' } = { ...cur, [field]: '' };
+        updated = { ...cur, [field]: '' };
         if (inputMode === 'MODE_2_TOTAL_ABSENT') {
           if (field === 'total') {
             updated = { total: '', absent: cur.absent, present: '' };
           } else if (field === 'absent') {
-            updated = {
-              total: cur.total,
-              absent: '',
-              present: cur.total === '' ? '' : curTotal,
-            };
+            updated = { total: cur.total, absent: '', present: cur.total === '' ? '' : curTotal };
           } else if (field === 'present') {
-            updated = {
-              total: cur.total,
-              present: '',
-              absent: cur.total === '' ? '' : curTotal,
-            };
+            updated = { total: cur.total, present: '', absent: cur.total === '' ? '' : curTotal };
           }
         } else if (inputMode === 'MODE_1_TOTAL_PRESENT') {
           if (field === 'total') {
             updated = { total: '', present: cur.present, absent: '' };
           } else if (field === 'present') {
-            updated = {
-              total: cur.total,
-              present: '',
-              absent: cur.total === '' ? '' : curTotal,
-            };
+            updated = { total: cur.total, present: '', absent: cur.total === '' ? '' : curTotal };
           } else if (field === 'absent') {
-            updated = {
-              total: cur.total,
-              absent: '',
-              present: cur.total === '' ? '' : curTotal,
-            };
+            updated = { total: cur.total, absent: '', present: cur.total === '' ? '' : curTotal };
           }
-        }
-        return {
-          ...prev,
-          [groupId]: updated,
-        };
-      }
-
-      const safeVal = Math.max(0, isNaN(Number(val)) ? 0 : Number(val));
-      let updated: { total: number | ''; present: number | ''; absent: number | '' } = { ...cur, [field]: safeVal };
-
-      if (inputMode === 'MODE_2_TOTAL_ABSENT') {
-        // User inputs Total & Absent -> Present is auto-calculated
-        if (field === 'total') {
-          const newAbsent = Math.min(curAbsent, safeVal);
-          updated = {
-            total: safeVal,
-            absent: cur.absent === '' ? '' : newAbsent,
-            present: Math.max(0, safeVal - newAbsent),
-          };
-        } else if (field === 'absent') {
-          const safeAbsent = Math.min(safeVal, curTotal);
-          updated = {
-            total: cur.total,
-            absent: safeAbsent,
-            present: Math.max(0, curTotal - safeAbsent),
-          };
-        } else if (field === 'present') {
-          const safePresent = Math.min(safeVal, curTotal);
-          updated = {
-            total: cur.total,
-            present: safePresent,
-            absent: Math.max(0, curTotal - safePresent),
-          };
-        }
-      } else if (inputMode === 'MODE_1_TOTAL_PRESENT') {
-        // User inputs Total & Present -> Absent is auto-calculated
-        if (field === 'total') {
-          const newPresent = Math.min(curPresent, safeVal);
-          updated = {
-            total: safeVal,
-            present: cur.present === '' ? '' : newPresent,
-            absent: Math.max(0, safeVal - newPresent),
-          };
-        } else if (field === 'present') {
-          const safePresent = Math.min(safeVal, curTotal);
-          updated = {
-            total: cur.total,
-            present: safePresent,
-            absent: Math.max(0, curTotal - safePresent),
-          };
-        } else if (field === 'absent') {
-          const safeAbsent = Math.min(safeVal, curTotal);
-          updated = {
-            total: cur.total,
-            absent: safeAbsent,
-            present: Math.max(0, curTotal - safeAbsent),
-          };
         }
       } else {
-        // MODE_3_ALL_THREE: Manual input
+        const safeVal = Math.max(0, isNaN(Number(val)) ? 0 : Number(val));
         updated = { ...cur, [field]: safeVal };
-      }
 
-      // Auto-synchronize absent student list slots when primary indicator absent count changes
-      if (groupId === enabledIndicators[0]?.id && updated.absent !== '') {
-        const targetAbsent = Number(updated.absent) || 0;
-        setAbsentStudents((prevAbsent) => {
-          const currentCount = prevAbsent.length;
-          if (targetAbsent === currentCount) return prevAbsent;
-
-          if (targetAbsent > currentCount) {
-            const toAdd = targetAbsent - currentCount;
-            const newSlots: AbsentStudent[] = Array.from({ length: toAdd }, () => ({
-              full_name: '',
-              address: '',
-              reason: 'Ốm',
-              isBoarding: false,
-            }));
-            return [...prevAbsent, ...newSlots];
-          } else {
-            if (targetAbsent === 0) return [];
-            let list = [...prevAbsent];
-            while (list.length > targetAbsent) {
-              const emptyIdx = list
-                .map((s, idx) => ({ s, idx }))
-                .reverse()
-                .find((x) => !x.s.full_name.trim())?.idx;
-              if (emptyIdx !== undefined) {
-                list.splice(emptyIdx, 1);
-              } else {
-                list.pop();
-              }
-            }
-            return list;
+        if (inputMode === 'MODE_2_TOTAL_ABSENT') {
+          if (field === 'total') {
+            const newAbsent = Math.min(curAbsent, safeVal);
+            updated = {
+              total: safeVal,
+              absent: cur.absent === '' ? '' : newAbsent,
+              present: Math.max(0, safeVal - newAbsent),
+            };
+          } else if (field === 'absent') {
+            const safeAbsent = Math.min(safeVal, curTotal);
+            updated = {
+              total: cur.total,
+              absent: safeAbsent,
+              present: Math.max(0, curTotal - safeAbsent),
+            };
+          } else if (field === 'present') {
+            const safePresent = Math.min(safeVal, curTotal);
+            updated = {
+              total: cur.total,
+              present: safePresent,
+              absent: Math.max(0, curTotal - safePresent),
+            };
           }
-        });
+        } else if (inputMode === 'MODE_1_TOTAL_PRESENT') {
+          if (field === 'total') {
+            const newPresent = Math.min(curPresent, safeVal);
+            updated = {
+              total: safeVal,
+              present: cur.present === '' ? '' : newPresent,
+              absent: Math.max(0, safeVal - newPresent),
+            };
+          } else if (field === 'present') {
+            const safePresent = Math.min(safeVal, curTotal);
+            updated = {
+              total: cur.total,
+              present: safePresent,
+              absent: Math.max(0, curTotal - safePresent),
+            };
+          } else if (field === 'absent') {
+            const safeAbsent = Math.min(safeVal, curTotal);
+            updated = {
+              total: cur.total,
+              absent: safeAbsent,
+              present: Math.max(0, curTotal - safeAbsent),
+            };
+          }
+        }
       }
 
-      return {
+      const nextValues: Record<string, { total: number | ''; present: number | ''; absent: number | '' }> = {
         ...prev,
         [groupId]: updated,
       };
+
+      // 1. Khi thao tác trên CHỈ TIÊU CHÍNH (Sĩ số cả lớp)
+      if (isPrimaryGroup) {
+        const pAbsent = updated.absent !== '' ? Number(updated.absent) || 0 : 0;
+
+        // Nếu cả lớp báo có mặt đầy đủ (0 vắng) -> Bán trú & Ngoại trú vắng bắt buộc = 0
+        if (pAbsent === 0) {
+          if (bInd && nextValues[bInd.id]) {
+            const bTot = Number(nextValues[bInd.id].total) || 0;
+            nextValues[bInd.id] = { total: nextValues[bInd.id].total, present: bTot, absent: 0 };
+          }
+          if (ntInd && nextValues[ntInd.id]) {
+            const ntTot = Number(nextValues[ntInd.id].total) || 0;
+            nextValues[ntInd.id] = { total: nextValues[ntInd.id].total, present: ntTot, absent: 0 };
+          }
+          setAbsentStudents([]);
+        } else {
+          // Nếu cả lớp vắng N em (ví dụ vắng 2 hoặc 3)
+          const bTot = bInd && nextValues[bInd.id] ? (Number(nextValues[bInd.id].total) || 0) : 0;
+          const ntTot = ntInd && nextValues[ntInd.id] ? (Number(nextValues[ntInd.id].total) || 0) : 0;
+
+          let currentBAbsent = bInd && nextValues[bInd.id] ? (Number(nextValues[bInd.id].absent) || 0) : 0;
+          let currentNtAbsent = ntInd && nextValues[ntInd.id] ? (Number(nextValues[ntInd.id].absent) || 0) : 0;
+
+          // Nếu trước đó cả 2 đều bằng 0 hoặc chưa khớp tổng -> Tự động phân bổ mặc định hợp lý
+          if (currentBAbsent + currentNtAbsent === 0 || currentBAbsent + currentNtAbsent !== pAbsent) {
+            currentBAbsent = Math.min(pAbsent, bTot);
+            currentNtAbsent = Math.min(Math.max(0, pAbsent - currentBAbsent), ntTot);
+          } else {
+            currentBAbsent = Math.min(currentBAbsent, pAbsent, bTot);
+            currentNtAbsent = Math.max(0, pAbsent - currentBAbsent);
+          }
+
+          if (bInd && nextValues[bInd.id]) {
+            nextValues[bInd.id] = {
+              total: nextValues[bInd.id].total,
+              absent: currentBAbsent,
+              present: Math.max(0, bTot - currentBAbsent),
+            };
+          }
+
+          if (ntInd && nextValues[ntInd.id]) {
+            nextValues[ntInd.id] = {
+              total: nextValues[ntInd.id].total,
+              absent: currentNtAbsent,
+              present: Math.max(0, ntTot - currentNtAbsent),
+            };
+          }
+
+          // Cập nhật danh sách học sinh vắng
+          setAbsentStudents((prevAbsent) => {
+            const newSlots: AbsentStudent[] = [];
+            for (let i = 0; i < pAbsent; i++) {
+              const existing = prevAbsent[i];
+              newSlots.push({
+                full_name: existing?.full_name || '',
+                address: existing?.address || '',
+                reason: existing?.reason || 'Ốm',
+                isBoarding: i < currentBAbsent,
+              });
+            }
+            return newSlots;
+          });
+        }
+      }
+
+      // 2 & 3. Khi thao tác trên CHỈ TIÊU BÁN TRÚ hoặc NGOẠI TRÚ
+      if (isBoardingGroup || isNgoaiTruGroup) {
+        const pId = enabledIndicators[0]?.id;
+        if (pId && nextValues[pId]) {
+          const bVal = bInd && nextValues[bInd.id] ? nextValues[bInd.id] : { total: 0, present: 0, absent: 0 };
+          const ntVal = ntInd && nextValues[ntInd.id] ? nextValues[ntInd.id] : { total: 0, present: 0, absent: 0 };
+
+          const bPres = bVal.present !== '' ? Number(bVal.present) || 0 : 0;
+          const ntPres = ntVal.present !== '' ? Number(ntVal.present) || 0 : 0;
+          const bAbs = bVal.absent !== '' ? Number(bVal.absent) || 0 : 0;
+          const ntAbs = ntVal.absent !== '' ? Number(ntVal.absent) || 0 : 0;
+          const bTot = bVal.total !== '' ? Number(bVal.total) || 0 : 0;
+          const ntTot = ntVal.total !== '' ? Number(ntVal.total) || 0 : 0;
+
+          if (bInd && ntInd) {
+            // Khi có đủ cả 2 nhóm Bán trú và Ngoại trú:
+            // Tự động nhảy trùng khớp số HS Có mặt, Vắng, và Tổng số ở chỉ tiêu chính phía trên
+            const sumPresent = bPres + ntPres;
+            const sumAbsent = bAbs + ntAbs;
+            const sumTotal = (bTot + ntTot > 0) ? (bTot + ntTot) : (sumPresent + sumAbsent);
+
+            nextValues[pId] = {
+              total: sumTotal > 0 ? sumTotal : (Number(nextValues[pId].total) || 0),
+              present: sumPresent,
+              absent: sumAbsent,
+            };
+
+            // Đồng bộ danh sách học sinh vắng tương ứng
+            setAbsentStudents((prevAbsent) => {
+              const newSlots: AbsentStudent[] = [];
+              for (let i = 0; i < sumAbsent; i++) {
+                const existing = prevAbsent[i];
+                newSlots.push({
+                  full_name: existing?.full_name || '',
+                  address: existing?.address || '',
+                  reason: existing?.reason || 'Ốm',
+                  isBoarding: i < bAbs,
+                });
+              }
+              return newSlots;
+            });
+          } else if (bInd) {
+            // Khi chỉ có nhóm Bán trú:
+            const pCur = nextValues[pId];
+            const pTot = Number(pCur.total) || 0;
+            if (bTot > pTot) {
+              nextValues[pId].total = bTot;
+            }
+            if (bAbs > (Number(pCur.absent) || 0) || (Number(pCur.absent) === 0 && bAbs > 0)) {
+              const newPAbsent = bAbs;
+              nextValues[pId].absent = newPAbsent;
+              nextValues[pId].present = Math.max(0, (Number(nextValues[pId].total) || pTot) - newPAbsent);
+            } else if (bPres > (Number(pCur.present) || 0)) {
+              nextValues[pId].present = bPres;
+            }
+
+            setAbsentStudents((prevAbsent) => {
+              const targetTotal = Number(nextValues[pId].absent) || 0;
+              const newSlots: AbsentStudent[] = [];
+              for (let i = 0; i < targetTotal; i++) {
+                const existing = prevAbsent[i];
+                newSlots.push({
+                  full_name: existing?.full_name || '',
+                  address: existing?.address || '',
+                  reason: existing?.reason || 'Ốm',
+                  isBoarding: i < bAbs,
+                });
+              }
+              return newSlots;
+            });
+          }
+        }
+      }
+
+      return nextValues;
     });
   };
 
@@ -599,63 +750,194 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
     });
   };
 
-  // Check validity
-  const isValid = useMemo(() => {
-    if (!selectedClassId) return false;
-    if (enabledIndicators.length === 0) return false;
-    
-    // Main indicator validation
-    const mainId = enabledIndicators[0].id;
+  // Comprehensive validation across all indicators, boarding/day student breakdown and absent list
+  const validationResult = useMemo(() => {
+    if (!selectedClassId) {
+      return { isValid: false, error: 'Chưa chọn lớp học.' };
+    }
+    if (enabledIndicators.length === 0) {
+      return { isValid: false, error: 'Chưa cấu hình nhóm chỉ tiêu.' };
+    }
+
+    // 1. Kiểm tra chỉ tiêu chính (Sĩ số cả lớp)
+    const mainId = enabledIndicators[0]?.id;
     const mainVal = formValues[mainId];
-    if (!mainVal) return false;
-    const total = Number(mainVal.total) || 0;
-    const present = Number(mainVal.present) || 0;
-    const absent = Number(mainVal.absent) || 0;
-    
-    if (total <= 0) return false;
-    if (present + absent !== total && inputMode !== 'MODE_3_ALL_THREE') {
-      return false;
+    if (!mainVal) {
+      return { isValid: false, error: 'Chưa có số liệu sĩ số cả lớp.' };
     }
 
-    // Absent list count validation
-    if (absent !== absentStudents.length) return false;
+    const mainTotal = Number(mainVal.total) || 0;
+    const mainPresent = Number(mainVal.present) || 0;
+    const mainAbsent = Number(mainVal.absent) || 0;
 
-    // All absent students must have non-empty name
-    if (absent > 0) {
-      const allNamed = absentStudents.every((s) => s.full_name.trim().length > 0);
-      if (!allNamed) return false;
+    if (mainTotal <= 0) {
+      return { isValid: false, error: 'Tổng sĩ số cả lớp phải lớn hơn 0.' };
     }
 
-    return true;
+    if (inputMode !== 'MODE_3_ALL_THREE' && mainPresent + mainAbsent !== mainTotal) {
+      return {
+        isValid: false,
+        error: `Số liệu sĩ số cả lớp chưa khớp: Có mặt (${mainPresent}) + Vắng (${mainAbsent}) phải bằng Tổng (${mainTotal}).`,
+      };
+    }
+
+    // 2. Tìm chỉ tiêu Bán trú và Ngoại trú (nếu có)
+    const bInd = enabledIndicators.find(
+      (i) =>
+        i.id === 'ig_boarding' ||
+        i.id === 'ig_boarding_half' ||
+        i.code.includes('BOARDING') ||
+        i.name.toLowerCase().includes('bán trú') ||
+        i.name.toLowerCase().includes('ăn trưa')
+    );
+    const ntInd = enabledIndicators.find(
+      (i) =>
+        i.id === 'ig_day' ||
+        i.id === 'ig_ngoaitru' ||
+        i.code.includes('NON_BOARDING') ||
+        i.code.includes('DAY') ||
+        i.name.toLowerCase().includes('ngoại trú') ||
+        i.name.toLowerCase().includes('không ăn') ||
+        i.name.toLowerCase().includes('về nhà')
+    );
+
+    const bVal = bInd ? formValues[bInd.id] : null;
+    const bTotal = bVal ? Number(bVal.total) || 0 : 0;
+    const bPresent = bVal ? Number(bVal.present) || 0 : 0;
+    const bAbsent = bVal ? Number(bVal.absent) || 0 : 0;
+
+    const ntVal = ntInd ? formValues[ntInd.id] : null;
+    const ntTotal = ntVal ? Number(ntVal.total) || 0 : 0;
+    const ntPresent = ntVal ? Number(ntVal.present) || 0 : 0;
+    const ntAbsent = ntVal ? Number(ntVal.absent) || 0 : 0;
+
+    const listBoardingCount = absentStudents.filter((s) => s.isBoarding).length;
+    const listNgoaiTruCount = absentStudents.filter((s) => !s.isBoarding).length;
+
+    // RÀNG BUỘC 1: Khi tổng sĩ số báo CÓ MẶT ĐỦ (mainAbsent === 0)
+    if (mainAbsent === 0) {
+      if (bAbsent > 0) {
+        return {
+          isValid: false,
+          error: `Tổng sĩ số cả lớp báo có mặt đủ (0 vắng), nên số vắng Bán trú không thể là ${bAbsent} (phải bằng 0).`,
+        };
+      }
+      if (ntAbsent > 0) {
+        return {
+          isValid: false,
+          error: `Tổng sĩ số cả lớp báo có mặt đủ (0 vắng), nên số vắng Ngoại trú không thể là ${ntAbsent} (phải bằng 0).`,
+        };
+      }
+      if (absentStudents.length > 0) {
+        return {
+          isValid: false,
+          error: 'Tổng sĩ số cả lớp báo có mặt đủ (0 vắng), danh sách học sinh vắng phải để trống.',
+        };
+      }
+    }
+
+    // RÀNG BUỘC 2: Khi tổng sĩ số CÓ HỌC SINH VẮNG (mainAbsent > 0, ví dụ vắng 1, 2, 3...)
+    if (mainAbsent > 0) {
+      // 2.1 Số lượng trong danh sách vắng phải khớp chính xác với số vắng báo cáo
+      if (absentStudents.length !== mainAbsent) {
+        return {
+          isValid: false,
+          error: `Số lượng học sinh vắng báo cáo (${mainAbsent}) chưa khớp với danh sách học sinh vắng (${absentStudents.length} em).`,
+        };
+      }
+
+      // 2.2 Tất cả học sinh trong danh sách vắng phải có họ tên
+      const emptyIdx = absentStudents.findIndex((s) => !s.full_name.trim());
+      if (emptyIdx !== -1) {
+        return {
+          isValid: false,
+          error: `Vui lòng nhập hoặc chọn họ tên cho học sinh vắng thứ ${emptyIdx + 1}.`,
+        };
+      }
+
+      // 2.3 Ràng buộc số vắng bán trú không vượt quá tổng vắng cả lớp
+      if (bInd && bAbsent > mainAbsent) {
+        return {
+          isValid: false,
+          error: `Số học sinh vắng Bán trú (${bAbsent}) không được lớn hơn tổng số học sinh vắng cả lớp (${mainAbsent}).`,
+        };
+      }
+
+      // 2.4 Ràng buộc số liệu bán trú phải cân
+      if (bInd) {
+        if (bTotal > mainTotal) {
+          return {
+            isValid: false,
+            error: `Sĩ số bán trú (${bTotal}) không được vượt quá tổng sĩ số cả lớp (${mainTotal}).`,
+          };
+        }
+        if (inputMode !== 'MODE_3_ALL_THREE' && bPresent + bAbsent !== bTotal) {
+          return {
+            isValid: false,
+            error: `Số liệu bán trú chưa khớp: Có mặt (${bPresent}) + Vắng (${bAbsent}) phải bằng Tổng bán trú (${bTotal}).`,
+          };
+        }
+        if (bAbsent !== listBoardingCount) {
+          return {
+            isValid: false,
+            error: `Số vắng bán trú ở chỉ tiêu (${bAbsent}) chưa khớp với số học sinh bán trú trong danh sách vắng (${listBoardingCount} em).`,
+          };
+        }
+      }
+
+      // 2.5 Ràng buộc nếu có nhóm Ngoại trú
+      if (ntInd && bInd) {
+        if (bAbsent === 0 && ntAbsent === 0) {
+          return {
+            isValid: false,
+            error: `Lớp đang có ${mainAbsent} học sinh vắng, bắt buộc phải phân bổ cụ thể số học sinh vắng Bán trú hoặc Ngoại trú tương ứng (không được để cả 2 bằng 0).`,
+          };
+        }
+      }
+
+      if (ntInd) {
+        if (ntTotal > mainTotal) {
+          return {
+            isValid: false,
+            error: `Sĩ số ngoại trú (${ntTotal}) không được vượt quá tổng sĩ số cả lớp (${mainTotal}).`,
+          };
+        }
+        if (inputMode !== 'MODE_3_ALL_THREE' && ntPresent + ntAbsent !== ntTotal) {
+          return {
+            isValid: false,
+            error: `Số liệu ngoại trú chưa khớp: Có mặt (${ntPresent}) + Vắng (${ntAbsent}) phải bằng Tổng ngoại trú (${ntTotal}).`,
+          };
+        }
+        if (bAbsent + ntAbsent !== mainAbsent) {
+          return {
+            isValid: false,
+            error: `Tổng vắng cả lớp (${mainAbsent}) phải bằng Số vắng Bán trú (${bAbsent}) + Số vắng Ngoại trú (${ntAbsent}).`,
+          };
+        }
+        if (ntAbsent !== listNgoaiTruCount) {
+          return {
+            isValid: false,
+            error: `Số vắng ngoại trú ở chỉ tiêu (${ntAbsent}) chưa khớp với số học sinh ngoại trú trong danh sách vắng (${listNgoaiTruCount} em).`,
+          };
+        }
+      }
+    }
+
+    return { isValid: true, error: null };
   }, [selectedClassId, enabledIndicators, formValues, inputMode, absentStudents]);
+
+  const isValid = validationResult.isValid;
 
   // Save report
   const handleSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    
-    // Check validation again to show specific error
-    const mainId = enabledIndicators[0]?.id;
-    if (mainId) {
-      const mainVal = formValues[mainId];
-      const absentReported = Number(mainVal?.absent) || 0;
-      if (absentReported !== absentStudents.length) {
-        setToastMessage({
-          text: `Số lượng vắng mặt báo cáo (${absentReported}) không khớp với danh sách học sinh vắng (${absentStudents.length}). Vui lòng kiểm tra lại!`,
-          type: 'error',
-        });
-        return;
-      }
 
-      if (absentReported > 0) {
-        const emptyIdx = absentStudents.findIndex((s) => !s.full_name.trim());
-        if (emptyIdx !== -1) {
-          setToastMessage({
-            text: `Vui lòng nhập hoặc chọn họ tên cho học sinh vắng thứ ${emptyIdx + 1} trước khi gửi!`,
-            type: 'error',
-          });
-          return;
-        }
-      }
+    if (!validationResult.isValid && validationResult.error) {
+      setToastMessage({
+        text: validationResult.error,
+        type: 'error',
+      });
+      return;
     }
 
     if (isLocked || !isValid || !currentUser || !selectedClassId) return;
@@ -1681,6 +1963,14 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
             )}
           </div>
         </div>
+
+        {/* Validation Error Notice if invalid */}
+        {!isLocked && !isValid && validationResult.error && (
+          <div className="px-3 py-2 rounded-xl bg-amber-50 border border-amber-300 text-amber-900 text-xs font-semibold flex items-center gap-2 animate-in fade-in duration-150">
+            <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+            <span className="leading-snug">{validationResult.error}</span>
+          </div>
+        )}
 
         {/* Row 2: Nút CẬP NHẬT BÁO CÁO / GỬI BÁO CÁO (Full-width như hình gốc) */}
         <div>
