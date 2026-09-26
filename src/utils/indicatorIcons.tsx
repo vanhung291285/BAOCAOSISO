@@ -42,7 +42,7 @@ export const INDICATOR_ICON_OPTIONS: Array<{
     label: 'Dao thìa nĩa (HS bán trú ăn cơm)',
     shortLabel: 'Bán trú / Ăn cơm',
     Icon: Utensils,
-    desc: 'Học sinh bán trú, phục vụ ăn uống trưa tại trường',
+    desc: 'Học sinh bán trú, phục vụ ăn uống cả ngày tại trường',
     colorClass: 'bg-emerald-50 text-emerald-700 border-emerald-200',
   },
   {
