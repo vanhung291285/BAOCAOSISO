@@ -20,6 +20,7 @@ import { SettingsIndicatorsPage } from './pages/SettingsIndicatorsPage';
 import { SettingsReportTemplatePage } from './pages/SettingsReportTemplatePage';
 import { SettingsSupabasePage } from './pages/SettingsSupabasePage';
 import { ProfilePage } from './pages/ProfilePage';
+import { BoardingManagementPage } from './pages/BoardingManagementPage';
 import {
   School,
   LayoutDashboard,
@@ -170,6 +171,10 @@ const AppContent: React.FC = () => {
                 }}
                 onNavigate={handleNavigate}
               />
+            )}
+
+            {(currentPath === '/boarding' || currentPath === '/boarding-meals') && (
+              <BoardingManagementPage onNavigate={handleNavigate} />
             )}
 
             {(currentPath === '/reports/daily' || currentPath === '/daily-report' || currentPath === '/reports') && (
