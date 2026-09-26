@@ -18,6 +18,10 @@ import {
   SchoolWeekInfo,
   AppNotification,
   NotificationType,
+  Student,
+  BoardingDailyReport,
+  BoardingMealRecord,
+  BoardingMealSummaryRow,
 } from '../types';
 import { getSupabaseClient, isSupabaseConnected } from './supabase';
 import {
@@ -48,6 +52,7 @@ const STORAGE_KEYS = {
   OFF_DAYS: 'sso_school_off_days_v1',
   STUDENTS: 'sso_students_v1',
   NOTIFICATIONS: 'sso_notifications_v1',
+  BOARDING_REPORTS: 'sso_boarding_reports_v1',
 };
 
 export interface TableSyncStatus {
@@ -902,6 +907,204 @@ export const StorageService = {
     notifyRealtimeChange('students');
   },
 
+  // --- 5.6. Boarding Management & Daily Meal Reports ---
+  async getBoardingReports(): Promise<BoardingDailyReport[]> {
+    ensureInitialized();
+    const raw = localStorage.getItem(STORAGE_KEYS.BOARDING_REPORTS);
+    const list: BoardingDailyReport[] = raw ? JSON.parse(raw) : [];
+    return list;
+  },
+
+  async getBoardingReport(classId: string, date: string): Promise<BoardingDailyReport | null> {
+    const list = await this.getBoardingReports();
+    return list.find((r) => r.class_id === classId && r.date === date) || null;
+  },
+
+  async getBoardingReportsByDate(date: string): Promise<BoardingDailyReport[]> {
+    const list = await this.getBoardingReports();
+    return list.filter((r) => r.date === date);
+  },
+
+  async getBoardingReportsByClass(classId: string): Promise<BoardingDailyReport[]> {
+    const list = await this.getBoardingReports();
+    return list.filter((r) => r.class_id === classId).sort((a, b) => b.date.localeCompare(a.date));
+  },
+
+  async getBoardingReportsByClassAndMonth(classId: string, monthStr: string): Promise<BoardingDailyReport[]> {
+    const list = await this.getBoardingReports();
+    return list
+      .filter((r) => r.class_id === classId && r.date.startsWith(monthStr))
+      .sort((a, b) => a.date.localeCompare(b.date));
+  },
+
+  async saveBoardingReportsBulk(reports: BoardingDailyReport[], savedBy?: Profile): Promise<void> {
+    ensureInitialized();
+    const list = await this.getBoardingReports();
+    const now = new Date().toISOString();
+
+    for (const rep of reports) {
+      const idx = list.findIndex((r) => r.id === rep.id || (r.class_id === rep.class_id && r.date === rep.date));
+      const finalReport: BoardingDailyReport = {
+        ...rep,
+        updated_at: now,
+        submitted_at: rep.submitted_at || now,
+      };
+      if (idx >= 0) {
+        list[idx] = finalReport;
+      } else {
+        list.push(finalReport);
+      }
+    }
+
+    localStorage.setItem(STORAGE_KEYS.BOARDING_REPORTS, JSON.stringify(list));
+    notifyRealtimeChange('boarding_reports', { count: reports.length });
+  },
+
+  async saveBoardingReport(report: BoardingDailyReport, savedBy?: Profile): Promise<void> {
+    ensureInitialized();
+    const list = await this.getBoardingReports();
+    const idx = list.findIndex((r) => r.id === report.id || (r.class_id === report.class_id && r.date === report.date));
+    
+    const now = new Date().toISOString();
+    const finalReport: BoardingDailyReport = {
+      ...report,
+      updated_at: now,
+      submitted_at: report.submitted_at || now,
+    };
+
+    if (idx >= 0) {
+      list[idx] = finalReport;
+    } else {
+      list.push(finalReport);
+    }
+
+    localStorage.setItem(STORAGE_KEYS.BOARDING_REPORTS, JSON.stringify(list));
+
+    if (savedBy) {
+      const classes = await this.getClasses();
+      const cls = classes.find((c) => c.id === report.class_id);
+      await this.addLog({
+        user_id: savedBy.id,
+        user_name: savedBy.full_name,
+        user_role: savedBy.role,
+        action: 'UPDATE',
+        class_name: cls?.class_name ? `Bán trú Lớp ${cls.class_name}` : 'Báo ăn Bán trú',
+        report_date: report.date,
+        new_data: {
+          total_boarding: report.total_boarding_students,
+          breakfast: report.breakfast_count,
+          lunch: report.lunch_count,
+          dinner: report.dinner_count,
+          absent: report.absent_count,
+          total_meals: report.total_meals,
+        },
+      });
+    }
+
+    notifyRealtimeChange('boarding_reports', { classId: report.class_id, date: report.date });
+  },
+
+  async deleteBoardingReport(reportId: string): Promise<void> {
+    const list = await this.getBoardingReports();
+    const filtered = list.filter((r) => r.id !== reportId);
+    localStorage.setItem(STORAGE_KEYS.BOARDING_REPORTS, JSON.stringify(filtered));
+    notifyRealtimeChange('boarding_reports', { reportId });
+  },
+
+  async getBoardingSummaryByDate(date: string, campusId?: string): Promise<{
+    date: string;
+    totalClasses: number;
+    reportedClasses: number;
+    unreportedClasses: number;
+    totalBoarding: number;
+    totalBreakfast: number;
+    totalLunch: number;
+    totalDinner: number;
+    totalAbsent: number;
+    totalMeals: number;
+    rows: BoardingMealSummaryRow[];
+  }> {
+    ensureInitialized();
+    const classes = await this.getClasses();
+    const profiles = await this.getProfiles();
+    const students = await this.getStudents();
+    const boardingReports = await this.getBoardingReportsByDate(date);
+
+    let activeClasses = classes.filter((c) => c.active && !c.is_locked);
+    if (campusId && campusId !== 'all') {
+      activeClasses = activeClasses.filter((c) => c.campus_id === campusId);
+    }
+    activeClasses.sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0) || a.class_name.localeCompare(b.class_name));
+
+    let sumBoarding = 0;
+    let sumBreakfast = 0;
+    let sumLunch = 0;
+    let sumDinner = 0;
+    let sumAbsent = 0;
+    let sumMeals = 0;
+    let reportedCount = 0;
+
+    const rows: BoardingMealSummaryRow[] = activeClasses.map((cls) => {
+      const teacher = profiles.find((p) => p.id === cls.homeroom_teacher_id || (p.assigned_class_id === cls.id && p.role === 'GVCN'));
+      const classStudents = students.filter((s) => s.class_id === cls.id);
+      const classBoardingStudents = classStudents.filter((s) => s.isBoarding !== false);
+      const rep = boardingReports.find((r) => r.class_id === cls.id);
+
+      if (rep && (rep.status === 'SUBMITTED' || rep.status === 'LOCKED')) {
+        reportedCount++;
+        sumBoarding += rep.total_boarding_students;
+        sumBreakfast += rep.breakfast_count;
+        sumLunch += rep.lunch_count;
+        sumDinner += rep.dinner_count;
+        sumAbsent += rep.absent_count;
+        sumMeals += rep.total_meals;
+
+        return {
+          classItem: cls,
+          teacher,
+          totalBoarding: rep.total_boarding_students,
+          breakfastCount: rep.breakfast_count,
+          lunchCount: rep.lunch_count,
+          dinnerCount: rep.dinner_count,
+          absentCount: rep.absent_count,
+          totalMeals: rep.total_meals,
+          status: rep.status,
+          report: rep,
+        };
+      }
+
+      const estBoarding = classBoardingStudents.length;
+      sumBoarding += estBoarding;
+
+      return {
+        classItem: cls,
+        teacher,
+        totalBoarding: estBoarding,
+        breakfastCount: 0,
+        lunchCount: 0,
+        dinnerCount: 0,
+        absentCount: 0,
+        totalMeals: 0,
+        status: 'NOT_REPORTED',
+        report: rep || undefined,
+      };
+    });
+
+    return {
+      date,
+      totalClasses: activeClasses.length,
+      reportedClasses: reportedCount,
+      unreportedClasses: activeClasses.length - reportedCount,
+      totalBoarding: sumBoarding,
+      totalBreakfast: sumBreakfast,
+      totalLunch: sumLunch,
+      totalDinner: sumDinner,
+      totalAbsent: sumAbsent,
+      totalMeals: sumMeals,
+      rows,
+    };
+  },
+
   // --- 6. Profiles (Users) ---
   async getProfiles(): Promise<Profile[]> {
     ensureInitialized();
@@ -1667,7 +1870,7 @@ export const StorageService = {
         const total = val ? val.total_count : 0;
         const present = val ? val.present_count : 0;
         const absent = val ? val.absent_count : 0;
-        const rate = total > 0 ? (absent / total) * 100 : 0;
+        const rate = total > 0 ? Math.round((absent / total) * 1000) / 10 : 0;
 
         values[ig.id] = { total, present, absent, rate };
 
@@ -1683,8 +1886,8 @@ export const StorageService = {
       const mainAbsent = values[mainIndicator?.id]?.absent || 0;
       const mainPresent = values[mainIndicator?.id]?.present || 0;
 
-      const overallRate = mainTotal > 0 ? (mainAbsent / mainTotal) * 100 : 0;
-      const overallPresentRate = mainTotal > 0 ? (mainPresent / mainTotal) * 100 : 0;
+      const overallRate = mainTotal > 0 ? Math.round((mainAbsent / mainTotal) * 1000) / 10 : 0;
+      const overallPresentRate = mainTotal > 0 ? Math.round((mainPresent / mainTotal) * 1000) / 10 : 0;
 
       return {
         classItem: cls,
@@ -1704,15 +1907,15 @@ export const StorageService = {
 
     indicators.forEach((ig) => {
       const t = totals[ig.id];
-      t.rate = t.total > 0 ? (t.absent / t.total) * 100 : 0;
+      t.rate = t.total > 0 ? Math.round((t.absent / t.total) * 1000) / 10 : 0;
     });
 
     const mainIndicator = indicators.find((i) => i.code === 'ALL') || indicators[0];
     const mainSchoolTotal = totals[mainIndicator?.id]?.total || 0;
     const mainSchoolPresent = totals[mainIndicator?.id]?.present || 0;
     const mainSchoolAbsent = totals[mainIndicator?.id]?.absent || 0;
-    const mainSchoolRate = mainSchoolTotal > 0 ? (mainSchoolAbsent / mainSchoolTotal) * 100 : 0;
-    const mainSchoolPresentRate = mainSchoolTotal > 0 ? (mainSchoolPresent / mainSchoolTotal) * 100 : 0;
+    const mainSchoolRate = mainSchoolTotal > 0 ? Math.round((mainSchoolAbsent / mainSchoolTotal) * 1000) / 10 : 0;
+    const mainSchoolPresentRate = mainSchoolTotal > 0 ? Math.round((mainSchoolPresent / mainSchoolTotal) * 1000) / 10 : 0;
 
     return {
       date: reportDate,
