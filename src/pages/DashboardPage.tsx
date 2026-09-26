@@ -383,8 +383,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSele
             </div>
           </div>
 
-          {/* Stat 2: CÓ MẶT */}
-          <div className="bg-white rounded-2xl p-4 sm:p-5 border border-emerald-200/90 shadow-xs flex flex-col justify-between transition-all hover:shadow-md bg-gradient-to-b from-white to-emerald-50/30">
+            {/* Stat 2: CÓ MẶT */}
+          <div className="bg-white rounded-2xl p-4 sm:p-5 border border-emerald-200/90 shadow-xs flex flex-col justify-between transition-all hover:shadow-md bg-gradient-to-b from-white to-emerald-50/30 overflow-hidden">
             <div className="flex items-center justify-between">
               <span className="text-xs font-extrabold uppercase tracking-wider text-emerald-800">
                 🟢 CÓ MẶT
@@ -397,14 +397,14 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSele
               <div className="text-2xl sm:text-3xl font-black text-emerald-700 tracking-tight tabular-nums">
                 {aggregateData.overallSchool.present}
               </div>
-              <div className="text-[11px] text-emerald-700 font-medium mt-1">
-                Chiếm {aggregateData.overallSchool.presentRate}% sĩ số
+              <div className="text-[11px] text-emerald-700 font-medium mt-1 truncate">
+                Chiếm {Number(aggregateData.overallSchool.presentRate).toFixed(1)}% sĩ số
               </div>
             </div>
           </div>
 
           {/* Stat 3: VẮNG */}
-          <div className="bg-white rounded-2xl p-4 sm:p-5 border border-rose-200/90 shadow-xs flex flex-col justify-between transition-all hover:shadow-md bg-gradient-to-b from-white to-rose-50/30">
+          <div className="bg-white rounded-2xl p-4 sm:p-5 border border-rose-200/90 shadow-xs flex flex-col justify-between transition-all hover:shadow-md bg-gradient-to-b from-white to-rose-50/30 overflow-hidden">
             <div className="flex items-center justify-between">
               <span className="text-xs font-extrabold uppercase tracking-wider text-rose-800">
                 🔴 VẮNG
@@ -417,14 +417,14 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSele
               <div className="text-2xl sm:text-3xl font-black text-rose-600 tracking-tight tabular-nums">
                 {aggregateData.overallSchool.absent}
               </div>
-              <div className="text-[11px] text-rose-600 font-medium mt-1">
-                Tỷ lệ vắng {aggregateData.overallSchool.rate}%
+              <div className="text-[11px] text-rose-600 font-medium mt-1 truncate">
+                Tỷ lệ vắng {Number(aggregateData.overallSchool.rate).toFixed(1)}%
               </div>
             </div>
           </div>
 
           {/* Stat 4: TỶ LỆ CHUYÊN CẦN */}
-          <div className="bg-white rounded-2xl p-4 sm:p-5 border border-indigo-200/90 shadow-xs flex flex-col justify-between transition-all hover:shadow-md bg-gradient-to-b from-white to-indigo-50/30">
+          <div className="bg-white rounded-2xl p-4 sm:p-5 border border-indigo-200/90 shadow-xs flex flex-col justify-between transition-all hover:shadow-md bg-gradient-to-b from-white to-indigo-50/30 overflow-hidden">
             <div className="flex items-center justify-between">
               <span className="text-xs font-extrabold uppercase tracking-wider text-indigo-900">
                 📊 TỶ LỆ CHUYÊN CẦN
@@ -434,13 +434,13 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSele
               </div>
             </div>
             <div className="mt-3 space-y-1.5">
-              <div className="text-2xl sm:text-3xl font-black text-indigo-900 tracking-tight tabular-nums">
-                {aggregateData.overallSchool.presentRate}%
+              <div className="text-2xl sm:text-3xl font-black text-indigo-900 tracking-tight tabular-nums truncate">
+                {Number(aggregateData.overallSchool.presentRate).toFixed(1)}%
               </div>
               <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
                 <div
                   className="bg-indigo-600 h-2 rounded-full transition-all duration-500"
-                  style={{ width: `${aggregateData.overallSchool.presentRate}%` }}
+                  style={{ width: `${Math.min(100, Math.max(0, Number(aggregateData.overallSchool.presentRate)))}%` }}
                 />
               </div>
             </div>
