@@ -1274,7 +1274,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
           const tagLabel = isPrimary
             ? '👥 CHỈ TIÊU CHÍNH CẢ LỚP'
             : isBoarding
-            ? '🍽️ BÁN TRÚ (ĂN TRƯA TẠI TRƯỜNG)'
+            ? '🍽️ BÁN TRÚ (ĂN CẢ NGÀY)'
             : isNgoaiTru
             ? '🏡 NGOẠI TRÚ (KHÔNG ĂN BÁN TRÚ)'
             : 'CHỈ TIÊU BÁO CÁO';
