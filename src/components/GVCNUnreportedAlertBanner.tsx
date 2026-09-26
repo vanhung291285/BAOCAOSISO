@@ -4,7 +4,21 @@ import { useSchool } from '../contexts/SchoolContext';
 import { useNotifications } from '../contexts/NotificationContext';
 import { StorageService, subscribeRealtime } from '../services/storage';
 import { showScreenAlert } from '../utils/notificationAudio';
-import { AlertTriangle, Clock, ArrowRight, X, ChevronRight, BellRing, Volume2, VolumeX, AlertCircle, MonitorSmartphone, ShieldAlert } from 'lucide-react';
+import { MobileNotificationSetupModal } from './MobileNotificationSetupModal';
+import {
+  AlertTriangle,
+  Clock,
+  ArrowRight,
+  X,
+  ChevronRight,
+  BellRing,
+  Volume2,
+  VolumeX,
+  AlertCircle,
+  MonitorSmartphone,
+  ShieldAlert,
+  Smartphone,
+} from 'lucide-react';
 import { getTodayDateStr, formatDateVN } from '../utils/schoolWeeks';
 
 interface GVCNUnreportedAlertBannerProps {
@@ -31,6 +45,7 @@ export const GVCNUnreportedAlertBanner: React.FC<GVCNUnreportedAlertBannerProps>
   const [dismissed, setDismissed] = useState(false);
   const [isPlayingTest, setIsPlayingTest] = useState(false);
   const [hasReportedToday, setHasReportedToday] = useState<boolean | null>(null);
+  const [showSetupModal, setShowSetupModal] = useState(false);
   const [unreportedStats, setUnreportedStats] = useState<{
     todayReminders: number;
     totalReminders: number;
@@ -136,6 +151,17 @@ export const GVCNUnreportedAlertBanner: React.FC<GVCNUnreportedAlertBannerProps>
           </div>
 
           <div className="flex items-center gap-2 self-end sm:self-auto flex-shrink-0">
+            {/* Nút cài đặt chuông tự động trên điện thoại */}
+            <button
+              type="button"
+              onClick={() => setShowSetupModal(true)}
+              title="Hướng dẫn bật chuông và thông báo tự động trên điện thoại khi chưa mở web"
+              className="py-1.5 px-2.5 sm:py-2 sm:px-3 rounded-xl text-xs font-bold flex items-center gap-1.5 bg-white/20 hover:bg-white/30 text-white transition-all shadow-sm active:scale-95 cursor-pointer"
+            >
+              <Smartphone className="w-3.5 h-3.5 text-amber-300" />
+              <span className="hidden md:inline">Cài chuông ĐT</span>
+            </button>
+
             {/* Nút bật & thử chuông kèm thông báo ngoài màn hình */}
             <button
               type="button"
@@ -155,7 +181,7 @@ export const GVCNUnreportedAlertBanner: React.FC<GVCNUnreportedAlertBannerProps>
                   ? 'Đang phát chuông...'
                   : browserPermission !== 'granted'
                   ? 'BẬT BÁO NGOÀI MÀN HÌNH'
-                  : 'Thử chuông & Màn hình'}
+                  : 'Thử chuông'}
               </span>
             </button>
 
@@ -185,6 +211,11 @@ export const GVCNUnreportedAlertBanner: React.FC<GVCNUnreportedAlertBannerProps>
           </div>
         </div>
       </div>
+
+      <MobileNotificationSetupModal
+        isOpen={showSetupModal}
+        onClose={() => setShowSetupModal(false)}
+      />
     </aside>
   );
 };

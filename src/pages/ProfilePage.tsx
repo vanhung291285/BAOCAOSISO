@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useSchool } from '../contexts/SchoolContext';
 import { useNotifications } from '../contexts/NotificationContext';
 import { StorageService } from '../services/storage';
+import { MobileNotificationSetupModal } from '../components/MobileNotificationSetupModal';
 import {
   User,
   GraduationCap,
@@ -22,6 +23,8 @@ import {
   BellRing,
   AlertCircle,
   Clock,
+  Smartphone,
+  Sparkles,
 } from 'lucide-react';
 
 interface ProfilePageProps {
@@ -31,8 +34,9 @@ interface ProfilePageProps {
 export const ProfilePage: React.FC<ProfilePageProps> = ({ onNavigate }) => {
   const { currentUser } = useAuth();
   const { classes, settings, activeYear } = useSchool();
-  const { isSoundEnabled, toggleSound, testSound, isAudioBlocked } = useNotifications();
+  const { isSoundEnabled, toggleSound, testSound, isAudioBlocked, browserPermission } = useNotifications();
   const [testingSound, setTestingSound] = useState(false);
+  const [showSetupModal, setShowSetupModal] = useState(false);
   const [reportStats, setReportStats] = useState<{
     todayReminders: number;
     totalReminders: number;
@@ -283,69 +287,117 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onNavigate }) => {
         </div>
       </div>
 
-      {/* Cài đặt âm thanh chuông báo trên thiết bị / điện thoại */}
+      {/* Cài đặt âm thanh & Thông báo tự động trên thiết bị / điện thoại */}
       <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Volume2 className="w-5 h-5 text-blue-600" />
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-700 border border-blue-200 flex items-center justify-center font-bold shrink-0">
+              <Smartphone className="w-5 h-5" />
+            </div>
             <div>
-              <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
-                Cài Đặt Âm Thanh & Chuông Báo Trên Điện Thoại
+              <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                <span>Báo Thức & Chuông Tự Động Điện Thoại</span>
+                <span className="text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full lowercase">
+                  (kể cả khi chưa mở web)
+                </span>
               </h2>
               <p className="text-xs text-slate-500">
-                Phát âm thanh chuông nhắc nhở và rung điện thoại khi chưa báo cáo sĩ số
+                Tự động gửi thông báo màn hình khóa, đổ chuông và rung điện thoại nhắc GVCN nộp báo cáo
               </p>
             </div>
           </div>
 
           <button
             type="button"
-            onClick={() => toggleSound(!isSoundEnabled)}
-            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-              isSoundEnabled ? 'bg-blue-600' : 'bg-slate-300'
-            }`}
+            onClick={() => setShowSetupModal(true)}
+            className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-xs transition-all active:scale-95 cursor-pointer self-start sm:self-auto"
           >
-            <span
-              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
-                isSoundEnabled ? 'translate-x-5' : 'translate-x-0'
-              }`}
-            />
+            <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+            <span>Cài đặt chuông tự động</span>
           </button>
         </div>
 
-        <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-          <div className="space-y-1">
-            <div className="font-semibold text-slate-800 flex items-center gap-2">
-              <span>Trạng thái âm thanh:</span>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+          {/* Card 1: Trạng thái âm thanh & Chuông */}
+          <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                <Volume2 className="w-4 h-4 text-blue-600" />
+                Âm thanh chuông báo
+              </span>
+              <button
+                type="button"
+                onClick={() => toggleSound(!isSoundEnabled)}
+                className={`relative inline-flex h-5 w-10 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                  isSoundEnabled ? 'bg-blue-600' : 'bg-slate-300'
+                }`}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+                    isSoundEnabled ? 'translate-x-5' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+            </div>
+            <div className="text-[11px] text-slate-500">
               {isSoundEnabled ? (
-                <span className="text-emerald-700 font-bold flex items-center gap-1">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> Đang bật
+                <span className="text-emerald-700 font-semibold flex items-center gap-1">
+                  <CheckCircle2 className="w-3.5 h-3.5" /> Chuông đa tần số & Rung đang hoạt động
                 </span>
               ) : (
-                <span className="text-slate-500 font-bold">Đang tắt</span>
+                <span className="text-slate-500">Âm thanh đang tạm tắt</span>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={handleTestSound}
+              className={`w-full py-1.5 px-3 rounded-lg text-xs font-bold transition-all shadow-2xs flex items-center justify-center gap-1.5 active:scale-95 ${
+                testingSound
+                  ? 'bg-emerald-600 text-white animate-pulse'
+                  : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-300'
+              }`}
+            >
+              <Volume2 className="w-3.5 h-3.5 text-blue-600" />
+              <span>{testingSound ? 'Đang phát chuông...' : 'Thử loa chuông & Rung'}</span>
+            </button>
+          </div>
+
+          {/* Card 2: Thông báo ngoài màn hình khóa */}
+          <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                <BellRing className="w-4 h-4 text-indigo-600" />
+                Thông báo màn hình khóa
+              </span>
+              {browserPermission === 'granted' ? (
+                <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full flex items-center gap-1">
+                  <CheckCircle2 className="w-3 h-3" /> Đã bật
+                </span>
+              ) : (
+                <span className="text-[11px] font-semibold text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-md">
+                  Chưa kích hoạt
+                </span>
               )}
             </div>
             <div className="text-[11px] text-slate-500">
-              {isAudioBlocked
-                ? '⚠️ Trình duyệt đang chờ thao tác chạm đầu tiên để mở khóa âm thanh tự động.'
-                : '✅ Âm thanh đã sẵn sàng phát chuông khi có thông báo từ BGH hoặc nhắc nhở tự động.'}
+              Khung giờ tự động nhắc: <strong>06:45 • 07:00 • 07:15</strong> mỗi sáng
             </div>
+            <button
+              type="button"
+              onClick={() => setShowSetupModal(true)}
+              className="w-full py-1.5 px-3 rounded-lg text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 transition-all shadow-2xs flex items-center justify-center gap-1.5 active:scale-95 cursor-pointer"
+            >
+              <Smartphone className="w-3.5 h-3.5" />
+              <span>Xem hướng dẫn cài đặt</span>
+            </button>
           </div>
-
-          <button
-            type="button"
-            onClick={handleTestSound}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1.5 active:scale-95 whitespace-nowrap ${
-              testingSound
-                ? 'bg-emerald-600 text-white animate-pulse'
-                : 'bg-blue-600 hover:bg-blue-700 text-white'
-            }`}
-          >
-            <Volume2 className="w-3.5 h-3.5" />
-            <span>{testingSound ? 'Đang phát chuông...' : 'Thử chuông & Rung'}</span>
-          </button>
         </div>
       </div>
+
+      <MobileNotificationSetupModal
+        isOpen={showSetupModal}
+        onClose={() => setShowSetupModal(false)}
+      />
 
       {/* Thông tin nhà phát triển ứng dụng */}
       <div className="bg-gradient-to-br from-slate-900 to-blue-950 text-white rounded-2xl p-5 border border-slate-800 shadow-md">
