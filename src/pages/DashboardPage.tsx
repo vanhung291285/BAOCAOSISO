@@ -459,7 +459,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSele
                 </div>
                 <div>
                   <div className="text-[11px] font-bold text-teal-900 uppercase">
-                    🍱 Ăn bán trú tại trường
+                    🍱 Học sinh bán trú (Ăn cả ngày)
                   </div>
                   <div className="text-xs text-slate-500">
                     Báo ăn: <strong className="text-teal-800 font-bold">{aggregateData.totals[boardingHalf.id].present}</strong> / {aggregateData.totals[boardingHalf.id].total} học sinh
@@ -470,7 +470,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSele
                 <span className="text-lg font-black text-teal-800 tabular-nums">
                   {aggregateData.totals[boardingHalf.id].present}
                 </span>
-                <span className="text-[10px] text-teal-600 block">suất ăn trưa</span>
+                <span className="text-[10px] text-teal-600 block">học sinh ăn cả ngày</span>
               </div>
             </div>
           )}
