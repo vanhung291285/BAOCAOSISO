@@ -1313,10 +1313,18 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                     type="text"
                     inputMode="numeric"
                     pattern="[0-9]*"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    autoCapitalize="off"
+                    spellCheck={false}
                     disabled={isLocked}
                     placeholder="0"
                     value={vals.total === '' ? '' : vals.total}
-                    onFocus={(e) => e.target.select()}
+                    onFocus={() => {
+                      if (vals.total === 0 || vals.total === '0') {
+                        handleValueChange(indicator.id, 'total', '');
+                      }
+                    }}
                     onBlur={() => {
                       if (vals.total === '') {
                         handleValueChange(indicator.id, 'total', 0);
@@ -1355,10 +1363,18 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                     type="text"
                     inputMode="numeric"
                     pattern="[0-9]*"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    autoCapitalize="off"
+                    spellCheck={false}
                     disabled={isLocked || inputMode === 'MODE_2_TOTAL_ABSENT'}
                     placeholder="0"
                     value={vals.present === '' ? '' : vals.present}
-                    onFocus={(e) => e.target.select()}
+                    onFocus={() => {
+                      if (vals.present === 0 || vals.present === '0') {
+                        handleValueChange(indicator.id, 'present', '');
+                      }
+                    }}
                     onBlur={() => {
                       if (vals.present === '') {
                         handleValueChange(indicator.id, 'present', 0);
@@ -1399,10 +1415,18 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                     type="text"
                     inputMode="numeric"
                     pattern="[0-9]*"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    autoCapitalize="off"
+                    spellCheck={false}
                     disabled={isLocked || inputMode === 'MODE_1_TOTAL_PRESENT'}
                     placeholder="0"
                     value={vals.absent === '' ? '' : vals.absent}
-                    onFocus={(e) => e.target.select()}
+                    onFocus={() => {
+                      if (vals.absent === 0 || vals.absent === '0') {
+                        handleValueChange(indicator.id, 'absent', '');
+                      }
+                    }}
                     onBlur={() => {
                       if (vals.absent === '') {
                         handleValueChange(indicator.id, 'absent', 0);

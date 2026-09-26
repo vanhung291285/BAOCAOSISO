@@ -2034,7 +2034,7 @@ export const AttendanceRankingPage: React.FC<AttendanceRankingPageProps> = ({ on
                         max={100}
                         step={0.1}
                         value={configThresholdExcellent}
-                        onFocus={(e) => e.target.select()}
+                        autoComplete="off"
                         onChange={(e) => {
                           const val = e.target.value;
                           setConfigThresholdExcellent(val === '' ? ('' as any) : parseFloat(val));
@@ -2062,7 +2062,7 @@ export const AttendanceRankingPage: React.FC<AttendanceRankingPageProps> = ({ on
                         max={100}
                         step={0.1}
                         value={configThresholdGood}
-                        onFocus={(e) => e.target.select()}
+                        autoComplete="off"
                         onChange={(e) => {
                           const val = e.target.value;
                           setConfigThresholdGood(val === '' ? ('' as any) : parseFloat(val));
@@ -2090,7 +2090,7 @@ export const AttendanceRankingPage: React.FC<AttendanceRankingPageProps> = ({ on
                         max={100}
                         step={0.1}
                         value={configThresholdFair}
-                        onFocus={(e) => e.target.select()}
+                        autoComplete="off"
                         onChange={(e) => {
                           const val = e.target.value;
                           setConfigThresholdFair(val === '' ? ('' as any) : parseFloat(val));
@@ -2158,7 +2158,7 @@ export const AttendanceRankingPage: React.FC<AttendanceRankingPageProps> = ({ on
                             max={10}
                             step={0.1}
                             value={configEarlyBonusPoints}
-                            onFocus={(e) => e.target.select()}
+                            autoComplete="off"
                             onChange={(e) => {
                               const val = e.target.value;
                               setConfigEarlyBonusPoints(val === '' ? ('' as any) : parseFloat(val));
@@ -2186,7 +2186,7 @@ export const AttendanceRankingPage: React.FC<AttendanceRankingPageProps> = ({ on
                             max={20}
                             step={0.1}
                             value={configEarlyMaxBonus}
-                            onFocus={(e) => e.target.select()}
+                            autoComplete="off"
                             onChange={(e) => {
                               const val = e.target.value;
                               setConfigEarlyMaxBonus(val === '' ? ('' as any) : parseFloat(val));

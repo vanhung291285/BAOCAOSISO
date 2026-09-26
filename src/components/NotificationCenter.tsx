@@ -116,16 +116,16 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ onNaviga
 
         {/* Unread Counter Badge */}
         {unreadCount > 0 && (
-          <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 bg-rose-600 text-white text-[10px] font-black rounded-full flex items-center justify-center shadow-xs border-2 border-white animate-in zoom-in-50">
+          <span className="absolute -top-1.5 -right-1.5 z-20 min-w-[20px] h-5 px-1 bg-rose-600 text-white text-xs font-bold leading-none rounded-full flex items-center justify-center text-center ring-2 ring-white shadow-xs tabular-nums select-none pointer-events-none">
             {unreadCount > 99 ? '99+' : unreadCount}
           </span>
         )}
 
-        {/* Pulsing indicator for urgent reminder */}
-        {urgentAttendanceReminder && (
-          <span className="absolute top-1 right-1 flex h-2 w-2">
+        {/* Pulsing indicator for urgent reminder ONLY when no count badge is present */}
+        {urgentAttendanceReminder && unreadCount === 0 && (
+          <span className="absolute top-1 right-1 z-10 flex h-2.5 w-2.5">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
+            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500 ring-1 ring-white"></span>
           </span>
         )}
       </button>

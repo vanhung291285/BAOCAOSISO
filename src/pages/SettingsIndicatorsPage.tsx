@@ -292,7 +292,7 @@ export const SettingsIndicatorsPage: React.FC = () => {
                   <input
                     type="number"
                     value={formSortOrder}
-                    onFocus={(e) => e.target.select()}
+                    autoComplete="off"
                     onChange={(e) => {
                       const val = e.target.value;
                       setFormSortOrder(val === '' ? ('' as any) : Number(val));

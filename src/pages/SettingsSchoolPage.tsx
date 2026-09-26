@@ -650,7 +650,7 @@ export const SettingsSchoolPage: React.FC = () => {
                       max={100}
                       step={0.1}
                       value={formData.ranking_threshold_excellent ?? 98}
-                      onFocus={(e) => e.target.select()}
+                      autoComplete="off"
                       onChange={(e) => {
                         const val = e.target.value;
                         setFormData({ ...formData, ranking_threshold_excellent: val === '' ? ('' as any) : parseFloat(val) });
@@ -679,7 +679,7 @@ export const SettingsSchoolPage: React.FC = () => {
                       max={100}
                       step={0.1}
                       value={formData.ranking_threshold_good ?? 95}
-                      onFocus={(e) => e.target.select()}
+                      autoComplete="off"
                       onChange={(e) => {
                         const val = e.target.value;
                         setFormData({ ...formData, ranking_threshold_good: val === '' ? ('' as any) : parseFloat(val) });
@@ -708,7 +708,7 @@ export const SettingsSchoolPage: React.FC = () => {
                       max={100}
                       step={0.1}
                       value={formData.ranking_threshold_fair ?? 90}
-                      onFocus={(e) => e.target.select()}
+                      autoComplete="off"
                       onChange={(e) => {
                         const val = e.target.value;
                         setFormData({ ...formData, ranking_threshold_fair: val === '' ? ('' as any) : parseFloat(val) });
@@ -771,7 +771,7 @@ export const SettingsSchoolPage: React.FC = () => {
                         max={10}
                         step={0.1}
                         value={formData.early_report_bonus_points ?? 0.5}
-                        onFocus={(e) => e.target.select()}
+                        autoComplete="off"
                         onChange={(e) => {
                           const val = e.target.value;
                           setFormData({ ...formData, early_report_bonus_points: val === '' ? ('' as any) : parseFloat(val) });
@@ -799,7 +799,7 @@ export const SettingsSchoolPage: React.FC = () => {
                         max={20}
                         step={0.1}
                         value={formData.early_report_max_bonus ?? 2.5}
-                        onFocus={(e) => e.target.select()}
+                        autoComplete="off"
                         onChange={(e) => {
                           const val = e.target.value;
                           setFormData({ ...formData, early_report_max_bonus: val === '' ? ('' as any) : parseFloat(val) });

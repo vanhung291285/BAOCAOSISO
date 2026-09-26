@@ -1215,14 +1215,51 @@ export const StorageService = {
     const supabase = getSupabaseClient();
     if (supabase && isSupabaseConnected()) {
       try {
-        let repData: any = { ...report };
         const upsertPromise = (async () => {
-          let { error: repErr } = await supabase.from('daily_reports').upsert(repData);
+          // 1. Tự động kiểm tra / đẩy profile của người tạo lên Supabase nếu chưa có để tránh lỗi FK
+          if (user && user.id) {
+            try {
+              await supabase.from('profiles').upsert(user);
+            } catch (pErr) {
+              console.warn('Supabase upsert user profile warning:', pErr);
+            }
+          }
 
-          // Nếu Supabase báo lỗi chưa có cột reported_time (schema cache cũ) -> loại bỏ reported_time và thử lại
-          if (repErr && (repErr.message?.includes('reported_time') || repErr.code === 'PGRST204')) {
-            const { reported_time: _unused, ...repWithoutTime } = repData;
-            const retryRes = await supabase.from('daily_reports').upsert(repWithoutTime);
+          // 2. Tìm ID báo cáo thực tế trên Cloud nếu đã tồn tại cho (class_id, report_date)
+          let effectiveReportId = reportId;
+          try {
+            const { data: cloudRep } = await supabase
+              .from('daily_reports')
+              .select('id')
+              .eq('class_id', classId)
+              .eq('report_date', reportDate)
+              .maybeSingle();
+            if (cloudRep && cloudRep.id) {
+              effectiveReportId = cloudRep.id;
+            }
+          } catch (e) {
+            console.warn('Supabase check existing report error:', e);
+          }
+
+          let repData: any = {
+            ...report,
+            id: effectiveReportId,
+            report_date: reportDate,
+          };
+
+          let { error: repErr } = await supabase.from('daily_reports').upsert(repData, { onConflict: 'class_id,report_date' });
+
+          // Nếu Supabase báo lỗi chưa có cột (schema cũ) -> loại bỏ các cột mở rộng và thử lại
+          if (repErr && (repErr.message?.includes('reported_time') || repErr.message?.includes('absent_students') || repErr.message?.includes('locked_at') || repErr.code === 'PGRST204')) {
+            const { reported_time: _unused1, absent_students: _unused2, locked_at: _unused3, ...repWithoutExtra } = repData;
+            const retryRes = await supabase.from('daily_reports').upsert(repWithoutExtra, { onConflict: 'class_id,report_date' });
+            repErr = retryRes.error;
+          }
+
+          // Nếu lỗi khóa ngoại người tạo (23503) -> thử lại với created_by = null
+          if (repErr && (repErr.code === '23503' || repErr.message?.includes('foreign key') || repErr.message?.includes('profiles'))) {
+            const repWithoutCreator = { ...repData, created_by: null };
+            const retryRes = await supabase.from('daily_reports').upsert(repWithoutCreator, { onConflict: 'class_id,report_date' });
             repErr = retryRes.error;
           }
 
@@ -1231,9 +1268,48 @@ export const StorageService = {
             return;
           }
 
+          // 3. Chuẩn bị và đẩy daily_report_values với report_id chính xác
           if (newValues.length > 0) {
-            const { error: valErr } = await supabase.from('daily_report_values').upsert(newValues);
-            if (valErr) console.error('Supabase upsert daily_report_values error:', valErr);
+            // Lấy danh sách ID giá trị chỉ tiêu hiện có trên Cloud để tái sử dụng nếu cần
+            const cloudValKeyMap = new Map<string, string>();
+            try {
+              const { data: cloudVals } = await supabase
+                .from('daily_report_values')
+                .select('id, indicator_group_id')
+                .eq('report_id', effectiveReportId);
+              if (cloudVals) {
+                cloudVals.forEach((cv) => cloudValKeyMap.set(cv.indicator_group_id, cv.id));
+              }
+            } catch {}
+
+            const cloudValues = newValues.map((v) => ({
+              ...v,
+              id: cloudValKeyMap.get(v.indicator_group_id) || `val_${effectiveReportId}_${v.indicator_group_id}`,
+              report_id: effectiveReportId,
+              total_count: Math.max(0, Number(v.total_count) || 0),
+              present_count: Math.max(0, Number(v.present_count) || 0),
+              absent_count: Math.max(0, Number(v.absent_count) || 0),
+            }));
+
+            let { error: valErr } = await supabase
+              .from('daily_report_values')
+              .upsert(cloudValues, { onConflict: 'report_id,indicator_group_id' });
+
+            // Nếu gặp lỗi FK với indicator_groups, tự động đẩy indicator_groups trước rồi thử lại
+            if (valErr && (valErr.code === '23503' || valErr.message?.includes('indicator_groups'))) {
+              const indicators = await this.getIndicatorGroups();
+              if (indicators.length > 0) {
+                await supabase.from('indicator_groups').upsert(indicators);
+                const retryVal = await supabase
+                  .from('daily_report_values')
+                  .upsert(cloudValues, { onConflict: 'report_id,indicator_group_id' });
+                valErr = retryVal.error;
+              }
+            }
+
+            if (valErr) {
+              console.error('Supabase upsert daily_report_values error:', valErr);
+            }
           }
         })();
 
@@ -1354,7 +1430,7 @@ export const StorageService = {
     if (supabase && isSupabaseConnected()) {
       try {
         await supabase.from('daily_report_values').delete().eq('report_id', reportToDelete.id);
-        await supabase.from('daily_reports').delete().eq('id', reportToDelete.id);
+        await supabase.from('daily_reports').delete().eq('class_id', classId).eq('report_date', reportDate);
       } catch (err) {
         console.error('Supabase delete daily report error:', err);
       }
@@ -3100,6 +3176,130 @@ export const StorageService = {
   },
 
   /**
+   * Tải toàn bộ dữ liệu từ 1 bảng trên Supabase (hỗ trợ phân trang để lấy đủ 100% bản ghi)
+   */
+  async fetchAllRowsFromCloud(tableKey: string): Promise<any[]> {
+    const supabase = getSupabaseClient();
+    if (!supabase || !isSupabaseConnected()) return [];
+
+    const allRows: any[] = [];
+    const pageSize = 1000;
+    let from = 0;
+    let hasMore = true;
+
+    while (hasMore) {
+      try {
+        const { data, error } = await supabase
+          .from(tableKey)
+          .select('*')
+          .range(from, from + pageSize - 1);
+
+        if (error || !data || data.length === 0) {
+          hasMore = false;
+          break;
+        }
+
+        allRows.push(...data);
+        if (data.length < pageSize) {
+          hasMore = false;
+        } else {
+          from += pageSize;
+        }
+      } catch {
+        hasMore = false;
+        break;
+      }
+    }
+
+    return allRows;
+  },
+
+  /**
+   * Tải và hợp nhất dữ liệu từ 1 bảng trên Supabase về Local Storage
+   */
+  async syncTableFromSupabase(tableKey: string): Promise<{ success: boolean; message: string; count: number }> {
+    ensureInitialized();
+    const supabase = getSupabaseClient();
+    if (!supabase || !isSupabaseConnected()) {
+      return { success: false, message: 'Chưa kết nối tới Supabase Cloud.', count: 0 };
+    }
+
+    try {
+      if (tableKey === 'school_settings') {
+        const { data: settings } = await supabase.from('school_settings').select('*').limit(1).maybeSingle();
+        if (settings) {
+          localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
+          notifyRealtimeChange('settings');
+          return { success: true, message: 'Đã tải cấu hình nhà trường từ Supabase về máy!', count: 1 };
+        }
+        return { success: false, message: 'Chưa có dữ liệu cấu hình trên Supabase.', count: 0 };
+      }
+
+      const cloudRows = await this.fetchAllRowsFromCloud(tableKey);
+      if (cloudRows.length === 0) {
+        return { success: true, message: `Bảng ${tableKey} trên Supabase chưa có bản ghi nào.`, count: 0 };
+      }
+
+      const storageMap: Record<string, string> = {
+        school_years: STORAGE_KEYS.YEARS,
+        campuses: STORAGE_KEYS.CAMPUSES,
+        profiles: STORAGE_KEYS.PROFILES,
+        classes: STORAGE_KEYS.CLASSES,
+        indicator_groups: STORAGE_KEYS.INDICATORS,
+        students: STORAGE_KEYS.STUDENTS,
+        daily_reports: STORAGE_KEYS.REPORTS,
+        daily_report_values: STORAGE_KEYS.VALUES,
+        school_off_days: STORAGE_KEYS.OFF_DAYS,
+        notifications: STORAGE_KEYS.NOTIFICATIONS,
+        system_logs: STORAGE_KEYS.LOGS,
+      };
+
+      const storageKey = storageMap[tableKey];
+      if (storageKey) {
+        const rawLocal = localStorage.getItem(storageKey);
+        let localList: any[] = rawLocal ? JSON.parse(rawLocal) : [];
+
+        // Hợp nhất dữ liệu Cloud vào Local theo ID hoặc Unique Key
+        const localMap = new Map<string, any>();
+        localList.forEach((item) => {
+          if (item && item.id) localMap.set(item.id, item);
+        });
+
+        cloudRows.forEach((cItem) => {
+          if (cItem && cItem.id) {
+            localMap.set(cItem.id, { ...(localMap.get(cItem.id) || {}), ...cItem });
+          }
+        });
+
+        const merged = Array.from(localMap.values());
+        localStorage.setItem(storageKey, JSON.stringify(merged));
+        notifyRealtimeChange(tableKey as any);
+
+        return {
+          success: true,
+          message: `Đã tải và hợp nhất thành công ${cloudRows.length} bản ghi của bảng "${tableKey}" về máy!`,
+          count: merged.length,
+        };
+      }
+
+      return { success: false, message: `Bảng "${tableKey}" không hợp lệ.`, count: 0 };
+    } catch (err: any) {
+      return { success: false, message: `Lỗi tải bảng ${tableKey}: ${err?.message || err}`, count: 0 };
+    }
+  },
+
+  /**
+   * Đồng bộ 2 chiều (Two-Way Sync): Tải Cloud về -> Hợp nhất -> Đẩy ngược lên Cloud để 2 bên khớp 100%
+   */
+  async syncTableTwoWay(tableKey: string): Promise<{ success: boolean; message: string; count: number }> {
+    ensureInitialized();
+    // 1. Tải từ Cloud về trước để không làm mất dữ liệu trên Cloud
+    await this.syncTableFromSupabase(tableKey);
+    // 2. Đẩy toàn bộ dữ liệu hợp nhất lên Cloud
+    return await this.syncTableToSupabase(tableKey);
+  },
+
+  /**
    * Pulls every table & row from Supabase Cloud and saves to Local Storage
    */
   async syncAllFromSupabase(): Promise<{
@@ -3120,87 +3320,72 @@ export const StorageService = {
 
     try {
       const [
-        { data: settings },
-        { data: years },
-        { data: campuses },
-        { data: profiles },
-        { data: classes },
-        { data: indicators },
-        { data: students },
-        { data: reports },
-        { data: values },
-        { data: offDays },
-        { data: notifications },
-        { data: logs },
+        settingsRes,
+        years,
+        campuses,
+        profiles,
+        classes,
+        indicators,
+        students,
+        reports,
+        values,
+        offDays,
+        notifications,
+        logs,
       ] = await Promise.all([
         supabase.from('school_settings').select('*').limit(1).maybeSingle(),
-        supabase.from('school_years').select('*'),
-        supabase.from('campuses').select('*'),
-        supabase.from('profiles').select('*'),
-        supabase.from('classes').select('*'),
-        supabase.from('indicator_groups').select('*'),
-        supabase.from('students').select('*'),
-        supabase.from('daily_reports').select('*'),
-        supabase.from('daily_report_values').select('*'),
-        supabase.from('school_off_days').select('*'),
-        supabase.from('notifications').select('*').limit(100),
-        supabase.from('system_logs').select('*').limit(200),
+        this.fetchAllRowsFromCloud('school_years'),
+        this.fetchAllRowsFromCloud('campuses'),
+        this.fetchAllRowsFromCloud('profiles'),
+        this.fetchAllRowsFromCloud('classes'),
+        this.fetchAllRowsFromCloud('indicator_groups'),
+        this.fetchAllRowsFromCloud('students'),
+        this.fetchAllRowsFromCloud('daily_reports'),
+        this.fetchAllRowsFromCloud('daily_report_values'),
+        this.fetchAllRowsFromCloud('school_off_days'),
+        this.fetchAllRowsFromCloud('notifications'),
+        this.fetchAllRowsFromCloud('system_logs'),
       ]);
 
+      const settings = settingsRes?.data;
       if (settings) {
         localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
         counts.school_settings = 1;
       }
-      if (years && years.length > 0) {
-        localStorage.setItem(STORAGE_KEYS.YEARS, JSON.stringify(years));
-        counts.school_years = years.length;
-      }
-      if (campuses && campuses.length > 0) {
-        localStorage.setItem(STORAGE_KEYS.CAMPUSES, JSON.stringify(campuses));
-        counts.campuses = campuses.length;
-      }
-      if (profiles && profiles.length > 0) {
-        localStorage.setItem(STORAGE_KEYS.PROFILES, JSON.stringify(profiles));
-        counts.profiles = profiles.length;
-      }
-      if (classes && classes.length > 0) {
-        localStorage.setItem(STORAGE_KEYS.CLASSES, JSON.stringify(classes));
-        counts.classes = classes.length;
-      }
-      if (indicators && indicators.length > 0) {
-        localStorage.setItem(STORAGE_KEYS.INDICATORS, JSON.stringify(indicators));
-        counts.indicator_groups = indicators.length;
-      }
-      if (students && students.length > 0) {
-        localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(students));
-        counts.students = students.length;
-      }
-      if (reports && reports.length > 0) {
-        localStorage.setItem(STORAGE_KEYS.REPORTS, JSON.stringify(reports));
-        counts.daily_reports = reports.length;
-      }
-      if (values && values.length > 0) {
-        localStorage.setItem(STORAGE_KEYS.VALUES, JSON.stringify(values));
-        counts.daily_report_values = values.length;
-      }
-      if (offDays && offDays.length > 0) {
-        localStorage.setItem(STORAGE_KEYS.OFF_DAYS, JSON.stringify(offDays));
-        counts.school_off_days = offDays.length;
-      }
-      if (notifications && notifications.length > 0) {
-        localStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(notifications));
-        counts.notifications = notifications.length;
-      }
-      if (logs && logs.length > 0) {
-        localStorage.setItem(STORAGE_KEYS.LOGS, JSON.stringify(logs));
-        counts.system_logs = logs.length;
-      }
+
+      const updateMergedList = (storageKey: string, cloudList: any[]) => {
+        if (!cloudList || cloudList.length === 0) return 0;
+        const raw = localStorage.getItem(storageKey);
+        let current: any[] = raw ? JSON.parse(raw) : [];
+        const map = new Map<string, any>();
+        current.forEach((item) => {
+          if (item && item.id) map.set(item.id, item);
+        });
+        cloudList.forEach((item) => {
+          if (item && item.id) map.set(item.id, { ...(map.get(item.id) || {}), ...item });
+        });
+        const merged = Array.from(map.values());
+        localStorage.setItem(storageKey, JSON.stringify(merged));
+        return merged.length;
+      };
+
+      if (years && years.length > 0) counts.school_years = updateMergedList(STORAGE_KEYS.YEARS, years);
+      if (campuses && campuses.length > 0) counts.campuses = updateMergedList(STORAGE_KEYS.CAMPUSES, campuses);
+      if (profiles && profiles.length > 0) counts.profiles = updateMergedList(STORAGE_KEYS.PROFILES, profiles);
+      if (classes && classes.length > 0) counts.classes = updateMergedList(STORAGE_KEYS.CLASSES, classes);
+      if (indicators && indicators.length > 0) counts.indicator_groups = updateMergedList(STORAGE_KEYS.INDICATORS, indicators);
+      if (students && students.length > 0) counts.students = updateMergedList(STORAGE_KEYS.STUDENTS, students);
+      if (reports && reports.length > 0) counts.daily_reports = updateMergedList(STORAGE_KEYS.REPORTS, reports);
+      if (values && values.length > 0) counts.daily_report_values = updateMergedList(STORAGE_KEYS.VALUES, values);
+      if (offDays && offDays.length > 0) counts.school_off_days = updateMergedList(STORAGE_KEYS.OFF_DAYS, offDays);
+      if (notifications && notifications.length > 0) counts.notifications = updateMergedList(STORAGE_KEYS.NOTIFICATIONS, notifications);
+      if (logs && logs.length > 0) counts.system_logs = updateMergedList(STORAGE_KEYS.LOGS, logs);
 
       notifyRealtimeChange('all');
 
       return {
         success: true,
-        message: 'Đã tải và đồng bộ toàn bộ dữ liệu từ Supabase Cloud về máy thành công!',
+        message: 'Đã tải và hợp nhất toàn bộ dữ liệu từ Supabase Cloud về máy thành công!',
         counts,
       };
     } catch (err: any) {

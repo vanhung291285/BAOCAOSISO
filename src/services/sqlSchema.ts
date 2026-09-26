@@ -411,3 +411,233 @@ BEGIN
     END LOOP;
 END $$;
 `;
+
+export const generateFullDatabaseSqlScript = (): string => {
+  const escapeSql = (val: any): string => {
+    if (val === null || val === undefined) return 'NULL';
+    if (typeof val === 'boolean') return val ? 'TRUE' : 'FALSE';
+    if (typeof val === 'number') return isNaN(val) ? '0' : val.toString();
+    if (typeof val === 'object') {
+      const jsonStr = JSON.stringify(val).replace(/'/g, "''");
+      return `'${jsonStr}'::jsonb`;
+    }
+    const str = String(val).replace(/'/g, "''");
+    return `'${str}'`;
+  };
+
+  let sql = `${SUPABASE_SQL_SCHEMA}\n\n`;
+  sql += `-- ==============================================================================\n`;
+  sql += `-- DỮ LIỆU THỰC TẾ TRONG HỆ THỐNG (DATA DUMP INSERT / UPSERT)\n`;
+  sql += `-- Được tạo tự động từ ứng dụng lúc: ${new Date().toLocaleString('vi-VN')}\n`;
+  sql += `-- ==============================================================================\n\n`;
+
+  try {
+    // 1. school_settings
+    const rawSettings = localStorage.getItem('sso_school_settings');
+    if (rawSettings) {
+      const s = JSON.parse(rawSettings);
+      sql += `-- 1. DỮ LIỆU CẤU HÌNH TRƯỜNG\n`;
+      sql += `INSERT INTO public.school_settings (
+    id, school_name, short_name, department_name, sub_department_name,
+    address, commune, province, phone, email, website, logo_url,
+    principal_name, principal_title, reporter_name, reporter_title,
+    report_title, footer_text, developer_name, developer_contact,
+    primary_color, input_mode, enable_campuses, week1_start_date,
+    school_days_per_week, ranking_threshold_excellent, ranking_threshold_good,
+    ranking_threshold_fair, enable_early_report_bonus, early_report_deadline,
+    early_report_bonus_points, early_report_max_bonus, enable_auto_reminder,
+    auto_reminder_time, reminder_message_template
+) VALUES (
+    ${escapeSql(s.id || 'school_01')}, ${escapeSql(s.school_name)}, ${escapeSql(s.short_name)}, ${escapeSql(s.department_name)}, ${escapeSql(s.sub_department_name)},
+    ${escapeSql(s.address)}, ${escapeSql(s.commune)}, ${escapeSql(s.province)}, ${escapeSql(s.phone)}, ${escapeSql(s.email)}, ${escapeSql(s.website)}, ${escapeSql(s.logo_url)},
+    ${escapeSql(s.principal_name)}, ${escapeSql(s.principal_title || 'Hiệu trưởng')}, ${escapeSql(s.reporter_name)}, ${escapeSql(s.reporter_title || 'Người lập biểu')},
+    ${escapeSql(s.report_title || 'BÁO CÁO SĨ SỐ HỌC SINH')}, ${escapeSql(s.footer_text)}, ${escapeSql(s.developer_name || 'Vũ Văn Hùng')}, ${escapeSql(s.developer_contact || 'SĐT: 0984246993')},
+    ${escapeSql(s.primary_color || '#1d4ed8')}, ${escapeSql(s.input_mode || 'MODE_1_TOTAL_PRESENT')}, ${escapeSql(Boolean(s.enable_campuses))}, ${escapeSql(s.week1_start_date || '2026-09-07')},
+    ${escapeSql(Number(s.school_days_per_week) || 5)}, ${escapeSql(Number(s.ranking_threshold_excellent) || 98)}, ${escapeSql(Number(s.ranking_threshold_good) || 95)},
+    ${escapeSql(Number(s.ranking_threshold_fair) || 90)}, ${escapeSql(Boolean(s.enable_early_report_bonus))}, ${escapeSql(s.early_report_deadline || '07:30')},
+    ${escapeSql(Number(s.early_report_bonus_points) || 0.5)}, ${escapeSql(Number(s.early_report_max_bonus) || 2.5)}, ${escapeSql(Boolean(s.enable_auto_reminder))},
+    ${escapeSql(s.auto_reminder_time || '07:30')}, ${escapeSql(s.reminder_message_template)}
+) ON CONFLICT (id) DO UPDATE SET
+    school_name = EXCLUDED.school_name,
+    short_name = EXCLUDED.short_name,
+    principal_name = EXCLUDED.principal_name,
+    reporter_name = EXCLUDED.reporter_name,
+    updated_at = timezone('utc'::text, now());\n\n`;
+    }
+
+    // 2. school_years
+    const rawYears = localStorage.getItem('sso_school_years');
+    if (rawYears) {
+      const years = JSON.parse(rawYears);
+      if (Array.isArray(years) && years.length > 0) {
+        sql += `-- 2. NĂM HỌC (${years.length} bản ghi)\n`;
+        years.forEach((y) => {
+          sql += `INSERT INTO public.school_years (id, name, is_active, is_locked)
+VALUES (${escapeSql(y.id)}, ${escapeSql(y.name)}, ${escapeSql(Boolean(y.is_active))}, ${escapeSql(Boolean(y.is_locked))})
+ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, is_active = EXCLUDED.is_active, is_locked = EXCLUDED.is_locked;\n`;
+        });
+        sql += `\n`;
+      }
+    }
+
+    // 3. campuses
+    const rawCampuses = localStorage.getItem('sso_campuses');
+    if (rawCampuses) {
+      const campuses = JSON.parse(rawCampuses);
+      if (Array.isArray(campuses) && campuses.length > 0) {
+        sql += `-- 3. PHÂN HIỆU / ĐIỂM TRƯỜNG (${campuses.length} bản ghi)\n`;
+        campuses.forEach((c) => {
+          sql += `INSERT INTO public.campuses (id, name, active, principal_name, principal_title, reporter_name, reporter_title)
+VALUES (${escapeSql(c.id)}, ${escapeSql(c.name)}, ${escapeSql(Boolean(c.active))}, ${escapeSql(c.principal_name)}, ${escapeSql(c.principal_title)}, ${escapeSql(c.reporter_name)}, ${escapeSql(c.reporter_title)})
+ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, active = EXCLUDED.active;\n`;
+        });
+        sql += `\n`;
+      }
+    }
+
+    // 4. profiles
+    const rawProfiles = localStorage.getItem('sso_profiles');
+    if (rawProfiles) {
+      const profiles = JSON.parse(rawProfiles);
+      if (Array.isArray(profiles) && profiles.length > 0) {
+        sql += `-- 4. TÀI KHOẢN NGƯỜI DÙNG (${profiles.length} tài khoản)\n`;
+        profiles.forEach((p) => {
+          sql += `INSERT INTO public.profiles (id, full_name, email, role, assigned_class_id, active, phone)
+VALUES (${escapeSql(p.id)}, ${escapeSql(p.full_name)}, ${escapeSql(p.email)}, ${escapeSql(p.role)}, ${escapeSql(p.assigned_class_id)}, ${escapeSql(Boolean(p.active))}, ${escapeSql(p.phone)})
+ON CONFLICT (id) DO UPDATE SET full_name = EXCLUDED.full_name, email = EXCLUDED.email, role = EXCLUDED.role, assigned_class_id = EXCLUDED.assigned_class_id, active = EXCLUDED.active;\n`;
+        });
+        sql += `\n`;
+      }
+    }
+
+    // 5. classes
+    const rawClasses = localStorage.getItem('sso_classes');
+    if (rawClasses) {
+      const classes = JSON.parse(rawClasses);
+      if (Array.isArray(classes) && classes.length > 0) {
+        sql += `-- 5. LỚP HỌC (${classes.length} lớp)\n`;
+        classes.forEach((cls) => {
+          sql += `INSERT INTO public.classes (id, class_name, grade, school_year_id, campus_id, homeroom_teacher_id, active, is_locked, sort_order)
+VALUES (${escapeSql(cls.id)}, ${escapeSql(cls.class_name)}, ${escapeSql(cls.grade)}, ${escapeSql(cls.school_year_id)}, ${escapeSql(cls.campus_id)}, ${escapeSql(cls.homeroom_teacher_id)}, ${escapeSql(Boolean(cls.active))}, ${escapeSql(Boolean(cls.is_locked))}, ${escapeSql(Number(cls.sort_order) || 0)})
+ON CONFLICT (id) DO UPDATE SET class_name = EXCLUDED.class_name, grade = EXCLUDED.grade, school_year_id = EXCLUDED.school_year_id, campus_id = EXCLUDED.campus_id, homeroom_teacher_id = EXCLUDED.homeroom_teacher_id, is_locked = EXCLUDED.is_locked, sort_order = EXCLUDED.sort_order;\n`;
+        });
+        sql += `\n`;
+      }
+    }
+
+    // 6. indicator_groups
+    const rawIndicators = localStorage.getItem('sso_indicator_groups');
+    if (rawIndicators) {
+      const indicators = JSON.parse(rawIndicators);
+      if (Array.isArray(indicators) && indicators.length > 0) {
+        sql += `-- 6. NHÓM CHỈ TIÊU (${indicators.length} chỉ tiêu)\n`;
+        indicators.forEach((ind) => {
+          sql += `INSERT INTO public.indicator_groups (id, name, code, enabled, sort_order, show_total, show_present, show_absent, show_percentage, column_header_override, icon)
+VALUES (${escapeSql(ind.id)}, ${escapeSql(ind.name)}, ${escapeSql(ind.code)}, ${escapeSql(Boolean(ind.enabled))}, ${escapeSql(Number(ind.sort_order) || 0)}, ${escapeSql(Boolean(ind.show_total))}, ${escapeSql(Boolean(ind.show_present))}, ${escapeSql(Boolean(ind.show_absent))}, ${escapeSql(Boolean(ind.show_percentage))}, ${escapeSql(ind.column_header_override)}, ${escapeSql(ind.icon)})
+ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, code = EXCLUDED.code, enabled = EXCLUDED.enabled, sort_order = EXCLUDED.sort_order, icon = EXCLUDED.icon;\n`;
+        });
+        sql += `\n`;
+      }
+    }
+
+    // 7. students
+    const rawStudents = localStorage.getItem('sso_students');
+    if (rawStudents) {
+      const students = JSON.parse(rawStudents);
+      if (Array.isArray(students) && students.length > 0) {
+        sql += `-- 7. DANH SÁCH HỌC SINH (${students.length} học sinh)\n`;
+        students.forEach((s) => {
+          sql += `INSERT INTO public.students (id, class_id, full_name, address, is_boarding)
+VALUES (${escapeSql(s.id)}, ${escapeSql(s.class_id)}, ${escapeSql(s.full_name)}, ${escapeSql(s.address)}, ${escapeSql(Boolean(s.isBoarding ?? s.is_boarding))})
+ON CONFLICT (id) DO UPDATE SET full_name = EXCLUDED.full_name, class_id = EXCLUDED.class_id, address = EXCLUDED.address, is_boarding = EXCLUDED.is_boarding;\n`;
+        });
+        sql += `\n`;
+      }
+    }
+
+    // 8. daily_reports
+    const rawReports = localStorage.getItem('sso_daily_reports');
+    if (rawReports) {
+      const reports = JSON.parse(rawReports);
+      if (Array.isArray(reports) && reports.length > 0) {
+        sql += `-- 8. SỔ BÁO CÁO SĨ SỐ NGÀY (${reports.length} báo cáo)\n`;
+        reports.forEach((r) => {
+          const dateStr = String(r.report_date).split('T')[0];
+          sql += `INSERT INTO public.daily_reports (id, class_id, report_date, created_by, status, notes, absent_students, reported_time, locked_at)
+VALUES (${escapeSql(r.id)}, ${escapeSql(r.class_id)}, ${escapeSql(dateStr)}::date, ${escapeSql(r.created_by)}, ${escapeSql(r.status || 'SUBMITTED')}, ${escapeSql(r.notes)}, ${escapeSql(r.absent_students || [])}, ${escapeSql(r.reported_time)}, ${escapeSql(r.locked_at)})
+ON CONFLICT (class_id, report_date) DO UPDATE SET created_by = EXCLUDED.created_by, status = EXCLUDED.status, notes = EXCLUDED.notes, absent_students = EXCLUDED.absent_students, reported_time = EXCLUDED.reported_time, locked_at = EXCLUDED.locked_at;\n`;
+        });
+        sql += `\n`;
+      }
+    }
+
+    // 9. daily_report_values
+    const rawValues = localStorage.getItem('sso_daily_report_values');
+    if (rawValues) {
+      const values = JSON.parse(rawValues);
+      if (Array.isArray(values) && values.length > 0) {
+        sql += `-- 9. CHI TIẾT SỐ LIỆU CHỈ TIÊU (${values.length} dòng số liệu)\n`;
+        values.forEach((v) => {
+          sql += `INSERT INTO public.daily_report_values (id, report_id, indicator_group_id, total_count, present_count, absent_count)
+VALUES (${escapeSql(v.id)}, ${escapeSql(v.report_id)}, ${escapeSql(v.indicator_group_id)}, ${escapeSql(Number(v.total_count) || 0)}, ${escapeSql(Number(v.present_count) || 0)}, ${escapeSql(Number(v.absent_count) || 0)})
+ON CONFLICT (report_id, indicator_group_id) DO UPDATE SET total_count = EXCLUDED.total_count, present_count = EXCLUDED.present_count, absent_count = EXCLUDED.absent_count;\n`;
+        });
+        sql += `\n`;
+      }
+    }
+
+    // 10. school_off_days
+    const rawOffDays = localStorage.getItem('sso_school_off_days');
+    if (rawOffDays) {
+      const offDays = JSON.parse(rawOffDays);
+      if (Array.isArray(offDays) && offDays.length > 0) {
+        sql += `-- 10. LỊCH NGHỈ HỌC SINH (${offDays.length} ngày nghỉ)\n`;
+        offDays.forEach((o) => {
+          sql += `INSERT INTO public.school_off_days (id, date, name, type, applies_to)
+VALUES (${escapeSql(o.id)}, ${escapeSql(o.date)}::date, ${escapeSql(o.name)}, ${escapeSql(o.type || 'HOLIDAY')}, ${escapeSql(o.applies_to || 'ALL')})
+ON CONFLICT (date) DO UPDATE SET name = EXCLUDED.name, type = EXCLUDED.type, applies_to = EXCLUDED.applies_to;\n`;
+        });
+        sql += `\n`;
+      }
+    }
+
+    // 11. notifications
+    const rawNotifs = localStorage.getItem('sso_notifications');
+    if (rawNotifs) {
+      const notifs = JSON.parse(rawNotifs);
+      if (Array.isArray(notifs) && notifs.length > 0) {
+        sql += `-- 11. THÔNG BÁO HỆ THỐNG (${notifs.length} thông báo)\n`;
+        notifs.slice(0, 100).forEach((n) => {
+          sql += `INSERT INTO public.notifications (id, user_id, class_id, class_name, type, title, message, date, read, action_url, created_by_name, urgent)
+VALUES (${escapeSql(n.id)}, ${escapeSql(n.user_id)}, ${escapeSql(n.class_id)}, ${escapeSql(n.class_name)}, ${escapeSql(n.type)}, ${escapeSql(n.title)}, ${escapeSql(n.message)}, ${escapeSql(n.date)}, ${escapeSql(Boolean(n.read))}, ${escapeSql(n.action_url)}, ${escapeSql(n.created_by_name)}, ${escapeSql(Boolean(n.urgent))})
+ON CONFLICT (id) DO NOTHING;\n`;
+        });
+        sql += `\n`;
+      }
+    }
+
+    // 12. system_logs
+    const rawLogs = localStorage.getItem('sso_system_logs');
+    if (rawLogs) {
+      const logs = JSON.parse(rawLogs);
+      if (Array.isArray(logs) && logs.length > 0) {
+        sql += `-- 12. NHẬT KÝ HỆ THỐNG (${logs.length} dòng nhật ký)\n`;
+        logs.slice(0, 100).forEach((l) => {
+          sql += `INSERT INTO public.system_logs (id, user_id, user_name, user_role, action, class_name, report_date, old_data, new_data)
+VALUES (${escapeSql(l.id)}, ${escapeSql(l.user_id)}, ${escapeSql(l.user_name)}, ${escapeSql(l.user_role)}, ${escapeSql(l.action)}, ${escapeSql(l.class_name)}, ${l.report_date ? `${escapeSql(l.report_date)}::date` : 'NULL'}, ${escapeSql(l.old_data)}, ${escapeSql(l.new_data)})
+ON CONFLICT (id) DO NOTHING;\n`;
+        });
+        sql += `\n`;
+      }
+    }
+
+    sql += `-- ==============================================================================\n`;
+    sql += `-- HOÀN TẤT ĐẨY TOÀN BỘ CƠ SỞ DỮ LIỆU & DỮ LIỆU SĨ SỐ LÊN SUPABASE!\n`;
+    sql += `-- ==============================================================================\n`;
+  } catch (err: any) {
+    sql += `\n-- Lỗi sinh dữ liệu: ${err?.message || err}\n`;
+  }
+
+  return sql;
+};
+

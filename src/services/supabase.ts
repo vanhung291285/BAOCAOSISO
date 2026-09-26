@@ -25,16 +25,29 @@ export function getSupabaseCredentials(): { url: string; anonKey: string } {
   const envUrl = (import.meta as any).env?.VITE_SUPABASE_URL || '';
   const envKey = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || '';
 
+  let rawUrl = (localUrl || envUrl).trim();
+  let rawKey = (localKey || envKey).trim();
+
+  if (rawUrl.includes('YOUR_SUPABASE') || rawUrl.includes('placeholder')) {
+    rawUrl = '';
+  }
+  if (rawKey.includes('YOUR_SUPABASE') || rawKey.includes('placeholder')) {
+    rawKey = '';
+  }
+
+  // Remove trailing slashes
+  rawUrl = rawUrl.replace(/\/+$/, '');
+
   return {
-    url: (localUrl || envUrl).trim(),
-    anonKey: (localKey || envKey).trim(),
+    url: rawUrl,
+    anonKey: rawKey,
   };
 }
 
 export function saveSupabaseCredentials(url: string, anonKey: string) {
   if (typeof window === 'undefined') return;
 
-  const cleanUrl = url.trim();
+  const cleanUrl = url.trim().replace(/\/+$/, '');
   const cleanKey = anonKey.trim();
 
   if (cleanUrl && cleanKey) {
@@ -62,7 +75,7 @@ let lastKey = '';
 export function getSupabaseClient(): SupabaseClient | null {
   const { url, anonKey } = getSupabaseCredentials();
 
-  if (!url || !anonKey) {
+  if (!url || !anonKey || !url.startsWith('http')) {
     return null;
   }
 
@@ -88,7 +101,7 @@ export function getSupabaseClient(): SupabaseClient | null {
 
 export function isSupabaseConnected(): boolean {
   const { url, anonKey } = getSupabaseCredentials();
-  return Boolean(url && anonKey && url.startsWith('http'));
+  return Boolean(url && anonKey && url.startsWith('http') && !url.includes('YOUR_SUPABASE'));
 }
 
 /**
@@ -127,8 +140,11 @@ export async function testSupabaseConnection(): Promise<SupabaseConnectionStatus
     'profiles',
     'classes',
     'indicator_groups',
+    'students',
     'daily_reports',
     'daily_report_values',
+    'school_off_days',
+    'notifications',
     'system_logs',
   ];
 

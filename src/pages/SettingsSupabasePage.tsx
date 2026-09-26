@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { SUPABASE_SQL_SCHEMA } from '../services/sqlSchema';
+import { SUPABASE_SQL_SCHEMA, generateFullDatabaseSqlScript } from '../services/sqlSchema';
 import { StorageService, TableSyncStatus } from '../services/storage';
 import {
   getSupabaseCredentials,
@@ -25,11 +25,15 @@ import {
   ArrowRight,
   Info,
   Loader2,
+  FileCode,
+  Download,
 } from 'lucide-react';
 
 export const SettingsSupabasePage: React.FC = () => {
   const [copied, setCopied] = useState(false);
+  const [copiedFull, setCopiedFull] = useState(false);
   const [resetSuccess, setResetSuccess] = useState(false);
+  const [sqlViewMode, setSqlViewMode] = useState<'schema' | 'full'>('full');
 
   // Credentials
   const [supabaseUrl, setSupabaseUrl] = useState('');
@@ -46,6 +50,7 @@ export const SettingsSupabasePage: React.FC = () => {
   // Sync actions
   const [syncingToCloud, setSyncingToCloud] = useState(false);
   const [syncingFromCloud, setSyncingFromCloud] = useState(false);
+  const [syncingDual, setSyncingDual] = useState(false);
   const [syncingTableKey, setSyncingTableKey] = useState<string | null>(null);
   const [syncMessage, setSyncMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
 
@@ -185,6 +190,32 @@ export const SettingsSupabasePage: React.FC = () => {
     }
   };
 
+  const handleDualSync = async () => {
+    if (!connStatus?.connected) {
+      alert('Vui lòng kiểm tra và đảm bảo kết nối Supabase thành công trước.');
+      return;
+    }
+
+    setSyncingDual(true);
+    setSyncMessage({ type: 'info', text: 'Đang hợp nhất 2 chiều: Tải dữ liệu từ Cloud và đẩy dữ liệu máy này lên Cloud...' });
+
+    try {
+      await StorageService.syncAllFromSupabase();
+      const res = await StorageService.syncAllToSupabase();
+      if (res.success) {
+        setSyncMessage({ type: 'success', text: 'Hợp nhất 2 chiều hoàn tất! Toàn bộ bảng đã đồng bộ 100%.' });
+      } else {
+        setSyncMessage({ type: 'error', text: res.message });
+      }
+      const tableStatuses = await StorageService.getSupabaseSyncStatus();
+      setSyncStatusList(tableStatuses);
+    } catch (err: any) {
+      setSyncMessage({ type: 'error', text: `Lỗi đồng bộ hai chiều: ${err?.message || err}` });
+    } finally {
+      setSyncingDual(false);
+    }
+  };
+
   const handleSyncSingleTable = async (tableKey: string) => {
     if (!connStatus?.connected) {
       alert('Vui lòng kiểm tra và đảm bảo kết nối Supabase thành công trước khi đẩy dữ liệu.');
@@ -258,6 +289,27 @@ export const SettingsSupabasePage: React.FC = () => {
     setTimeout(() => setCopied(false), 2500);
   };
 
+  const handleCopyFullSql = () => {
+    const fullSql = generateFullDatabaseSqlScript();
+    navigator.clipboard.writeText(fullSql);
+    setCopiedFull(true);
+    setTimeout(() => setCopiedFull(false), 2500);
+  };
+
+  const handleDownloadSqlFile = () => {
+    const fullSql = sqlViewMode === 'full' ? generateFullDatabaseSqlScript() : SUPABASE_SQL_SCHEMA;
+    const filename = sqlViewMode === 'full' ? `supabase_full_dump_${new Date().toISOString().split('T')[0]}.sql` : 'supabase_schema.sql';
+    const blob = new Blob([fullSql], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   const handleResetSampleData = () => {
     if (
       window.confirm(
@@ -272,6 +324,8 @@ export const SettingsSupabasePage: React.FC = () => {
     }
   };
 
+  const displayedSql = sqlViewMode === 'full' ? generateFullDatabaseSqlScript() : SUPABASE_SQL_SCHEMA;
+
   return (
     <div className="max-w-5xl mx-auto space-y-6">
       {/* Settings Navigation Tabs */}
@@ -283,11 +337,11 @@ export const SettingsSupabasePage: React.FC = () => {
           <div className="flex items-center gap-2">
             <Database className="w-5 h-5 text-blue-600" />
             <h1 className="text-xl font-black text-slate-900 tracking-tight">
-              ĐỒNG BỘ CSDL SUPABASE CLOUD
+              ĐỒNG BỘ CSDL SUPABASE CLOUD & XUẤT SQL
             </h1>
           </div>
           <p className="text-xs text-slate-500 mt-0.5">
-            Đảm bảo 100% mọi thiết lập nhà trường, năm học, tài khoản, chỉ tiêu và số liệu sĩ số được lưu trữ bền vững trên đám mây
+            Đảm bảo 100% mọi thiết lập nhà trường, năm học, tài khoản, chỉ tiêu và số liệu sĩ số được lưu trữ bền vững trên đám mây hoặc chạy trực tiếp bằng SQL Script.
           </p>
         </div>
 
@@ -360,7 +414,7 @@ export const SettingsSupabasePage: React.FC = () => {
                       : 'bg-amber-100 text-amber-800'
                   }`}
                 >
-                  {connStatus?.connected ? 'ĐÃ KẾT NỐI CLOUD' : 'CHƯA KẾT NỐI HOẶC CẦN KHỞI TẠO SQL'}
+                  {connStatus?.connected ? 'ĐÃ KẾT NỐI CLOUD' : 'CHƯA KẾT NỐI HOẶC CẦN CHẠY SQL'}
                 </span>
               </div>
               <div className="text-xs text-slate-500 mt-0.5">
@@ -391,37 +445,48 @@ export const SettingsSupabasePage: React.FC = () => {
               Đồng bộ dữ liệu hai chiều (Dual Sync)
             </div>
             <p className="text-[11px] text-blue-700 mt-0.5">
-              Tất cả thao tác chỉnh sửa thiết lập và ghi sổ sĩ số đều được tự động lưu đồng thời vào Supabase Cloud.
+              Hợp nhất dữ liệu giữa điện thoại/máy tính với cơ sở dữ liệu Supabase Cloud.
             </p>
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
             <button
               type="button"
+              onClick={handleDualSync}
+              disabled={syncingDual || !connStatus?.connected}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-extrabold text-white bg-indigo-600 hover:bg-indigo-700 shadow-xs transition-colors disabled:opacity-50"
+              title="Tự động hợp nhất cả 2 chiều và giải quyết lệch số liệu"
+            >
+              {syncingDual ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+              <span>Hợp nhất 2 chiều (Ghép số liệu)</span>
+            </button>
+
+            <button
+              type="button"
               onClick={handleUploadAllToCloud}
               disabled={syncingToCloud || !connStatus?.connected}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-extrabold text-white bg-blue-600 hover:bg-blue-700 shadow-xs transition-colors disabled:opacity-50"
+              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-extrabold text-white bg-blue-600 hover:bg-blue-700 shadow-xs transition-colors disabled:opacity-50"
             >
               {syncingToCloud ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
               ) : (
                 <UploadCloud className="w-4 h-4" />
               )}
-              <span>Đẩy tất cả lên Supabase</span>
+              <span>Đẩy tất cả lên Cloud</span>
             </button>
 
             <button
               type="button"
               onClick={handlePullAllFromCloud}
               disabled={syncingFromCloud || !connStatus?.connected}
-              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-300 transition-colors disabled:opacity-50"
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-300 transition-colors disabled:opacity-50"
             >
               {syncingFromCloud ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
               ) : (
                 <DownloadCloud className="w-4 h-4" />
               )}
-              <span>Tải từ Supabase về</span>
+              <span>Tải từ Cloud về</span>
             </button>
           </div>
         </div>
@@ -446,24 +511,24 @@ export const SettingsSupabasePage: React.FC = () => {
                 <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
                 <div>
                   <span className="font-extrabold">
-                    Còn {syncStatusList.filter((s) => !s.inSync).length} bảng chưa đồng bộ hoàn tất:
+                    Trạng thái dữ liệu:
                   </span>
                   <span className="ml-1 text-amber-800 font-semibold">
-                    {syncStatusList.filter((s) => !s.inSync).map((s) => s.label.split('(')[0].trim()).join(', ')}
+                    {syncStatusList.filter((s) => !s.inSync).map((s) => `${s.label.split('(')[0].trim()} (${s.localCount} máy / ${s.cloudCount} cloud)`).join('; ')}
                   </span>
                   <p className="text-[11px] text-amber-700 mt-0.5">
-                    Hệ thống đã kích hoạt chế độ tự động khớp ID và bỏ qua xung đột khóa ngoại. Bạn có thể bấm nút bên phải để đẩy ngay.
+                    Nếu gặp khó khăn khi đẩy qua mạng, Thầy/Cô có thể bấm <b>"Sao chép toàn bộ SQL"</b> hoặc <b>"Tải file .sql"</b> ở bên dưới và dán vào <b>SQL Editor</b> của Supabase để chạy trực tiếp 100% thành công!
                   </p>
                 </div>
               </div>
               <button
                 type="button"
-                onClick={handleUploadAllToCloud}
-                disabled={syncingToCloud || !connStatus?.connected}
+                onClick={handleDualSync}
+                disabled={syncingDual || !connStatus?.connected}
                 className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-black text-white bg-amber-600 hover:bg-amber-700 shadow-xs transition-colors flex-shrink-0 disabled:opacity-50"
               >
-                {syncingToCloud ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <UploadCloud className="w-3.5 h-3.5" />}
-                <span>ĐẨY CÁC BẢNG NÀY LÊN CLOUD</span>
+                {syncingDual ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                <span>ĐỒNG BỘ HỢP NHẤT NGAY</span>
               </button>
             </div>
           )}
@@ -607,35 +672,69 @@ export const SettingsSupabasePage: React.FC = () => {
         </div>
       </div>
 
-      {/* SQL Script View & 1-Click Copy */}
+      {/* SQL Script View & 1-Click Copy / Download */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
         <div className="p-5 border-b border-slate-200 bg-slate-50 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div className="flex items-center gap-2">
             <Code2 className="w-5 h-5 text-blue-600" />
             <div>
               <h2 className="text-sm font-extrabold text-slate-900 uppercase tracking-wider">
-                KỊCH BẢN TẠO BẢNG SUPABASE (SQL DDL, RLS & REALTIME)
+                KỊCH BẢN TẠO BẢNG & ĐẨY DỮ LIỆU SQL (SUPABASE SQL EDITOR)
               </h2>
               <p className="text-xs text-slate-500">
-                1. Sao chép đoạn mã SQL bên dưới → 2. Mở Supabase SQL Editor → 3. Dán và bấm Run để tạo bảng trong 5 giây
+                1. Sao chép hoặc Tải file SQL → 2. Mở Supabase Dashboard → 3. Chọn mục <b>SQL Editor</b> → 4. Dán và bấm <b>Run</b>
               </p>
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={handleCopySql}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-xs transition-colors flex-shrink-0"
-          >
-            {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-            <span>{copied ? 'ĐÃ SAO CHÉP SQL!' : 'SAO CHÉP SQL SCHEMA'}</span>
-          </button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="bg-slate-200 p-1 rounded-xl flex items-center gap-1 text-[11px] font-bold">
+              <button
+                type="button"
+                onClick={() => setSqlViewMode('full')}
+                className={`px-2.5 py-1 rounded-lg transition-colors ${
+                  sqlViewMode === 'full' ? 'bg-white text-blue-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Cả Cấu Trúc + Dữ Liệu
+              </button>
+              <button
+                type="button"
+                onClick={() => setSqlViewMode('schema')}
+                className={`px-2.5 py-1 rounded-lg transition-colors ${
+                  sqlViewMode === 'schema' ? 'bg-white text-blue-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Chỉ Cấu Trúc Bảng
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleDownloadSqlFile}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-300 shadow-xs transition-colors"
+              title="Tải tệp tin .sql về máy tính để mở trên SQL Editor"
+            >
+              <Download className="w-4 h-4 text-slate-600" />
+              <span>Tải file .sql</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={sqlViewMode === 'full' ? handleCopyFullSql : handleCopySql}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-xs transition-colors flex-shrink-0"
+            >
+              {(sqlViewMode === 'full' ? copiedFull : copied) ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+              <span>{(sqlViewMode === 'full' ? copiedFull : copied) ? 'ĐÃ SAO CHÉP SQL!' : 'SAO CHÉP SQL'}</span>
+            </button>
+          </div>
         </div>
 
         <div className="p-4 bg-slate-950 text-slate-200 font-mono text-[11px] overflow-x-auto max-h-[440px]">
-          <pre>{SUPABASE_SQL_SCHEMA}</pre>
+          <pre>{displayedSql}</pre>
         </div>
       </div>
     </div>
   );
 };
+
