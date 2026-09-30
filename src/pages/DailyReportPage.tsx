@@ -1284,7 +1284,7 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
 
                       {/* 10. Tên học sinh nghỉ */}
                       <td className="border border-black py-1.5 px-2.5 text-left text-[11px] text-black whitespace-pre">
-                        {r.isReported ? r.studentNames || '' : ''}
+                        {r.studentNames || ''}
                       </td>
 
                       {/* 11. Địa chỉ */}

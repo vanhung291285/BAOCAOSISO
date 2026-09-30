@@ -904,7 +904,7 @@ export async function exportAttendanceMonthlyClassExcel(params: ExportAttendance
       rObj.getCell(7).value = '';
       rObj.getCell(8).value = '';
       rObj.getCell(9).value = '';
-      rObj.getCell(10).value = '';
+      rObj.getCell(10).value = r.studentNames || '';
       rObj.getCell(11).value = '';
       rObj.getCell(12).value = '';
       rObj.getCell(13).value = '';
@@ -1406,7 +1406,7 @@ export async function exportAttendanceMonthlyAllClassesExcel(params: ExportAtten
         row.getCell(7).value = '';
         row.getCell(8).value = '';
         row.getCell(9).value = '';
-        row.getCell(10).value = '';
+        row.getCell(10).value = r.studentNames || '';
         row.getCell(11).value = '';
         row.getCell(12).value = '';
         row.getCell(13).value = '';

@@ -2196,6 +2196,23 @@ export const StorageService = {
         if (!rpcErr && rpcRows && Array.isArray(rpcRows) && rpcRows.length > 0) {
           const rows = rpcRows.map((r: any) => {
             const isRep = Boolean(r.is_reported);
+            const parts = r.report_date.split('-');
+            const y_val = parseInt(parts[0], 10);
+            const m_val = parseInt(parts[1], 10) - 1;
+            const d_val = parseInt(parts[2], 10);
+            const dayOfWeek = new Date(y_val, m_val, d_val).getDay();
+
+            let finalNames = isRep ? (r.absent_students_names || '') : '';
+            if (dayOfWeek === 6 || dayOfWeek === 0) {
+              finalNames = 'Ngày nghỉ';
+            } else if (dayOfWeek === 5) {
+              if (finalNames) {
+                finalNames += '\n- Thứ 6 chỉ ăn sáng và ăn trưa';
+              } else {
+                finalNames = 'Thứ 6 chỉ ăn sáng và ăn trưa';
+              }
+            }
+
             return {
               date: r.report_date,
               dayLabel: r.day_label || `Ngày ${r.day_str}/${mStr}`,
@@ -2209,7 +2226,7 @@ export const StorageService = {
               baoAnBoarding: isRep ? Number(r.bao_an_boarding ?? defaultClassBoarding) : 0,
               totalNgoaiTru: isRep ? Number(r.total_ngoai_tru ?? Math.max(0, defaultClassTotal - defaultClassBoarding)) : 0,
               absentNgoaiTru: isRep ? Number(r.absent_ngoai_tru ?? 0) : 0,
-              studentNames: isRep ? (r.absent_students_names || '') : '',
+              studentNames: finalNames,
               studentAddresses: isRep ? '-' : '',
               absentRate: isRep ? Number(r.absent_rate ?? 0) : 0,
               presentRate: isRep ? Number(r.present_rate ?? 100) : 0,
@@ -2401,6 +2418,23 @@ export const StorageService = {
           namesStr = rep.notes;
         }
 
+        const parts_loc = dateStr.split('-');
+        const y_loc = parseInt(parts_loc[0], 10);
+        const m_loc = parseInt(parts_loc[1], 10) - 1;
+        const d_loc = parseInt(parts_loc[2], 10);
+        const dayOfWeek_loc = new Date(y_loc, m_loc, d_loc).getDay();
+
+        let finalNames_loc = namesStr || '';
+        if (dayOfWeek_loc === 6 || dayOfWeek_loc === 0) {
+          finalNames_loc = 'Ngày nghỉ';
+        } else if (dayOfWeek_loc === 5) {
+          if (finalNames_loc) {
+            finalNames_loc += '\n- Thứ 6 chỉ ăn sáng và ăn trưa';
+          } else {
+            finalNames_loc = 'Thứ 6 chỉ ăn sáng và ăn trưa';
+          }
+        }
+
         rows.push({
           date: dateStr,
           dayLabel,
@@ -2414,7 +2448,7 @@ export const StorageService = {
           baoAnBoarding,
           totalNgoaiTru,
           absentNgoaiTru,
-          studentNames: namesStr || '',
+          studentNames: finalNames_loc,
           studentAddresses: addrsStr || '-',
           absentRate,
           presentRate,
@@ -2422,6 +2456,19 @@ export const StorageService = {
         });
       } else {
         // Ngày chưa có báo cáo -> Để trống mặc định (0)
+        const parts_loc = dateStr.split('-');
+        const y_loc = parseInt(parts_loc[0], 10);
+        const m_loc = parseInt(parts_loc[1], 10) - 1;
+        const d_loc = parseInt(parts_loc[2], 10);
+        const dayOfWeek_loc = new Date(y_loc, m_loc, d_loc).getDay();
+
+        let finalNames_unrep = '';
+        if (dayOfWeek_loc === 6 || dayOfWeek_loc === 0) {
+          finalNames_unrep = 'Ngày nghỉ';
+        } else if (dayOfWeek_loc === 5) {
+          finalNames_unrep = 'Thứ 6 chỉ ăn sáng và ăn trưa';
+        }
+
         rows.push({
           date: dateStr,
           dayLabel,
@@ -2435,7 +2482,7 @@ export const StorageService = {
           baoAnBoarding: 0,
           totalNgoaiTru: 0,
           absentNgoaiTru: 0,
-          studentNames: '',
+          studentNames: finalNames_unrep,
           studentAddresses: '',
           absentRate: 0,
           presentRate: 0,
