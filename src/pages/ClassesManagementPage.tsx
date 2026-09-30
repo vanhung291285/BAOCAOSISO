@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useSchool } from '../contexts/SchoolContext';
 import { useAuth } from '../contexts/AuthContext';
 import { ClassItem, Profile, Student } from '../types';
+import { generateDefaultBoardingStudentsForClass } from '../utils/boardingRules';
 import {
   Layers,
   Plus,
@@ -117,6 +118,14 @@ export const ClassesManagementPage: React.FC = () => {
       setSuccessToast(`Đã thêm ${parsedStudents.length} học sinh thành công!`);
       setTimeout(() => setSuccessToast(''), 3000);
     }
+  };
+
+  const handleAutoGenerateStudentsForRosterClass = async () => {
+    if (!rosterClassId || !rosterClass) return;
+    const generated = generateDefaultBoardingStudentsForClass(rosterClassId, rosterClass.class_name);
+    await importStudents(generated);
+    setSuccessToast(`Đã tự động khởi tạo 35 học sinh cho lớp ${rosterClass.class_name}!`);
+    setTimeout(() => setSuccessToast(''), 3000);
   };
 
   const handleStartEditStudent = (s: Student) => {
@@ -1324,8 +1333,16 @@ export const ClassesManagementPage: React.FC = () => {
                 {rosterStudents.length === 0 ? (
                   <div className="text-center py-8 bg-slate-50 rounded-2xl border border-slate-200 border-dashed text-slate-400">
                     <User className="w-8 h-8 mx-auto opacity-35 mb-2" />
-                    <p className="text-xs font-bold text-slate-500">Chưa có học sinh nào được thêm</p>
-                    <p className="text-[10px] text-slate-400 mt-1">Sử dụng form bên trên để đăng ký danh sách lớp.</p>
+                    <p className="text-xs font-bold text-slate-500">Chưa có học sinh nào trong lớp {rosterClass?.class_name}</p>
+                    <p className="text-[10px] text-slate-400 mt-1 mb-3">Sử dụng form bên trên hoặc bấm nút tạo nhanh 35 học sinh mẫu chuẩn trường Xa Dung.</p>
+                    <button
+                      type="button"
+                      onClick={handleAutoGenerateStudentsForRosterClass}
+                      className="px-3.5 py-2 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-xs inline-flex items-center gap-1.5 transition-all cursor-pointer"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                      <span>Tạo nhanh DS 35 học sinh lớp {rosterClass?.class_name}</span>
+                    </button>
                   </div>
                 ) : (
                   <div className="border border-slate-200 rounded-2xl overflow-hidden bg-white max-h-[300px] overflow-y-auto">

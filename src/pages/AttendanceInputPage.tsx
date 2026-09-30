@@ -37,8 +37,11 @@ import {
   Globe,
   FileCheck2,
   School,
+  Download,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { getIndicatorMeta } from '../utils/indicatorIcons';
+import { exportMonthlyBoardingExcel } from '../utils/exportBoardingExcel';
 
 interface AttendanceInputPageProps {
   initialClassId?: string;
@@ -57,6 +60,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
   const { currentUser, isGVCN, isAdmin, isBGH } = useAuth();
   const { testSound, isSoundEnabled, isAudioBlocked } = useNotifications();
   const [isPlayingSoundTest, setIsPlayingSoundTest] = useState(false);
+  const [isExportingBoarding, setIsExportingBoarding] = useState(false);
 
   // Active indicators sorted by sort_order
   const enabledIndicators = useMemo(() => {
@@ -1007,6 +1011,38 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
     }
   };
 
+  // Xuất file Excel Báo ăn bán trú trong tháng (Sổ chấm cơm theo định mức)
+  const handleExportBoardingMonthlyFromAttendance = async (monthOverride?: string) => {
+    if (!selectedClass) {
+      setToastMessage({ text: 'Vui lòng chọn lớp học!', type: 'error' });
+      return;
+    }
+    const targetMonth = monthOverride || selectedDate.substring(0, 7); // 'YYYY-MM'
+    setIsExportingBoarding(true);
+    try {
+      await exportMonthlyBoardingExcel({
+        classId: selectedClassId,
+        className: selectedClass.class_name,
+        campusName: selectedCampus?.name || 'Suối Lư',
+        schoolName: settings?.school_name || 'TRƯỜNG PTDTBT THCS XA DUNG',
+        monthStr: targetMonth,
+        students: students,
+        teacherName: currentUser?.full_name || 'GVCN Lớp ' + selectedClass.class_name,
+        principalName: settings?.principal_name || 'Hiệu trưởng',
+      });
+      const [y, m] = targetMonth.split('-');
+      setToastMessage({
+        text: `Đã xuất thành công biểu tổng hợp ăn bán trú Tháng ${m}/${y} lớp ${selectedClass.class_name}!`,
+        type: 'success',
+      });
+    } catch (e: any) {
+      console.error(e);
+      setToastMessage({ text: e?.message || 'Có lỗi xảy ra khi xuất biểu mẫu ăn bán trú!', type: 'error' });
+    } finally {
+      setIsExportingBoarding(false);
+    }
+  };
+
   // Main stats for mobile bar & header summary
   const mainVal = enabledIndicators[0] ? formValues[enabledIndicators[0].id] || { total: 0, present: 0, absent: 0 } : { total: 0, present: 0, absent: 0 };
   const mainTotal = mainVal.total || 0;
@@ -1143,6 +1179,31 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                   : 'Thử chuông'}
               </span>
             </button>
+
+            {/* Nút Xuất Excel Báo Ăn Bán Trú Trong Tháng cho GVCN */}
+            <button
+              type="button"
+              onClick={() => handleExportBoardingMonthlyFromAttendance()}
+              disabled={isExportingBoarding}
+              title={`Xuất file Excel Sổ chấm cơm & Biểu tổng hợp các ngày ăn bán trú Tháng ${selectedDate.substring(5, 7)}/${selectedDate.substring(0, 4)} của lớp`}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-black bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs active:scale-95 transition-all cursor-pointer disabled:opacity-50"
+            >
+              <FileSpreadsheet className="w-4 h-4" />
+              <span>{isExportingBoarding ? 'Đang xuất...' : `Xuất Excel Báo Ăn Tháng ${Number(selectedDate.substring(5, 7))}`}</span>
+              <Download className="w-3.5 h-3.5 ml-0.5" />
+            </button>
+
+            {onNavigate && (
+              <button
+                type="button"
+                onClick={() => onNavigate('/reports/boarding-monthly')}
+                className="hidden md:inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-300 transition-colors cursor-pointer"
+                title="Mở toàn bộ Sổ chấm cơm bán trú theo tháng của lớp"
+              >
+                <Utensils className="w-3.5 h-3.5 text-amber-600" />
+                <span>Sổ chấm cơm</span>
+              </button>
+            )}
 
             {onNavigate && (
               <button
@@ -1572,6 +1633,37 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                     KHÔNG ĂN TẠI TRƯỜNG
                   </div>
                 </div>
+              </div>
+            </div>
+
+            {/* Thanh công cụ Xuất Excel Báo ăn bán trú trong tháng dành cho GVCN */}
+            <div className="mt-3.5 pt-3 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-slate-50/70 p-3 rounded-xl border border-slate-200/80">
+              <div className="text-xs text-slate-700 font-semibold flex items-center gap-2">
+                <FileSpreadsheet className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>Biểu tổng hợp các ngày ăn trong tháng của học sinh bán trú (Sổ chấm cơm theo định mức S - T - T)</span>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleExportBoardingMonthlyFromAttendance()}
+                  disabled={isExportingBoarding}
+                  className="px-3.5 py-1.5 rounded-xl text-xs font-black text-white bg-emerald-600 hover:bg-emerald-700 shadow-xs flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                  title="Tải về file Excel biểu tổng hợp các ngày ăn bán trú trong tháng của học sinh theo mẫu quy định"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>{isExportingBoarding ? 'Đang xuất Excel...' : `Xuất Excel Sổ Chấm Cơm Tháng ${Number(selectedDate.substring(5, 7))}`}</span>
+                </button>
+                {onNavigate && (
+                  <button
+                    type="button"
+                    onClick={() => onNavigate('/reports/boarding-monthly')}
+                    className="px-3 py-1.5 rounded-xl text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 transition-colors flex items-center gap-1 cursor-pointer"
+                    title="Xem biểu mẫu trực quan và điều chỉnh bữa ăn bán trú"
+                  >
+                    <Utensils className="w-3.5 h-3.5 text-blue-600" />
+                    <span>Xem Sổ chấm cơm</span>
+                  </button>
+                )}
               </div>
             </div>
           </div>

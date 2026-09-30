@@ -4,8 +4,9 @@ import { useSchool } from '../contexts/SchoolContext';
 import { useAuth } from '../contexts/AuthContext';
 import { StorageService } from '../services/storage';
 import { Student, BoardingDailyReport, BoardingMealRecord } from '../types';
-import { getMealScheduleForDate, buildDefaultMealRecords } from '../utils/boardingRules';
+import { getMealScheduleForDate, buildDefaultMealRecords, generateDefaultBoardingStudentsForClass } from '../utils/boardingRules';
 import { formatDateVN } from '../utils/schoolWeeks';
+import { exportMonthlyBoardingExcel } from '../utils/exportBoardingExcel';
 import {
   Calendar,
   Download,
@@ -346,117 +347,39 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
   };
 
   // Export exact matching Excel form
-  const handleExportExcel = () => {
+  const handleExportExcel = async () => {
     try {
-      const rows: any[][] = [];
-
-      // Row 1: Header Trường
-      rows.push(['TRƯỜNG PTDTBT THCS XA DUNG', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '']);
-      // Row 2: Header Phân hiệu
-      rows.push([`PHÂN HIỆU: ${currentCampus?.name?.toUpperCase() || 'SUỐI LƯ'}`, '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '']);
-      // Row 3: Blank
-      rows.push([]);
-      // Row 4: Main Title
-      rows.push(['', '', '', '', '', '', '', '', '', '', '', `SỔ CHẤM CƠM LỚP: ${currentClass?.class_name?.toUpperCase() || ''} THÁNG ${monthNum}/${yearNum}`]);
-      // Row 5: Blank
-      rows.push([]);
-
-      // Row 6: Table Header 1 (Ngày)
-      const hRow1: any[] = ['STT', 'Họ và tên'];
-      monthDays.forEach((d) => {
-        hRow1.push(d.dayNum, '', '');
+      if (!currentClass) return;
+      await exportMonthlyBoardingExcel({
+        classId: selectedClassId,
+        className: currentClass.class_name,
+        campusName: currentCampus?.name || 'Suối Lư',
+        schoolName: 'TRƯỜNG PTDTBT THCS XA DUNG',
+        monthStr: selectedMonth,
+        students: students, // Pass all students so export function can auto-generate if empty
+        teacherName: currentUser?.full_name || 'Giáo viên chủ nhiệm',
+        principalName: 'Hiệu trưởng',
+        existingMatrix: Object.keys(mealMatrix).length > 0 ? mealMatrix : undefined,
       });
-      hRow1.push('Số ngày ăn trong tháng', '', '', '', '', '', 'Ngày ăn thực');
-      rows.push(hRow1);
-
-      // Row 7: Table Header 2 (Thứ)
-      const hRow2: any[] = ['', ''];
-      monthDays.forEach((d) => {
-        hRow2.push(d.dayOfWeekShort, '', '');
-      });
-      hRow2.push('Số ngày báo ăn', '', '', 'Số ngày không báo ăn', '', '', '');
-      rows.push(hRow2);
-
-      // Row 8: Table Header 3 (Bữa: S, T, T)
-      const hRow3: any[] = ['', ''];
-      monthDays.forEach(() => {
-        hRow3.push('S', 'T', 'T');
-      });
-      hRow3.push('S', 'T', 'T', 'S', 'T', 'T', '');
-      rows.push(hRow3);
-
-      // Rows for each student
-      classBoardingStudents.forEach((st, idx) => {
-        const rData: any[] = [idx + 1, st.full_name];
-        const stDays = mealMatrix[st.id] || {};
-
-        monthDays.forEach((d) => {
-          const dRec = stDays[d.dateStr];
-          rData.push(
-            dRec?.breakfast ? '+' : '',
-            dRec?.lunch ? '+' : '',
-            dRec?.dinner ? '+' : ''
-          );
-        });
-
-        const sum = studentSummaries.summaries[st.id] || {
-          eatenBreakfast: 0,
-          eatenLunch: 0,
-          eatenDinner: 0,
-          missedBreakfast: 0,
-          missedLunch: 0,
-          missedDinner: 0,
-          actualDays: 0,
-        };
-
-        rData.push(
-          sum.eatenBreakfast,
-          sum.eatenLunch,
-          sum.eatenDinner,
-          sum.missedBreakfast,
-          sum.missedLunch,
-          sum.missedDinner,
-          sum.actualDays
-        );
-
-        rows.push(rData);
-      });
-
-      const ws = XLSX.utils.aoa_to_sheet(rows);
-
-      // Create Merges for headers
-      const merges: XLSX.Range[] = [
-        // Title merge
-        { s: { r: 3, c: 5 }, e: { r: 3, c: 25 } },
-        // STT & Họ và tên merges
-        { s: { r: 5, c: 0 }, e: { r: 7, c: 0 } },
-        { s: { r: 5, c: 1 }, e: { r: 7, c: 1 } },
-      ];
-
-      // Merge days (every 3 columns)
-      let colIdx = 2;
-      monthDays.forEach(() => {
-        // Merge Ngày row
-        merges.push({ s: { r: 5, c: colIdx }, e: { r: 5, c: colIdx + 2 } });
-        // Merge Thứ row
-        merges.push({ s: { r: 6, c: colIdx }, e: { r: 6, c: colIdx + 2 } });
-        colIdx += 3;
-      });
-
-      // Merge summary group
-      merges.push({ s: { r: 5, c: colIdx }, e: { r: 5, c: colIdx + 5 } }); // Số ngày ăn trong tháng
-      merges.push({ s: { r: 6, c: colIdx }, e: { r: 6, c: colIdx + 2 } }); // Số ngày báo ăn
-      merges.push({ s: { r: 6, c: colIdx + 3 }, e: { r: 6, c: colIdx + 5 } }); // Số ngày không báo ăn
-
-      ws['!merges'] = merges;
-
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, `SoChamCom_T${monthNum}`);
-      XLSX.writeFile(wb, `So_Cham_Com_Lop_${currentClass?.class_name || ''}_Thang_${monthNum}_${yearNum}.xlsx`);
-      showToast('Đã xuất file Excel Sổ Chấm Cơm chuẩn biểu mẫu!');
-    } catch (e) {
+      showToast('Đã xuất file Excel Sổ Chấm Cơm chuẩn biểu mẫu thành công!');
+    } catch (e: any) {
       console.error(e);
-      showToast('Lỗi khi xuất file Excel!', 'error');
+      showToast(e?.message || 'Lỗi khi xuất file Excel!', 'error');
+    }
+  };
+
+  const [isGeneratingStudents, setIsGeneratingStudents] = useState(false);
+  const handleGenerateDefaultStudents = async () => {
+    if (!currentClass) return;
+    setIsGeneratingStudents(true);
+    try {
+      const defaultStds = generateDefaultBoardingStudentsForClass(selectedClassId, currentClass.class_name);
+      await StorageService.saveStudents(defaultStds);
+      showToast(`Đã khởi tạo thành công 35 học sinh bán trú lớp ${currentClass.class_name}!`);
+    } catch (e: any) {
+      showToast(e?.message || 'Lỗi khi khởi tạo danh sách học sinh!', 'error');
+    } finally {
+      setIsGeneratingStudents(false);
     }
   };
 
@@ -584,8 +507,35 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
             <span className="text-xs font-semibold">Đang tải dữ liệu sổ chấm cơm tháng...</span>
           </div>
         ) : classBoardingStudents.length === 0 ? (
-          <div className="py-16 text-center text-slate-500 text-xs">
-            Lớp này chưa có học sinh bán trú. Thầy/Cô vui lòng chuyển sang tab "Danh sách HS bán trú" để thêm học sinh.
+          <div className="py-12 px-4 text-center max-w-lg mx-auto">
+            <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto mb-3 border border-amber-200">
+              <FileSpreadsheet className="w-6 h-6" />
+            </div>
+            <h3 className="text-sm font-bold text-slate-900 mb-1">
+              Lớp {currentClass?.class_name || ''} chưa có danh sách học sinh bán trú
+            </h3>
+            <p className="text-xs text-slate-500 mb-4 leading-relaxed">
+              Thầy/Cô có thể bấm nút bên dưới để tạo nhanh danh sách 35 học sinh bán trú mẫu theo đặc thù trường PTDTBT THCS Xa Dung, hoặc bấm nút Xuất Excel ở trên để hệ thống tự động điền và tạo file.
+            </p>
+            <div className="flex flex-wrap items-center justify-center gap-2.5">
+              <button
+                type="button"
+                onClick={handleGenerateDefaultStudents}
+                disabled={isGeneratingStudents}
+                className="px-4 py-2.5 rounded-xl text-xs font-black text-white bg-blue-600 hover:bg-blue-700 shadow-sm transition-all cursor-pointer flex items-center gap-1.5"
+              >
+                <Sparkles className="w-4 h-4 text-amber-300" />
+                <span>{isGeneratingStudents ? 'Đang tạo danh sách...' : `Tạo nhanh DS 35 học sinh lớp ${currentClass?.class_name || ''}`}</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleExportExcel}
+                className="px-4 py-2.5 rounded-xl text-xs font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 transition-all cursor-pointer flex items-center gap-1.5"
+              >
+                <Download className="w-4 h-4 text-emerald-700" />
+                <span>Xuất file Excel mẫu ngay</span>
+              </button>
+            </div>
           </div>
         ) : (
           /* Table Sheet Grid */

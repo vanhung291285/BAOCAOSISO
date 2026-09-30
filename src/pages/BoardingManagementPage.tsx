@@ -15,6 +15,7 @@ import { getTodayDateStr, formatDateVN } from '../utils/schoolWeeks';
 import {
   getMealScheduleForDate,
   buildDefaultMealRecords,
+  generateDefaultBoardingStudentsForClass,
 } from '../utils/boardingRules';
 import {
   Utensils,
@@ -55,16 +56,24 @@ import {
 
 interface BoardingManagementPageProps {
   onNavigate?: (path: string) => void;
+  initialTab?: TabType;
 }
 
 type TabType = 'daily-attendance' | 'monthly-sheet' | 'students-list' | 'kitchen-report' | 'rules-info';
 
-export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ onNavigate }) => {
+export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ onNavigate, initialTab }) => {
   const { classes, campuses, students, addStudent, updateStudent, deleteStudent, importStudents } = useSchool();
   const { currentUser, isGVCN, isAdmin, isBGH } = useAuth();
 
   // Active Tab
-  const [activeTab, setActiveTab] = useState<TabType>('daily-attendance');
+  const [activeTab, setActiveTab] = useState<TabType>(initialTab || 'daily-attendance');
+
+  // Keep active tab in sync if initialTab prop changes
+  useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab]);
 
   // Selected Date (defaults to today)
   const [selectedDate, setSelectedDate] = useState<string>(getTodayDateStr());
@@ -239,6 +248,22 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
   const showToast = (text: string, type: 'success' | 'error' | 'info' = 'success') => {
     setToastMessage({ text, type });
     setTimeout(() => setToastMessage(null), 4000);
+  };
+
+  const [isGeneratingStudents, setIsGeneratingStudents] = useState(false);
+  const handleGenerateDefaultStudents = async () => {
+    if (!selectedClass) return;
+    setIsGeneratingStudents(true);
+    try {
+      const defaultStds = generateDefaultBoardingStudentsForClass(selectedClassId, selectedClass.class_name);
+      await StorageService.saveStudents(defaultStds);
+      showToast(`Đã khởi tạo thành công 35 học sinh bán trú lớp ${selectedClass.class_name}!`);
+      await loadMealAttendance();
+    } catch (e: any) {
+      showToast(e?.message || 'Lỗi khi khởi tạo danh sách học sinh!', 'error');
+    } finally {
+      setIsGeneratingStudents(false);
+    }
   };
 
   // Real-time Meal Statistics
@@ -755,13 +780,25 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
   };
 
   // Export Students Roster to Excel
-  const handleExportStudentsExcel = () => {
-    if (classStudents.length === 0) {
+  const handleExportStudentsExcel = async () => {
+    let exportStudents = classStudents;
+    if (exportStudents.length === 0 && selectedClass) {
+      const generated = generateDefaultBoardingStudentsForClass(selectedClass.id, selectedClass.class_name);
+      try {
+        await StorageService.saveStudents(generated);
+        exportStudents = generated;
+        showToast(`Đã tự động khởi tạo danh sách 35 học sinh cho lớp ${selectedClass.class_name}!`);
+      } catch (e) {
+        console.warn('Could not auto save students:', e);
+      }
+    }
+
+    if (exportStudents.length === 0) {
       showToast('Không có dữ liệu học sinh để xuất file!', 'info');
       return;
     }
 
-    const exportData = classStudents.map((st, idx) => ({
+    const exportData = exportStudents.map((st, idx) => ({
       'STT': idx + 1,
       'Mã HS': st.student_code || '',
       'Họ và tên': st.full_name,
@@ -1139,6 +1176,16 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
             <div className="flex items-center gap-2">
               <button
                 type="button"
+                onClick={() => setActiveTab('monthly-sheet')}
+                className="px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold bg-amber-50 text-amber-900 hover:bg-amber-100 border border-amber-300 flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
+                title="Mở Sổ chấm cơm tháng & Xuất file Excel chuẩn mẫu"
+              >
+                <FileSpreadsheet className="w-4 h-4 text-amber-600" />
+                <span>Sổ chấm cơm tháng & Xuất Excel</span>
+              </button>
+
+              <button
+                type="button"
                 onClick={handlePrintMealReport}
                 className="px-3 py-2 rounded-xl text-xs sm:text-sm font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200 flex items-center gap-1.5 transition-all"
               >
@@ -1199,14 +1246,25 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
                 <p className="text-xs text-slate-500 max-w-md mt-1 mb-4">
                   Thầy/Cô vui lòng chuyển sang tab "Danh sách HS bán trú" để Import file Excel hoặc thêm danh sách học sinh cho lớp.
                 </p>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('students-list')}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-md flex items-center gap-2"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>Thêm danh sách học sinh bán trú ngay</span>
-                </button>
+                <div className="flex flex-wrap items-center justify-center gap-2.5">
+                  <button
+                    type="button"
+                    onClick={handleGenerateDefaultStudents}
+                    disabled={isGeneratingStudents}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-md flex items-center gap-2 cursor-pointer"
+                  >
+                    <Sparkles className="w-4 h-4 text-amber-300" />
+                    <span>{isGeneratingStudents ? 'Đang tạo danh sách...' : `Tạo nhanh DS 35 học sinh lớp ${selectedClass?.class_name}`}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('students-list')}
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 text-xs font-bold rounded-xl flex items-center gap-2 cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Nhập danh sách riêng từ Excel</span>
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -1532,8 +1590,27 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
             {filteredStudents.length === 0 ? (
               <div className="py-16 text-center text-slate-400 flex flex-col items-center justify-center p-4">
                 <Users className="w-10 h-10 text-slate-300 mb-2" />
-                <p className="text-sm font-bold text-slate-600">Chưa có học sinh nào phù hợp</p>
-                <p className="text-xs text-slate-400 mt-1">Bấm "Import Excel" hoặc "Thêm học sinh" để bắt đầu thiết lập danh sách.</p>
+                <p className="text-sm font-bold text-slate-600">Chưa có học sinh nào trong danh sách lớp {selectedClass?.class_name}</p>
+                <p className="text-xs text-slate-400 mt-1 mb-4">Thầy/Cô có thể tạo nhanh danh sách 35 học sinh bán trú mẫu đặc trưng trường Xa Dung hoặc Import từ file Excel.</p>
+                <div className="flex flex-wrap items-center justify-center gap-2.5">
+                  <button
+                    type="button"
+                    onClick={handleGenerateDefaultStudents}
+                    disabled={isGeneratingStudents}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-md flex items-center gap-2 cursor-pointer"
+                  >
+                    <Sparkles className="w-4 h-4 text-amber-300" />
+                    <span>{isGeneratingStudents ? 'Đang tạo...' : `Tạo nhanh DS 35 học sinh lớp ${selectedClass?.class_name}`}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 text-xs font-bold rounded-xl flex items-center gap-2 cursor-pointer"
+                  >
+                    <Upload className="w-4 h-4" />
+                    <span>Import từ file Excel</span>
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="overflow-x-auto">

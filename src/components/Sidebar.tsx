@@ -86,6 +86,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
       allowed: true,
     },
     {
+      id: 'boarding-monthly',
+      label: isGVCN && assignedClass ? `Sổ chấm cơm ${assignedClass.class_name}` : 'Sổ chấm cơm tháng',
+      path: '/reports/boarding-monthly',
+      icon: FileSpreadsheet,
+      allowed: true,
+      highlight: isGVCN,
+    },
+    {
       id: 'ranking',
       label: 'Thi đua sĩ số',
       path: '/reports/ranking',

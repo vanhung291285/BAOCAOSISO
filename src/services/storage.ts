@@ -38,6 +38,7 @@ import {
   getTodayDateStr,
   formatDateVN,
 } from '../utils/schoolWeeks';
+import { resolveTeacherName } from '../utils/exportAttendanceStandardExcel';
 
 const STORAGE_KEYS = {
   SETTINGS: 'sso_school_settings_v1',
@@ -1826,7 +1827,23 @@ export const StorageService = {
     });
 
     const rows: ClassReportRow[] = activeClasses.map((cls) => {
-      const teacher = profiles.find((p) => p.id === cls.homeroom_teacher_id) || profiles.find((p) => p.assigned_class_id === cls.id);
+      let teacher = profiles.find((p) => p.id === cls.homeroom_teacher_id) 
+        || profiles.find((p) => p.assigned_class_id === cls.id && p.role === 'GVCN')
+        || profiles.find((p) => p.assigned_class_id === cls.id);
+      const teacherName = resolveTeacherName(cls.class_name, teacher?.full_name);
+      if (!teacher) {
+        teacher = {
+          id: `teacher_${cls.id}`,
+          full_name: teacherName,
+          email: '',
+          role: 'GVCN' as const,
+          active: true,
+          assigned_class_id: cls.id,
+          created_at: new Date().toISOString(),
+        };
+      } else if (!teacher.full_name || teacher.full_name.startsWith('GVCN')) {
+        teacher = { ...teacher, full_name: teacherName };
+      }
       const rep = dayReports.find((r) => r.class_id === cls.id);
       const repValues = rep ? allValues.filter((v) => v.report_id === rep.id) : [];
       const hasRealData = repValues.some((v) => (v.total_count || 0) > 0);
@@ -2076,6 +2093,286 @@ export const StorageService = {
       highestAbsentClass,
       lowestAbsentClass,
       dayStats,
+    };
+  },
+
+  // --- 9.0.1 Biểu mẫu Báo cáo sĩ số học sinh THEO THÁNG CỦA TỪNG LỚP (Khớp 100% biểu mẫu 13 cột) ---
+  async getClassMonthlyAttendance(classId: string, yearMonth: string): Promise<{
+    classItem: ClassItem | null;
+    teacher: Profile | null;
+    rows: {
+      date: string;
+      dayLabel: string;
+      className: string;
+      teacherName: string;
+      totalAll: number;
+      absentAll: number;
+      presentAll: number;
+      totalBoarding: number;
+      absentBoarding: number;
+      baoAnBoarding: number;
+      totalNgoaiTru: number;
+      absentNgoaiTru: number;
+      studentNames: string;
+      studentAddresses: string;
+      absentRate: number;
+      presentRate: number;
+      isReported: boolean;
+    }[];
+    summary: {
+      totalDaysReported: number;
+      sumTotalAll: number;
+      sumAbsentAll: number;
+      sumPresentAll: number;
+      sumTotalBoarding: number;
+      sumAbsentBoarding: number;
+      sumBaoAnBoarding: number;
+      sumTotalNgoaiTru: number;
+      sumAbsentNgoaiTru: number;
+      avgAbsentRate: number;
+      avgPresentRate: number;
+    };
+  }> {
+    ensureInitialized();
+
+    const [classes, profiles, indicators, students] = await Promise.all([
+      this.getClasses(),
+      this.getProfiles(),
+      this.getIndicatorGroups(),
+      this.getStudents(),
+    ]);
+
+    const classItem = classes.find((c) => c.id === classId) || null;
+    let teacher = classItem
+      ? profiles.find((p) => p.id === classItem.homeroom_teacher_id)
+        || profiles.find((p) => p.assigned_class_id === classItem.id && p.role === 'GVCN')
+        || profiles.find((p) => p.assigned_class_id === classItem.id)
+        || null
+      : null;
+    const teacherName = resolveTeacherName(classItem?.class_name, teacher?.full_name);
+    if (!teacher && classItem) {
+      teacher = {
+        id: `teacher_${classItem.id}`,
+        full_name: teacherName,
+        email: '',
+        role: 'GVCN' as const,
+        active: true,
+        assigned_class_id: classItem.id,
+        created_at: new Date().toISOString(),
+      };
+    } else if (teacher && (!teacher.full_name || teacher.full_name.startsWith('GVCN'))) {
+      teacher = { ...teacher, full_name: teacherName };
+    }
+
+    // Đồng bộ nhanh từ Supabase nếu có kết nối
+    const supabase = getSupabaseClient();
+    if (supabase && isSupabaseConnected()) {
+      try {
+        const { data: cloudReports } = await supabase
+          .from('daily_reports')
+          .select('*')
+          .eq('class_id', classId)
+          .gte('report_date', `${yearMonth}-01`)
+          .lte('report_date', `${yearMonth}-31`);
+
+        if (cloudReports && cloudReports.length > 0) {
+          const rawReports = localStorage.getItem(STORAGE_KEYS.REPORTS);
+          let reports: DailyReport[] = rawReports ? JSON.parse(rawReports) : [];
+          cloudReports.forEach((cRep) => {
+            const idx = reports.findIndex((r) => r.id === cRep.id || (r.class_id === cRep.class_id && r.report_date === cRep.report_date));
+            if (idx >= 0) reports[idx] = cRep;
+            else reports.push(cRep);
+          });
+          localStorage.setItem(STORAGE_KEYS.REPORTS, JSON.stringify(reports));
+
+          const repIds = cloudReports.map((r) => r.id);
+          const { data: cloudValues } = await supabase
+            .from('daily_report_values')
+            .select('*')
+            .in('report_id', repIds);
+
+          if (cloudValues) {
+            const rawValues = localStorage.getItem(STORAGE_KEYS.VALUES);
+            let allValues: DailyReportValue[] = rawValues ? JSON.parse(rawValues) : [];
+            allValues = allValues.filter((v) => !repIds.includes(v.report_id)).concat(cloudValues);
+            localStorage.setItem(STORAGE_KEYS.VALUES, JSON.stringify(allValues));
+          }
+        }
+      } catch (err) {
+        console.warn('Supabase fetch class monthly attendance fallback to local:', err);
+      }
+    }
+
+    const allIndicator = indicators.find((i) => i.code === 'ALL' || i.id === 'ig_all') || indicators[0];
+    const boardingIndicator = indicators.find((i) => i.code === 'BOARDING_HALF' || i.id === 'ig_boarding_half' || i.name.toLowerCase().includes('bán trú')) || indicators[1];
+
+    const rawReports = localStorage.getItem(STORAGE_KEYS.REPORTS);
+    const reports: DailyReport[] = rawReports ? JSON.parse(rawReports) : [];
+    const monthReports = reports.filter((r) => r.class_id === classId && r.report_date.startsWith(yearMonth));
+
+    const rawValues = localStorage.getItem(STORAGE_KEYS.VALUES);
+    const allValues: DailyReportValue[] = rawValues ? JSON.parse(rawValues) : [];
+
+    // Helper resolve address
+    const classStudents = students.filter((s) => s.class_id === classId);
+    const resolveAddr = (s: any): string => {
+      if (s.id) {
+        const m = classStudents.find((std) => std.id === s.id);
+        if (m && m.address) return m.address;
+      }
+      if (s.full_name) {
+        const m = classStudents.find((std) => std.full_name.trim().toLowerCase() === s.full_name.trim().toLowerCase());
+        if (m && m.address) return m.address;
+      }
+      return s.address || '-';
+    };
+
+    const [yStr, mStr] = yearMonth.split('-');
+    const year = parseInt(yStr, 10);
+    const month = parseInt(mStr, 10);
+    const daysInMonth = new Date(year, month, 0).getDate();
+
+    const rows: {
+      date: string;
+      dayLabel: string;
+      className: string;
+      teacherName: string;
+      totalAll: number;
+      absentAll: number;
+      presentAll: number;
+      totalBoarding: number;
+      absentBoarding: number;
+      baoAnBoarding: number;
+      totalNgoaiTru: number;
+      absentNgoaiTru: number;
+      studentNames: string;
+      studentAddresses: string;
+      absentRate: number;
+      presentRate: number;
+      isReported: boolean;
+    }[] = [];
+
+    const defaultClassTotal = classStudents.length > 0 ? classStudents.length : 35;
+    const defaultClassBoarding = classStudents.filter((s) => s.isBoarding !== false).length || Math.min(25, defaultClassTotal);
+
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dayStr = String(day).padStart(2, '0');
+      const dateStr = `${yearMonth}-${dayStr}`;
+      const dayLabel = `Ngày ${dayStr}/${mStr}`;
+
+      const rep = monthReports.find((r) => r.report_date === dateStr);
+      if (rep && (rep.status === 'SUBMITTED' || rep.status === 'LOCKED' || rep.status === 'DRAFT')) {
+        const repVals = allValues.filter((v) => v.report_id === rep.id);
+        const allVal = repVals.find((v) => v.indicator_group_id === allIndicator?.id);
+        const boardingVal = repVals.find((v) => v.indicator_group_id === boardingIndicator?.id);
+
+        const totalAll = allVal?.total_count ?? defaultClassTotal;
+        const absentAll = allVal?.absent_count ?? 0;
+        const presentAll = allVal?.present_count ?? Math.max(0, totalAll - absentAll);
+
+        const totalBoarding = boardingVal?.total_count ?? defaultClassBoarding;
+        const absentBoarding = boardingVal?.absent_count ?? 0;
+        const baoAnBoarding = Math.max(0, totalBoarding - absentBoarding);
+
+        const totalNgoaiTru = Math.max(0, totalAll - totalBoarding);
+        const absentNgoaiTru = Math.max(0, absentAll - absentBoarding);
+
+        const absentRate = totalAll > 0 ? (absentAll / totalAll) * 100 : 0;
+        const presentRate = totalAll > 0 ? (presentAll / totalAll) * 100 : 100;
+
+        let namesStr = '';
+        let addrsStr = '-';
+        if (rep.absent_students && rep.absent_students.length > 0) {
+          namesStr = rep.absent_students
+            .map((s) => `${s.full_name}${s.isBoarding ? ' (Bán Trú)' : ' (Ngoại Trú)'}${s.reason ? ` (${s.reason})` : ''}`)
+            .join('\n');
+          if (rep.notes && !namesStr.includes(rep.notes)) {
+            namesStr += `\n- Ghi chú: ${rep.notes}`;
+          }
+          addrsStr = rep.absent_students.map(resolveAddr).join('\n');
+        } else if (rep.notes) {
+          namesStr = rep.notes;
+        }
+
+        rows.push({
+          date: dateStr,
+          dayLabel,
+          className: classItem?.class_name || '',
+          teacherName,
+          totalAll,
+          absentAll,
+          presentAll,
+          totalBoarding,
+          absentBoarding,
+          baoAnBoarding,
+          totalNgoaiTru,
+          absentNgoaiTru,
+          studentNames: namesStr || '',
+          studentAddresses: addrsStr || '-',
+          absentRate,
+          presentRate,
+          isReported: true,
+        });
+      } else {
+        // Ngày chưa có báo cáo
+        const totalAll = defaultClassTotal;
+        const totalBoarding = defaultClassBoarding;
+        const totalNgoaiTru = Math.max(0, totalAll - totalBoarding);
+
+        rows.push({
+          date: dateStr,
+          dayLabel,
+          className: classItem?.class_name || '',
+          teacherName,
+          totalAll,
+          absentAll: 0,
+          presentAll: totalAll,
+          totalBoarding,
+          absentBoarding: 0,
+          baoAnBoarding: totalBoarding,
+          totalNgoaiTru,
+          absentNgoaiTru: 0,
+          studentNames: 'Chưa báo cáo',
+          studentAddresses: '-',
+          absentRate: 0,
+          presentRate: 100,
+          isReported: false,
+        });
+      }
+    }
+
+    const reportedRows = rows.filter((r) => r.isReported);
+    const sumTotalAll = reportedRows.reduce((acc, r) => acc + r.totalAll, 0);
+    const sumAbsentAll = reportedRows.reduce((acc, r) => acc + r.absentAll, 0);
+    const sumPresentAll = sumTotalAll - sumAbsentAll;
+
+    const sumTotalBoarding = reportedRows.reduce((acc, r) => acc + r.totalBoarding, 0);
+    const sumAbsentBoarding = reportedRows.reduce((acc, r) => acc + r.absentBoarding, 0);
+    const sumBaoAnBoarding = reportedRows.reduce((acc, r) => acc + r.baoAnBoarding, 0);
+
+    const sumTotalNgoaiTru = reportedRows.reduce((acc, r) => acc + r.totalNgoaiTru, 0);
+    const sumAbsentNgoaiTru = reportedRows.reduce((acc, r) => acc + r.absentNgoaiTru, 0);
+
+    const avgAbsentRate = sumTotalAll > 0 ? (sumAbsentAll / sumTotalAll) * 100 : 0;
+    const avgPresentRate = sumTotalAll > 0 ? (sumPresentAll / sumTotalAll) * 100 : 100;
+
+    return {
+      classItem,
+      teacher,
+      rows,
+      summary: {
+        totalDaysReported: reportedRows.length,
+        sumTotalAll,
+        sumAbsentAll,
+        sumPresentAll,
+        sumTotalBoarding,
+        sumAbsentBoarding,
+        sumBaoAnBoarding,
+        sumTotalNgoaiTru,
+        sumAbsentNgoaiTru,
+        avgAbsentRate,
+        avgPresentRate,
+      },
     };
   },
 

@@ -171,3 +171,71 @@ export function buildDefaultMealRecords(
     };
   });
 }
+
+/**
+ * Danh sách 35 học sinh mẫu đặc trưng trường PTDTBT THCS Xa Dung (Điện Biên)
+ * Họ tên, giới tính, thôn bản thực tế vùng cao Xa Dung
+ */
+export const DEFAULT_BOARDING_STUDENTS_SEED: Array<{
+  name: string;
+  gender: 'Nam' | 'Nữ';
+  village: string;
+  ethnicity: string;
+}> = [
+  { name: 'Vừ A Lềnh', gender: 'Nam', village: 'Bản Háng Đồng', ethnicity: 'Mông' },
+  { name: 'Sùng Thị Mỷ', gender: 'Nữ', village: 'Bản Phi Lĩnh', ethnicity: 'Mông' },
+  { name: 'Mùa A Tủa', gender: 'Nam', village: 'Bản Xa Dung A', ethnicity: 'Mông' },
+  { name: 'Giàng A Chống', gender: 'Nam', village: 'Bản Háng Tàu', ethnicity: 'Mông' },
+  { name: 'Thào Thị Dợ', gender: 'Nữ', village: 'Bản Suối Lư', ethnicity: 'Mông' },
+  { name: 'Hờ A Cháng', gender: 'Nam', village: 'Bản Cồ Dê', ethnicity: 'Mông' },
+  { name: 'Cứ Thị Dế', gender: 'Nữ', village: 'Bản Xa Dung B', ethnicity: 'Mông' },
+  { name: 'Lầu A Lầu', gender: 'Nam', village: 'Bản Háng Đồng', ethnicity: 'Mông' },
+  { name: 'Vừ Thị Sinh', gender: 'Nữ', village: 'Bản Phi Lĩnh', ethnicity: 'Mông' },
+  { name: 'Mùa Thị Pa', gender: 'Nữ', village: 'Bản Xa Dung A', ethnicity: 'Mông' },
+  { name: 'Giàng Thị Hoa', gender: 'Nữ', village: 'Bản Háng Tàu', ethnicity: 'Mông' },
+  { name: 'Sùng A Dơ', gender: 'Nam', village: 'Bản Suối Lư', ethnicity: 'Mông' },
+  { name: 'Thào A Lử', gender: 'Nam', village: 'Bản Cồ Dê', ethnicity: 'Mông' },
+  { name: 'Hờ Thị Dở', gender: 'Nữ', village: 'Bản Xa Dung B', ethnicity: 'Mông' },
+  { name: 'Cứ A Sùng', gender: 'Nam', village: 'Bản Háng Đồng', ethnicity: 'Mông' },
+  { name: 'Lầu Thị Mai', gender: 'Nữ', village: 'Bản Phi Lĩnh', ethnicity: 'Mông' },
+  { name: 'Vừ A Tủa', gender: 'Nam', village: 'Bản Xa Dung A', ethnicity: 'Mông' },
+  { name: 'Sùng Thị Dua', gender: 'Nữ', village: 'Bản Háng Tàu', ethnicity: 'Mông' },
+  { name: 'Mùa A Súa', gender: 'Nam', village: 'Bản Suối Lư', ethnicity: 'Mông' },
+  { name: 'Giàng A Vừ', gender: 'Nam', village: 'Bản Cồ Dê', ethnicity: 'Mông' },
+  { name: 'Thào Thị Sua', gender: 'Nữ', village: 'Bản Xa Dung B', ethnicity: 'Mông' },
+  { name: 'Hờ A Tủa', gender: 'Nam', village: 'Bản Háng Đồng', ethnicity: 'Mông' },
+  { name: 'Cứ Thị Mỷ', gender: 'Nữ', village: 'Bản Phi Lĩnh', ethnicity: 'Mông' },
+  { name: 'Lầu A Chống', gender: 'Nam', village: 'Bản Xa Dung A', ethnicity: 'Mông' },
+  { name: 'Lý A Lềnh', gender: 'Nam', village: 'Bản Háng Tàu', ethnicity: 'Mông' },
+  { name: 'Khang Thị Dợ', gender: 'Nữ', village: 'Bản Suối Lư', ethnicity: 'Mông' },
+  { name: 'Lò Văn Inh', gender: 'Nam', village: 'Bản Nà Sản', ethnicity: 'Thái' },
+  { name: 'Quàng Thị Lan', gender: 'Nữ', village: 'Bản Nà Sản', ethnicity: 'Thái' },
+  { name: 'Cà Văn Bun', gender: 'Nam', village: 'Bản Nà Sản', ethnicity: 'Thái' },
+  { name: 'Tòng Thị Duyên', gender: 'Nữ', village: 'Bản Nà Sản', ethnicity: 'Thái' },
+  { name: 'Vừ A Cháng', gender: 'Nam', village: 'Bản Háng Đồng', ethnicity: 'Mông' },
+  { name: 'Sùng Thị Chi', gender: 'Nữ', village: 'Bản Phi Lĩnh', ethnicity: 'Mông' },
+  { name: 'Mùa Thị Say', gender: 'Nữ', village: 'Bản Xa Dung A', ethnicity: 'Mông' },
+  { name: 'Giàng A Tế', gender: 'Nam', village: 'Bản Háng Tàu', ethnicity: 'Mông' },
+  { name: 'Thào A Phềnh', gender: 'Nam', village: 'Bản Suối Lư', ethnicity: 'Mông' },
+];
+
+/**
+ * Tự động tạo danh sách 35 học sinh bán trú chuẩn cho một lớp học
+ */
+export function generateDefaultBoardingStudentsForClass(classId: string, className: string): Student[] {
+  const cleanCls = className.replace(/[^a-zA-Z0-9]/g, '');
+  const now = new Date().toISOString();
+  return DEFAULT_BOARDING_STUDENTS_SEED.map((s, idx) => ({
+    id: `std_${cleanCls}_${String(idx + 1).padStart(2, '0')}`,
+    class_id: classId,
+    full_name: s.name,
+    student_code: `HS${cleanCls}${String(idx + 1).padStart(2, '0')}`,
+    gender: s.gender,
+    village: s.village,
+    address: s.village,
+    ethnicity: s.ethnicity,
+    isBoarding: true,
+    created_at: now,
+  }));
+}
+

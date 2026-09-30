@@ -29,7 +29,9 @@ import {
   Volume2,
   VolumeX,
   ClipboardList,
-  Code2
+  Code2,
+  ChevronDown,
+  CheckCircle2,
 } from 'lucide-react';
 import { SchoolYear } from '../types';
 import { PWAInstallButton } from '../components/PWAInstallButton';
@@ -438,13 +440,13 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
   const gvcnUsers = allUsers.filter((u) => u.role === 'GVCN');
 
   return (
-    <div className="min-h-screen bg-linear-to-b from-slate-100 via-slate-50 to-slate-200 flex flex-col justify-center py-4 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-linear-to-b from-slate-100 via-slate-50 to-blue-50/30 flex flex-col justify-center py-6 sm:py-10 px-3.5 sm:px-6 lg:px-8 selection:bg-blue-600 selection:text-white">
       {!isSupabaseConnected() && (
-        <div className="sm:mx-auto sm:w-full sm:max-w-lg mb-6 animate-in fade-in slide-in-from-top-4">
-          <div className="bg-amber-50 border border-amber-300 p-4 rounded-2xl flex items-start gap-3 shadow-sm">
-            <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
-            <div className="text-sm text-amber-900 leading-relaxed">
-              <strong className="block font-bold mb-1">Cảnh báo: Dữ liệu đang lưu cục bộ!</strong>
+        <div className="mx-auto w-full max-w-md sm:max-w-lg mb-4 animate-in fade-in slide-in-from-top-4">
+          <div className="bg-amber-50/90 border border-amber-300/80 p-3.5 sm:p-4 rounded-2xl flex items-start gap-3 shadow-xs">
+            <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+            <div className="text-xs sm:text-sm text-amber-900 leading-relaxed">
+              <strong className="block font-bold mb-0.5">Cảnh báo: Dữ liệu đang lưu cục bộ!</strong>
               Mọi cấu hình hiện tại chưa được lưu lên Supabase do trình duyệt này chưa có thông số kết nối.
               Hãy đăng nhập bằng tài khoản Quản trị, vào <strong>Cài đặt Hệ thống &gt; Supabase</strong> để điền URL & API Key, sau đó bấm <strong>Lấy dữ liệu từ Cloud</strong> để đồng bộ.
             </div>
@@ -453,53 +455,53 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       )}
 
       {/* Header Branding */}
-      <div className="sm:mx-auto sm:w-full sm:max-w-lg text-center">
+      <div className="mx-auto w-full max-w-md sm:max-w-lg text-center">
         <div
-          className="mx-auto w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-blue-900/10 flex-shrink-0"
+          className="mx-auto w-14 h-14 sm:w-16 sm:h-16 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-blue-900/15 ring-4 ring-white shrink-0 transition-transform duration-300 hover:scale-105"
           style={{ backgroundColor: settings?.primary_color || '#1e40af' }}
         >
           {settings?.logo_url ? (
-            <img src={settings.logo_url} alt="Logo" className="w-8 h-8 object-contain rounded-xl" />
+            <img src={settings.logo_url} alt="Logo" className="w-9 h-9 sm:w-10 sm:h-10 object-contain rounded-xl" />
           ) : (
-            <School className="w-8 h-8" />
+            <School className="w-8 h-8 sm:w-9 sm:h-9" />
           )}
         </div>
-        <h1 className="mt-2 text-xl sm:text-2xl font-black text-slate-900 tracking-tight leading-tight">
+        <h1 className="mt-3 text-xl sm:text-2xl font-black text-slate-900 tracking-tight leading-tight uppercase">
           SỔ BÁO CÁO SĨ SỐ ĐIỆN TỬ
         </h1>
-        <p className="mt-0.5 text-sm font-bold text-blue-700">
-          {settings?.school_name || 'Hệ thống Quản lý Báo cáo Sĩ số'}
+        <p className="mt-1 text-sm sm:text-base font-extrabold text-blue-700 tracking-tight">
+          {settings?.school_name || 'TRƯỜNG PTDTBT THCS XA DUNG'}
         </p>
         {(settings?.commune || settings?.province) ? (
-          <p className="text-xs text-slate-500 mt-0.5">
+          <p className="text-[11px] sm:text-xs text-slate-500 font-medium mt-0.5">
             {[settings.commune, settings.province].filter(Boolean).join(' • ')}
           </p>
         ) : (
-          <p className="text-xs text-slate-500 mt-0.5">
+          <p className="text-[11px] sm:text-xs text-slate-500 font-medium mt-0.5">
             Sổ điện tử theo dõi chuyên cần & sĩ số học sinh hằng ngày
           </p>
         )}
-        <div className="mt-4 flex justify-center">
+        <div className="mt-3.5 flex justify-center">
           <PWAInstallButton />
         </div>
       </div>
 
       {/* School Year Info Bar - Configuration restricted to ADMIN only */}
-      <div className="mt-3 sm:mx-auto sm:w-full sm:max-w-lg">
-        <div className="bg-white/90 backdrop-blur-xs border border-blue-200/80 rounded-xl px-3 py-1.5 shadow-xs flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 min-w-0">
-            <div className="w-6 h-6 rounded-lg bg-blue-50 text-blue-700 flex items-center justify-center flex-shrink-0">
+      <div className="mt-3 mx-auto w-full max-w-md sm:max-w-lg">
+        <div className="bg-white/95 backdrop-blur-md border border-slate-200/90 rounded-2xl px-3.5 py-2 sm:py-2.5 shadow-xs flex flex-wrap sm:flex-nowrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center shrink-0 border border-blue-100">
               <Calendar className="w-4 h-4" />
             </div>
             <div className="min-w-0">
               <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 leading-none">
                 Năm học hoạt động
               </div>
-              <div className="flex items-center gap-2 mt-0.5">
-                <span className="text-xs font-black text-blue-950">
+              <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                <span className="text-xs sm:text-sm font-black text-slate-900">
                   Năm học {activeYear?.name || '2026-2027'}
                 </span>
-                <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-200">
+                <span className="text-[9px] sm:text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200/80">
                   Đang áp dụng
                 </span>
               </div>
@@ -510,14 +512,14 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
             <button
               type="button"
               onClick={handleOpenAdminYearModal}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-purple-700 hover:bg-purple-50 border border-purple-200 transition-colors flex-shrink-0"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-purple-700 bg-purple-50/70 hover:bg-purple-100 border border-purple-200 transition-all shrink-0 cursor-pointer"
               title="Cấu hình năm học (Dành riêng cho Quản trị viên)"
             >
               <Settings2 className="w-3.5 h-3.5" />
               <span>Cấu hình năm học</span>
             </button>
           ) : (
-            <div className="flex items-center gap-1 text-[11px] font-semibold text-slate-500 bg-slate-50 border border-slate-200/80 px-2.5 py-1 rounded-lg">
+            <div className="flex items-center gap-1.5 text-[10px] sm:text-xs font-semibold text-slate-500 bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-xl shrink-0">
               <ShieldCheck className="w-3.5 h-3.5 text-slate-400" />
               <span>Quản trị cấu hình</span>
             </div>
@@ -527,15 +529,15 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
 
       {/* Urgent Attendance Warning Banner if unsubmitted report today (KỂ CẢ KHI CHƯA ĐĂNG NHẬP) */}
       {urgentAttendanceReminder && (
-        <div className="mt-3 sm:mx-auto sm:w-full sm:max-w-lg">
-          <div className="bg-gradient-to-r from-red-600 via-rose-600 to-amber-600 text-white p-4 rounded-2xl shadow-xl border-2 border-amber-300 animate-in fade-in slide-in-from-top-3">
+        <div className="mt-3 mx-auto w-full max-w-md sm:max-w-lg">
+          <div className="bg-gradient-to-r from-red-600 via-rose-600 to-amber-600 text-white p-3.5 sm:p-4 rounded-2xl shadow-xl border-2 border-amber-300 animate-in fade-in slide-in-from-top-3">
             <div className="flex items-start gap-3">
-              <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center flex-shrink-0 animate-bounce">
-                <BellRing className="w-6 h-6 text-amber-200" />
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center shrink-0 animate-bounce">
+                <BellRing className="w-5 h-5 sm:w-6 sm:h-6 text-amber-200" />
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[10px] font-black uppercase tracking-wider bg-white/25 px-2 py-0.5 rounded shadow-2xs">
+                  <span className="text-[10px] font-black uppercase tracking-wider bg-white/25 px-2 py-0.5 rounded-md shadow-2xs">
                     CẢNH BÁO ĐIỂM DANH (RA NGOÀI MÀN HÌNH)
                   </span>
                   <span className="text-xs font-black text-amber-200">
@@ -553,7 +555,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                   <button
                     type="button"
                     onClick={handleDirectAttendanceFromAlert}
-                    className="py-1.5 px-3.5 rounded-xl bg-amber-300 hover:bg-amber-200 text-slate-950 text-xs font-black shadow-sm active:scale-95 transition-all flex items-center gap-1.5"
+                    className="py-1.5 px-3.5 rounded-xl bg-amber-300 hover:bg-amber-200 text-slate-950 text-xs font-black shadow-sm active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
                   >
                     <ClipboardList className="w-4 h-4" />
                     <span>Vào Điểm Danh & Nộp Ngay</span>
@@ -562,7 +564,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                   <button
                     type="button"
                     onClick={testSound}
-                    className="py-1.5 px-2.5 rounded-xl bg-white/20 hover:bg-white/30 text-white text-xs font-bold border border-white/30 flex items-center gap-1 active:scale-95 transition-all"
+                    className="py-1.5 px-2.5 rounded-xl bg-white/20 hover:bg-white/30 text-white text-xs font-bold border border-white/30 flex items-center gap-1 active:scale-95 transition-all cursor-pointer"
                   >
                     <Volume2 className="w-3.5 h-3.5" />
                     <span>Nghe lại chuông</span>
@@ -571,7 +573,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                   <button
                     type="button"
                     onClick={snoozeUrgentReminder}
-                    className="py-1.5 px-2.5 rounded-xl bg-black/20 hover:bg-black/30 text-rose-100 text-xs font-semibold ml-auto transition-colors"
+                    className="py-1.5 px-2.5 rounded-xl bg-black/20 hover:bg-black/30 text-rose-100 text-xs font-semibold ml-auto transition-colors cursor-pointer"
                   >
                     Tắt chuông
                   </button>
@@ -583,59 +585,64 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       )}
 
       {/* Device Screen Alert & Audio Settings Bar */}
-      <div className="mt-3 sm:mx-auto sm:w-full sm:max-w-lg">
-        <div className="bg-white/95 backdrop-blur-xs border border-blue-200/90 rounded-2xl p-3 shadow-xs">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-blue-50 text-blue-700 flex items-center justify-center flex-shrink-0">
-                <Bell className="w-4 h-4" />
-              </div>
-              <div>
-                <div className="text-[11px] font-black text-slate-800 flex items-center gap-1.5">
-                  <span>Cảnh báo ngoài màn hình & Chuông nhắc</span>
-                  {selectedClassId && currentClass && (
-                    <span className="text-[10px] font-bold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">
-                      Lớp {currentClass.class_name}
-                    </span>
-                  )}
+      <div className="mt-3 mx-auto w-full max-w-md sm:max-w-lg">
+        <div className="bg-white/95 backdrop-blur-md border border-slate-200/90 rounded-2xl p-3 sm:p-3.5 shadow-xs">
+          <div className="flex flex-col gap-2.5">
+            {/* Top row: Title + class badge */}
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="w-7 h-7 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center shrink-0 border border-blue-100">
+                  <Bell className="w-3.5 h-3.5" />
                 </div>
-                <p className="text-[10px] text-slate-500">
-                  Phát chuông và đẩy thông báo ra ngoài màn hình dù GVCN chưa đăng nhập.
-                </p>
+                <div className="min-w-0">
+                  <div className="text-[11px] font-black text-slate-800 leading-tight">
+                    Cảnh báo ngoài màn hình & Chuông nhắc
+                  </div>
+                  <p className="text-[10px] text-slate-500 leading-tight">
+                    Phát chuông và đẩy thông báo ra ngoài màn hình dù chưa đăng nhập
+                  </p>
+                </div>
               </div>
+
+              {selectedClassId && currentClass && (
+                <span className="text-[10px] font-extrabold text-blue-800 bg-blue-50 px-2 py-0.5 rounded-lg border border-blue-200 shrink-0">
+                  Lớp {currentClass.class_name}
+                </span>
+              )}
             </div>
 
-            <div className="flex items-center gap-1.5 flex-wrap sm:flex-nowrap">
+            {/* Bottom row: Action Buttons responsive grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5 pt-1 border-t border-slate-100">
               {/* Nút bật thông báo ra ngoài màn hình */}
               {browserPermission !== 'granted' ? (
                 <button
                   type="button"
                   onClick={requestBrowserPermission}
-                  className="px-2.5 py-1 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold shadow-xs active:scale-95 transition-all flex items-center gap-1 animate-pulse"
+                  className="w-full px-2.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold shadow-xs active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer animate-pulse"
                   title="Bấm để cho phép trình duyệt gửi cảnh báo bật ra ngoài màn hình máy tính/điện thoại"
                 >
-                  <BellRing className="w-3.5 h-3.5" />
+                  <BellRing className="w-3.5 h-3.5 shrink-0" />
                   <span>Bật báo ra màn hình</span>
                 </button>
               ) : (
-                <span className="px-2 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10px] font-bold flex items-center gap-1">
-                  <Check className="w-3 h-3 text-emerald-600" />
-                  <span>Báo ngoài màn hình: BẬT</span>
-                </span>
+                <div className="w-full px-2.5 py-1.5 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10px] font-bold flex items-center justify-center gap-1">
+                  <Check className="w-3 h-3 text-emerald-600 shrink-0" />
+                  <span>Báo ra màn hình: BẬT</span>
+                </div>
               )}
 
               {/* Nút bật/tắt âm thanh chuông */}
               <button
                 type="button"
                 onClick={() => toggleSound(!isSoundEnabled)}
-                className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition-colors flex items-center gap-1 ${
+                className={`w-full px-2.5 py-1.5 rounded-xl text-[11px] font-bold border transition-colors flex items-center justify-center gap-1.5 cursor-pointer ${
                   isSoundEnabled
-                    ? 'bg-slate-100 text-slate-800 border-slate-300 hover:bg-slate-200'
-                    : 'bg-rose-50 text-rose-700 border-rose-200'
+                    ? 'bg-slate-50 text-slate-800 border-slate-200 hover:bg-slate-100'
+                    : 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100'
                 }`}
                 title={isSoundEnabled ? 'Tắt âm thanh chuông' : 'Bật âm thanh chuông'}
               >
-                {isSoundEnabled ? <Volume2 className="w-3 h-3 text-blue-600" /> : <VolumeX className="w-3 h-3 text-rose-600" />}
+                {isSoundEnabled ? <Volume2 className="w-3.5 h-3.5 text-blue-600 shrink-0" /> : <VolumeX className="w-3.5 h-3.5 text-rose-600 shrink-0" />}
                 <span>{isSoundEnabled ? 'Chuông: Bật' : 'Chuông: Tắt'}</span>
               </button>
 
@@ -643,7 +650,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
               <button
                 type="button"
                 onClick={testSound}
-                className="px-2 py-1 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 text-[10px] font-bold flex items-center gap-1 active:scale-95 transition-all"
+                className="w-full px-2.5 py-1.5 rounded-xl bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 text-[11px] font-bold flex items-center justify-center gap-1.5 active:scale-95 transition-all cursor-pointer"
                 title="Bấm để nghe thử chuông ngân vang và mở khóa âm thanh trình duyệt"
               >
                 <span>Thử chuông</span>
@@ -655,9 +662,9 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
           {isAudioBlocked && (
             <div
               onClick={testSound}
-              className="mt-2 p-2 bg-amber-50 hover:bg-amber-100 border border-amber-300 rounded-xl flex items-center gap-2 cursor-pointer transition-colors"
+              className="mt-2.5 p-2.5 bg-amber-50 hover:bg-amber-100 border border-amber-300 rounded-xl flex items-center gap-2 cursor-pointer transition-colors"
             >
-              <Volume2 className="w-4 h-4 text-amber-700 animate-bounce flex-shrink-0" />
+              <Volume2 className="w-4 h-4 text-amber-700 animate-bounce shrink-0" />
               <span className="text-[11px] font-bold text-amber-900">
                 🔊 Trình duyệt đang chờ chạm để mở khóa chuông báo. Nhấp vào đây để kích hoạt ngay!
               </span>
@@ -667,23 +674,23 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       </div>
 
       {/* Main Login Card */}
-      <div className="mt-4 sm:mx-auto sm:w-full sm:max-w-lg">
-        <div className="bg-white shadow-xl rounded-2xl border border-slate-200 overflow-hidden">
+      <div className="mt-3.5 mx-auto w-full max-w-md sm:max-w-lg">
+        <div className="bg-white shadow-xl shadow-slate-200/60 rounded-2xl sm:rounded-3xl border border-slate-200/80 overflow-hidden">
           {/* Tab Switcher */}
-          <div className="grid grid-cols-2 border-b border-slate-200 bg-slate-50/80 p-1.5 gap-1.5">
+          <div className="grid grid-cols-2 border-b border-slate-100 bg-slate-50/80 p-1.5 sm:p-2 gap-1.5">
             <button
               type="button"
               onClick={() => {
                 setActiveTab('GVCN');
                 setError('');
               }}
-              className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg text-xs font-bold transition-all ${
+              className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-black transition-all cursor-pointer select-none ${
                 activeTab === 'GVCN'
-                  ? 'bg-blue-50 text-blue-700 shadow-sm border border-blue-200'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
+                  ? 'bg-white text-blue-700 shadow-sm border border-slate-200/90 ring-1 ring-blue-500/10'
+                  : 'text-slate-500 hover:text-slate-800 hover:bg-white/60'
               }`}
             >
-              <GraduationCap className="w-3.5 h-3.5 text-blue-600" />
+              <GraduationCap className={`w-4 h-4 ${activeTab === 'GVCN' ? 'text-blue-600' : 'text-slate-400'}`} />
               <span>GIÁO VIÊN CHỦ NHIỆM</span>
             </button>
             <button
@@ -692,21 +699,21 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                 setActiveTab('ADMIN');
                 setError('');
               }}
-              className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg text-xs font-bold transition-all ${
+              className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-black transition-all cursor-pointer select-none ${
                 activeTab === 'ADMIN'
-                  ? 'bg-orange-50 text-orange-700 shadow-sm border border-orange-200'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
+                  ? 'bg-white text-purple-700 shadow-sm border border-slate-200/90 ring-1 ring-purple-500/10'
+                  : 'text-slate-500 hover:text-slate-800 hover:bg-white/60'
               }`}
             >
-              <ShieldCheck className="w-3.5 h-3.5 text-orange-600" />
+              <ShieldCheck className={`w-4 h-4 ${activeTab === 'ADMIN' ? 'text-purple-600' : 'text-slate-400'}`} />
               <span>BGH & QUẢN TRỊ</span>
             </button>
           </div>
 
-          <div className="p-4 sm:p-5">
+          <div className="p-4 sm:p-6">
             {error && (
-              <div className="mb-3 p-2 bg-red-50 border border-red-200 rounded-lg text-[11px] font-semibold text-red-700 flex items-center gap-1.5">
-                <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-xs font-bold text-red-700 flex items-center gap-2 animate-shake">
+                <AlertCircle className="w-4 h-4 shrink-0" />
                 <span>{error}</span>
               </div>
             )}
@@ -714,108 +721,118 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
             {/* TAB 1: GVCN - CHỈ CẦN THÔNG TIN LỚP & TÊN GVCN */}
             {activeTab === 'GVCN' && (
               <div className="space-y-4">
-                <div className="bg-blue-50/70 border border-blue-100 rounded-lg p-2 text-[11px] text-blue-800 flex items-start gap-1.5 leading-tight">
-                  <Sparkles className="w-3.5 h-3.5 text-blue-600 flex-shrink-0 mt-0.5" />
+                {/* Info box */}
+                <div className="bg-blue-50/70 border border-blue-100/90 rounded-xl sm:rounded-2xl p-3 sm:p-3.5 text-xs text-blue-900 flex items-start gap-2.5 leading-relaxed shadow-2xs">
+                  <Sparkles className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
                   <div>
-                    <span className="font-bold">Đăng nhập nhanh dành cho GVCN:</span> Chọn lớp và tên của bạn để báo cáo sĩ số, không cần mật khẩu.
+                    <span className="font-extrabold text-blue-950">Đăng nhập nhanh dành cho GVCN:</span> Chọn lớp và tên của bạn để vào báo cáo sĩ số, không cần mật khẩu.
                   </div>
                 </div>
 
                 {/* 1. Chọn Lớp học */}
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
-                    1. Chọn Lớp học <span className="text-red-500">*</span>
+                  <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider mb-1.5">
+                    1. CHỌN LỚP HỌC <span className="text-red-500 font-bold">*</span>
                   </label>
-                  <select
-                    value={selectedClassId}
-                    onChange={(e) => setSelectedClassId(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-300 text-xs font-bold text-slate-800 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors shadow-2xs"
-                  >
-                    <option value="" disabled>-- Vui lòng chọn lớp học --</option>
-                    {grade6Classes.length > 0 && (
-                      <optgroup label="Khối 6">
-                        {grade6Classes.map((cls) => (
-                          <option key={cls.id} value={cls.id}>
-                            Lớp {cls.class_name} ({getCampusName(cls.campus_id)})
-                          </option>
-                        ))}
-                      </optgroup>
-                    )}
-                    {grade7Classes.length > 0 && (
-                      <optgroup label="Khối 7">
-                        {grade7Classes.map((cls) => (
-                          <option key={cls.id} value={cls.id}>
-                            Lớp {cls.class_name} ({getCampusName(cls.campus_id)})
-                          </option>
-                        ))}
-                      </optgroup>
-                    )}
-                    {grade8Classes.length > 0 && (
-                      <optgroup label="Khối 8">
-                        {grade8Classes.map((cls) => (
-                          <option key={cls.id} value={cls.id}>
-                            Lớp {cls.class_name} ({getCampusName(cls.campus_id)})
-                          </option>
-                        ))}
-                      </optgroup>
-                    )}
-                    {grade9Classes.length > 0 && (
-                      <optgroup label="Khối 9">
-                        {grade9Classes.map((cls) => (
-                          <option key={cls.id} value={cls.id}>
-                            Lớp {cls.class_name} ({getCampusName(cls.campus_id)})
-                          </option>
-                        ))}
-                      </optgroup>
-                    )}
-                  </select>
+                  <div className="relative">
+                    <select
+                      value={selectedClassId}
+                      onChange={(e) => setSelectedClassId(e.target.value)}
+                      className="w-full h-11 sm:h-12 pl-3.5 pr-9 py-2.5 rounded-xl border border-slate-200 bg-slate-50/50 hover:bg-white hover:border-slate-300 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 text-xs sm:text-sm font-bold text-slate-900 transition-all shadow-2xs cursor-pointer appearance-none"
+                    >
+                      <option value="" disabled>-- Vui lòng chọn lớp học --</option>
+                      {grade6Classes.length > 0 && (
+                        <optgroup label="Khối 6">
+                          {grade6Classes.map((cls) => (
+                            <option key={cls.id} value={cls.id}>
+                              Lớp {cls.class_name} ({getCampusName(cls.campus_id)})
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
+                      {grade7Classes.length > 0 && (
+                        <optgroup label="Khối 7">
+                          {grade7Classes.map((cls) => (
+                            <option key={cls.id} value={cls.id}>
+                              Lớp {cls.class_name} ({getCampusName(cls.campus_id)})
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
+                      {grade8Classes.length > 0 && (
+                        <optgroup label="Khối 8">
+                          {grade8Classes.map((cls) => (
+                            <option key={cls.id} value={cls.id}>
+                              Lớp {cls.class_name} ({getCampusName(cls.campus_id)})
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
+                      {grade9Classes.length > 0 && (
+                        <optgroup label="Khối 9">
+                          {grade9Classes.map((cls) => (
+                            <option key={cls.id} value={cls.id}>
+                              Lớp {cls.class_name} ({getCampusName(cls.campus_id)})
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
+                    </select>
+                    <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-3.5 sm:top-4 pointer-events-none" />
+                  </div>
                 </div>
 
                 {/* 2. Tên Giáo viên chủ nhiệm */}
                 <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider">
-                      2. Tên Giáo viên chủ nhiệm <span className="text-red-500">*</span>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider">
+                      2. TÊN GIÁO VIÊN CHỦ NHIỆM <span className="text-red-500 font-bold">*</span>
                     </label>
-                    <span className="text-[10px] text-blue-600 font-semibold">Tự nhận diện</span>
+                    <span className="text-[10px] text-blue-700 bg-blue-50/90 border border-blue-200/80 px-2.5 py-0.5 rounded-full font-bold flex items-center gap-1 shadow-2xs">
+                      <Sparkles className="w-2.5 h-2.5 text-blue-600" />
+                      Tự nhận diện
+                    </span>
                   </div>
-                  <select
-                    value={selectedTeacherId}
-                    onChange={(e) => setSelectedTeacherId(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-300 text-xs font-semibold text-slate-800 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors shadow-2xs"
-                  >
-                    <option value="" disabled>-- Vui lòng chọn giáo viên chủ nhiệm --</option>
-                    {gvcnUsers.map((teacher) => {
-                      const teacherClass = classes.find((c) => c.id === teacher.assigned_class_id);
-                      return (
-                        <option key={teacher.id} value={teacher.id}>
-                          {teacher.full_name} {teacherClass ? `(Lớp ${teacherClass.class_name})` : ''}
-                        </option>
-                      );
-                    })}
-                  </select>
+                  <div className="relative">
+                    <select
+                      value={selectedTeacherId}
+                      onChange={(e) => setSelectedTeacherId(e.target.value)}
+                      className="w-full h-11 sm:h-12 pl-3.5 pr-9 py-2.5 rounded-xl border border-slate-200 bg-slate-50/50 hover:bg-white hover:border-slate-300 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 text-xs sm:text-sm font-semibold text-slate-900 transition-all shadow-2xs cursor-pointer appearance-none"
+                    >
+                      <option value="" disabled>-- Vui lòng chọn giáo viên chủ nhiệm --</option>
+                      {gvcnUsers.map((teacher) => {
+                        const teacherClass = classes.find((c) => c.id === teacher.assigned_class_id);
+                        return (
+                          <option key={teacher.id} value={teacher.id}>
+                            {teacher.full_name} {teacherClass ? `(Lớp ${teacherClass.class_name})` : ''}
+                          </option>
+                        );
+                      })}
+                    </select>
+                    <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-3.5 sm:top-4 pointer-events-none" />
+                  </div>
 
                   {/* Teacher Info Preview Card */}
                   {currentTeacher && (
-                    <div className="mt-2 p-2 rounded-lg bg-slate-50 border border-slate-200 flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-xs flex-shrink-0 shadow-xs">
+                    <div className="mt-3 p-3 sm:p-3.5 rounded-xl sm:rounded-2xl bg-slate-50/80 border border-slate-200/90 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 text-white flex items-center justify-center font-black text-sm shrink-0 shadow-xs ring-2 ring-white">
                           {currentTeacher.full_name.charAt(0)}
                         </div>
                         <div className="min-w-0">
-                          <div className="text-xs font-black text-slate-900 truncate">
+                          <div className="text-xs sm:text-sm font-black text-slate-900 truncate">
                             {currentTeacher.full_name}
                           </div>
-                          <div className="text-[10px] text-blue-700 font-bold flex items-center gap-1 mt-0.5">
+                          <div className="text-[11px] text-blue-700 font-bold flex items-center gap-1.5 mt-0.5 flex-wrap">
                             <span>GVCN {currentClass ? `Lớp ${currentClass.class_name}` : ''}</span>
-                            <span>•</span>
+                            <span className="text-slate-300">•</span>
                             <span className="text-slate-500 font-medium">Năm học {activeYear?.name || '2026-2027'}</span>
                           </div>
                         </div>
                       </div>
-                      <div className="flex-shrink-0">
-                        <span className="inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800">
-                          <Check className="w-2.5 h-2.5" />
+                      <div className="shrink-0 self-start sm:self-auto">
+                        <span className="inline-flex items-center gap-1 text-[10px] sm:text-[11px] font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs">
+                          <Check className="w-3 h-3 text-emerald-600 stroke-[2.5]" />
                           Sẵn sàng
                         </span>
                       </div>
@@ -824,17 +841,17 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                 </div>
 
                 {/* Big Action Button: Vào báo cáo sĩ số ngay */}
-                <div className="pt-1">
+                <div className="pt-2">
                   <button
                     type="button"
                     onClick={handleGVCNLogin}
                     disabled={isSubmitting || !selectedTeacherId}
-                    className="w-full flex justify-center items-center gap-2 py-3 px-4 rounded-xl shadow-md text-sm font-black text-white bg-blue-600 hover:bg-blue-700 active:scale-[0.99] focus:outline-hidden focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all disabled:opacity-50"
+                    className="w-full flex justify-center items-center gap-2.5 h-12 sm:h-13 px-5 rounded-xl sm:rounded-2xl shadow-md shadow-blue-600/20 hover:shadow-lg hover:shadow-blue-600/30 text-sm sm:text-base font-bold text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 active:scale-[0.99] focus:outline-hidden focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer group"
                   >
                     <span>VÀO BÁO CÁO SĨ SỐ NGAY</span>
-                    <ArrowRight className="w-4 h-4" />
+                    <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 transition-transform group-hover:translate-x-1" />
                   </button>
-                  <p className="text-center text-[10px] text-slate-400 mt-1.5">
+                  <p className="text-center text-[11px] sm:text-xs text-slate-500 mt-2.5 font-medium leading-relaxed">
                     Hệ thống sẽ chuyển trực tiếp vào màn hình nhập sĩ số của lớp {currentClass?.class_name || ''}
                   </p>
                 </div>
@@ -854,48 +871,48 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
               >
                 {/* Thông báo thông tin đã được ghi nhớ trên Safari / Thiết bị */}
                 {hasSavedCreds && (
-                  <div className="p-2.5 bg-purple-50 border border-purple-200 rounded-xl text-xs text-purple-900 flex items-center justify-between gap-2 shadow-2xs">
+                  <div className="p-3 bg-purple-50 border border-purple-200 rounded-xl text-xs text-purple-900 flex items-center justify-between gap-2 shadow-2xs">
                     <div className="flex items-center gap-2">
-                      <KeyRound className="w-4 h-4 text-purple-600 flex-shrink-0" />
+                      <KeyRound className="w-4 h-4 text-purple-600 shrink-0" />
                       <span className="text-[11px] font-bold">
-                        Đã lưu mật khẩu quản trị trên Safari
+                        Đã lưu mật khẩu quản trị trên thiết bị
                       </span>
                     </div>
-                    <span className="text-[10px] font-black bg-purple-200 text-purple-800 px-2 py-0.5 rounded-full">
+                    <span className="text-[10px] font-black bg-purple-200 text-purple-800 px-2.5 py-0.5 rounded-full">
                       Tự động điền
                     </span>
                   </div>
                 )}
 
                 <div>
-                  <label htmlFor="admin-username" className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider">
-                    Email hoặc Tên đăng nhập <span className="text-red-500">*</span>
+                  <label htmlFor="admin-username" className="block text-xs font-extrabold text-slate-700 uppercase tracking-wider mb-1.5">
+                    EMAIL HOẶC TÊN ĐĂNG NHẬP <span className="text-red-500">*</span>
                   </label>
-                  <div className="mt-1">
-                    <input
-                      id="admin-username"
-                      name="username"
-                      type="text"
-                      autoComplete="username"
-                      autoCapitalize="none"
-                      autoCorrect="off"
-                      spellCheck={false}
-                      inputMode="email"
-                      required
-                      placeholder="admin@db.edu.vn hoặc admin..."
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      className="w-full px-3 py-2 rounded-lg border border-slate-300 text-xs font-semibold focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors shadow-2xs"
-                    />
-                  </div>
+                  <input
+                    id="admin-username"
+                    name="username"
+                    type="text"
+                    autoComplete="username"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    inputMode="email"
+                    required
+                    placeholder="admin@db.edu.vn hoặc admin..."
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full h-11 sm:h-12 px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm font-semibold text-slate-900 bg-white hover:border-slate-400 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-all shadow-2xs"
+                  />
                 </div>
 
                 <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label htmlFor="admin-password" className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider">
-                      Mật khẩu Quản trị <span className="text-red-500">*</span>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label htmlFor="admin-password" className="block text-xs font-extrabold text-slate-700 uppercase tracking-wider">
+                      MẬT KHẨU QUẢN TRỊ <span className="text-red-500">*</span>
                     </label>
-                    <span className="text-[10px] text-purple-600 font-semibold">Bảo mật</span>
+                    <span className="text-[10px] text-purple-700 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded-full font-bold">
+                      Bảo mật
+                    </span>
                   </div>
                   <div className="relative">
                     <input
@@ -910,12 +927,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                       placeholder="Nhập mật khẩu quản trị..."
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      className="w-full pl-3 pr-10 py-2 rounded-lg border border-slate-300 text-xs font-mono font-semibold focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors shadow-2xs"
+                      className="w-full h-11 sm:h-12 pl-3.5 pr-11 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm font-mono font-semibold text-slate-900 bg-white hover:border-slate-400 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-all shadow-2xs"
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      className="w-7 h-7 flex items-center justify-center text-slate-400 hover:text-slate-600 rounded-md absolute right-2 top-1.5 cursor-pointer transition-colors"
+                      className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-slate-600 rounded-lg absolute right-2 top-1.5 sm:top-2 cursor-pointer transition-colors"
                       tabIndex={-1}
                       title={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
                     >
@@ -925,7 +942,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                 </div>
 
                 {/* Tùy chọn: Ghi nhớ mật khẩu trên Safari iPhone */}
-                <div className="flex items-center justify-between text-xs pt-0.5">
+                <div className="flex items-center justify-between text-xs pt-0.5 flex-wrap gap-2">
                   <label className="flex items-center gap-2 cursor-pointer select-none">
                     <input
                       type="checkbox"
@@ -935,36 +952,36 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                       onChange={(e) => setRememberAdmin(e.target.checked)}
                       className="w-4 h-4 text-purple-600 border-slate-300 rounded focus:ring-purple-500 cursor-pointer"
                     />
-                    <span className="text-[11px] font-bold text-slate-700">
-                      Ghi nhớ mật khẩu trên Safari (iPhone)
+                    <span className="text-[11px] sm:text-xs font-bold text-slate-700">
+                      Ghi nhớ mật khẩu trên thiết bị này
                     </span>
                   </label>
                   {hasSavedCreds && (
                     <button
                       type="button"
                       onClick={handleClearSavedAdminCreds}
-                      className="text-[10px] text-rose-600 hover:text-rose-700 font-semibold underline cursor-pointer"
+                      className="text-[11px] text-rose-600 hover:text-rose-700 font-semibold underline cursor-pointer"
                     >
                       Xóa mật khẩu đã lưu
                     </button>
                   )}
                 </div>
 
-                <div className="pt-1">
+                <div className="pt-2">
                   <button
                     type="submit"
                     id="admin-login-btn"
                     disabled={isSubmitting}
-                    className="w-full flex justify-center items-center gap-2 py-3 px-4 rounded-xl shadow-md text-sm font-bold text-white bg-purple-600 hover:bg-purple-700 active:scale-[0.99] focus:outline-hidden focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 transition-all disabled:opacity-50 cursor-pointer"
+                    className="w-full flex justify-center items-center gap-2.5 h-12 sm:h-13 px-5 rounded-2xl shadow-lg shadow-purple-600/25 text-sm sm:text-base font-black text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 active:scale-[0.99] focus:outline-hidden focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 transition-all disabled:opacity-50 cursor-pointer"
                   >
-                    <LogIn className="w-4 h-4" />
+                    <LogIn className="w-4 h-4 sm:w-5 sm:h-5" />
                     <span>{isSubmitting ? 'Đang xác thực & Lưu mật khẩu...' : 'ĐĂNG NHẬP QUẢN TRỊ'}</span>
                   </button>
                 </div>
 
                 {/* Hướng dẫn lưu mật khẩu trên Safari iPhone */}
-                <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[11px] text-slate-600 leading-relaxed">
-                  <p className="font-semibold text-slate-700 flex items-center gap-1 mb-0.5">
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-600 leading-relaxed shadow-2xs">
+                  <p className="font-bold text-slate-800 flex items-center gap-1 mb-0.5">
                     <span>💡 Hướng dẫn lưu mật khẩu trên Safari iPhone:</span>
                   </p>
                   <p>
@@ -974,17 +991,17 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
               </form>
             )}
           </div>
+        </div>
 
-          {/* Footer Developer Credit */}
-          <div className="mt-5 text-center text-xs text-slate-500 space-y-1">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/80 border border-slate-200 shadow-2xs text-slate-700 font-medium">
-              <Code2 className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
-              <span>Ứng dụng được phát triển bởi: <strong className="text-slate-900 font-bold">Vũ Văn Hùng</strong> - <a href="tel:0984246993" className="font-bold text-blue-700 hover:underline">SĐT: 0984246993</a></span>
-            </div>
-            <p className="text-[11px] text-slate-400">
-              {settings?.school_name || 'Hệ thống Quản lý Báo cáo Sĩ số'} © {activeYear?.name || '2026-2027'}
-            </p>
+        {/* Footer Developer Credit */}
+        <div className="mt-5 text-center text-xs text-slate-500 space-y-1.5 px-2">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/90 border border-slate-200/90 shadow-2xs text-slate-700 text-xs font-medium max-w-full flex-wrap justify-center">
+            <Code2 className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+            <span>Ứng dụng được phát triển bởi: <strong className="text-slate-900 font-bold">Vũ Văn Hùng</strong> - <a href="tel:0984246993" className="font-bold text-blue-700 hover:underline">SĐT: 0984246993</a></span>
           </div>
+          <p className="text-[11px] text-slate-400 font-medium">
+            {settings?.school_name || 'TRƯỜNG PTDTBT THCS XA DUNG'} © {activeYear?.name || '2026-2027'}
+          </p>
         </div>
       </div>
 

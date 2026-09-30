@@ -708,6 +708,34 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSele
               <ArrowRight className="w-4 h-4" />
             </button>
           </div>
+
+          {/* Quick action bar for GVCN boarding meal management & Excel export */}
+          <div className="mt-4 pt-3.5 border-t border-white/20 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+            <div className="text-xs text-blue-100 flex items-center gap-1.5">
+              <Utensils className="w-4 h-4 text-amber-300 shrink-0" />
+              <span>Ăn bán trú: Biểu tổng hợp các ngày ăn trong tháng & Định mức Sáng - Trưa - Tối</span>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => onNavigate('/reports/boarding-monthly')}
+                className="px-3.5 py-1.5 rounded-xl bg-white/20 hover:bg-white/30 text-white text-xs font-bold border border-white/30 flex items-center gap-1.5 transition-colors cursor-pointer"
+                title="Mở Sổ chấm cơm tháng và xuất file Excel chuẩn mẫu của lớp"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-amber-300" />
+                <span>Sổ chấm cơm tháng (Excel)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => onNavigate('/boarding')}
+                className="px-3.5 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-black flex items-center gap-1.5 transition-colors cursor-pointer"
+                title="Vào chấm báo ăn bán trú hằng ngày"
+              >
+                <Utensils className="w-3.5 h-3.5 text-slate-900" />
+                <span>Báo ăn Lớp</span>
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

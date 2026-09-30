@@ -173,8 +173,11 @@ const AppContent: React.FC = () => {
               />
             )}
 
-            {(currentPath === '/boarding' || currentPath === '/boarding-meals') && (
-              <BoardingManagementPage onNavigate={handleNavigate} />
+            {(currentPath === '/boarding' || currentPath === '/boarding-meals' || currentPath === '/reports/boarding-monthly') && (
+              <BoardingManagementPage
+                initialTab={currentPath === '/reports/boarding-monthly' ? 'monthly-sheet' : undefined}
+                onNavigate={handleNavigate}
+              />
             )}
 
             {(currentPath === '/reports/daily' || currentPath === '/daily-report' || currentPath === '/reports') && (
