@@ -897,17 +897,17 @@ export async function exportAttendanceMonthlyClassExcel(params: ExportAttendance
       rObj.getCell(12).value = `${r.absentRate.toFixed(2).replace('.', ',')}%`;
       rObj.getCell(13).value = `${r.presentRate.toFixed(2).replace('.', ',')}%`;
     } else {
-      rObj.getCell(3).value = r.totalAll > 0 ? r.totalAll : '-';
-      rObj.getCell(4).value = '-';
-      rObj.getCell(5).value = r.totalBoarding > 0 ? r.totalBoarding : '-';
-      rObj.getCell(6).value = '-';
-      rObj.getCell(7).value = '-';
-      rObj.getCell(8).value = r.totalNgoaiTru > 0 ? r.totalNgoaiTru : '-';
-      rObj.getCell(9).value = '-';
-      rObj.getCell(10).value = 'Chưa báo cáo';
-      rObj.getCell(11).value = '-';
-      rObj.getCell(12).value = '-';
-      rObj.getCell(13).value = '-';
+      rObj.getCell(3).value = '';
+      rObj.getCell(4).value = '';
+      rObj.getCell(5).value = '';
+      rObj.getCell(6).value = '';
+      rObj.getCell(7).value = '';
+      rObj.getCell(8).value = '';
+      rObj.getCell(9).value = '';
+      rObj.getCell(10).value = '';
+      rObj.getCell(11).value = '';
+      rObj.getCell(12).value = '';
+      rObj.getCell(13).value = '';
     }
 
     // Styles
@@ -1399,17 +1399,17 @@ export async function exportAttendanceMonthlyAllClassesExcel(params: ExportAtten
         row.getCell(12).value = `${r.absentRate.toFixed(2).replace('.', ',')}%`;
         row.getCell(13).value = `${r.presentRate.toFixed(2).replace('.', ',')}%`;
       } else {
-        row.getCell(3).value = r.totalAll > 0 ? r.totalAll : '-';
-        row.getCell(4).value = '-';
-        row.getCell(5).value = r.totalBoarding > 0 ? r.totalBoarding : '-';
-        row.getCell(6).value = '-';
-        row.getCell(7).value = '-';
-        row.getCell(8).value = r.totalNgoaiTru > 0 ? r.totalNgoaiTru : '-';
-        row.getCell(9).value = '-';
-        row.getCell(10).value = 'Chưa báo cáo';
-        row.getCell(11).value = '-';
-        row.getCell(12).value = '-';
-        row.getCell(13).value = '-';
+        row.getCell(3).value = '';
+        row.getCell(4).value = '';
+        row.getCell(5).value = '';
+        row.getCell(6).value = '';
+        row.getCell(7).value = '';
+        row.getCell(8).value = '';
+        row.getCell(9).value = '';
+        row.getCell(10).value = '';
+        row.getCell(11).value = '';
+        row.getCell(12).value = '';
+        row.getCell(13).value = '';
       }
 
       for (let c = 1; c <= 13; c++) {

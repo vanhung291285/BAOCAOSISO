@@ -1963,14 +1963,21 @@ export const StorageService = {
   }> {
     ensureInitialized();
 
+    const [yStr, mStr] = yearMonth.split('-');
+    const year = parseInt(yStr, 10);
+    const month = parseInt(mStr, 10);
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const firstDayStr = `${yearMonth}-01`;
+    const lastDayStr = `${yearMonth}-${String(daysInMonth).padStart(2, '0')}`;
+
     const supabase = getSupabaseClient();
     if (supabase && isSupabaseConnected()) {
       try {
         const { data: cloudReports } = await supabase
           .from('daily_reports')
           .select('*')
-          .gte('report_date', `${yearMonth}-01`)
-          .lte('report_date', `${yearMonth}-31`);
+          .gte('report_date', firstDayStr)
+          .lte('report_date', lastDayStr);
 
         if (cloudReports && cloudReports.length > 0) {
           const repIds = cloudReports.map((r) => r.id);
@@ -2142,7 +2149,7 @@ export const StorageService = {
       this.getStudents(),
     ]);
 
-    const classItem = classes.find((c) => c.id === classId) || null;
+    const classItem = classes.find((c) => c.id === classId || c.class_name.toLowerCase() === classId.toLowerCase()) || null;
     let teacher = classItem
       ? profiles.find((p) => p.id === classItem.homeroom_teacher_id)
         || profiles.find((p) => p.assigned_class_id === classItem.id && p.role === 'GVCN')
@@ -2164,18 +2171,98 @@ export const StorageService = {
       teacher = { ...teacher, full_name: teacherName };
     }
 
-    // Đồng bộ nhanh từ Supabase nếu có kết nối
+    const [yStr, mStr] = yearMonth.split('-');
+    const year = parseInt(yStr, 10);
+    const month = parseInt(mStr, 10);
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const firstDayStr = `${yearMonth}-01`;
+    const lastDayStr = `${yearMonth}-${String(daysInMonth).padStart(2, '0')}`;
+
+    const classStudents = classItem ? students.filter((s) => s.class_id === classItem.id) : [];
+    const defaultClassTotal = classStudents.length > 0 ? classStudents.length : 35;
+    const defaultClassBoarding = classStudents.filter((s) => s.isBoarding !== false).length || Math.min(25, defaultClassTotal);
+
     const supabase = getSupabaseClient();
+
+    // Thử gọi qua Supabase RPC chuyên dụng nếu database đã cập nhật schema mới
     if (supabase && isSupabaseConnected()) {
       try {
-        const { data: cloudReports } = await supabase
+        const targetId = classItem?.id || classId;
+        const { data: rpcRows, error: rpcErr } = await supabase.rpc('get_class_monthly_attendance_report', {
+          p_class_id: targetId,
+          p_year_month: yearMonth,
+        });
+
+        if (!rpcErr && rpcRows && Array.isArray(rpcRows) && rpcRows.length > 0) {
+          const rows = rpcRows.map((r: any) => {
+            const isRep = Boolean(r.is_reported);
+            return {
+              date: r.report_date,
+              dayLabel: r.day_label || `Ngày ${r.day_str}/${mStr}`,
+              className: r.class_name || classItem?.class_name || '',
+              teacherName: r.teacher_name || teacherName,
+              totalAll: isRep ? Number(r.total_all ?? defaultClassTotal) : 0,
+              absentAll: isRep ? Number(r.absent_all ?? 0) : 0,
+              presentAll: isRep ? Number(r.present_all ?? defaultClassTotal) : 0,
+              totalBoarding: isRep ? Number(r.total_boarding ?? defaultClassBoarding) : 0,
+              absentBoarding: isRep ? Number(r.absent_boarding ?? 0) : 0,
+              baoAnBoarding: isRep ? Number(r.bao_an_boarding ?? defaultClassBoarding) : 0,
+              totalNgoaiTru: isRep ? Number(r.total_ngoai_tru ?? Math.max(0, defaultClassTotal - defaultClassBoarding)) : 0,
+              absentNgoaiTru: isRep ? Number(r.absent_ngoai_tru ?? 0) : 0,
+              studentNames: isRep ? (r.absent_students_names || '') : '',
+              studentAddresses: isRep ? '-' : '',
+              absentRate: isRep ? Number(r.absent_rate ?? 0) : 0,
+              presentRate: isRep ? Number(r.present_rate ?? 100) : 0,
+              isReported: isRep,
+            };
+          });
+
+          const reportedRows = rows.filter((r) => r.isReported);
+          const sumTotalAll = reportedRows.reduce((acc, r) => acc + r.totalAll, 0);
+          const sumAbsentAll = reportedRows.reduce((acc, r) => acc + r.absentAll, 0);
+          const sumPresentAll = sumTotalAll - sumAbsentAll;
+          const sumTotalBoarding = reportedRows.reduce((acc, r) => acc + r.totalBoarding, 0);
+          const sumAbsentBoarding = reportedRows.reduce((acc, r) => acc + r.absentBoarding, 0);
+          const sumBaoAnBoarding = reportedRows.reduce((acc, r) => acc + r.baoAnBoarding, 0);
+          const sumTotalNgoaiTru = reportedRows.reduce((acc, r) => acc + r.totalNgoaiTru, 0);
+          const sumAbsentNgoaiTru = reportedRows.reduce((acc, r) => acc + r.absentNgoaiTru, 0);
+
+          return {
+            classItem,
+            teacher,
+            rows,
+            summary: {
+              totalDaysReported: reportedRows.length,
+              sumTotalAll,
+              sumAbsentAll,
+              sumPresentAll,
+              sumTotalBoarding,
+              sumAbsentBoarding,
+              sumBaoAnBoarding,
+              sumTotalNgoaiTru,
+              sumAbsentNgoaiTru,
+              avgAbsentRate: sumTotalAll > 0 ? (sumAbsentAll / sumTotalAll) * 100 : 0,
+              avgPresentRate: sumTotalAll > 0 ? (sumPresentAll / sumTotalAll) * 100 : 100,
+            },
+          };
+        }
+      } catch (rpcEx) {
+        // Tiếp tục phương án truy vấn bảng chuẩn bên dưới
+      }
+    }
+
+    // Đồng bộ nhanh từ Supabase bảng daily_reports & daily_report_values nếu có kết nối
+    if (supabase && isSupabaseConnected()) {
+      try {
+        const targetIds = Array.from(new Set([classId, classItem?.id, classItem?.class_name].filter(Boolean))) as string[];
+        const { data: cloudReports, error: cErr } = await supabase
           .from('daily_reports')
           .select('*')
-          .eq('class_id', classId)
-          .gte('report_date', `${yearMonth}-01`)
-          .lte('report_date', `${yearMonth}-31`);
+          .in('class_id', targetIds)
+          .gte('report_date', firstDayStr)
+          .lte('report_date', lastDayStr);
 
-        if (cloudReports && cloudReports.length > 0) {
+        if (!cErr && cloudReports && cloudReports.length > 0) {
           const rawReports = localStorage.getItem(STORAGE_KEYS.REPORTS);
           let reports: DailyReport[] = rawReports ? JSON.parse(rawReports) : [];
           cloudReports.forEach((cRep) => {
@@ -2186,16 +2273,22 @@ export const StorageService = {
           localStorage.setItem(STORAGE_KEYS.REPORTS, JSON.stringify(reports));
 
           const repIds = cloudReports.map((r) => r.id);
-          const { data: cloudValues } = await supabase
-            .from('daily_report_values')
-            .select('*')
-            .in('report_id', repIds);
+          if (repIds.length > 0) {
+            const { data: cloudValues } = await supabase
+              .from('daily_report_values')
+              .select('*')
+              .in('report_id', repIds);
 
-          if (cloudValues) {
-            const rawValues = localStorage.getItem(STORAGE_KEYS.VALUES);
-            let allValues: DailyReportValue[] = rawValues ? JSON.parse(rawValues) : [];
-            allValues = allValues.filter((v) => !repIds.includes(v.report_id)).concat(cloudValues);
-            localStorage.setItem(STORAGE_KEYS.VALUES, JSON.stringify(allValues));
+            if (cloudValues && cloudValues.length > 0) {
+              const rawValues = localStorage.getItem(STORAGE_KEYS.VALUES);
+              let allValues: DailyReportValue[] = rawValues ? JSON.parse(rawValues) : [];
+              cloudValues.forEach((cVal) => {
+                const vIdx = allValues.findIndex(v => v.id === cVal.id || (v.report_id === cVal.report_id && v.indicator_group_id === cVal.indicator_group_id));
+                if (vIdx >= 0) allValues[vIdx] = cVal;
+                else allValues.push(cVal);
+              });
+              localStorage.setItem(STORAGE_KEYS.VALUES, JSON.stringify(allValues));
+            }
           }
         }
       } catch (err) {
@@ -2208,13 +2301,13 @@ export const StorageService = {
 
     const rawReports = localStorage.getItem(STORAGE_KEYS.REPORTS);
     const reports: DailyReport[] = rawReports ? JSON.parse(rawReports) : [];
-    const monthReports = reports.filter((r) => r.class_id === classId && r.report_date.startsWith(yearMonth));
+    const validClassIds = new Set([classId, classItem?.id, classItem?.class_name].filter(Boolean));
+    const monthReports = reports.filter((r) => validClassIds.has(r.class_id) && r.report_date.startsWith(yearMonth));
 
     const rawValues = localStorage.getItem(STORAGE_KEYS.VALUES);
     const allValues: DailyReportValue[] = rawValues ? JSON.parse(rawValues) : [];
 
     // Helper resolve address
-    const classStudents = students.filter((s) => s.class_id === classId);
     const resolveAddr = (s: any): string => {
       if (s.id) {
         const m = classStudents.find((std) => std.id === s.id);
@@ -2226,11 +2319,6 @@ export const StorageService = {
       }
       return s.address || '-';
     };
-
-    const [yStr, mStr] = yearMonth.split('-');
-    const year = parseInt(yStr, 10);
-    const month = parseInt(mStr, 10);
-    const daysInMonth = new Date(year, month, 0).getDate();
 
     const rows: {
       date: string;
@@ -2252,9 +2340,6 @@ export const StorageService = {
       isReported: boolean;
     }[] = [];
 
-    const defaultClassTotal = classStudents.length > 0 ? classStudents.length : 35;
-    const defaultClassBoarding = classStudents.filter((s) => s.isBoarding !== false).length || Math.min(25, defaultClassTotal);
-
     for (let day = 1; day <= daysInMonth; day++) {
       const dayStr = String(day).padStart(2, '0');
       const dateStr = `${yearMonth}-${dayStr}`;
@@ -2263,15 +2348,37 @@ export const StorageService = {
       const rep = monthReports.find((r) => r.report_date === dateStr);
       if (rep && (rep.status === 'SUBMITTED' || rep.status === 'LOCKED' || rep.status === 'DRAFT')) {
         const repVals = allValues.filter((v) => v.report_id === rep.id);
-        const allVal = repVals.find((v) => v.indicator_group_id === allIndicator?.id);
-        const boardingVal = repVals.find((v) => v.indicator_group_id === boardingIndicator?.id);
+        const allVal = repVals.find((v) => 
+          v.indicator_group_id === allIndicator?.id || 
+          v.indicator_group_id === 'ig_all' ||
+          indicators.find(i => i.id === v.indicator_group_id)?.code === 'ALL'
+        );
+        const boardingVal = repVals.find((v) => 
+          v.indicator_group_id === boardingIndicator?.id || 
+          v.indicator_group_id === 'ig_boarding_half' ||
+          indicators.find(i => i.id === v.indicator_group_id)?.code === 'BOARDING_HALF' ||
+          indicators.find(i => i.id === v.indicator_group_id)?.name?.toLowerCase().includes('bán trú')
+        );
+
+        // Parse absent_students an toàn
+        let absentStudentsList: any[] = [];
+        if (typeof rep.absent_students === 'string') {
+          try {
+            absentStudentsList = JSON.parse(rep.absent_students);
+          } catch {
+            absentStudentsList = [];
+          }
+        } else if (Array.isArray(rep.absent_students)) {
+          absentStudentsList = rep.absent_students;
+        }
 
         const totalAll = allVal?.total_count ?? defaultClassTotal;
-        const absentAll = allVal?.absent_count ?? 0;
+        const absentAll = allVal?.absent_count ?? (absentStudentsList.length > 0 ? absentStudentsList.length : 0);
         const presentAll = allVal?.present_count ?? Math.max(0, totalAll - absentAll);
 
+        const listBoardingAbsent = absentStudentsList.filter((s) => s.isBoarding === true || s.is_boarding === true).length;
         const totalBoarding = boardingVal?.total_count ?? defaultClassBoarding;
-        const absentBoarding = boardingVal?.absent_count ?? 0;
+        const absentBoarding = boardingVal?.absent_count ?? (listBoardingAbsent > 0 ? listBoardingAbsent : 0);
         const baoAnBoarding = Math.max(0, totalBoarding - absentBoarding);
 
         const totalNgoaiTru = Math.max(0, totalAll - totalBoarding);
@@ -2282,14 +2389,14 @@ export const StorageService = {
 
         let namesStr = '';
         let addrsStr = '-';
-        if (rep.absent_students && rep.absent_students.length > 0) {
-          namesStr = rep.absent_students
-            .map((s) => `${s.full_name}${s.isBoarding ? ' (Bán Trú)' : ' (Ngoại Trú)'}${s.reason ? ` (${s.reason})` : ''}`)
+        if (absentStudentsList && absentStudentsList.length > 0) {
+          namesStr = absentStudentsList
+            .map((s) => `${s.full_name || s.name || 'HS'}${s.isBoarding || s.is_boarding ? ' (Bán Trú)' : ' (Ngoại Trú)'}${s.reason ? ` (${s.reason})` : ''}`)
             .join('\n');
           if (rep.notes && !namesStr.includes(rep.notes)) {
             namesStr += `\n- Ghi chú: ${rep.notes}`;
           }
-          addrsStr = rep.absent_students.map(resolveAddr).join('\n');
+          addrsStr = absentStudentsList.map(resolveAddr).join('\n');
         } else if (rep.notes) {
           namesStr = rep.notes;
         }
@@ -2314,28 +2421,24 @@ export const StorageService = {
           isReported: true,
         });
       } else {
-        // Ngày chưa có báo cáo
-        const totalAll = defaultClassTotal;
-        const totalBoarding = defaultClassBoarding;
-        const totalNgoaiTru = Math.max(0, totalAll - totalBoarding);
-
+        // Ngày chưa có báo cáo -> Để trống mặc định (0)
         rows.push({
           date: dateStr,
           dayLabel,
           className: classItem?.class_name || '',
           teacherName,
-          totalAll,
+          totalAll: 0,
           absentAll: 0,
-          presentAll: totalAll,
-          totalBoarding,
+          presentAll: 0,
+          totalBoarding: 0,
           absentBoarding: 0,
-          baoAnBoarding: totalBoarding,
-          totalNgoaiTru,
+          baoAnBoarding: 0,
+          totalNgoaiTru: 0,
           absentNgoaiTru: 0,
-          studentNames: 'Chưa báo cáo',
-          studentAddresses: '-',
+          studentNames: '',
+          studentAddresses: '',
           absentRate: 0,
-          presentRate: 100,
+          presentRate: 0,
           isReported: false,
         });
       }

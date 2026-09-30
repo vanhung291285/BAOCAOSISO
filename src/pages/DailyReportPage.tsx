@@ -150,17 +150,24 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
     return list;
   }, [classes, selectedCampusId]);
 
-  // Cập nhật monthlyClassId mặc định nếu chưa chọn
+  // Cập nhật monthlyClassId mặc định nếu chưa chọn hoặc không nằm trong danh sách phân hiệu hiện tại
   useEffect(() => {
-    if (!monthlyClassId && displayClasses.length > 0) {
-      if (isGVCN && currentUser?.assigned_class_id) {
-        const found = displayClasses.find((c) => c.id === currentUser.assigned_class_id);
-        if (found) {
-          setMonthlyClassId(found.id);
-          return;
+    if (displayClasses.length > 0) {
+      if (!monthlyClassId) {
+        if (isGVCN && currentUser?.assigned_class_id) {
+          const found = displayClasses.find((c) => c.id === currentUser.assigned_class_id);
+          if (found) {
+            setMonthlyClassId(found.id);
+            return;
+          }
+        }
+        setMonthlyClassId(displayClasses[0].id);
+      } else {
+        const stillInList = displayClasses.some((c) => c.id === monthlyClassId);
+        if (!stillInList) {
+          setMonthlyClassId(displayClasses[0].id);
         }
       }
-      setMonthlyClassId(displayClasses[0].id);
     }
   }, [displayClasses, monthlyClassId, isGVCN, currentUser]);
 
@@ -329,6 +336,41 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
   const currentMonthlyClassObj = useMemo(() => {
     return classes.find((c) => c.id === monthlyClassId) || null;
   }, [monthlyClassId, classes]);
+
+  // Helper to resolve the real count of students for a class from roster or latest reports
+  const getClassStudentCount = useCallback((classId: string) => {
+    const rosterCount = students.filter((s) => s.class_id === classId).length;
+    if (rosterCount > 0) return rosterCount;
+
+    // Fallback to the latest report values from localStorage if available
+    try {
+      const rawReports = localStorage.getItem('sso_daily_reports_v1');
+      const rawValues = localStorage.getItem('sso_daily_report_values_v1');
+      if (rawReports && rawValues) {
+        const reps = JSON.parse(rawReports);
+        const vals = JSON.parse(rawValues);
+        if (Array.isArray(reps) && Array.isArray(vals)) {
+          const classReps = reps.filter(
+            (r: any) => r.class_id === classId && (r.status === 'SUBMITTED' || r.status === 'LOCKED')
+          );
+          if (classReps.length > 0) {
+            // Sort by report_date descending to get the newest
+            classReps.sort((a: any, b: any) => b.report_date.localeCompare(a.report_date));
+            const latestRep = classReps[0];
+            const allVal = vals.find(
+              (v: any) => v.report_id === latestRep.id && (v.indicator_group_id === 'ig_all' || v.indicator_group_id === 'all')
+            );
+            if (allVal && typeof allVal.total_count === 'number' && allVal.total_count > 0) {
+              return allVal.total_count;
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Error reading latest student count:', e);
+    }
+    return 0;
+  }, [students]);
 
   const displayTitle = useMemo(() => {
     if (reportMode === 'monthly_class') {
@@ -544,8 +586,19 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
           rows: cData.rows,
         });
 
-        const clsTotal = students.filter((s) => s.class_id === cls.id).length || 35;
-        const clsBoarding = students.filter((s) => s.class_id === cls.id && s.isBoarding !== false).length || Math.min(25, clsTotal);
+        const rosterTotal = students.filter((s) => s.class_id === cls.id).length;
+        const clsTotal = rosterTotal > 0 
+          ? rosterTotal 
+          : (cData.summary.totalDaysReported > 0 
+              ? Math.round(cData.summary.sumTotalAll / cData.summary.totalDaysReported) 
+              : 35);
+
+        const rosterBoarding = students.filter((s) => s.class_id === cls.id && s.isBoarding !== false).length;
+        const clsBoarding = rosterBoarding > 0 
+          ? rosterBoarding 
+          : (cData.summary.totalDaysReported > 0 
+              ? Math.round(cData.summary.sumTotalBoarding / cData.summary.totalDaysReported) 
+              : Math.min(25, clsTotal));
         const clsNgoaiTru = Math.max(0, clsTotal - clsBoarding);
 
         summaryRows.push({
@@ -699,10 +752,10 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
                     className="text-xs font-black text-blue-900 bg-transparent border-0 focus:outline-hidden cursor-pointer"
                   >
                     {displayClasses.map((cls) => {
-                      const count = students.filter((s) => s.class_id === cls.id).length || 35;
+                      const count = getClassStudentCount(cls.id);
                       return (
                         <option key={cls.id} value={cls.id}>
-                          Lớp {cls.class_name} ({count} HS)
+                          Lớp {cls.class_name} {count > 0 ? `(${count} HS)` : ''}
                         </option>
                       );
                     })}
@@ -987,69 +1040,69 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
 
                         {/* 3. Học sinh toàn trường - Tổng số */}
                         <td className="border border-black py-1.5 px-1 font-medium text-center">
-                          {isReported ? totalAll : totalAll > 0 ? totalAll : '-'}
+                          {isReported ? totalAll : ''}
                         </td>
 
                         {/* 4. Học sinh toàn trường - Số vắng */}
                         <td
                           className={`border border-black py-1.5 px-1 font-bold text-center ${
-                            absentAll > 0 ? 'text-red-700' : 'text-black'
+                            isReported && absentAll > 0 ? 'text-red-700' : 'text-black'
                           }`}
                         >
-                          {isReported ? absentAll : '-'}
+                          {isReported ? absentAll : ''}
                         </td>
 
                         {/* 5. Học sinh bán trú - Tổng số */}
                         <td className="border border-black py-1.5 px-1 font-medium text-center">
-                          {isReported ? totalBoarding : totalBoarding > 0 ? totalBoarding : '-'}
+                          {isReported ? totalBoarding : ''}
                         </td>
 
                         {/* 6. Học sinh bán trú - Số vắng */}
                         <td
                           className={`border border-black py-1.5 px-1 font-bold text-center ${
-                            absentBoarding > 0 ? 'text-red-700' : 'text-black'
+                            isReported && absentBoarding > 0 ? 'text-red-700' : 'text-black'
                           }`}
                         >
-                          {isReported ? absentBoarding : '-'}
+                          {isReported ? absentBoarding : ''}
                         </td>
 
                         {/* 7. Học sinh bán trú - Báo ăn */}
                         <td className="border border-black py-1.5 px-1 font-bold text-center text-blue-900 bg-blue-50/40">
-                          {isReported ? baoAnBoarding : '-'}
+                          {isReported ? baoAnBoarding : ''}
                         </td>
 
                         {/* 8. Học sinh ngoại trú - Tổng số */}
                         <td className="border border-black py-1.5 px-1 font-medium text-center">
-                          {isReported ? totalNgoaiTru : totalNgoaiTru > 0 ? totalNgoaiTru : '-'}
+                          {isReported ? totalNgoaiTru : ''}
                         </td>
 
                         {/* 9. Học sinh ngoại trú - Số vắng */}
                         <td
                           className={`border border-black py-1.5 px-1 font-bold text-center ${
-                            absentNgoaiTru > 0 ? 'text-red-700' : 'text-black'
+                            isReported && absentNgoaiTru > 0 ? 'text-red-700' : 'text-black'
                           }`}
                         >
-                          {isReported ? absentNgoaiTru : '-'}
+                          {isReported ? absentNgoaiTru : ''}
                         </td>
 
                         {/* 10. Tên học sinh nghỉ */}
                         <td className="border border-black py-1.5 px-2.5 text-left text-[11px] text-black whitespace-pre">
-                          {isReported ? studentNames || '' : <span className="text-slate-400 italic">Chưa báo cáo</span>}
+                          {isReported ? studentNames || '' : ''}
                         </td>
 
                         {/* 11. Địa chỉ */}
                         <td className="border border-black py-1.5 px-2.5 text-left text-[11px] text-black whitespace-pre">
-                          {isReported ? studentAddresses || '-' : '-'}
+                          {isReported ? studentAddresses || '' : ''}
                         </td>
 
                         {/* 12. % Vắng */}
                         <td className="border border-black py-1.5 px-1 font-bold text-center text-black">
-                          {isReported ? `${absentRate.toFixed(2).replace('.', ',')}%` : '-'}
+                          {isReported ? `${absentRate.toFixed(2).replace('.', ',')}%` : ''}
                         </td>
 
                         {/* 13. % Chuyên cần */}
                         <td className="border border-black py-1.5 px-1 font-bold text-center text-black">
-                          {isReported ? `${presentRate.toFixed(2).replace('.', ',')}%` : '-'}
+                          {isReported ? `${presentRate.toFixed(2).replace('.', ',')}%` : ''}
                         </td>
 
                         {/* 14. Xử lý reset nhầm (ẩn khi in) */}
@@ -1184,69 +1237,69 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
 
                       {/* 3. Toàn trường/Lớp - Tổng số */}
                       <td className="border border-black py-1.5 px-1 font-medium text-center">
-                        {r.isReported ? r.totalAll : r.totalAll > 0 ? r.totalAll : '-'}
+                        {r.isReported ? r.totalAll : ''}
                       </td>
 
                       {/* 4. Toàn trường/Lớp - Số vắng */}
                       <td
                         className={`border border-black py-1.5 px-1 font-bold text-center ${
-                          r.absentAll > 0 ? 'text-red-700' : 'text-black'
+                          r.isReported && r.absentAll > 0 ? 'text-red-700' : 'text-black'
                         }`}
                       >
-                        {r.isReported ? r.absentAll : '-'}
+                        {r.isReported ? r.absentAll : ''}
                       </td>
 
                       {/* 5. Bán trú - Tổng số */}
                       <td className="border border-black py-1.5 px-1 font-medium text-center">
-                        {r.isReported ? r.totalBoarding : r.totalBoarding > 0 ? r.totalBoarding : '-'}
+                        {r.isReported ? r.totalBoarding : ''}
                       </td>
 
                       {/* 6. Bán trú - Số vắng */}
                       <td
                         className={`border border-black py-1.5 px-1 font-bold text-center ${
-                          r.absentBoarding > 0 ? 'text-red-700' : 'text-black'
+                          r.isReported && r.absentBoarding > 0 ? 'text-red-700' : 'text-black'
                         }`}
                       >
-                        {r.isReported ? r.absentBoarding : '-'}
+                        {r.isReported ? r.absentBoarding : ''}
                       </td>
 
                       {/* 7. Bán trú - Học sinh báo ăn */}
                       <td className="border border-black py-1.5 px-1 font-bold text-center text-blue-900 bg-blue-50/40">
-                        {r.isReported ? r.baoAnBoarding : '-'}
+                        {r.isReported ? r.baoAnBoarding : ''}
                       </td>
 
                       {/* 8. Ngoại trú - Tổng số */}
                       <td className="border border-black py-1.5 px-1 font-medium text-center">
-                        {r.isReported ? r.totalNgoaiTru : r.totalNgoaiTru > 0 ? r.totalNgoaiTru : '-'}
+                        {r.isReported ? r.totalNgoaiTru : ''}
                       </td>
 
                       {/* 9. Ngoại trú - Số vắng */}
                       <td
                         className={`border border-black py-1.5 px-1 font-bold text-center ${
-                          r.absentNgoaiTru > 0 ? 'text-red-700' : 'text-black'
+                          r.isReported && r.absentNgoaiTru > 0 ? 'text-red-700' : 'text-black'
                         }`}
                       >
-                        {r.isReported ? r.absentNgoaiTru : '-'}
+                        {r.isReported ? r.absentNgoaiTru : ''}
                       </td>
 
                       {/* 10. Tên học sinh nghỉ */}
                       <td className="border border-black py-1.5 px-2.5 text-left text-[11px] text-black whitespace-pre">
-                        {r.isReported ? r.studentNames || '' : <span className="text-slate-400 italic">Chưa báo cáo</span>}
+                        {r.isReported ? r.studentNames || '' : ''}
                       </td>
 
                       {/* 11. Địa chỉ */}
                       <td className="border border-black py-1.5 px-2.5 text-left text-[11px] text-black whitespace-pre">
-                        {r.isReported ? r.studentAddresses || '-' : '-'}
+                        {r.isReported ? (r.studentAddresses && r.studentAddresses !== '-' ? r.studentAddresses : '') : ''}
                       </td>
 
                       {/* 12. % Vắng */}
                       <td className="border border-black py-1.5 px-1 font-bold text-center text-black">
-                        {r.isReported ? `${r.absentRate.toFixed(2).replace('.', ',')}%` : '-'}
+                        {r.isReported ? `${r.absentRate.toFixed(2).replace('.', ',')}%` : ''}
                       </td>
 
                       {/* 13. % Chuyên cần */}
                       <td className="border border-black py-1.5 px-1 font-bold text-center text-black">
-                        {r.isReported ? `${r.presentRate.toFixed(2).replace('.', ',')}%` : '-'}
+                        {r.isReported ? `${r.presentRate.toFixed(2).replace('.', ',')}%` : ''}
                       </td>
                     </tr>
                   ))}
@@ -1254,8 +1307,19 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
                   {/* Summary Row Theo Tháng của Lớp */}
                   {monthlyData && (
                     (() => {
-                      const curTotal = students.filter((s) => s.class_id === currentMonthlyClassObj?.id).length || 35;
-                      const curBoarding = students.filter((s) => s.class_id === currentMonthlyClassObj?.id && s.isBoarding !== false).length || Math.min(25, curTotal);
+                      const rosterTotal = students.filter((s) => s.class_id === currentMonthlyClassObj?.id).length;
+                      const curTotal = rosterTotal > 0 
+                        ? rosterTotal 
+                        : (monthlyData.summary.totalDaysReported > 0 
+                            ? Math.round(monthlyData.summary.sumTotalAll / monthlyData.summary.totalDaysReported) 
+                            : 35);
+
+                      const rosterBoarding = students.filter((s) => s.class_id === currentMonthlyClassObj?.id && s.isBoarding !== false).length;
+                      const curBoarding = rosterBoarding > 0 
+                        ? rosterBoarding 
+                        : (monthlyData.summary.totalDaysReported > 0 
+                            ? Math.round(monthlyData.summary.sumTotalBoarding / monthlyData.summary.totalDaysReported) 
+                            : Math.min(25, curTotal));
                       const curNgoaiTru = Math.max(0, curTotal - curBoarding);
 
                       return (
@@ -1266,41 +1330,41 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
                           <td className="border border-black py-2 px-1 text-xs font-bold text-black text-center">
                             {monthlyData.summary.totalDaysReported > 0
                               ? Math.round(monthlyData.summary.sumTotalAll / monthlyData.summary.totalDaysReported)
-                              : curTotal}
+                              : '-'}
                           </td>
                           <td
                             className={`border border-black py-2 px-1 text-xs font-bold text-center ${
                               monthlyData.summary.sumAbsentAll > 0 ? 'text-red-700' : 'text-black'
                             }`}
                           >
-                            {monthlyData.summary.sumAbsentAll}
+                            {monthlyData.summary.totalDaysReported > 0 ? monthlyData.summary.sumAbsentAll : '-'}
                           </td>
                           <td className="border border-black py-2 px-1 text-xs font-bold text-black text-center">
                             {monthlyData.summary.totalDaysReported > 0
                               ? Math.round(monthlyData.summary.sumTotalBoarding / monthlyData.summary.totalDaysReported)
-                              : curBoarding}
+                              : '-'}
                           </td>
                           <td
                             className={`border border-black py-2 px-1 text-xs font-bold text-center ${
                               monthlyData.summary.sumAbsentBoarding > 0 ? 'text-red-700' : 'text-black'
                             }`}
                           >
-                            {monthlyData.summary.sumAbsentBoarding}
+                            {monthlyData.summary.totalDaysReported > 0 ? monthlyData.summary.sumAbsentBoarding : '-'}
                           </td>
                           <td className="border border-black py-2 px-1 text-xs font-bold text-blue-900 bg-blue-100/70 text-center">
-                            {monthlyData.summary.sumBaoAnBoarding}
+                            {monthlyData.summary.totalDaysReported > 0 ? monthlyData.summary.sumBaoAnBoarding : '-'}
                           </td>
                           <td className="border border-black py-2 px-1 text-xs font-bold text-black text-center">
                             {monthlyData.summary.totalDaysReported > 0
                               ? Math.round(monthlyData.summary.sumTotalNgoaiTru / monthlyData.summary.totalDaysReported)
-                              : curNgoaiTru}
+                              : '-'}
                           </td>
                           <td
                             className={`border border-black py-2 px-1 text-xs font-bold text-center ${
                               monthlyData.summary.sumAbsentNgoaiTru > 0 ? 'text-red-700' : 'text-black'
                             }`}
                           >
-                            {monthlyData.summary.sumAbsentNgoaiTru}
+                            {monthlyData.summary.totalDaysReported > 0 ? monthlyData.summary.sumAbsentNgoaiTru : '-'}
                           </td>
                           <td className="border border-black py-2 px-2 text-left text-[11px] font-semibold text-slate-700">
                             Đã nộp: {monthlyData.summary.totalDaysReported}/{monthlyData.rows.length} ngày

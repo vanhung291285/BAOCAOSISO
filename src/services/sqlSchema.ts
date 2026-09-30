@@ -410,6 +410,250 @@ BEGIN
         END IF;
     END LOOP;
 END $$;
+
+-- ==============================================================================
+-- 14. CHỈ MỤC TỐI ƯU TRUY VẤN BÁO CÁO & TỔNG HỢP (INDEXES)
+-- ==============================================================================
+CREATE INDEX IF NOT EXISTS idx_daily_reports_class_date ON public.daily_reports (class_id, report_date);
+CREATE INDEX IF NOT EXISTS idx_daily_reports_date ON public.daily_reports (report_date);
+CREATE INDEX IF NOT EXISTS idx_daily_report_values_report ON public.daily_report_values (report_id);
+CREATE INDEX IF NOT EXISTS idx_daily_report_values_indicator ON public.daily_report_values (indicator_group_id);
+CREATE INDEX IF NOT EXISTS idx_students_class ON public.students (class_id);
+
+-- ==============================================================================
+-- 15. VIEW: view_class_monthly_attendance_summary
+-- Tổng hợp dữ liệu sĩ số từng ngày theo tháng của từng lớp (Chuẩn 13 cột)
+-- ==============================================================================
+CREATE OR REPLACE VIEW public.view_class_monthly_attendance_summary AS
+SELECT 
+    dr.id AS report_id,
+    c.id AS class_id,
+    c.class_name,
+    c.grade,
+    c.campus_id,
+    c.sort_order,
+    COALESCE(p.full_name, 'GVCN ' || c.class_name) AS teacher_name,
+    dr.report_date,
+    to_char(dr.report_date, 'YYYY-MM') AS year_month,
+    to_char(dr.report_date, 'DD') AS day_str,
+    dr.status,
+    dr.reported_time,
+    COALESCE(drv_all.total_count, (SELECT count(*) FROM public.students s WHERE s.class_id = c.id), 35)::INT AS total_all,
+    COALESCE(drv_all.absent_count, jsonb_array_length(CASE WHEN jsonb_typeof(dr.absent_students) = 'array' THEN dr.absent_students ELSE '[]'::jsonb END), 0)::INT AS absent_all,
+    COALESCE(drv_all.present_count, GREATEST(0, COALESCE(drv_all.total_count, 35) - COALESCE(drv_all.absent_count, 0)))::INT AS present_all,
+    COALESCE(drv_board.total_count, (SELECT count(*) FROM public.students s WHERE s.class_id = c.id AND s.is_boarding = true), 25)::INT AS total_boarding,
+    COALESCE(drv_board.absent_count, 0)::INT AS absent_boarding,
+    GREATEST(0, COALESCE(drv_board.total_count, 25) - COALESCE(drv_board.absent_count, 0))::INT AS bao_an_boarding,
+    GREATEST(0, COALESCE(drv_all.total_count, 35) - COALESCE(drv_board.total_count, 25))::INT AS total_ngoai_tru,
+    GREATEST(0, COALESCE(drv_all.absent_count, 0) - COALESCE(drv_board.absent_count, 0))::INT AS absent_ngoai_tru,
+    dr.notes,
+    dr.absent_students
+FROM public.daily_reports dr
+JOIN public.classes c ON dr.class_id = c.id
+LEFT JOIN public.profiles p ON c.homeroom_teacher_id = p.id OR p.assigned_class_id = c.id
+LEFT JOIN public.daily_report_values drv_all ON dr.id = drv_all.report_id AND drv_all.indicator_group_id IN (SELECT id FROM public.indicator_groups WHERE code = 'ALL' OR id = 'ig_all')
+LEFT JOIN public.daily_report_values drv_board ON dr.id = drv_board.report_id AND drv_board.indicator_group_id IN (SELECT id FROM public.indicator_groups WHERE code = 'BOARDING_HALF' OR id = 'ig_boarding_half' OR lower(name) LIKE '%bán trú%');
+
+GRANT SELECT ON public.view_class_monthly_attendance_summary TO anon, authenticated;
+
+-- ==============================================================================
+-- 16. FUNCTION: get_class_monthly_attendance_report
+-- Trả về danh sách chi tiết tất cả các ngày trong tháng (kể cả ngày chưa có báo cáo)
+-- ==============================================================================
+CREATE OR REPLACE FUNCTION public.get_class_monthly_attendance_report(p_class_id TEXT, p_year_month TEXT)
+RETURNS TABLE (
+    report_date DATE,
+    day_str TEXT,
+    day_label TEXT,
+    class_name TEXT,
+    teacher_name TEXT,
+    total_all INT,
+    absent_all INT,
+    present_all INT,
+    total_boarding INT,
+    absent_boarding INT,
+    bao_an_boarding INT,
+    total_ngoai_tru INT,
+    absent_ngoai_tru INT,
+    absent_students_names TEXT,
+    notes TEXT,
+    absent_rate NUMERIC,
+    present_rate NUMERIC,
+    is_reported BOOLEAN
+) AS $$
+DECLARE
+    v_year INT;
+    v_month INT;
+    v_start_date DATE;
+    v_end_date DATE;
+    v_class_name TEXT;
+    v_teacher_name TEXT;
+    v_default_total INT;
+    v_default_boarding INT;
+BEGIN
+    v_year := split_part(p_year_month, '-', 1)::INT;
+    v_month := split_part(p_year_month, '-', 2)::INT;
+    v_start_date := make_date(v_year, v_month, 1);
+    v_end_date := (v_start_date + interval '1 month - 1 day')::DATE;
+
+    SELECT c.class_name, COALESCE(p.full_name, 'GVCN ' || c.class_name)
+    INTO v_class_name, v_teacher_name
+    FROM public.classes c
+    LEFT JOIN public.profiles p ON c.homeroom_teacher_id = p.id OR p.assigned_class_id = c.id
+    WHERE c.id = p_class_id OR c.class_name = p_class_id
+    LIMIT 1;
+
+    SELECT count(*) INTO v_default_total FROM public.students s WHERE s.class_id = p_class_id;
+    IF v_default_total = 0 THEN v_default_total := 35; END IF;
+
+    SELECT count(*) INTO v_default_boarding FROM public.students s WHERE s.class_id = p_class_id AND s.is_boarding = true;
+    IF v_default_boarding = 0 THEN v_default_boarding := LEAST(25, v_default_total); END IF;
+
+    RETURN QUERY
+    WITH calendar AS (
+        SELECT generate_series(v_start_date, v_end_date, '1 day'::interval)::DATE AS c_date
+    )
+    SELECT 
+        cal.c_date AS report_date,
+        to_char(cal.c_date, 'DD') AS day_str,
+        'Ngày ' || to_char(cal.c_date, 'DD/MM') AS day_label,
+        COALESCE(v_class_name, '') AS class_name,
+        COALESCE(v_teacher_name, '') AS teacher_name,
+        CASE WHEN v.report_id IS NOT NULL THEN COALESCE(v.total_all, v_default_total)::INT ELSE NULL END AS total_all,
+        CASE WHEN v.report_id IS NOT NULL THEN COALESCE(v.absent_all, 0)::INT ELSE NULL END AS absent_all,
+        CASE WHEN v.report_id IS NOT NULL THEN COALESCE(v.present_all, v_default_total)::INT ELSE NULL END AS present_all,
+        CASE WHEN v.report_id IS NOT NULL THEN COALESCE(v.total_boarding, v_default_boarding)::INT ELSE NULL END AS total_boarding,
+        CASE WHEN v.report_id IS NOT NULL THEN COALESCE(v.absent_boarding, 0)::INT ELSE NULL END AS absent_boarding,
+        CASE WHEN v.report_id IS NOT NULL THEN COALESCE(v.bao_an_boarding, v_default_boarding)::INT ELSE NULL END AS bao_an_boarding,
+        CASE WHEN v.report_id IS NOT NULL THEN COALESCE(v.total_ngoai_tru, GREATEST(0, v_default_total - v_default_boarding))::INT ELSE NULL END AS total_ngoai_tru,
+        CASE WHEN v.report_id IS NOT NULL THEN COALESCE(v.absent_ngoai_tru, 0)::INT ELSE NULL END AS absent_ngoai_tru,
+        CASE 
+            WHEN v.report_id IS NOT NULL THEN
+                COALESCE(
+                    CASE 
+                        WHEN jsonb_typeof(v.absent_students) = 'array' AND jsonb_array_length(v.absent_students) > 0 THEN
+                            (SELECT string_agg(s->>'full_name' || CASE WHEN (s->>'isBoarding')::boolean THEN ' (Bán Trú)' ELSE ' (Ngoại Trú)' END, E'\n') 
+                             FROM jsonb_array_elements(v.absent_students) s)
+                        ELSE v.notes
+                    END, 
+                    ''
+                )
+            ELSE ''
+        END AS absent_students_names,
+        COALESCE(v.notes, '') AS notes,
+        CASE 
+            WHEN v.report_id IS NOT NULL THEN
+                ROUND((CASE WHEN COALESCE(v.total_all, v_default_total) > 0 THEN (COALESCE(v.absent_all, 0)::NUMERIC / COALESCE(v.total_all, v_default_total)::NUMERIC) * 100 ELSE 0 END), 2)
+            ELSE NULL 
+        END AS absent_rate,
+        CASE 
+            WHEN v.report_id IS NOT NULL THEN
+                ROUND((CASE WHEN COALESCE(v.total_all, v_default_total) > 0 THEN (COALESCE(v.present_all, v_default_total)::NUMERIC / COALESCE(v.total_all, v_default_total)::NUMERIC) * 100 ELSE 100 END), 2)
+            ELSE NULL 
+        END AS present_rate,
+        (v.report_id IS NOT NULL) AS is_reported
+    FROM calendar cal
+    LEFT JOIN public.view_class_monthly_attendance_summary v 
+        ON (v.class_id = p_class_id OR v.class_name = p_class_id) AND v.report_date = cal.c_date
+    ORDER BY cal.c_date ASC;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+GRANT EXECUTE ON FUNCTION public.get_class_monthly_attendance_report(TEXT, TEXT) TO anon, authenticated;
+
+-- ==============================================================================
+-- 17. FUNCTION: get_all_classes_monthly_attendance_summary
+-- Tổng hợp sĩ số tháng cho TẤT CẢ các lớp học (cho Sheet Tổng Hợp toàn trường)
+-- ==============================================================================
+CREATE OR REPLACE FUNCTION public.get_all_classes_monthly_attendance_summary(p_year_month TEXT, p_campus_id TEXT DEFAULT NULL)
+RETURNS TABLE (
+    class_id TEXT,
+    class_name TEXT,
+    grade INT,
+    campus_id TEXT,
+    sort_order INT,
+    teacher_name TEXT,
+    total_students INT,
+    total_boarding INT,
+    total_ngoai_tru INT,
+    reported_days_count INT,
+    total_days_in_month INT,
+    sum_absent_all INT,
+    sum_present_all INT,
+    sum_absent_boarding INT,
+    sum_bao_an_boarding INT,
+    sum_absent_ngoai_tru INT,
+    avg_absent_rate NUMERIC,
+    avg_present_rate NUMERIC
+) AS $$
+DECLARE
+    v_year INT;
+    v_month INT;
+    v_start_date DATE;
+    v_end_date DATE;
+    v_days_count INT;
+BEGIN
+    v_year := split_part(p_year_month, '-', 1)::INT;
+    v_month := split_part(p_year_month, '-', 2)::INT;
+    v_start_date := make_date(v_year, v_month, 1);
+    v_end_date := (v_start_date + interval '1 month - 1 day')::DATE;
+    v_days_count := extract(day from v_end_date)::INT;
+
+    RETURN QUERY
+    WITH class_base AS (
+        SELECT 
+            c.id AS c_id,
+            c.class_name AS c_name,
+            c.grade AS c_grade,
+            c.campus_id AS c_campus,
+            c.sort_order AS c_sort,
+            COALESCE(p.full_name, 'GVCN ' || c.class_name) AS t_name,
+            COALESCE(NULLIF((SELECT count(*) FROM public.students s WHERE s.class_id = c.id), 0), 35)::INT AS c_total,
+            COALESCE(NULLIF((SELECT count(*) FROM public.students s WHERE s.class_id = c.id AND s.is_boarding = true), 0), 25)::INT AS c_board
+        FROM public.classes c
+        LEFT JOIN public.profiles p ON c.homeroom_teacher_id = p.id OR p.assigned_class_id = c.id
+        WHERE c.active = true
+          AND (p_campus_id IS NULL OR p_campus_id = 'all' OR c.campus_id = p_campus_id)
+    ),
+    rep_agg AS (
+        SELECT 
+            v.class_id,
+            count(DISTINCT v.report_date)::INT AS rep_days,
+            COALESCE(sum(v.absent_all), 0)::INT AS sum_abs_all,
+            COALESCE(sum(v.present_all), 0)::INT AS sum_pres_all,
+            COALESCE(sum(v.absent_boarding), 0)::INT AS sum_abs_board,
+            COALESCE(sum(v.bao_an_boarding), 0)::INT AS sum_bao_an,
+            COALESCE(sum(v.absent_ngoai_tru), 0)::INT AS sum_abs_ngoai
+        FROM public.view_class_monthly_attendance_summary v
+        WHERE v.year_month = p_year_month
+        GROUP BY v.class_id
+    )
+    SELECT 
+        cb.c_id AS class_id,
+        cb.c_name AS class_name,
+        cb.c_grade AS grade,
+        cb.c_campus AS campus_id,
+        cb.c_sort AS sort_order,
+        cb.t_name AS teacher_name,
+        cb.c_total AS total_students,
+        cb.c_board AS total_boarding,
+        GREATEST(0, cb.c_total - cb.c_board)::INT AS total_ngoai_tru,
+        COALESCE(ra.rep_days, 0)::INT AS reported_days_count,
+        v_days_count AS total_days_in_month,
+        COALESCE(ra.sum_abs_all, 0)::INT AS sum_absent_all,
+        COALESCE(ra.sum_pres_all, cb.c_total * COALESCE(ra.rep_days, 0) - COALESCE(ra.sum_abs_all, 0))::INT AS sum_present_all,
+        COALESCE(ra.sum_abs_board, 0)::INT AS sum_absent_boarding,
+        COALESCE(ra.sum_bao_an, cb.c_board * COALESCE(ra.rep_days, 0) - COALESCE(ra.sum_abs_board, 0))::INT AS sum_bao_an_boarding,
+        COALESCE(ra.sum_abs_ngoai, 0)::INT AS sum_absent_ngoai_tru,
+        ROUND((CASE WHEN (cb.c_total * GREATEST(1, COALESCE(ra.rep_days, 0))) > 0 THEN (COALESCE(ra.sum_abs_all, 0)::NUMERIC / (cb.c_total * GREATEST(1, COALESCE(ra.rep_days, 0)))::NUMERIC) * 100 ELSE 0 END), 2) AS avg_absent_rate,
+        ROUND((CASE WHEN (cb.c_total * GREATEST(1, COALESCE(ra.rep_days, 0))) > 0 THEN 100 - (COALESCE(ra.sum_abs_all, 0)::NUMERIC / (cb.c_total * GREATEST(1, COALESCE(ra.rep_days, 0)))::NUMERIC) * 100 ELSE 100 END), 2) AS avg_present_rate
+    FROM class_base cb
+    LEFT JOIN rep_agg ra ON cb.c_id = ra.class_id
+    ORDER BY cb.c_grade ASC, cb.c_sort ASC, cb.c_name ASC;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+GRANT EXECUTE ON FUNCTION public.get_all_classes_monthly_attendance_summary(TEXT, TEXT) TO anon, authenticated;
 `;
 
 export const generateFullDatabaseSqlScript = (): string => {
