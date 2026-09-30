@@ -1180,19 +1180,6 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
               </span>
             </button>
 
-            {/* Nút Xuất Excel Báo Ăn Bán Trú Trong Tháng cho GVCN */}
-            <button
-              type="button"
-              onClick={() => handleExportBoardingMonthlyFromAttendance()}
-              disabled={isExportingBoarding}
-              title={`Xuất file Excel Sổ chấm cơm & Biểu tổng hợp các ngày ăn bán trú Tháng ${selectedDate.substring(5, 7)}/${selectedDate.substring(0, 4)} của lớp`}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-black bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs active:scale-95 transition-all cursor-pointer disabled:opacity-50"
-            >
-              <FileSpreadsheet className="w-4 h-4" />
-              <span>{isExportingBoarding ? 'Đang xuất...' : `Xuất Excel Báo Ăn Tháng ${Number(selectedDate.substring(5, 7))}`}</span>
-              <Download className="w-3.5 h-3.5 ml-0.5" />
-            </button>
-
             {onNavigate && (
               <button
                 type="button"
