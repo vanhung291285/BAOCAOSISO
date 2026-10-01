@@ -515,8 +515,11 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
             const absentMap = new Map<string, { reason?: string }>();
             if (dr.absent_students) {
               dr.absent_students.forEach((ab) => {
-                if (ab.id) absentMap.set(ab.id, { reason: ab.reason });
-                if (ab.full_name) absentMap.set(ab.full_name.trim().toLowerCase(), { reason: ab.reason });
+                if (ab.id) {
+                  absentMap.set(ab.id, { reason: ab.reason });
+                } else if (ab.full_name) {
+                  absentMap.set(ab.full_name.trim().toLowerCase(), { reason: ab.reason });
+                }
               });
             }
             const synthRecords = buildDefaultMealRecords(classBoardingStudents, cleanDate, selectedClassId, absentMap);
@@ -586,13 +589,20 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
             return;
           }
 
-          // Lấy đúng số liệu GVCN đã chấm cho học sinh (tìm theo ID hoặc tên)
+          // Lấy đúng số liệu GVCN đã chấm cho học sinh (tìm theo ID trước, chỉ fallback tên khi tên là duy nhất)
           let recs = rep.records;
           if (typeof recs === 'string') {
             try { recs = JSON.parse(recs); } catch { recs = []; }
           }
+          const sameNameCount = classBoardingStudents.filter(
+            (s) => s.full_name.trim().toLowerCase() === normName
+          ).length;
+
           const stRec = Array.isArray(recs)
-            ? recs.find((r) => r.student_id === st.id || (r.student_name && r.student_name.trim().toLowerCase() === normName))
+            ? recs.find((r) => r.student_id === st.id) ||
+              (sameNameCount === 1
+                ? recs.find((r) => !r.student_id && r.student_name && r.student_name.trim().toLowerCase() === normName)
+                : undefined)
             : undefined;
 
           if (stRec) {
@@ -665,8 +675,11 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
         const absentMap = new Map<string, { reason?: string }>();
         if (dr.absent_students) {
           dr.absent_students.forEach((ab) => {
-            if (ab.id) absentMap.set(ab.id, { reason: ab.reason });
-            if (ab.full_name) absentMap.set(ab.full_name.trim().toLowerCase(), { reason: ab.reason });
+            if (ab.id) {
+              absentMap.set(ab.id, { reason: ab.reason });
+            } else if (ab.full_name) {
+              absentMap.set(ab.full_name.trim().toLowerCase(), { reason: ab.reason });
+            }
           });
         }
         const synthRecords = buildDefaultMealRecords(classBoardingStudents, cleanDate, selectedClassId, absentMap);

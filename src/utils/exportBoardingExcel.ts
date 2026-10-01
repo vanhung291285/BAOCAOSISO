@@ -783,8 +783,11 @@ export async function exportMonthlyBoardingExcel(params: ExportBoardingExcelPara
           const absentMap = new Map<string, { reason?: string }>();
           if (dr.absent_students) {
             dr.absent_students.forEach((ab) => {
-              if (ab.id) absentMap.set(ab.id, { reason: ab.reason });
-              if (ab.full_name) absentMap.set(ab.full_name.trim().toLowerCase(), { reason: ab.reason });
+              if (ab.id) {
+                absentMap.set(ab.id, { reason: ab.reason });
+              } else if (ab.full_name) {
+                absentMap.set(ab.full_name.trim().toLowerCase(), { reason: ab.reason });
+              }
             });
           }
           const synthRecords = buildDefaultMealRecords(boardingStudents, cleanDate, classId, absentMap);
@@ -823,6 +826,9 @@ export async function exportMonthlyBoardingExcel(params: ExportBoardingExcelPara
     boardingStudents.forEach((st) => {
       matrix[st.id] = {};
       const normName = st.full_name.trim().toLowerCase();
+      const sameNameCount = boardingStudents.filter(
+        (s) => s.full_name.trim().toLowerCase() === normName
+      ).length;
 
       monthDays.forEach((day) => {
         const rep = reportMap.get(day.dateStr);
@@ -833,7 +839,9 @@ export async function exportMonthlyBoardingExcel(params: ExportBoardingExcelPara
           }
           const stRec = Array.isArray(recs)
             ? recs.find((r) => r.student_id === st.id) ||
-              recs.find((r) => !r.student_id && r.student_name && r.student_name.trim().toLowerCase() === normName)
+              (sameNameCount === 1
+                ? recs.find((r) => !r.student_id && r.student_name && r.student_name.trim().toLowerCase() === normName)
+                : undefined)
             : undefined;
 
           if (stRec) {

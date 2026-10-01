@@ -121,16 +121,20 @@ export function buildDefaultMealRecords(
 
   return boardingStudents.map((st) => {
     // Check if student is marked absent in daily report
-    // Check by id or by name normalization
+    // Check by unique student id first. Only match by name if the class has a SINGLE student with that name
     const normName = st.full_name.trim().toLowerCase();
+    const sameNameCount = boardingStudents.filter(
+      (s) => s.full_name.trim().toLowerCase() === normName
+    ).length;
+
     let isMarkedAbsent = false;
     let absentReason = '';
 
     if (absentStudentsMap) {
-      if (absentStudentsMap.has(st.id)) {
+      if (st.id && absentStudentsMap.has(st.id)) {
         isMarkedAbsent = true;
         absentReason = absentStudentsMap.get(st.id)?.reason || 'Vắng học trong ngày';
-      } else if (absentStudentsMap.has(normName)) {
+      } else if (sameNameCount === 1 && absentStudentsMap.has(normName)) {
         isMarkedAbsent = true;
         absentReason = absentStudentsMap.get(normName)?.reason || 'Vắng học trong ngày';
       }

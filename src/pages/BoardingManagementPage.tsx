@@ -206,8 +206,17 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
       const absentMap = new Map<string, { reason?: string }>();
       if (existingAttendanceReport.report?.absent_students) {
         existingAttendanceReport.report.absent_students.forEach((ab) => {
-          if (ab.id) absentMap.set(ab.id, { reason: ab.reason });
-          if (ab.full_name) absentMap.set(ab.full_name.trim().toLowerCase(), { reason: ab.reason });
+          if (ab.id) {
+            absentMap.set(ab.id, { reason: ab.reason });
+          } else if (ab.full_name) {
+            const norm = ab.full_name.trim().toLowerCase();
+            const sameCount = classBoardingStudents.filter(
+              (s) => s.full_name.trim().toLowerCase() === norm
+            ).length;
+            if (sameCount === 1) {
+              absentMap.set(norm, { reason: ab.reason });
+            }
+          }
         });
       }
 
@@ -253,8 +262,8 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
           };
         }
 
-        const isAbsentInDaily = absentMap.has(st.id) || absentMap.has(normName);
-        const absentInfo = absentMap.get(st.id) || absentMap.get(normName);
+        const isAbsentInDaily = absentMap.has(st.id) || (sameNameCount === 1 && absentMap.has(normName));
+        const absentInfo = absentMap.get(st.id) || (sameNameCount === 1 ? absentMap.get(normName) : undefined);
         const isAbsent = Boolean(isAbsentInDaily);
 
         return {
@@ -442,8 +451,17 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
       const absentMap = new Map<string, { reason?: string }>();
       if (dailyRep.report.absent_students) {
         dailyRep.report.absent_students.forEach((ab) => {
-          if (ab.id) absentMap.set(ab.id, { reason: ab.reason });
-          if (ab.full_name) absentMap.set(ab.full_name.trim().toLowerCase(), { reason: ab.reason });
+          if (ab.id) {
+            absentMap.set(ab.id, { reason: ab.reason });
+          } else if (ab.full_name) {
+            const norm = ab.full_name.trim().toLowerCase();
+            const sameCount = classBoardingStudents.filter(
+              (s) => s.full_name.trim().toLowerCase() === norm
+            ).length;
+            if (sameCount === 1) {
+              absentMap.set(norm, { reason: ab.reason });
+            }
+          }
         });
       }
 

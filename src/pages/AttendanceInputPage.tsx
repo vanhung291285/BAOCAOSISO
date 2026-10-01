@@ -625,6 +625,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
             for (let i = 0; i < pAbsent; i++) {
               const existing = prevAbsent[i];
               newSlots.push({
+                id: existing?.id,
                 full_name: existing?.full_name || '',
                 address: existing?.address || '',
                 reason: existing?.reason || 'Ốm',
@@ -669,6 +670,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
               for (let i = 0; i < sumAbsent; i++) {
                 const existing = prevAbsent[i];
                 newSlots.push({
+                  id: existing?.id,
                   full_name: existing?.full_name || '',
                   address: existing?.address || '',
                   reason: existing?.reason || 'Ốm',
@@ -698,6 +700,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
               for (let i = 0; i < targetTotal; i++) {
                 const existing = prevAbsent[i];
                 newSlots.push({
+                  id: existing?.id,
                   full_name: existing?.full_name || '',
                   address: existing?.address || '',
                   reason: existing?.reason || 'Ốm',
@@ -719,15 +722,19 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
     name: string,
     address: string = '',
     reason: string = 'Ốm',
-    isBoarding: boolean = false
+    isBoarding: boolean = false,
+    studentId?: string
   ) => {
     if (isLocked) return;
     const trimmedName = name.trim();
 
-    const studentMatch = classStudents.find(
-      (s) => s.full_name.trim().toLowerCase() === trimmedName.toLowerCase()
-    );
-    const finalAddress = address.trim() || studentMatch?.address || '';
+    const studentMatch = studentId
+      ? classStudents.find((s) => s.id === studentId)
+      : classStudents.find(
+          (s) => s.full_name.trim().toLowerCase() === trimmedName.toLowerCase()
+        );
+    const finalId = studentId || studentMatch?.id || undefined;
+    const finalAddress = address.trim() || studentMatch?.address || studentMatch?.village || '';
     const finalBoarding = isBoarding !== undefined ? isBoarding : !!studentMatch?.isBoarding;
 
     setAbsentStudents((prev) => {
@@ -737,6 +744,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
       if (emptyIdx !== -1) {
         nextList = [...prev];
         nextList[emptyIdx] = {
+          id: finalId,
           full_name: trimmedName,
           address: finalAddress,
           reason: reason || 'Ốm',
@@ -746,6 +754,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
         nextList = [
           ...prev,
           {
+            id: finalId,
             full_name: trimmedName,
             address: finalAddress,
             reason: reason || 'Ốm',
@@ -787,12 +796,14 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
       let extra: Partial<AbsentStudent> = {};
       if (partial.full_name !== undefined) {
         const trimmed = partial.full_name.trim();
-        const match = classStudents.find(
+        const matches = classStudents.filter(
           (s) => s.full_name.trim().toLowerCase() === trimmed.toLowerCase()
         );
-        if (match) {
+        if (matches.length === 1 && !partial.id) {
+          const match = matches[0];
+          extra.id = match.id;
           if (!nextList[index].address && match.address) {
-            extra.address = match.address;
+            extra.address = match.address || match.village || '';
           }
           if (partial.isBoarding === undefined) {
             extra.isBoarding = !!match.isBoarding;
@@ -1034,8 +1045,17 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
           const absentMap = new Map<string, { reason?: string }>();
           if (absentStudents) {
             absentStudents.forEach((ab) => {
-              if (ab.id) absentMap.set(ab.id, { reason: ab.reason });
-              if (ab.full_name) absentMap.set(ab.full_name.trim().toLowerCase(), { reason: ab.reason });
+              if (ab.id) {
+                absentMap.set(ab.id, { reason: ab.reason });
+              } else if (ab.full_name) {
+                const norm = ab.full_name.trim().toLowerCase();
+                const sameCount = classBoardingStudents.filter(
+                  (s) => s.full_name.trim().toLowerCase() === norm
+                ).length;
+                if (sameCount === 1) {
+                  absentMap.set(norm, { reason: ab.reason });
+                }
+              }
             });
           }
           const synthRecords = buildDefaultMealRecords(classBoardingStudents, selectedDate, selectedClassId, absentMap);
@@ -1170,12 +1190,22 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
 
   // Students not currently marked absent for quick-click tagging
   const availableStudentsForAbsent = useMemo(() => {
-    const markedNames = new Set(
-      absentStudents
-        .filter((s) => s.full_name && s.full_name.trim().length > 0)
-        .map((s) => s.full_name.trim().toLowerCase())
-    );
-    return classStudents.filter((s) => !markedNames.has(s.full_name.trim().toLowerCase()));
+    const markedIds = new Set(absentStudents.filter((s) => s.id).map((s) => s.id!));
+    const markedNamesCount: Record<string, number> = {};
+    absentStudents.forEach((s) => {
+      if (s.full_name && s.full_name.trim()) {
+        const norm = s.full_name.trim().toLowerCase();
+        markedNamesCount[norm] = (markedNamesCount[norm] || 0) + 1;
+      }
+    });
+
+    return classStudents.filter((st) => {
+      if (st.id && markedIds.has(st.id)) return false;
+      const norm = st.full_name.trim().toLowerCase();
+      const sameNameTotal = classStudents.filter((s) => s.full_name.trim().toLowerCase() === norm).length;
+      if (sameNameTotal === 1 && (markedNamesCount[norm] || 0) > 0) return false;
+      return true;
+    });
   }, [classStudents, absentStudents]);
 
   const boardingAbsentCount = useMemo(() => {
@@ -1918,18 +1948,33 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                 ({availableStudentsForAbsent.length}/{classStudents.length} em chưa chọn)
               </span>
             </div>
-            <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto pr-1">
+            <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto pr-1">
               {classStudents.map((st) => {
-                const isMarked = absentStudents.some(
-                  (s) => s.full_name.trim().toLowerCase() === st.full_name.trim().toLowerCase()
+                const normName = st.full_name.trim().toLowerCase();
+                const sameNameStudents = classStudents.filter(
+                  (s) => s.full_name.trim().toLowerCase() === normName
                 );
+                const isDuplicateName = sameNameStudents.length > 1;
+                const duplicateIndex = isDuplicateName
+                  ? sameNameStudents.findIndex((s) => s.id === st.id) + 1
+                  : 0;
+
+                // Check if THIS specific student is marked absent
+                const isMarked = absentStudents.some((s) => {
+                  if (s.id && st.id) return s.id === st.id;
+                  if (isDuplicateName) return false;
+                  return s.full_name.trim().toLowerCase() === normName;
+                });
+
+                const addressSuffix = st.address || st.village;
+
                 return (
                   <button
                     key={st.id}
                     type="button"
                     disabled={isMarked}
-                    onClick={() => handleAddAbsentStudent(st.full_name, st.address || '', 'Ốm', !!st.isBoarding)}
-                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all shadow-2xs ${
+                    onClick={() => handleAddAbsentStudent(st.full_name, addressSuffix || '', 'Ốm', !!st.isBoarding, st.id)}
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all shadow-2xs ${
                       isMarked
                         ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 opacity-70 cursor-default'
                         : 'bg-white hover:bg-rose-50 text-slate-700 hover:text-rose-700 border border-slate-200 hover:border-rose-300 cursor-pointer active:scale-95'
@@ -1937,15 +1982,20 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                     title={
                       isMarked
                         ? 'Đã có trong danh sách vắng'
-                        : `Bấm để ghi nhận vắng: ${st.full_name} (${st.isBoarding ? 'Bán trú' : 'Ngoại trú'})`
+                        : `Bấm để ghi nhận vắng: ${st.full_name}${addressSuffix ? ` (${addressSuffix})` : ''} (${st.isBoarding ? 'Bán trú' : 'Ngoại trú'})`
                     }
                   >
                     {isMarked ? (
-                      <Check className="w-3 h-3 text-emerald-600" />
+                      <Check className="w-3 h-3 text-emerald-600 shrink-0" />
                     ) : (
-                      <Plus className="w-3 h-3 text-slate-400" />
+                      <Plus className="w-3 h-3 text-slate-400 shrink-0" />
                     )}
                     <span>{st.full_name}</span>
+                    {isDuplicateName && (
+                      <span className="text-[10px] text-slate-500 font-normal">
+                        ({addressSuffix || `#${duplicateIndex}`})
+                      </span>
+                    )}
                     {st.isBoarding ? (
                       <span className="text-[10px] text-emerald-700 font-black bg-emerald-50 px-1 rounded border border-emerald-200">BT</span>
                     ) : (
@@ -2004,8 +2054,9 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                             const selectedSt = classStudents.find((s) => s.id === e.target.value);
                             if (selectedSt) {
                               handleUpdateAbsentStudent(index, {
+                                id: selectedSt.id,
                                 full_name: selectedSt.full_name,
-                                address: selectedSt.address || '',
+                                address: selectedSt.address || selectedSt.village || '',
                                 isBoarding: !!selectedSt.isBoarding,
                               });
                             }
@@ -2016,7 +2067,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                           <option value="">+ Chọn từ DS lớp ({classStudents.length} HS)...</option>
                           {classStudents.map((cs) => (
                             <option key={cs.id} value={cs.id}>
-                              {cs.full_name} {cs.isBoarding ? '• [Bán trú]' : '• [Ngoại trú]'} {cs.address ? `- ${cs.address}` : ''}
+                              {cs.full_name} {cs.isBoarding ? '• [Bán trú]' : '• [Ngoại trú]'} {cs.address ? `- ${cs.address}` : cs.village ? `- ${cs.village}` : ''}
                             </option>
                           ))}
                         </select>
