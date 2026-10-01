@@ -304,9 +304,11 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
   };
 
   // Load monthly meal data
-  const loadMonthData = async () => {
+  const loadMonthData = async (isSilent = false) => {
     if (!selectedClassId || !selectedMonth) return;
-    setIsLoading(true);
+    if (!isSilent) {
+      setIsLoading(true);
+    }
     try {
       const todayStr = getTodayDateStr();
 
@@ -454,17 +456,19 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
     } catch (e) {
       console.error('Error loading month data:', e);
     } finally {
-      setIsLoading(false);
+      if (!isSilent) {
+        setIsLoading(false);
+      }
     }
   };
 
   useEffect(() => {
-    loadMonthData();
+    loadMonthData(false);
 
     // Lắng nghe sự kiện lưu báo ăn từ Tab 1 để tự động đồng bộ tức thì vào biểu
     const unsubscribe = subscribeRealtime((event) => {
       if (event.table === 'boarding_reports' || event.table === 'daily_reports') {
-        loadMonthData();
+        loadMonthData(true);
       }
     });
 
