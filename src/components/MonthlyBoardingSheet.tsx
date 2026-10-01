@@ -646,13 +646,18 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
 
     // Lắng nghe sự kiện lưu báo ăn từ Tab 1 (Báo cáo sĩ số ngày) để tự động đồng bộ tức thì vào biểu
     // Lưu ý: Tuyệt đối KHÔNG lắng nghe 'boarding_reports' tại đây để tránh vòng lặp tự reload và giật lag khi chấm ăn
+    let debounceTimer: any = null;
     const unsubscribe = subscribeRealtime((event) => {
       if (event.table === 'daily_reports') {
-        loadMonthData(true);
+        if (debounceTimer) clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => {
+          loadMonthData(true);
+        }, 400);
       }
     });
 
     return () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
       unsubscribe();
       // Clear all pending save timers on unmount
       Object.values(saveTimersRef.current).forEach((t) => clearTimeout(t));
