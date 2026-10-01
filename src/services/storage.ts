@@ -855,14 +855,14 @@ export const StorageService = {
       data = raw ? JSON.parse(raw) : [];
     }
 
-    // Auto-deduplicate any duplicate student records by class_id and normalized student name
+    // Auto-deduplicate any duplicate student records by id
     const seen = new Set<string>();
     const cleaned: import('../types').Student[] = [];
     let hadDuplicates = false;
 
     for (const s of data) {
-      if (!s || !s.full_name) continue;
-      const key = `${s.class_id || ''}:::${s.full_name.trim().toLowerCase()}`;
+      if (!s || !s.id) continue;
+      const key = s.id;
       if (!seen.has(key)) {
         seen.add(key);
         cleaned.push(s);
@@ -880,13 +880,7 @@ export const StorageService = {
 
   async saveStudent(student: import('../types').Student): Promise<void> {
     const list = await this.getStudents();
-    const normName = (student.full_name || '').trim().toLowerCase();
     let idx = list.findIndex((s) => s.id === student.id);
-    if (idx < 0) {
-      idx = list.findIndex(
-        (s) => s.class_id === student.class_id && (s.full_name || '').trim().toLowerCase() === normName
-      );
-    }
 
     if (idx >= 0) list[idx] = { ...list[idx], ...student };
     else list.push(student);
@@ -983,18 +977,9 @@ export const StorageService = {
     const all = await this.getStudents();
     const updated = [...all];
     for (const student of students) {
-      if (!student || !student.full_name) continue;
-      const normName = student.full_name.trim().toLowerCase();
-      const sCls = String(student.class_id || '').trim().toLowerCase();
+      if (!student || !student.id) continue;
 
       let idx = updated.findIndex((s) => s.id === student.id);
-      if (idx < 0) {
-        idx = updated.findIndex(
-          (s) =>
-            String(s.class_id || '').trim().toLowerCase() === sCls &&
-            (s.full_name || '').trim().toLowerCase() === normName
-        );
-      }
       if (idx >= 0) updated[idx] = { ...updated[idx], ...student };
       else updated.push(student);
     }

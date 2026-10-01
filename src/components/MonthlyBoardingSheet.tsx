@@ -154,6 +154,8 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
     Record<string, Record<string, { breakfast: boolean; lunch: boolean; dinner: boolean }>>
   >({});
 
+  const [reportedDates, setReportedDates] = useState<Set<string>>(new Set());
+
   // View mode: 'all' | 'page1' (1-15) | 'page2' (16-end)
   const [viewMode, setViewMode] = useState<'all' | 'page1' | 'page2'>('all');
 
@@ -178,17 +180,23 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
     let bCount = 0;
     let lCount = 0;
     let dCount = 0;
+    
+    // Nếu chưa có ngày nào được báo cáo, tính định mức cho cả tháng theo lịch
+    const useWholeMonth = reportedDates.size === 0;
+
     monthDays.forEach((d) => {
-      if (d.allowedMeals.breakfast) bCount++;
-      if (d.allowedMeals.lunch) lCount++;
-      if (d.allowedMeals.dinner) dCount++;
+      if (useWholeMonth || reportedDates.has(d.dateStr)) {
+        if (d.allowedMeals.breakfast) bCount++;
+        if (d.allowedMeals.lunch) lCount++;
+        if (d.allowedMeals.dinner) dCount++;
+      }
     });
     return {
       defaultStandardBreakfast: bCount,
       defaultStandardLunch: lCount,
       defaultStandardDinner: dCount,
     };
-  }, [monthDays]);
+  }, [monthDays, reportedDates]);
 
   // Load custom standard days config from localStorage
   useEffect(() => {
@@ -317,30 +325,12 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
     try {
       const todayStr = getTodayDateStr();
 
-      // Dọn dẹp bất kỳ báo cáo thử nghiệm nào ở ngày tương lai trong bộ nhớ
-      try {
-        const raw = localStorage.getItem('sso_boarding_reports_v1');
-        if (raw) {
-          const list = JSON.parse(raw);
-          const cleaned = list.filter((r: any) => {
-            const dStr = r.date ? String(r.date).split('T')[0].trim() : '';
-            if (r.class_id === selectedClassId && dStr > todayStr) return false;
-            return true;
-          });
-          if (cleaned.length !== list.length) {
-            localStorage.setItem('sso_boarding_reports_v1', JSON.stringify(cleaned));
-          }
-        }
-      } catch {}
-
       // 1. Lấy danh sách báo ăn bán trú đã lưu trong tháng (Supabase + Local)
       const reports = await StorageService.getBoardingReportsByClassAndMonth(selectedClassId, selectedMonth);
       const reportMap = new Map<string, BoardingDailyReport>();
       reports.forEach((r) => {
         if (!r) return;
         const cleanDate = String(r.date).split('T')[0].trim();
-        // Tuyệt đối không nhận các báo cáo của ngày tương lai
-        if (cleanDate > todayStr) return;
 
         let recs = r.records;
         if (typeof recs === 'string') {
@@ -364,8 +354,6 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
 
         classDaily.forEach((dr) => {
           const cleanDate = String(dr.report_date).split('T')[0].trim();
-          // Tuyệt đối không đồng bộ ngày tương lai (sau ngày hôm nay)
-          if (cleanDate > todayStr) return;
 
           if (!reportMap.has(cleanDate)) {
             const absentMap = new Map<string, { reason?: string }>();
@@ -417,6 +405,13 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
         console.warn('Sync daily reports check error:', err);
       }
 
+      // Track actually reported dates for dynamic standard calculations
+      const reportedSet = new Set<string>();
+      reportMap.forEach((_, dateStr) => {
+        reportedSet.add(dateStr);
+      });
+      setReportedDates(reportedSet);
+
       const initialMatrix: Record<string, Record<string, { breakfast: boolean; lunch: boolean; dinner: boolean }>> = {};
 
       classBoardingStudents.forEach((st) => {
@@ -424,16 +419,6 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
         const normName = st.full_name.trim().toLowerCase();
 
         monthDays.forEach((day) => {
-          // Các ngày chưa tới trong tương lai (sau ngày hôm nay) TUYỆT ĐỐI để trống hoàn toàn
-          if (day.dateStr > todayStr) {
-            initialMatrix[st.id][day.dateStr] = {
-              breakfast: false,
-              lunch: false,
-              dinner: false,
-            };
-            return;
-          }
-
           // Ngày nào GVCN đã báo ăn (trong reportMap) thì hiển thị dấu (+), ngày chưa báo thì để trống hoàn toàn
           const rep = reportMap.get(day.dateStr);
           if (!rep) {
@@ -469,12 +454,12 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
               };
             }
           } else {
-            // Ngày này GVCN đã báo ăn của lớp nhưng học sinh chưa có trong bản ghi cũ (mới bổ sung):
-            // Nếu ngày đó là ngày ăn học đường thì học sinh được hưởng bữa ăn theo lịch ngày
+            // Ngày này lớp có báo ăn nhưng học sinh chưa có trong bản ghi cũ (mới bổ sung):
+            // Mặc định để trống (false) để tránh tự động điền thêm số ngày ăn sai lệch
             initialMatrix[st.id][day.dateStr] = {
-              breakfast: Boolean(day.allowedMeals.breakfast),
-              lunch: Boolean(day.allowedMeals.lunch),
-              dinner: Boolean(day.allowedMeals.dinner),
+              breakfast: false,
+              lunch: false,
+              dinner: false,
             };
           }
         });
@@ -571,9 +556,6 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
   // Background auto-save helper for single date
   const autoSaveMealDate = async (dateStr: string, currentMatrix: typeof mealMatrix) => {
     if (!selectedClassId || !selectedMonth) return;
-    const todayStr = getTodayDateStr();
-    // Không cho phép lưu chấm trước cho ngày tương lai
-    if (dateStr > todayStr) return;
 
     try {
       const schedule = getMealScheduleForDate(dateStr);
@@ -655,12 +637,6 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
 
   // Toggle meal cell
   const handleToggleCell = (studentId: string, dateStr: string, meal: 'breakfast' | 'lunch' | 'dinner') => {
-    const todayStr = getTodayDateStr();
-    if (dateStr > todayStr) {
-      showToast('Không thể chấm trước cho các ngày chưa tới trong tháng! Ngày nào đến thì GVCN mới báo ăn ngày đó.', 'info');
-      return;
-    }
-
     setMealMatrix((prev) => {
       const studentDays = prev[studentId] || {};
       const currentDay = studentDays[dateStr] || { breakfast: false, lunch: false, dinner: false };
@@ -772,8 +748,6 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
       }
     > = {};
 
-    const todayStr = getTodayDateStr();
-
     classBoardingStudents.forEach((st) => {
       const stDays = mealMatrix[st.id] || {};
       let eatenB = 0;
@@ -782,9 +756,6 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
       let distinctEatenDays = 0;
 
       monthDays.forEach((d) => {
-        // Chỉ tính các ngày từ đầu tháng đến ngày hôm nay (không tính các ngày chưa tới trong tương lai)
-        if (d.dateStr > todayStr) return;
-
         const dayRecord = stDays[d.dateStr];
         const hasMeal = dayRecord?.breakfast || dayRecord?.lunch || dayRecord?.dinner;
         if (hasMeal) {
@@ -828,13 +799,8 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
   // Daily column meal counts for footer CỘNG
   const columnTotals = useMemo(() => {
     const dailyTotals: Record<string, { breakfast: number; lunch: number; dinner: number }> = {};
-    const todayStr = getTodayDateStr();
 
     displayedMonthDays.forEach((d) => {
-      if (d.dateStr > todayStr) {
-        dailyTotals[d.dateStr] = { breakfast: 0, lunch: 0, dinner: 0 };
-        return;
-      }
       let b = 0;
       let l = 0;
       let dn = 0;
@@ -1602,64 +1568,52 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
                             {/* Sáng */}
                             <td
                               onClick={() => handleToggleCell(st.id, d.dateStr, 'breakfast')}
-                              className={`py-1 w-4 border-r border-slate-200 select-none font-black ${
-                                isFuture
-                                  ? 'bg-slate-50/50 cursor-not-allowed text-slate-300'
-                                  : dMeal.breakfast
-                                  ? 'text-blue-700 bg-blue-50/30 cursor-pointer'
+                              className={`py-1 w-4 border-r border-slate-200 select-none font-black cursor-pointer ${
+                                dMeal.breakfast
+                                  ? 'text-blue-700 bg-blue-50/30'
                                   : isWeekend
-                                  ? 'bg-slate-100/60 cursor-pointer'
-                                  : 'cursor-pointer hover:bg-blue-50/20'
+                                  ? 'bg-slate-100/60'
+                                  : isFuture
+                                  ? 'bg-slate-50/50 hover:bg-blue-50/20'
+                                  : 'hover:bg-blue-50/20'
                               }`}
-                              title={
-                                isFuture
-                                  ? `Ngày ${d.dayNum} (Chưa tới - Để trống)`
-                                  : `Ngày ${d.dayNum} - Sáng: ${dMeal.breakfast ? 'Có ăn (+)' : 'Để trống'}`
-                              }
+                              title={`Ngày ${d.dayNum} - Sáng: ${dMeal.breakfast ? 'Có ăn (+)' : 'Để trống'}`}
                             >
-                              {!isFuture && dMeal.breakfast ? '+' : ''}
+                              {dMeal.breakfast ? '+' : ''}
                             </td>
 
                             {/* Trưa */}
                             <td
                               onClick={() => handleToggleCell(st.id, d.dateStr, 'lunch')}
-                              className={`py-1 w-4 border-r border-slate-200 select-none font-black ${
-                                isFuture
-                                  ? 'bg-slate-50/50 cursor-not-allowed text-slate-300'
-                                  : dMeal.lunch
-                                  ? 'text-amber-700 bg-amber-50/30 cursor-pointer'
+                              className={`py-1 w-4 border-r border-slate-200 select-none font-black cursor-pointer ${
+                                dMeal.lunch
+                                  ? 'text-amber-700 bg-amber-50/30'
                                   : isWeekend
-                                  ? 'bg-slate-100/60 cursor-pointer'
-                                  : 'cursor-pointer hover:bg-amber-50/20'
+                                  ? 'bg-slate-100/60'
+                                  : isFuture
+                                  ? 'bg-slate-50/50 hover:bg-amber-50/20'
+                                  : 'hover:bg-amber-50/20'
                               }`}
-                              title={
-                                isFuture
-                                  ? `Ngày ${d.dayNum} (Chưa tới - Để trống)`
-                                  : `Ngày ${d.dayNum} - Trưa: ${dMeal.lunch ? 'Có ăn (+)' : 'Để trống'}`
-                              }
+                              title={`Ngày ${d.dayNum} - Trưa: ${dMeal.lunch ? 'Có ăn (+)' : 'Để trống'}`}
                             >
-                              {!isFuture && dMeal.lunch ? '+' : ''}
+                              {dMeal.lunch ? '+' : ''}
                             </td>
 
                             {/* Tối */}
                             <td
                               onClick={() => handleToggleCell(st.id, d.dateStr, 'dinner')}
-                              className={`py-1 w-4 border-r border-slate-300 select-none font-black ${
-                                isFuture
-                                  ? 'bg-slate-50/50 cursor-not-allowed text-slate-300'
-                                  : dMeal.dinner
-                                  ? 'text-purple-700 bg-purple-50/30 cursor-pointer'
+                              className={`py-1 w-4 border-r border-slate-300 select-none font-black cursor-pointer ${
+                                dMeal.dinner
+                                  ? 'text-purple-700 bg-purple-50/30'
                                   : isWeekend || d.dayOfWeekShort === '6'
-                                  ? 'bg-slate-100/60 cursor-pointer'
-                                  : 'cursor-pointer hover:bg-purple-50/20'
+                                  ? 'bg-slate-100/60'
+                                  : isFuture
+                                  ? 'bg-slate-50/50 hover:bg-purple-50/20'
+                                  : 'hover:bg-purple-50/20'
                               }`}
-                              title={
-                                isFuture
-                                  ? `Ngày ${d.dayNum} (Chưa tới - Để trống)`
-                                  : `Ngày ${d.dayNum} - Tối: ${dMeal.dinner ? 'Có ăn (+)' : 'Để trống'}`
-                              }
+                              title={`Ngày ${d.dayNum} - Tối: ${dMeal.dinner ? 'Có ăn (+)' : 'Để trống'}`}
                             >
-                              {!isFuture && dMeal.dinner ? '+' : ''}
+                              {dMeal.dinner ? '+' : ''}
                             </td>
                           </React.Fragment>
                         );

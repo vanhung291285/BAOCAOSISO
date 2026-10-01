@@ -574,24 +574,23 @@ export async function exportMonthlyBoardingExcel(params: ExportBoardingExcelPara
   }
 
   // Chuẩn bị ma trận ăn: studentId -> { dateStr: { breakfast, lunch, dinner } }
-  const todayStr = getTodayDateStr();
   let matrix: Record<string, Record<string, { breakfast: boolean; lunch: boolean; dinner: boolean }>> = {};
+  const reportedDates = new Set<string>();
 
   if (existingMatrix) {
-    // Làm sạch existingMatrix: Đảm bảo các ngày tương lai và ngày chưa chấm luôn để trống 100%
     boardingStudents.forEach((st) => {
       matrix[st.id] = {};
       monthDays.forEach((day) => {
-        if (day.dateStr > todayStr) {
-          matrix[st.id][day.dateStr] = { breakfast: false, lunch: false, dinner: false };
-        } else {
-          const rec = existingMatrix[st.id]?.[day.dateStr];
-          matrix[st.id][day.dateStr] = {
-            breakfast: Boolean(rec?.breakfast),
-            lunch: Boolean(rec?.lunch),
-            dinner: Boolean(rec?.dinner),
-          };
+        const rec = existingMatrix[st.id]?.[day.dateStr];
+        const hasMeal = rec?.breakfast || rec?.lunch || rec?.dinner;
+        if (hasMeal) {
+          reportedDates.add(day.dateStr);
         }
+        matrix[st.id][day.dateStr] = {
+          breakfast: Boolean(rec?.breakfast),
+          lunch: Boolean(rec?.lunch),
+          dinner: Boolean(rec?.dinner),
+        };
       });
     });
   } else {
@@ -600,20 +599,18 @@ export async function exportMonthlyBoardingExcel(params: ExportBoardingExcelPara
     reports.forEach((r) => {
       if (!r) return;
       const cleanDate = String(r.date).split('T')[0].trim();
-      if (cleanDate <= todayStr) {
-        let recs = r.records;
-        if (typeof recs === 'string') {
-          try { recs = JSON.parse(recs); } catch { recs = []; }
-        }
-        if (!Array.isArray(recs) || recs.length === 0) {
-          recs = buildDefaultMealRecords(boardingStudents, cleanDate, classId);
-        }
-        reportMap.set(cleanDate, {
-          ...r,
-          date: cleanDate,
-          records: recs,
-        });
+      let recs = r.records;
+      if (typeof recs === 'string') {
+        try { recs = JSON.parse(recs); } catch { recs = []; }
       }
+      if (!Array.isArray(recs) || recs.length === 0) {
+        recs = buildDefaultMealRecords(boardingStudents, cleanDate, classId);
+      }
+      reportMap.set(cleanDate, {
+        ...r,
+        date: cleanDate,
+        records: recs,
+      });
     });
 
     // Fallback: Đồng bộ từ daily_reports nếu chưa có boarding_reports
@@ -621,7 +618,7 @@ export async function exportMonthlyBoardingExcel(params: ExportBoardingExcelPara
       const dailyReports = await StorageService.getDailyReportsByMonth(classId, monthStr);
       dailyReports.forEach((dr) => {
         const cleanDate = String(dr.report_date).split('T')[0].trim();
-        if (cleanDate <= todayStr && !reportMap.has(cleanDate)) {
+        if (!reportMap.has(cleanDate)) {
           const absentMap = new Map<string, { reason?: string }>();
           if (dr.absent_students) {
             dr.absent_students.forEach((ab) => {
@@ -658,21 +655,15 @@ export async function exportMonthlyBoardingExcel(params: ExportBoardingExcelPara
       console.warn('Excel export daily report sync fallback warning:', err);
     }
 
+    reportMap.forEach((_, cleanDate) => {
+      reportedDates.add(cleanDate);
+    });
+
     boardingStudents.forEach((st) => {
       matrix[st.id] = {};
       const normName = st.full_name.trim().toLowerCase();
 
       monthDays.forEach((day) => {
-        // Không chấm trước các ngày của tháng: Các ngày sau hôm nay (tương lai) mặc định để trống
-        if (day.dateStr > todayStr) {
-          matrix[st.id][day.dateStr] = {
-            breakfast: false,
-            lunch: false,
-            dinner: false,
-          };
-          return;
-        }
-
         const rep = reportMap.get(day.dateStr);
         if (rep) {
           let recs = rep.records;
@@ -693,11 +684,12 @@ export async function exportMonthlyBoardingExcel(params: ExportBoardingExcelPara
               return;
             }
           } else {
-            // Ngày này lớp có báo ăn, học sinh không vắng -> tính ăn theo ngày
+            // Ngày này lớp có báo ăn nhưng học sinh chưa có trong bản ghi cũ (mới bổ sung):
+            // Mặc định để trống (false)
             matrix[st.id][day.dateStr] = {
-              breakfast: Boolean(day.allowedMeals.breakfast),
-              lunch: Boolean(day.allowedMeals.lunch),
-              dinner: Boolean(day.allowedMeals.dinner),
+              breakfast: false,
+              lunch: false,
+              dinner: false,
             };
             return;
           }
@@ -719,11 +711,21 @@ export async function exportMonthlyBoardingExcel(params: ExportBoardingExcelPara
   let standardDinnerDays = params.standardDinnerDays !== undefined ? params.standardDinnerDays : 0;
 
   if (params.standardBreakfastDays === undefined) {
+    let bCount = 0;
+    let lCount = 0;
+    let dCount = 0;
+    const useWholeMonth = reportedDates.size === 0;
+
     monthDays.forEach((d) => {
-      if (d.allowedMeals.breakfast) standardBreakfastDays++;
-      if (d.allowedMeals.lunch) standardLunchDays++;
-      if (d.allowedMeals.dinner) standardDinnerDays++;
+      if (useWholeMonth || reportedDates.has(d.dateStr)) {
+        if (d.allowedMeals.breakfast) bCount++;
+        if (d.allowedMeals.lunch) lCount++;
+        if (d.allowedMeals.dinner) dCount++;
+      }
     });
+    standardBreakfastDays = bCount;
+    standardLunchDays = lCount;
+    standardDinnerDays = dCount;
   }
 
   const wb = new ExcelJS.Workbook();
