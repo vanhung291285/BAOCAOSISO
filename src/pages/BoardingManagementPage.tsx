@@ -782,16 +782,6 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
   // Export Students Roster to Excel
   const handleExportStudentsExcel = async () => {
     let exportStudents = classStudents;
-    if (exportStudents.length === 0 && selectedClass) {
-      const generated = generateDefaultBoardingStudentsForClass(selectedClass.id, selectedClass.class_name);
-      try {
-        await StorageService.saveStudents(generated);
-        exportStudents = generated;
-        showToast(`Đã tự động khởi tạo danh sách 35 học sinh cho lớp ${selectedClass.class_name}!`);
-      } catch (e) {
-        console.warn('Could not auto save students:', e);
-      }
-    }
 
     if (exportStudents.length === 0) {
       showToast('Không có dữ liệu học sinh để xuất file!', 'info');

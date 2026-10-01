@@ -188,7 +188,7 @@ export function subscribeRealtime(callback: (event: { table: string; payload?: a
 // ----------------------------------------------------
 // INITIAL SEED DATA BUILDER (MẶC ĐỊNH RỖNG ĐỂ CẤU HÌNH TỪ ĐẦU)
 // ----------------------------------------------------
-export const STORAGE_CLEAN_VERSION_KEY = 'sso_clean_state_v3_blank_slate';
+export const STORAGE_CLEAN_VERSION_KEY = 'sso_clean_state_v4_clean_blank_slate';
 
 export function getInitialData() {
   const now = new Date().toISOString();
@@ -313,7 +313,7 @@ export function resetAllDataToEmpty() {
   localStorage.setItem(STORAGE_KEYS.VALUES, JSON.stringify(seed.dailyReportValues));
   localStorage.setItem(STORAGE_KEYS.LOGS, JSON.stringify(seed.logs));
   localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify([]));
-  localStorage.setItem(STORAGE_CLEAN_VERSION_KEY, 'v3_blank_slate');
+  localStorage.setItem(STORAGE_CLEAN_VERSION_KEY, 'v4_clean_blank_slate');
   localStorage.setItem('sso_current_user_id', 'u_admin');
   notifyRealtimeChange('all_reset');
 }
@@ -322,7 +322,7 @@ export function resetAllDataToEmpty() {
 export function ensureInitialized() {
   if (typeof window === 'undefined') return;
 
-  if (localStorage.getItem(STORAGE_CLEAN_VERSION_KEY) !== 'v3_blank_slate') {
+  if (localStorage.getItem(STORAGE_CLEAN_VERSION_KEY) !== 'v4_clean_blank_slate') {
     resetAllDataToEmpty();
     return;
   }
@@ -927,11 +927,57 @@ export const StorageService = {
   },
 
   async getBoardingReportsByClass(classId: string): Promise<BoardingDailyReport[]> {
+    ensureInitialized();
+    const supabase = getSupabaseClient();
+    if (supabase && isSupabaseConnected()) {
+      try {
+        const { data, error } = await supabase
+          .from('boarding_reports')
+          .select('*')
+          .eq('class_id', classId);
+        if (!error && data) {
+          // Update local cache
+          const raw = localStorage.getItem(STORAGE_KEYS.BOARDING_REPORTS);
+          let list: BoardingDailyReport[] = raw ? JSON.parse(raw) : [];
+          list = list.filter(r => r.class_id !== classId).concat(data);
+          localStorage.setItem(STORAGE_KEYS.BOARDING_REPORTS, JSON.stringify(list));
+
+          return data.sort((a, b) => b.date.localeCompare(a.date));
+        }
+      } catch (e) {
+        console.warn('Supabase fetch boarding reports error:', e);
+      }
+    }
+
     const list = await this.getBoardingReports();
     return list.filter((r) => r.class_id === classId).sort((a, b) => b.date.localeCompare(a.date));
   },
 
   async getBoardingReportsByClassAndMonth(classId: string, monthStr: string): Promise<BoardingDailyReport[]> {
+    ensureInitialized();
+    const supabase = getSupabaseClient();
+    if (supabase && isSupabaseConnected()) {
+      try {
+        const { data, error } = await supabase
+          .from('boarding_reports')
+          .select('*')
+          .eq('class_id', classId)
+          .gte('date', `${monthStr}-01`)
+          .lte('date', `${monthStr}-31`);
+        if (!error && data) {
+          // Update local cache
+          const raw = localStorage.getItem(STORAGE_KEYS.BOARDING_REPORTS);
+          let list: BoardingDailyReport[] = raw ? JSON.parse(raw) : [];
+          list = list.filter(r => r.class_id !== classId || !r.date.startsWith(monthStr)).concat(data);
+          localStorage.setItem(STORAGE_KEYS.BOARDING_REPORTS, JSON.stringify(list));
+
+          return data.sort((a, b) => a.date.localeCompare(b.date));
+        }
+      } catch (e) {
+        console.warn('Supabase fetch boarding reports month error:', e);
+      }
+    }
+
     const list = await this.getBoardingReports();
     return list
       .filter((r) => r.class_id === classId && r.date.startsWith(monthStr))
@@ -958,6 +1004,16 @@ export const StorageService = {
     }
 
     localStorage.setItem(STORAGE_KEYS.BOARDING_REPORTS, JSON.stringify(list));
+
+    const supabase = getSupabaseClient();
+    if (supabase && isSupabaseConnected()) {
+      try {
+        await supabase.from('boarding_reports').upsert(reports, { onConflict: 'class_id,date' });
+      } catch (e) {
+        console.warn('Supabase upsert boarding reports bulk error:', e);
+      }
+    }
+
     notifyRealtimeChange('boarding_reports', { count: reports.length });
   },
 
@@ -980,6 +1036,15 @@ export const StorageService = {
     }
 
     localStorage.setItem(STORAGE_KEYS.BOARDING_REPORTS, JSON.stringify(list));
+
+    const supabase = getSupabaseClient();
+    if (supabase && isSupabaseConnected()) {
+      try {
+        await supabase.from('boarding_reports').upsert(finalReport, { onConflict: 'class_id,date' });
+      } catch (e) {
+        console.warn('Supabase upsert boarding report error:', e);
+      }
+    }
 
     if (savedBy) {
       const classes = await this.getClasses();
@@ -1009,6 +1074,16 @@ export const StorageService = {
     const list = await this.getBoardingReports();
     const filtered = list.filter((r) => r.id !== reportId);
     localStorage.setItem(STORAGE_KEYS.BOARDING_REPORTS, JSON.stringify(filtered));
+
+    const supabase = getSupabaseClient();
+    if (supabase && isSupabaseConnected()) {
+      try {
+        await supabase.from('boarding_reports').delete().eq('id', reportId);
+      } catch (e) {
+        console.warn('Supabase delete boarding report error:', e);
+      }
+    }
+
     notifyRealtimeChange('boarding_reports', { reportId });
   },
 

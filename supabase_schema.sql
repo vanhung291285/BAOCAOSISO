@@ -692,3 +692,35 @@ VALUES
     ('bgh_01', 'Kiều Việt Hưng (Phó Hiệu trưởng)', 'bgh@xadung.edu.vn', 'BGH', true, '0984246993'),
     ('reporter_01', 'Trần Thanh Tú (Người lập biểu)', 'tu@xadung.edu.vn', 'GVCN', true, '0984246993')
 ON CONFLICT (email) DO NOTHING;
+
+-- ==============================================================================
+-- 11. TABLE: boarding_reports (Báo cáo ăn bán trú chi tiết từng ngày của các lớp)
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS public.boarding_reports (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    class_id TEXT NOT NULL REFERENCES public.classes(id) ON DELETE CASCADE,
+    date DATE NOT NULL,
+    status TEXT NOT NULL DEFAULT 'SUBMITTED' CHECK (status IN ('DRAFT', 'SUBMITTED', 'LOCKED')),
+    total_boarding_students INTEGER NOT NULL DEFAULT 0,
+    breakfast_count INTEGER NOT NULL DEFAULT 0,
+    lunch_count INTEGER NOT NULL DEFAULT 0,
+    dinner_count INTEGER NOT NULL DEFAULT 0,
+    absent_count INTEGER NOT NULL DEFAULT 0,
+    total_meals INTEGER NOT NULL DEFAULT 0,
+    notes TEXT,
+    records JSONB DEFAULT '[]'::jsonb,
+    submitted_by TEXT REFERENCES public.profiles(id) ON DELETE SET NULL,
+    submitted_by_name TEXT,
+    submitted_at TIMESTAMPTZ,
+    locked_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
+    UNIQUE (class_id, date)
+);
+
+-- Bật Row Level Security (RLS) cho bảng boarding_reports
+ALTER TABLE public.boarding_reports ENABLE ROW LEVEL SECURITY;
+
+-- Tạo chính sách RLS cho phép truy cập tự do cho anon và authenticated
+DROP POLICY IF EXISTS "Allow all for boarding_reports" ON public.boarding_reports;
+CREATE POLICY "Allow all for boarding_reports" ON public.boarding_reports FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);

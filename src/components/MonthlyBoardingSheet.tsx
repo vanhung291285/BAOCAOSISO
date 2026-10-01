@@ -3,6 +3,7 @@ import * as XLSX from 'xlsx';
 import { useSchool } from '../contexts/SchoolContext';
 import { useAuth } from '../contexts/AuthContext';
 import { StorageService } from '../services/storage';
+import { getSupabaseClient, isSupabaseConnected } from '../services/supabase';
 import { Student, BoardingDailyReport, BoardingMealRecord } from '../types';
 import { getMealScheduleForDate, buildDefaultMealRecords, generateDefaultBoardingStudentsForClass } from '../utils/boardingRules';
 import { formatDateVN } from '../utils/schoolWeeks';
@@ -115,6 +116,97 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
     Record<string, Record<string, { breakfast: boolean; lunch: boolean; dinner: boolean }>>
   >({});
 
+  const [overrideBreakfast, setOverrideBreakfast] = useState<number | null>(null);
+  const [overrideLunch, setOverrideLunch] = useState<number | null>(null);
+  const [overrideDinner, setOverrideDinner] = useState<number | null>(null);
+
+  const { defaultStandardBreakfast, defaultStandardLunch, defaultStandardDinner } = useMemo(() => {
+    let bCount = 0;
+    let lCount = 0;
+    let dCount = 0;
+    monthDays.forEach((d) => {
+      if (d.allowedMeals.breakfast) bCount++;
+      if (d.allowedMeals.lunch) lCount++;
+      if (d.allowedMeals.dinner) dCount++;
+    });
+    return {
+      defaultStandardBreakfast: bCount,
+      defaultStandardLunch: lCount,
+      defaultStandardDinner: dCount,
+    };
+  }, [monthDays]);
+
+  // Load custom standard days config from localStorage
+  useEffect(() => {
+    if (!selectedClassId || !selectedMonth) return;
+    try {
+      const savedRaw = localStorage.getItem('sso_boarding_standard_configs_v1');
+      if (savedRaw) {
+        const configs = JSON.parse(savedRaw);
+        const configKey = `${selectedClassId}_${selectedMonth}`;
+        const savedConfig = configs[configKey];
+        if (savedConfig) {
+          setOverrideBreakfast(savedConfig.breakfast !== undefined ? savedConfig.breakfast : null);
+          setOverrideLunch(savedConfig.lunch !== undefined ? savedConfig.lunch : null);
+          setOverrideDinner(savedConfig.dinner !== undefined ? savedConfig.dinner : null);
+          return;
+        }
+      }
+    } catch (e) {
+      console.warn('Error loading custom standard config:', e);
+    }
+    setOverrideBreakfast(null);
+    setOverrideLunch(null);
+    setOverrideDinner(null);
+  }, [selectedClassId, selectedMonth]);
+
+  // Helper to persist custom standard days config
+  const saveCustomStandardConfig = (
+    breakfast: number | null,
+    lunch: number | null,
+    dinner: number | null
+  ) => {
+    if (!selectedClassId || !selectedMonth) return;
+    try {
+      const savedRaw = localStorage.getItem('sso_boarding_standard_configs_v1');
+      const configs = savedRaw ? JSON.parse(savedRaw) : {};
+      const configKey = `${selectedClassId}_${selectedMonth}`;
+      
+      if (breakfast === null && lunch === null && dinner === null) {
+        delete configs[configKey];
+      } else {
+        configs[configKey] = {
+          breakfast: breakfast !== null ? breakfast : undefined,
+          lunch: lunch !== null ? lunch : undefined,
+          dinner: dinner !== null ? dinner : undefined,
+        };
+      }
+      
+      localStorage.setItem('sso_boarding_standard_configs_v1', JSON.stringify(configs));
+    } catch (e) {
+      console.warn('Error saving custom standard config:', e);
+    }
+  };
+
+  const updateOverrideBreakfast = (val: number | null) => {
+    setOverrideBreakfast(val);
+    saveCustomStandardConfig(val, overrideLunch, overrideDinner);
+  };
+
+  const updateOverrideLunch = (val: number | null) => {
+    setOverrideLunch(val);
+    saveCustomStandardConfig(overrideBreakfast, val, overrideDinner);
+  };
+
+  const updateOverrideDinner = (val: number | null) => {
+    setOverrideDinner(val);
+    saveCustomStandardConfig(overrideBreakfast, overrideLunch, val);
+  };
+
+  const standardBreakfastDays = overrideBreakfast !== null ? overrideBreakfast : defaultStandardBreakfast;
+  const standardLunchDays = overrideLunch !== null ? overrideLunch : defaultStandardLunch;
+  const standardDinnerDays = overrideDinner !== null ? overrideDinner : defaultStandardDinner;
+
   const showToast = (text: string, type: 'success' | 'error' = 'success') => {
     setToastMessage({ text, type });
     setTimeout(() => setToastMessage(null), 3500);
@@ -125,9 +217,60 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
     if (!selectedClassId || !selectedMonth) return;
     setIsLoading(true);
     try {
+      // 1. Fetch boarding reports
       const reports = await StorageService.getBoardingReportsByClassAndMonth(selectedClassId, selectedMonth);
       const reportMap = new Map<string, BoardingDailyReport>();
       reports.forEach((r) => reportMap.set(r.date, r));
+
+      // 2. Fetch daily attendance reports to see who is absent on each date
+      let classDailyReports: any[] = [];
+      const supabase = getSupabaseClient();
+      if (supabase && isSupabaseConnected()) {
+        try {
+          const { data: repData, error: repErr } = await supabase
+            .from('daily_reports')
+            .select('*')
+            .eq('class_id', selectedClassId)
+            .gte('report_date', `${selectedMonth}-01`)
+            .lte('report_date', `${selectedMonth}-31`);
+          if (!repErr && repData) {
+            classDailyReports = repData;
+          }
+        } catch (e) {
+          console.warn('Error fetching daily reports from Supabase:', e);
+        }
+      }
+
+      if (classDailyReports.length === 0) {
+        try {
+          const raw = localStorage.getItem('sso_daily_reports_v1');
+          if (raw) {
+            const list: any[] = JSON.parse(raw);
+            classDailyReports = list.filter(r => r.class_id === selectedClassId && r.report_date.startsWith(selectedMonth));
+          }
+        } catch (e) {}
+      }
+
+      // Map of absent students per date: dateStr -> Set of student IDs / normalized names
+      const absentMapByDate = new Map<string, Set<string>>();
+      classDailyReports.forEach((rep) => {
+        let absentList: any[] = [];
+        if (typeof rep.absent_students === 'string') {
+          try { absentList = JSON.parse(rep.absent_students); } catch {}
+        } else if (Array.isArray(rep.absent_students)) {
+          absentList = rep.absent_students;
+        }
+
+        const absentSet = new Set<string>();
+        absentList.forEach((abs) => {
+          if (abs.id) absentSet.add(abs.id);
+          if (abs.student_id) absentSet.add(abs.student_id);
+          if (abs.full_name) absentSet.add(abs.full_name.trim().toLowerCase());
+          if (abs.name) absentSet.add(abs.name.trim().toLowerCase());
+        });
+
+        absentMapByDate.set(rep.report_date, absentSet);
+      });
 
       const initialMatrix: Record<string, Record<string, { breakfast: boolean; lunch: boolean; dinner: boolean }>> = {};
 
@@ -135,6 +278,24 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
         initialMatrix[st.id] = {};
         monthDays.forEach((day) => {
           const rep = reportMap.get(day.dateStr);
+
+          // Check if student was reported absent in daily report on this date
+          const isStudentAbsentOnDay = (() => {
+            const absentSet = absentMapByDate.get(day.dateStr);
+            if (!absentSet) return false;
+            return absentSet.has(st.id) || absentSet.has(st.full_name.trim().toLowerCase());
+          })();
+
+          if (isStudentAbsentOnDay) {
+            // "nếu là HS bán trú vắng thì cả ngày hôm đó không ăn và tự động đồng bộ sang phiếu chấm ăn"
+            initialMatrix[st.id][day.dateStr] = {
+              breakfast: false,
+              lunch: false,
+              dinner: false,
+            };
+            return;
+          }
+
           if (rep && rep.records) {
             const stRec = rep.records.find((r) => r.student_id === st.id);
             if (stRec) {
@@ -207,17 +368,6 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
 
   // Student summary calculation in the month
   const studentSummaries = useMemo(() => {
-    // Total scheduled meal sessions in month according to standard calendar
-    let standardBreakfastDays = 0;
-    let standardLunchDays = 0;
-    let standardDinnerDays = 0;
-
-    monthDays.forEach((d) => {
-      if (d.allowedMeals.breakfast) standardBreakfastDays++;
-      if (d.allowedMeals.lunch) standardLunchDays++;
-      if (d.allowedMeals.dinner) standardDinnerDays++;
-    });
-
     const summaries: Record<
       string,
       {
@@ -269,7 +419,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
       standardDinnerDays,
       summaries,
     };
-  }, [classBoardingStudents, mealMatrix, monthDays]);
+  }, [classBoardingStudents, mealMatrix, monthDays, standardBreakfastDays, standardLunchDays, standardDinnerDays]);
 
   // Save all days in month
   const handleSaveMonth = async () => {
@@ -360,6 +510,9 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
         teacherName: currentUser?.full_name || 'Giáo viên chủ nhiệm',
         principalName: 'Hiệu trưởng',
         existingMatrix: Object.keys(mealMatrix).length > 0 ? mealMatrix : undefined,
+        standardBreakfastDays,
+        standardLunchDays,
+        standardDinnerDays,
       });
       showToast('Đã xuất file Excel Sổ Chấm Cơm chuẩn biểu mẫu thành công!');
     } catch (e: any) {
@@ -475,6 +628,87 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
             <Save className="w-3.5 h-3.5" />
             <span>{isSaving ? 'Đang lưu...' : 'Lưu Sổ Chấm Cơm'}</span>
           </button>
+        </div>
+      </div>
+
+      {/* Custom standard meal days configuration */}
+      <div className="bg-amber-50/50 rounded-2xl p-4 border border-amber-200 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4 no-print -mt-2">
+        <div className="flex flex-col gap-1 col-span-2">
+          <div className="text-xs font-black text-amber-900 flex items-center gap-1.5 uppercase tracking-wide">
+            <Info className="w-4 h-4 text-amber-600" />
+            <span>Định mức số ngày ăn chuẩn trong tháng (Mặc định tự động tính theo lịch)</span>
+          </div>
+          <p className="text-[11px] text-slate-500">
+            Giáo viên có thể nhập đè số ngày để điều chỉnh định mức khi có ngày nghỉ lễ, nghỉ thời tiết...
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+          {/* Sáng */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs font-bold text-slate-700">Ăn Sáng (S):</span>
+            <input
+              type="number"
+              min={0}
+              max={31}
+              value={overrideBreakfast !== null ? overrideBreakfast : defaultStandardBreakfast}
+              onChange={(e) => {
+                const val = e.target.value === '' ? null : Number(e.target.value);
+                updateOverrideBreakfast(val);
+              }}
+              className="w-14 bg-white border border-slate-300 rounded-xl px-2 py-1 text-xs font-bold text-center text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500"
+              placeholder={String(defaultStandardBreakfast)}
+            />
+          </div>
+
+          {/* Trưa */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs font-bold text-slate-700">Ăn Trưa (T):</span>
+            <input
+              type="number"
+              min={0}
+              max={31}
+              value={overrideLunch !== null ? overrideLunch : defaultStandardLunch}
+              onChange={(e) => {
+                const val = e.target.value === '' ? null : Number(e.target.value);
+                updateOverrideLunch(val);
+              }}
+              className="w-14 bg-white border border-slate-300 rounded-xl px-2 py-1 text-xs font-bold text-center text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500"
+              placeholder={String(defaultStandardLunch)}
+            />
+          </div>
+
+          {/* Tối */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs font-bold text-slate-700">Ăn Tối (T):</span>
+            <input
+              type="number"
+              min={0}
+              max={31}
+              value={overrideDinner !== null ? overrideDinner : defaultStandardDinner}
+              onChange={(e) => {
+                const val = e.target.value === '' ? null : Number(e.target.value);
+                updateOverrideDinner(val);
+              }}
+              className="w-14 bg-white border border-slate-300 rounded-xl px-2 py-1 text-xs font-bold text-center text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500"
+              placeholder={String(defaultStandardDinner)}
+            />
+          </div>
+
+          {/* Reset button */}
+          {(overrideBreakfast !== null || overrideLunch !== null || overrideDinner !== null) && (
+            <button
+              type="button"
+              onClick={() => {
+                updateOverrideBreakfast(null);
+                updateOverrideLunch(null);
+                updateOverrideDinner(null);
+              }}
+              className="px-2.5 py-1 rounded-lg text-[10px] font-black bg-rose-100 text-rose-900 hover:bg-rose-200 cursor-pointer"
+              title="Khôi phục lại định mức mặc định tính tự động theo lịch"
+            >
+              Đặt lại
+            </button>
+          )}
         </div>
       </div>
 

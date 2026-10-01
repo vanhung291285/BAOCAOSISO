@@ -1,4 +1,4 @@
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import { StorageService } from '../services/storage';
 import { Student, BoardingDailyReport } from '../types';
 import { getMealScheduleForDate, generateDefaultBoardingStudentsForClass } from './boardingRules';
@@ -13,17 +13,26 @@ export interface ExportBoardingExcelParams {
   teacherName?: string;
   principalName?: string;
   existingMatrix?: Record<string, Record<string, { breakfast: boolean; lunch: boolean; dinner: boolean }>>;
+  standardBreakfastDays?: number;
+  standardLunchDays?: number;
+  standardDinnerDays?: number;
+}
+
+// Convert column index (0-indexed) to letter references (e.g. A, ZZ)
+function getColLetter(colIdx: number): string {
+  let temp = colIdx + 1;
+  let letter = '';
+  while (temp > 0) {
+    let modulo = (temp - 1) % 26;
+    letter = String.fromCharCode(65 + modulo) + letter;
+    temp = Math.floor((temp - modulo) / 26);
+  }
+  return letter;
 }
 
 /**
- * Xuất file Excel "Sổ Chấm Cơm Bán Trú Tháng" chuẩn biểu mẫu Bộ/Sở Giáo dục
- * Bao gồm:
- * - Tiêu đề trường, phân hiệu, lớp, tháng/năm
- * - Bảng chấm ăn chi tiết từng ngày (Sáng, Trưa, Tối: S - T - T)
- * - Cột tổng hợp số ngày báo ăn (S - T - T) và không báo ăn (S - T - T)
- * - Cột ngày ăn thực của từng học sinh
- * - Dòng TỔNG CỘNG suất ăn toàn lớp theo từng bữa và cả tháng
- * - Khối chữ ký xác nhận của GVCN và Ban Giám Hiệu
+ * Xuất file Excel "Sổ Chấm Cơm Bán Trú Tháng" chuẩn biểu mẫu Bộ/Sở Giáo dục giống 100% hình gốc.
+ * Cột ngày và thứ tự động cập nhật, chấm bằng dấu (+), ô trống khi nghỉ hoặc ngày cuối tuần/Thứ 6 tối.
  */
 export async function exportMonthlyBoardingExcel(params: ExportBoardingExcelParams): Promise<boolean> {
   const {
@@ -97,16 +106,10 @@ export async function exportMonthlyBoardingExcel(params: ExportBoardingExcelPara
     }
   }
 
-  // 4. Nếu lớp hoàn toàn chưa được nhập danh sách học sinh vào hệ thống:
-  // Tự động khởi tạo danh sách 35 học sinh bán trú chuẩn cho lớp (đặc thù THCS Xa Dung)
-  // và lưu vào cơ sở dữ liệu để lớp luôn có danh sách học sinh sử dụng lâu dài
+  // 4. Nếu lớp hoàn toàn chưa được nhập danh sách học sinh vào hệ thống, để trống để GVCN Import Excel lên
   if (boardingStudents.length === 0) {
-    boardingStudents = generateDefaultBoardingStudentsForClass(classId, className);
-    try {
-      await StorageService.saveStudents(boardingStudents);
-    } catch (e) {
-      console.warn('Could not auto-save default students:', e);
-    }
+    // Keep boardingStudents as empty array
+    boardingStudents = [];
   }
 
   const [yStr, mStr] = monthStr.split('-');
@@ -183,261 +186,345 @@ export async function exportMonthlyBoardingExcel(params: ExportBoardingExcelPara
     });
   }
 
-  // Tính số ngày tiêu chuẩn trong tháng
-  let standardBreakfastDays = 0;
-  let standardLunchDays = 0;
-  let standardDinnerDays = 0;
-  monthDays.forEach((d) => {
-    if (d.allowedMeals.breakfast) standardBreakfastDays++;
-    if (d.allowedMeals.lunch) standardLunchDays++;
-    if (d.allowedMeals.dinner) standardDinnerDays++;
+  // Tính số ngày tiêu chuẩn trong tháng (sử dụng giá trị truyền vào từ giao diện hoặc tự động tính theo lịch)
+  let standardBreakfastDays = params.standardBreakfastDays !== undefined ? params.standardBreakfastDays : 0;
+  let standardLunchDays = params.standardLunchDays !== undefined ? params.standardLunchDays : 0;
+  let standardDinnerDays = params.standardDinnerDays !== undefined ? params.standardDinnerDays : 0;
+
+  if (params.standardBreakfastDays === undefined) {
+    monthDays.forEach((d) => {
+      if (d.allowedMeals.breakfast) standardBreakfastDays++;
+      if (d.allowedMeals.lunch) standardLunchDays++;
+      if (d.allowedMeals.dinner) standardDinnerDays++;
+    });
+  }
+
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'Phần mềm Quản lý Sĩ số';
+  wb.created = new Date();
+
+  const sheetName = `SoChamCom_T${monthNum}`;
+  const ws = wb.addWorksheet(sheetName, {
+    pageSetup: {
+      orientation: 'landscape',
+      paperSize: 9, // A4
+      fitToPage: true,
+      fitToWidth: 1,
+      fitToHeight: 0,
+      horizontalCentered: true,
+      verticalCentered: false,
+      margins: { left: 0.3, right: 0.3, top: 0.4, bottom: 0.4, header: 0.2, footer: 0.2 },
+      showGridLines: true,
+    },
   });
 
-  // Mảng dữ liệu Excel dạng AOA (Array of Arrays)
-  const rows: any[][] = [];
+  // Setup Column Widths
+  // Col 1 (A): STT, Col 2 (B): Họ và tên
+  ws.getColumn(1).width = 4.5;
+  ws.getColumn(2).width = 18;
 
-  // 1. Tiêu đề trường và phân hiệu
-  rows.push([schoolName.toUpperCase()]);
-  rows.push([`PHÂN HIỆU: ${(campusName || 'Suối Lư').toUpperCase()}`]);
-  rows.push([]);
+  // Daily columns: S, T, T for each day
+  for (let d = 1; d <= daysInMonth; d++) {
+    const colStart = 3 + (d - 1) * 3;
+    ws.getColumn(colStart).width = 3.1;
+    ws.getColumn(colStart + 1).width = 3.1;
+    ws.getColumn(colStart + 2).width = 3.1;
+  }
 
-  // 2. Tiêu đề chính của biểu mẫu
-  rows.push([
-    '',
-    '',
-    '',
-    '',
-    '',
-    `SỔ CHẤM CƠM LỚP ${className.toUpperCase()} - THÁNG ${monthNum}/${yearNum}`,
-  ]);
-  rows.push([
-    '',
-    '',
-    '',
-    '',
-    '',
-    `(Biểu tổng hợp các ngày ăn của học sinh bán trú trong tháng)`,
-  ]);
-  rows.push([]);
+  // Summary columns
+  const sumColIdx = 3 + daysInMonth * 3;
+  ws.getColumn(sumColIdx).width = 4.5; // S báo ăn
+  ws.getColumn(sumColIdx + 1).width = 4.5; // T báo ăn
+  ws.getColumn(sumColIdx + 2).width = 4.5; // T báo ăn
+  ws.getColumn(sumColIdx + 3).width = 4.5; // S không báo ăn
+  ws.getColumn(sumColIdx + 4).width = 4.5; // T không báo ăn
+  ws.getColumn(sumColIdx + 5).width = 4.5; // T không báo ăn
 
-  // 3. Hàng Header 1: STT, Họ và tên, Ngày (1..days), Số ngày ăn trong tháng, Ngày ăn thực
-  const headerRow1: any[] = ['STT', 'Họ và tên'];
-  monthDays.forEach((d) => {
-    headerRow1.push(d.dayNum, '', '');
+  const thinBorder = {
+    top: { style: 'thin' as const, color: { argb: 'FF000000' } },
+    left: { style: 'thin' as const, color: { argb: 'FF000000' } },
+    bottom: { style: 'thin' as const, color: { argb: 'FF000000' } },
+    right: { style: 'thin' as const, color: { argb: 'FF000000' } },
+  };
+
+  // Header 1: School and Campus info
+  ws.getCell('A1').value = schoolName.toUpperCase();
+  ws.getCell('A1').font = { name: 'Times New Roman', size: 9, bold: true };
+  ws.getCell('A1').alignment = { horizontal: 'left', vertical: 'middle' };
+
+  ws.getCell('A2').value = `PHÂN HIỆU: ${(campusName || 'XA DUNG').toUpperCase()}`;
+  ws.getCell('A2').font = { name: 'Times New Roman', size: 9, bold: true };
+  ws.getCell('A2').alignment = { horizontal: 'left', vertical: 'middle' };
+
+  // Header Main Title
+  const totalColsCount = sumColIdx + 5;
+  const titleRange = `A4:${getColLetter(totalColsCount - 1)}4`;
+  ws.mergeCells(titleRange);
+  const titleCell = ws.getCell('A4');
+  titleCell.value = `SỔ CHẤM CƠM LỚP: ${className.toUpperCase()} THÁNG ${monthNum}/${yearNum}`;
+  titleCell.font = { name: 'Times New Roman', size: 14, bold: true };
+  titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+  ws.getRow(4).height = 24;
+
+  // Header Table setup (Rows 6, 7, 8)
+  const headerRow1 = 6;
+  const headerRow2 = 7;
+  const headerRow3 = 8;
+
+  ws.mergeCells(`A${headerRow1}:A${headerRow3}`);
+  const sttHeader = ws.getCell(`A${headerRow1}`);
+  sttHeader.value = 'STT';
+
+  ws.mergeCells(`B${headerRow1}:B${headerRow3}`);
+  const nameHeader = ws.getCell(`B${headerRow1}`);
+  nameHeader.value = 'Họ và tên';
+
+  // Render Day Numbers & Day Of Week Headers
+  monthDays.forEach((day, dIdx) => {
+    const colStart = 2 + dIdx * 3; // 0-indexed column offset
+    const colLetterStart = getColLetter(colStart);
+    const colLetterEnd = getColLetter(colStart + 2);
+
+    // Row 6: Day Number
+    ws.mergeCells(`${colLetterStart}${headerRow1}:${colLetterEnd}${headerRow1}`);
+    const dayNumCell = ws.getCell(`${colLetterStart}${headerRow1}`);
+    dayNumCell.value = day.dayNum;
+
+    // Row 7: Day Of Week Short
+    ws.mergeCells(`${colLetterStart}${headerRow2}:${colLetterEnd}${headerRow2}`);
+    const dowCell = ws.getCell(`${colLetterStart}${headerRow2}`);
+    dowCell.value = day.dayOfWeekShort;
+
+    // Row 8: S, T, T
+    ws.getCell(`${colLetterStart}${headerRow3}`).value = 'S';
+    ws.getCell(`${getColLetter(colStart + 1)}${headerRow3}`).value = 'T';
+    ws.getCell(`${getColLetter(colStart + 2)}${headerRow3}`).value = 'T';
   });
-  headerRow1.push('Số ngày ăn trong tháng', '', '', '', '', '', 'Ngày ăn thực');
-  rows.push(headerRow1);
 
-  // 4. Hàng Header 2: '', '', Thứ (2..CN), Số ngày báo ăn, Số ngày không báo ăn, ''
-  const headerRow2: any[] = ['', ''];
-  monthDays.forEach((d) => {
-    headerRow2.push(d.dayOfWeekShort, '', '');
-  });
-  headerRow2.push('Số ngày báo ăn', '', '', 'Số ngày không báo ăn', '', '', '');
-  rows.push(headerRow2);
+  // Summary Headers
+  const sumColLetterStart = getColLetter(sumColIdx - 1);
+  const sumColLetterEnd = getColLetter(sumColIdx + 4);
+  ws.mergeCells(`${sumColLetterStart}${headerRow1}:${sumColLetterEnd}${headerRow1}`);
+  const summaryHeader = ws.getCell(`${sumColLetterStart}${headerRow1}`);
+  summaryHeader.value = 'Số ngày ăn trong tháng';
 
-  // 5. Hàng Header 3: '', '', Bữa (S, T, T), S, T, T, S, T, T, ''
-  const headerRow3: any[] = ['', ''];
-  monthDays.forEach(() => {
-    headerRow3.push('S', 'T', 'T');
-  });
-  headerRow3.push('S', 'T', 'T', 'S', 'T', 'T', '');
-  rows.push(headerRow3);
+  // Sub-summaries
+  const eatenColLetterEnd = getColLetter(sumColIdx + 1);
+  ws.mergeCells(`${sumColLetterStart}${headerRow2}:${eatenColLetterEnd}${headerRow2}`);
+  const eatenHeader = ws.getCell(`${sumColLetterStart}${headerRow2}`);
+  eatenHeader.value = 'Số ngày báo ăn';
 
-  // Mảng tích lũy tổng cộng từng cột
-  // Mỗi ngày có 3 cột bữa: S, T, T
-  const dayTotals: Array<{ breakfast: number; lunch: number; dinner: number }> = monthDays.map(() => ({
-    breakfast: 0,
-    lunch: 0,
-    dinner: 0,
-  }));
+  const missedColLetterStart = getColLetter(sumColIdx + 2);
+  const missedColLetterEnd = getColLetter(sumColIdx + 4);
+  ws.mergeCells(`${missedColLetterStart}${headerRow2}:${missedColLetterEnd}${headerRow2}`);
+  const missedHeader = ws.getCell(`${missedColLetterStart}${headerRow2}`);
+  missedHeader.value = 'Số ngày không báo ăn';
 
-  let totalAllEatenB = 0;
-  let totalAllEatenL = 0;
-  let totalAllEatenD = 0;
-  let totalAllMissedB = 0;
-  let totalAllMissedL = 0;
-  let totalAllMissedD = 0;
-  let totalAllActualDays = 0;
+  // Row 8: S, T, T subheadings for summary
+  ws.getCell(`${sumColLetterStart}${headerRow3}`).value = 'S';
+  ws.getCell(`${getColLetter(sumColIdx)}${headerRow3}`).value = 'T';
+  ws.getCell(`${getColLetter(sumColIdx + 1)}${headerRow3}`).value = 'T';
 
-  // 6. Điền dữ liệu từng học sinh
+  ws.getCell(`${getColLetter(sumColIdx + 2)}${headerRow3}`).value = 'S';
+  ws.getCell(`${getColLetter(sumColIdx + 3)}${headerRow3}`).value = 'T';
+  ws.getCell(`${getColLetter(sumColIdx + 4)}${headerRow3}`).value = 'T';
+
+  // Style Header block
+  ws.getRow(headerRow1).height = 18;
+  ws.getRow(headerRow2).height = 18;
+  ws.getRow(headerRow3).height = 16;
+
+  for (let r = headerRow1; r <= headerRow3; r++) {
+    const row = ws.getRow(r);
+    for (let c = 1; c <= totalColsCount; c++) {
+      const cell = row.getCell(c);
+      cell.border = thinBorder;
+      cell.font = { name: 'Times New Roman', size: 9, bold: true };
+      cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+      
+      // Gray out summary header backgrounds
+      if (c >= sumColIdx) {
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFF2F4F7' },
+        };
+      }
+    }
+  }
+
+  // Align corner headers
+  sttHeader.alignment = { horizontal: 'center', vertical: 'middle' };
+  nameHeader.alignment = { horizontal: 'center', vertical: 'middle' };
+
+  // Data rows
+  let currentExcelRow = 9;
+
   boardingStudents.forEach((st, idx) => {
-    const rData: any[] = [idx + 1, st.full_name];
-    const stDays = matrix![st.id] || {};
+    const rowObj = ws.getRow(currentExcelRow);
+    rowObj.getCell(1).value = idx + 1;
+    rowObj.getCell(2).value = st.full_name;
 
+    const stDays = matrix![st.id] || {};
     let eatenB = 0;
     let eatenL = 0;
     let eatenD = 0;
 
-    monthDays.forEach((d, dIdx) => {
-      const dRec = stDays[d.dateStr];
+    monthDays.forEach((day, dIdx) => {
+      const dRec = stDays[day.dateStr];
       const hasB = Boolean(dRec?.breakfast);
       const hasL = Boolean(dRec?.lunch);
       const hasD = Boolean(dRec?.dinner);
 
-      if (hasB) {
-        eatenB++;
-        dayTotals[dIdx].breakfast++;
-      }
-      if (hasL) {
-        eatenL++;
-        dayTotals[dIdx].lunch++;
-      }
-      if (hasD) {
-        eatenD++;
-        dayTotals[dIdx].dinner++;
-      }
+      if (hasB) eatenB++;
+      if (hasL) eatenL++;
+      if (hasD) eatenD++;
 
-      rData.push(hasB ? '+' : '', hasL ? '+' : '', hasD ? '+' : '');
+      const colStart = 3 + dIdx * 3;
+      rowObj.getCell(colStart).value = hasB ? '+' : '';
+      rowObj.getCell(colStart + 1).value = hasL ? '+' : '';
+      rowObj.getCell(colStart + 2).value = hasD ? '+' : '';
     });
 
     const missedB = Math.max(0, standardBreakfastDays - eatenB);
     const missedL = Math.max(0, standardLunchDays - eatenL);
     const missedD = Math.max(0, standardDinnerDays - eatenD);
-    const actualDays = Math.round(((eatenB + eatenL + eatenD) / 3) * 10) / 10;
 
-    totalAllEatenB += eatenB;
-    totalAllEatenL += eatenL;
-    totalAllEatenD += eatenD;
-    totalAllMissedB += missedB;
-    totalAllMissedL += missedL;
-    totalAllMissedD += missedD;
-    totalAllActualDays += actualDays;
+    // Eaten summaries
+    rowObj.getCell(sumColIdx).value = eatenB;
+    rowObj.getCell(sumColIdx + 1).value = eatenL;
+    rowObj.getCell(sumColIdx + 2).value = eatenD;
 
-    rData.push(eatenB, eatenL, eatenD, missedB, missedL, missedD, actualDays);
-    rows.push(rData);
+    // Missed summaries
+    rowObj.getCell(sumColIdx + 3).value = missedB > 0 ? missedB : '';
+    rowObj.getCell(sumColIdx + 4).value = missedL > 0 ? missedL : '';
+    rowObj.getCell(sumColIdx + 5).value = missedD > 0 ? missedD : '';
+
+    // Style the student row
+    rowObj.height = 18;
+    for (let c = 1; c <= totalColsCount; c++) {
+      const cell = rowObj.getCell(c);
+      cell.border = thinBorder;
+      cell.font = { name: 'Times New Roman', size: 9.5 };
+      
+      if (c === 2) {
+        cell.alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
+      } else {
+        cell.alignment = { horizontal: 'center', vertical: 'middle' };
+      }
+
+      // Highlight "+" meals
+      if (c >= 3 && c < sumColIdx && cell.value === '+') {
+        cell.font = { name: 'Times New Roman', size: 9.5, bold: true };
+      }
+    }
+
+    currentExcelRow++;
   });
 
-  // 7. Hàng TỔNG CỘNG
-  const totalRow: any[] = ['', 'TỔNG CỘNG'];
-  monthDays.forEach((_, dIdx) => {
-    totalRow.push(
-      dayTotals[dIdx].breakfast || '',
-      dayTotals[dIdx].lunch || '',
-      dayTotals[dIdx].dinner || ''
-    );
-  });
-  totalRow.push(
-    totalAllEatenB,
-    totalAllEatenL,
-    totalAllEatenD,
-    totalAllMissedB,
-    totalAllMissedL,
-    totalAllMissedD,
-    Math.round(totalAllActualDays * 10) / 10
-  );
-  rows.push(totalRow);
+  // TỔNG CỘNG row
+  const sumRowIndex = currentExcelRow;
+  const sumRowObj = ws.getRow(sumRowIndex);
+  ws.mergeCells(`A${sumRowIndex}:B${sumRowIndex}`);
+  
+  const sumLabelCell = sumRowObj.getCell(1);
+  sumLabelCell.value = 'CỘNG';
+  sumLabelCell.font = { name: 'Times New Roman', size: 10, bold: true };
+  sumLabelCell.alignment = { horizontal: 'center', vertical: 'middle' };
 
-  // 8. Hàng ghi chú định mức
-  rows.push([]);
-  rows.push([
-    `* Ghi chú: Định mức số ngày ăn chuẩn trong tháng: Sáng = ${standardBreakfastDays} ngày, Trưa = ${standardLunchDays} ngày, Tối = ${standardDinnerDays} ngày.`,
-  ]);
-  rows.push([
-    `* Dấu (+) là học sinh có ăn. Để trống là học sinh nghỉ ăn. Ngày ăn thực = Tổng số bữa ăn thực tế quy đổi.`,
-  ]);
-  rows.push([]);
+  // Add formula sums for daily columns
+  for (let c = 3; c < sumColIdx; c++) {
+    const colLetter = getColLetter(c - 1);
+    const startCellRef = `${colLetter}9`;
+    const endCellRef = `${colLetter}${sumRowIndex - 1}`;
+    const cell = sumRowObj.getCell(c);
+    cell.value = { formula: `COUNTIF(${startCellRef}:${endCellRef}, "+")` };
+    cell.font = { name: 'Times New Roman', size: 9, bold: true };
+    cell.alignment = { horizontal: 'center', vertical: 'middle' };
+    cell.border = thinBorder;
+  }
 
-  // 9. Khối chữ ký xác nhận
-  const signColGVCN = 1;
-  const signColBGH = 2 + monthDays.length * 3; // Căn về phía bên phải
+  // Add sums for eaten and missed summary columns
+  for (let c = sumColIdx; c < totalColsCount; c++) {
+    const colLetter = getColLetter(c - 1);
+    const startCellRef = `${colLetter}9`;
+    const endCellRef = `${colLetter}${sumRowIndex - 1}`;
+    const cell = sumRowObj.getCell(c);
+    cell.value = { formula: `SUM(${startCellRef}:${endCellRef})` };
+    cell.font = { name: 'Times New Roman', size: 9, bold: true };
+    cell.alignment = { horizontal: 'center', vertical: 'middle' };
+    cell.border = thinBorder;
+  }
+
+  sumRowObj.height = 20;
+
+  // Signatures blocks
+  currentExcelRow += 3;
+  ws.mergeCells(`B${currentExcelRow}:G${currentExcelRow}`);
+  const dateSignColLetterStart = getColLetter(sumColIdx - 5);
+  const dateSignColLetterEnd = getColLetter(totalColsCount - 1);
+  ws.mergeCells(`${dateSignColLetterStart}${currentExcelRow}:${dateSignColLetterEnd}${currentExcelRow}`);
 
   const now = new Date();
   const dateSignText = `Xa Dung, ngày ${String(now.getDate()).padStart(2, '0')} tháng ${String(now.getMonth() + 1).padStart(2, '0')} năm ${now.getFullYear()}`;
+  const dateCell = ws.getCell(`${dateSignColLetterStart}${currentExcelRow}`);
+  dateCell.value = dateSignText;
+  dateCell.font = { name: 'Times New Roman', size: 11, italic: true };
+  dateCell.alignment = { horizontal: 'center', vertical: 'middle' };
 
-  const signRow1: any[] = [];
-  signRow1[signColBGH] = dateSignText;
-  rows.push(signRow1);
+  currentExcelRow++;
+  ws.mergeCells(`B${currentExcelRow}:G${currentExcelRow}`);
+  ws.mergeCells(`${dateSignColLetterStart}${currentExcelRow}:${dateSignColLetterEnd}${currentExcelRow}`);
 
-  const signRow2: any[] = [];
-  signRow2[signColGVCN] = 'NGƯỜI LẬP BIỂU (GVCN)';
-  signRow2[signColBGH] = 'HIỆU TRƯỞNG / BAN GIÁM HIỆU';
-  rows.push(signRow2);
+  const gvcnTitle = ws.getCell(`B${currentExcelRow}`);
+  gvcnTitle.value = 'GIÁO VIÊN CHỦ NHIỆM';
+  gvcnTitle.font = { name: 'Times New Roman', size: 11, bold: true };
+  gvcnTitle.alignment = { horizontal: 'center', vertical: 'middle' };
 
-  const signRow3: any[] = [];
-  signRow3[signColGVCN] = '(Ký và ghi rõ họ tên)';
-  signRow3[signColBGH] = '(Ký, đóng dấu)';
-  rows.push(signRow3);
+  const bghTitle = ws.getCell(`${dateSignColLetterStart}${currentExcelRow}`);
+  bghTitle.value = 'HIỆU TRƯỞNG';
+  bghTitle.font = { name: 'Times New Roman', size: 11, bold: true };
+  bghTitle.alignment = { horizontal: 'center', vertical: 'middle' };
 
-  // Khoảng trống ký tên
-  rows.push([]);
-  rows.push([]);
-  rows.push([]);
+  currentExcelRow++;
+  ws.mergeCells(`B${currentExcelRow}:G${currentExcelRow}`);
+  ws.mergeCells(`${dateSignColLetterStart}${currentExcelRow}:${dateSignColLetterEnd}${currentExcelRow}`);
 
-  const signRow4: any[] = [];
-  signRow4[signColGVCN] = teacherName;
-  signRow4[signColBGH] = principalName;
-  rows.push(signRow4);
+  const gvcnSub = ws.getCell(`B${currentExcelRow}`);
+  gvcnSub.value = '(Ký và ghi rõ họ tên)';
+  gvcnSub.font = { name: 'Times New Roman', size: 10, italic: true };
+  gvcnSub.alignment = { horizontal: 'center', vertical: 'middle' };
 
-  // Tạo Worksheet
-  const ws = XLSX.utils.aoa_to_sheet(rows);
+  const bghSub = ws.getCell(`${dateSignColLetterStart}${currentExcelRow}`);
+  bghSub.value = '(Ký, đóng dấu)';
+  bghSub.font = { name: 'Times New Roman', size: 10, italic: true };
+  bghSub.alignment = { horizontal: 'center', vertical: 'middle' };
 
-  // Cấu hình các ô merge (trộn ô)
-  const headerStartRow = 6; // Hàng thứ 7 (0-indexed = 6)
-  const merges: XLSX.Range[] = [
-    // Tiêu đề chính
-    { s: { r: 3, c: 5 }, e: { r: 3, c: 22 } },
-    { s: { r: 4, c: 5 }, e: { r: 4, c: 22 } },
+  // Leave space for physical signature
+  currentExcelRow += 4;
+  ws.mergeCells(`B${currentExcelRow}:G${currentExcelRow}`);
+  ws.mergeCells(`${dateSignColLetterStart}${currentExcelRow}:${dateSignColLetterEnd}${currentExcelRow}`);
 
-    // STT & Họ và tên (merge 3 hàng header)
-    { s: { r: headerStartRow, c: 0 }, e: { r: headerStartRow + 2, c: 0 } },
-    { s: { r: headerStartRow, c: 1 }, e: { r: headerStartRow + 2, c: 1 } },
-  ];
+  const gvcnName = ws.getCell(`B${currentExcelRow}`);
+  gvcnName.value = teacherName;
+  gvcnName.font = { name: 'Times New Roman', size: 11, bold: true };
+  gvcnName.alignment = { horizontal: 'center', vertical: 'middle' };
 
-  // Merge từng ngày (mỗi ngày 3 cột S, T, T)
-  let cIdx = 2;
-  monthDays.forEach(() => {
-    // Merge Ngày
-    merges.push({ s: { r: headerStartRow, c: cIdx }, e: { r: headerStartRow, c: cIdx + 2 } });
-    // Merge Thứ
-    merges.push({ s: { r: headerStartRow + 1, c: cIdx }, e: { r: headerStartRow + 1, c: cIdx + 2 } });
-    cIdx += 3;
-  });
+  const bghName = ws.getCell(`${dateSignColLetterStart}${currentExcelRow}`);
+  bghName.value = principalName;
+  bghName.font = { name: 'Times New Roman', size: 11, bold: true };
+  bghName.alignment = { horizontal: 'center', vertical: 'middle' };
 
-  // Merge nhóm tổng kết
-  // Số ngày ăn trong tháng (6 cột)
-  merges.push({ s: { r: headerStartRow, c: cIdx }, e: { r: headerStartRow, c: cIdx + 5 } });
-  // Số ngày báo ăn (3 cột)
-  merges.push({ s: { r: headerStartRow + 1, c: cIdx }, e: { r: headerStartRow + 1, c: cIdx + 2 } });
-  // Số ngày không báo ăn (3 cột)
-  merges.push({ s: { r: headerStartRow + 1, c: cIdx + 3 }, e: { r: headerStartRow + 1, c: cIdx + 5 } });
-  // Ngày ăn thực (3 hàng)
-  merges.push({ s: { r: headerStartRow, c: cIdx + 6 }, e: { r: headerStartRow + 2, c: cIdx + 6 } });
-
-  ws['!merges'] = merges;
-
-  // Cấu hình độ rộng các cột (Column widths)
-  const colWidths: XLSX.ColInfo[] = [
-    { wch: 5 }, // STT
-    { wch: 22 }, // Họ và tên
-  ];
-
-  // Mỗi ngày: 3 cột S, T, T (độ rộng 3.5 ký tự mỗi cột)
-  monthDays.forEach(() => {
-    colWidths.push({ wch: 3.5 }, { wch: 3.5 }, { wch: 3.5 });
-  });
-
-  // Các cột tổng hợp
-  colWidths.push(
-    { wch: 4.5 }, // Báo ăn S
-    { wch: 4.5 }, // Báo ăn T
-    { wch: 4.5 }, // Báo ăn T
-    { wch: 4.5 }, // Không báo ăn S
-    { wch: 4.5 }, // Không báo ăn T
-    { wch: 4.5 }, // Không báo ăn T
-    { wch: 11 } // Ngày ăn thực
-  );
-
-  ws['!cols'] = colWidths;
-
-  // Tạo Workbook và xuất file
-  const wb = XLSX.utils.book_new();
-  const sheetName = `SoChamCom_T${monthNum}`;
-  XLSX.utils.book_append_sheet(wb, ws, sheetName);
-
+  // Trigger download
+  const buffer = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
   const cleanClassName = className.replace(/[^a-zA-Z0-9]/g, '_');
-  const fileName = `So_Cham_Com_Lop_${cleanClassName}_Thang_${String(monthNum).padStart(2, '0')}_${yearNum}.xlsx`;
-  XLSX.writeFile(wb, fileName);
+  a.download = `So_Cham_Com_Lop_${cleanClassName}_Thang_${String(monthNum).padStart(2, '0')}_${yearNum}.xlsx`;
+  a.click();
+  URL.revokeObjectURL(url);
 
   return true;
 }
