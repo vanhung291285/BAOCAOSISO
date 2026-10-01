@@ -186,9 +186,13 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     triggerAutoCheck(today);
 
     // Subscribe to realtime updates across tabs/cloud
+    let debounceTimer: any = null;
     const unsub = subscribeRealtime((event) => {
       if (event.table === 'notifications' || event.table === 'daily_reports') {
-        loadNotifications();
+        if (debounceTimer) clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => {
+          loadNotifications();
+        }, 400);
       }
     });
 
@@ -199,6 +203,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     }, 60 * 1000);
 
     return () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
       unsub();
       clearInterval(interval);
     };
