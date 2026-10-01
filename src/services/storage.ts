@@ -820,12 +820,29 @@ export const StorageService = {
     ensureInitialized();
     let data: import('../types').Student[] | null = null;
     const supabase = getSupabaseClient();
+
+    // Map DB student row (snake_case) to JS student object (camelCase)
+    const mapDBToJSStudent = (s: any) => ({
+      id: s.id,
+      student_code: s.student_code || '',
+      full_name: s.full_name,
+      gender: s.gender || '',
+      birth_date: s.birth_date || '',
+      class_id: s.class_id,
+      village: s.village || '',
+      address: s.village || '',
+      ethnicity: s.ethnicity || '',
+      isBoarding: s.is_boarding !== undefined ? s.is_boarding : (s.isBoarding !== undefined ? s.isBoarding : false),
+      notes: s.notes || '',
+    });
+
     if (supabase && isSupabaseConnected()) {
       try {
         const { data: cloudData, error } = await supabase.from('students').select('*').order('full_name', { ascending: true });
         if (!error && cloudData && cloudData.length > 0) {
-          localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(cloudData));
-          data = cloudData;
+          const mapped = cloudData.map(mapDBToJSStudent);
+          localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(mapped));
+          data = mapped;
         }
       } catch (err) {
         console.warn('Supabase fetch students fallback to local', err);
@@ -851,10 +868,23 @@ export const StorageService = {
     list.sort((a, b) => collator.compare(a.full_name, b.full_name));
     localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(list));
 
+    const mapJSToDBStudent = (s: any) => ({
+      id: s.id,
+      student_code: s.student_code || '',
+      full_name: s.full_name,
+      gender: s.gender || '',
+      birth_date: s.birth_date || '',
+      class_id: s.class_id,
+      village: s.village || s.address || '',
+      ethnicity: s.ethnicity || '',
+      is_boarding: s.isBoarding !== undefined ? s.isBoarding : (s.is_boarding !== undefined ? s.is_boarding : false),
+      notes: s.notes || '',
+    });
+
     const supabase = getSupabaseClient();
     if (supabase && isSupabaseConnected()) {
       try {
-        await supabase.from('students').upsert(student);
+        await supabase.from('students').upsert(mapJSToDBStudent(student));
       } catch (e) {
         console.error('Supabase saveStudent error:', e);
       }
@@ -897,10 +927,23 @@ export const StorageService = {
     updated.sort((a, b) => collator.compare(a.full_name, b.full_name));
     localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(updated));
 
+    const mapJSToDBStudent = (s: any) => ({
+      id: s.id,
+      student_code: s.student_code || '',
+      full_name: s.full_name,
+      gender: s.gender || '',
+      birth_date: s.birth_date || '',
+      class_id: s.class_id,
+      village: s.village || s.address || '',
+      ethnicity: s.ethnicity || '',
+      is_boarding: s.isBoarding !== undefined ? s.isBoarding : (s.is_boarding !== undefined ? s.is_boarding : false),
+      notes: s.notes || '',
+    });
+
     const supabase = getSupabaseClient();
     if (supabase && isSupabaseConnected()) {
       try {
-        await supabase.from('students').upsert(students);
+        await supabase.from('students').upsert(students.map(mapJSToDBStudent));
       } catch (e) {
         console.error('Supabase saveStudents bulk error:', e);
       }

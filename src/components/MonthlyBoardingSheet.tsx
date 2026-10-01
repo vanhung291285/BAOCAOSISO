@@ -279,6 +279,19 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
         monthDays.forEach((day) => {
           const rep = reportMap.get(day.dateStr);
 
+          // Check if there is an actual attendance report or boarding report for this day
+          const isDateReported = classDailyReports.some(r => r.report_date === day.dateStr) || reportMap.has(day.dateStr);
+
+          if (!isDateReported) {
+            // Măc định báo ăn để trống tức là chưa chấm khi GVCN chưa báo
+            initialMatrix[st.id][day.dateStr] = {
+              breakfast: false,
+              lunch: false,
+              dinner: false,
+            };
+            return;
+          }
+
           // Check if student was reported absent in daily report on this date
           const isStudentAbsentOnDay = (() => {
             const absentSet = absentMapByDate.get(day.dateStr);
@@ -329,12 +342,82 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
     loadMonthData();
   }, [selectedClassId, selectedMonth, classBoardingStudents.length]);
 
+  // Background auto-save helper
+  const autoSaveMealMatrix = async (currentMatrix: typeof mealMatrix) => {
+    if (!selectedClassId || !selectedMonth) return;
+    try {
+      const reportsToSave: BoardingDailyReport[] = [];
+
+      monthDays.forEach((day) => {
+        const records: BoardingMealRecord[] = classBoardingStudents.map((st) => {
+          const dayMeal = currentMatrix[st.id]?.[day.dateStr] || {
+            breakfast: false,
+            lunch: false,
+            dinner: false,
+          };
+          const isAbsent = !dayMeal.breakfast && !dayMeal.lunch && !dayMeal.dinner && day.isSchoolMealDay;
+
+          return {
+            id: `meal_${selectedClassId}_${day.dateStr}_${st.id}`,
+            class_id: selectedClassId,
+            date: day.dateStr,
+            student_id: st.id,
+            student_name: st.full_name,
+            gender: st.gender,
+            village: st.village || st.address,
+            breakfast: dayMeal.breakfast,
+            lunch: dayMeal.lunch,
+            dinner: dayMeal.dinner,
+            is_absent: isAbsent,
+            absent_reason: isAbsent ? 'Nghỉ ăn' : '',
+            notes: '',
+          };
+        });
+
+        let bCount = 0;
+        let lCount = 0;
+        let dCount = 0;
+        let abCount = 0;
+        records.forEach((r) => {
+          if (r.breakfast) bCount++;
+          if (r.lunch) lCount++;
+          if (r.dinner) dCount++;
+          if (r.is_absent) abCount++;
+        });
+
+        reportsToSave.push({
+          id: `boarding_rep_${selectedClassId}_${day.dateStr}`,
+          class_id: selectedClassId,
+          date: day.dateStr,
+          status: 'SUBMITTED',
+          total_boarding_students: classBoardingStudents.length,
+          breakfast_count: bCount,
+          lunch_count: lCount,
+          dinner_count: dCount,
+          absent_count: abCount,
+          total_meals: bCount + lCount + dCount,
+          notes: '',
+          records,
+          submitted_by: currentUser?.id,
+          submitted_by_name: currentUser?.full_name || 'GVCN',
+          submitted_at: new Date().toISOString(),
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        });
+      });
+
+      await StorageService.saveBoardingReportsBulk(reportsToSave);
+    } catch (e) {
+      console.error('Error in background auto-save:', e);
+    }
+  };
+
   // Toggle meal cell
   const handleToggleCell = (studentId: string, dateStr: string, meal: 'breakfast' | 'lunch' | 'dinner') => {
     setMealMatrix((prev) => {
       const studentDays = prev[studentId] || {};
       const currentDay = studentDays[dateStr] || { breakfast: false, lunch: false, dinner: false };
-      return {
+      const updated = {
         ...prev,
         [studentId]: {
           ...studentDays,
@@ -344,6 +427,8 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
           },
         },
       };
+      autoSaveMealMatrix(updated);
+      return updated;
     });
   };
 
@@ -778,8 +863,8 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
               <thead>
                 {/* Row 1: STT, Họ và tên, Ngày (1..daysInMonth), Số ngày ăn trong tháng */}
                 <tr className="bg-slate-100 font-black text-slate-900 border-b border-slate-300">
-                  <th rowSpan={3} className="py-2 px-1 w-8 border-r border-slate-300">STT</th>
-                  <th rowSpan={3} className="py-2 px-2 min-w-[130px] text-left border-r border-slate-300">
+                  <th rowSpan={3} className="py-2 px-1 w-8 border-r border-slate-300 sticky left-0 bg-slate-100 z-20">STT</th>
+                  <th rowSpan={3} className="py-2 px-2 min-w-[130px] text-left border-r border-slate-300 sticky left-8 bg-slate-100 z-20">
                     Họ và tên
                   </th>
                   {monthDays.map((d) => (
@@ -859,8 +944,8 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
 
                   return (
                     <tr key={st.id} className="hover:bg-slate-50/80 transition-colors">
-                      <td className="py-1.5 px-1 font-bold text-slate-400 border-r border-slate-200">{idx + 1}</td>
-                      <td className="py-1.5 px-2 text-left font-extrabold text-slate-900 border-r border-slate-300 whitespace-nowrap">
+                      <td className="py-1.5 px-1 font-bold text-slate-400 border-r border-slate-200 sticky left-0 bg-white z-10">{idx + 1}</td>
+                      <td className="py-1.5 px-2 text-left font-extrabold text-slate-900 border-r border-slate-300 whitespace-nowrap sticky left-8 bg-white z-10">
                         {st.full_name}
                       </td>
 
