@@ -434,8 +434,8 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
   const handleSyncFromDailyAttendance = async () => {
     try {
       const dailyRep = await StorageService.getDailyReport(selectedClassId, selectedDate);
-      if (!dailyRep.report) {
-        showToast('Chưa có báo cáo sĩ số cho lớp này vào ngày đã chọn!', 'info');
+      if (!dailyRep.report || (dailyRep.report.status !== 'SUBMITTED' && dailyRep.report.status !== 'LOCKED')) {
+        showToast('Chưa có báo cáo sĩ số đã nộp cho lớp này vào ngày đã chọn! Vui lòng nộp báo cáo sĩ số ngày trước khi đồng bộ.', 'info');
         return;
       }
 

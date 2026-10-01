@@ -1,6 +1,6 @@
 import ExcelJS from 'exceljs';
 import { StorageService } from '../services/storage';
-import { Student, BoardingDailyReport } from '../types';
+import { Student, BoardingDailyReport, BoardingSignatureConfig, BoardingMonthSignature } from '../types';
 import { getMealScheduleForDate, buildDefaultMealRecords } from './boardingRules';
 import { getTodayDateStr } from './schoolWeeks';
 
@@ -13,12 +13,15 @@ export interface ExportBoardingExcelParams {
   monthStr: string; // 'YYYY-MM'
   students: Student[];
   teacherName?: string;
+  teacherTitle?: string;
   principalName?: string;
   signingDate?: string; // Ngày ký tự động / tùy chỉnh
   existingMatrix?: Record<string, Record<string, { breakfast: boolean; lunch: boolean; dinner: boolean }>>;
   standardBreakfastDays?: number;
   standardLunchDays?: number;
   standardDinnerDays?: number;
+  sigConfig?: BoardingSignatureConfig;
+  monthSig?: BoardingMonthSignature | null;
 }
 
 // Convert 0-indexed column index to Excel column letter (0 -> A, 1 -> B, ...)
@@ -31,6 +34,53 @@ function getColLetter(colIdx: number): string {
     temp = Math.floor((temp - modulo) / 26);
   }
   return letter;
+}
+
+/**
+ * Chèn ảnh chữ ký hoặc con dấu điện tử vào sheet Excel
+ */
+function addSignatureImageToWorksheet(
+  wb: ExcelJS.Workbook,
+  ws: ExcelJS.Worksheet,
+  base64String: string,
+  colPosition: number,
+  rowPosition: number,
+  width = 120,
+  height = 50
+) {
+  try {
+    if (!base64String || typeof base64String !== 'string') return;
+    let base64Clean = base64String.trim();
+    let ext: 'png' | 'jpeg' = 'png';
+
+    if (base64Clean.startsWith('data:image/')) {
+      const match = base64Clean.match(/^data:image\/(png|jpeg|jpg);base64,(.*)$/);
+      if (match) {
+        ext = match[1] === 'jpg' ? 'jpeg' : (match[1] as 'png' | 'jpeg');
+        base64Clean = match[2];
+      } else {
+        const parts = base64Clean.split(',');
+        if (parts.length > 1) {
+          base64Clean = parts[1];
+        }
+      }
+    }
+
+    if (!base64Clean) return;
+
+    const imgId = wb.addImage({
+      base64: base64Clean,
+      extension: ext,
+    });
+
+    ws.addImage(imgId, {
+      tl: { col: Math.max(0, colPosition), row: Math.max(0, rowPosition) },
+      ext: { width, height },
+      editAs: 'oneCell',
+    });
+  } catch (err) {
+    console.warn('Could not add signature image to Excel worksheet:', err);
+  }
 }
 
 const thinBorder: Partial<ExcelJS.Borders> = {
@@ -77,7 +127,10 @@ function buildBoardingWorksheet(
     standardLunchDays: number;
     standardDinnerDays: number;
     teacherName: string;
+    teacherTitle?: string;
     principalName: string;
+    sigConfig?: BoardingSignatureConfig;
+    monthSig?: BoardingMonthSignature | null;
   }
 ) {
   const {
@@ -102,7 +155,10 @@ function buildBoardingWorksheet(
     standardLunchDays,
     standardDinnerDays,
     teacherName,
+    teacherTitle,
     principalName,
+    sigConfig,
+    monthSig,
   } = context;
 
   // Filter days for this sheet
@@ -140,7 +196,7 @@ function buildBoardingWorksheet(
         ySplit: 9, // Cố định các hàng tiêu đề khi cuộn dọc
         topLeftCell: 'C10',
         activeCell: 'A1',
-        showGridLines: true,
+        showGridLines: false, // Tắt lưới Excel trên màn hình để nền trắng sạch sẽ quanh tiêu đề và chữ ký như mẫu gốc
       },
     ],
   });
@@ -450,60 +506,114 @@ function buildBoardingWorksheet(
 
   sumRowObj.height = 20;
 
-  // Signatures block
-  if (includeMonthSummary) {
-    // Spacer row
-    currentExcelRow++;
-    ws.getRow(currentExcelRow).height = 6;
+  // Signatures block - Hiển thị đầy đủ chữ ký GVCN trên tất cả các trang
+  currentExcelRow++;
+  ws.getRow(currentExcelRow).height = 6;
 
-    currentExcelRow++;
-    const rightColLetterStart = getColLetter(Math.max(2, totalColsCount - 14));
-    const rightColLetterEnd = getColLetter(totalColsCount - 1);
+  currentExcelRow++;
+  const colSpanCount = Math.min(16, totalColsCount);
+  const rightColStartIdx = Math.max(2, totalColsCount - colSpanCount);
+  const rightColLetterStart = getColLetter(rightColStartIdx);
+  const rightColLetterEnd = getColLetter(totalColsCount - 1);
 
-    // TRANG 2 (NGÀY 16 ĐẾN CUỐI THÁNG) & CẢ THÁNG (TOÀN BỘ THÁNG):
-    // CHỈ LẤY CHỮ KÝ CỦA GVCN, BỎ CHỮ KÝ HIỆU TRƯỞNG!
+  // 1. Dòng Địa danh & Ngày ký
+  ws.mergeCells(`${rightColLetterStart}${currentExcelRow}:${rightColLetterEnd}${currentExcelRow}`);
+  const dateCell = ws.getCell(`${rightColLetterStart}${currentExcelRow}`);
+  dateCell.value = signDateText;
+  dateCell.font = { name: 'Times New Roman', size: 10, italic: true, color: { argb: 'FF000000' } };
+  dateCell.alignment = { horizontal: 'center', vertical: 'middle' };
+  ws.getRow(currentExcelRow).height = 16;
+
+  // 2. Chức danh người ký
+  currentExcelRow++;
+  ws.mergeCells(`${rightColLetterStart}${currentExcelRow}:${rightColLetterEnd}${currentExcelRow}`);
+  const gvcnTitle = ws.getCell(`${rightColLetterStart}${currentExcelRow}`);
+  gvcnTitle.value = (sigConfig?.teacher_title || teacherTitle || 'GIÁO VIÊN CHỦ NHIỆM').toUpperCase();
+  gvcnTitle.font = { name: 'Times New Roman', size: 10.5, bold: true, color: { argb: 'FF000000' } };
+  gvcnTitle.alignment = { horizontal: 'center', vertical: 'middle' };
+  ws.getRow(currentExcelRow).height = 17;
+
+  // 3. Phụ đề (Ký và ghi rõ họ tên)
+  currentExcelRow++;
+  ws.mergeCells(`${rightColLetterStart}${currentExcelRow}:${rightColLetterEnd}${currentExcelRow}`);
+  const gvcnSub = ws.getCell(`${rightColLetterStart}${currentExcelRow}`);
+  gvcnSub.value = '(Ký và ghi rõ họ tên)';
+  gvcnSub.font = { name: 'Times New Roman', size: 9, italic: true, color: { argb: 'FF475569' } };
+  gvcnSub.alignment = { horizontal: 'center', vertical: 'middle' };
+  ws.getRow(currentExcelRow).height = 14;
+
+  // 4. Vùng chữ ký số / con dấu / ký tay
+  const hasSigImage = Boolean(sigConfig?.signature_image_url);
+  const hasStampImage = Boolean(sigConfig?.stamp_image_url);
+  const isSignedDigital = Boolean(monthSig?.is_signed);
+
+  const sigRowStart = currentExcelRow + 1;
+
+  if (hasSigImage || hasStampImage || isSignedDigital) {
+    // Dòng hiển thị chứng nhận ký điện tử
+    currentExcelRow++;
     ws.mergeCells(`${rightColLetterStart}${currentExcelRow}:${rightColLetterEnd}${currentExcelRow}`);
-    const dateCell = ws.getCell(`${rightColLetterStart}${currentExcelRow}`);
-    dateCell.value = signDateText;
-    dateCell.font = { name: 'Times New Roman', size: 10, italic: true };
-    dateCell.alignment = { horizontal: 'center', vertical: 'middle' };
-    ws.getRow(currentExcelRow).height = 16;
-
-    currentExcelRow++;
-    ws.mergeCells(`${rightColLetterStart}${currentExcelRow}:${rightColLetterEnd}${currentExcelRow}`);
-    const gvcnTitle = ws.getCell(`${rightColLetterStart}${currentExcelRow}`);
-    gvcnTitle.value = 'GIÁO VIÊN CHỦ NHIỆM';
-    gvcnTitle.font = { name: 'Times New Roman', size: 10.5, bold: true };
-    gvcnTitle.alignment = { horizontal: 'center', vertical: 'middle' };
-    ws.getRow(currentExcelRow).height = 17;
-
-    currentExcelRow++;
-    ws.mergeCells(`${rightColLetterStart}${currentExcelRow}:${rightColLetterEnd}${currentExcelRow}`);
-    const gvcnSub = ws.getCell(`${rightColLetterStart}${currentExcelRow}`);
-    gvcnSub.value = '(Ký và ghi rõ họ tên)';
-    gvcnSub.font = { name: 'Times New Roman', size: 9, italic: true };
-    gvcnSub.alignment = { horizontal: 'center', vertical: 'middle' };
+    const badgeCell = ws.getCell(`${rightColLetterStart}${currentExcelRow}`);
+    if (isSignedDigital) {
+      badgeCell.value = monthSig?.certificate_hash
+        ? `[✓ ĐÃ KÝ ĐIỆN TỬ: ${monthSig.certificate_hash}]`
+        : '[✓ ĐÃ KÝ ĐIỆN TỬ]';
+      badgeCell.font = { name: 'Times New Roman', size: 8.5, bold: true, color: { argb: 'FF047857' } }; // Xanh lá cây
+    } else {
+      badgeCell.value = '(Chữ ký điện tử)';
+      badgeCell.font = { name: 'Times New Roman', size: 8.5, italic: true, color: { argb: 'FF64748B' } };
+    }
+    badgeCell.alignment = { horizontal: 'center', vertical: 'middle' };
     ws.getRow(currentExcelRow).height = 14;
 
-    // Space for physical signature (3 rows at 11pt)
     currentExcelRow++;
-    ws.getRow(currentExcelRow).height = 11;
+    ws.getRow(currentExcelRow).height = 20;
     currentExcelRow++;
-    ws.getRow(currentExcelRow).height = 11;
-    currentExcelRow++;
-    ws.getRow(currentExcelRow).height = 11;
-
-    currentExcelRow++;
-    ws.mergeCells(`${rightColLetterStart}${currentExcelRow}:${rightColLetterEnd}${currentExcelRow}`);
-    const gvcnName = ws.getCell(`${rightColLetterStart}${currentExcelRow}`);
-    gvcnName.value = teacherName;
-    gvcnName.font = { name: 'Times New Roman', size: 11, bold: true };
-    gvcnName.alignment = { horizontal: 'center', vertical: 'middle' };
     ws.getRow(currentExcelRow).height = 18;
+
+    // Chèn ảnh chữ ký
+    if (hasSigImage && sigConfig?.signature_image_url) {
+      addSignatureImageToWorksheet(
+        wb,
+        ws,
+        sigConfig.signature_image_url,
+        rightColStartIdx + Math.floor(colSpanCount / 2) - 2.5,
+        sigRowStart - 0.2,
+        125,
+        48
+      );
+    }
+
+    // Chèn ảnh con dấu (nếu có)
+    if (hasStampImage && sigConfig?.stamp_image_url) {
+      addSignatureImageToWorksheet(
+        wb,
+        ws,
+        sigConfig.stamp_image_url,
+        rightColStartIdx + Math.floor(colSpanCount / 2) - 1.5,
+        sigRowStart - 0.5,
+        75,
+        60
+      );
+    }
   } else {
-    // TRANG 1 (NỬA ĐẦU THÁNG: NGÀY 01 ĐẾN 15):
-    // BỎ CHỮ KÝ CỦA CẢ GVCN VÀ HIỆU TRƯỞNG (KHÔNG XUẤT KHỐI CHỮ KÝ)
+    // Space for physical signature (3 rows at 12pt)
+    currentExcelRow++;
+    ws.getRow(currentExcelRow).height = 12;
+    currentExcelRow++;
+    ws.getRow(currentExcelRow).height = 12;
+    currentExcelRow++;
+    ws.getRow(currentExcelRow).height = 12;
   }
+
+  // 5. Dòng Họ và tên GVCN
+  currentExcelRow++;
+  ws.mergeCells(`${rightColLetterStart}${currentExcelRow}:${rightColLetterEnd}${currentExcelRow}`);
+  const gvcnName = ws.getCell(`${rightColLetterStart}${currentExcelRow}`);
+  gvcnName.value = teacherName;
+  gvcnName.font = { name: 'Times New Roman', size: 11, bold: true, color: { argb: 'FF000000' } };
+  gvcnName.alignment = { horizontal: 'center', vertical: 'middle' };
+  ws.getRow(currentExcelRow).height = 19;
 }
 
 /**
@@ -666,6 +776,8 @@ export async function exportMonthlyBoardingExcel(params: ExportBoardingExcelPara
     try {
       const dailyReports = await StorageService.getDailyReportsByMonth(classId, monthStr);
       dailyReports.forEach((dr) => {
+        // Chỉ lấy các ngày GVCN ĐÃ NỘP BÁO CÁO THỰC SỰ (SUBMITTED hoặc LOCKED)
+        if (dr.status !== 'SUBMITTED' && dr.status !== 'LOCKED') return;
         const cleanDate = String(dr.report_date).split('T')[0].trim();
         if (!reportMap.has(cleanDate)) {
           const absentMap = new Map<string, { reason?: string }>();
@@ -778,6 +890,27 @@ export async function exportMonthlyBoardingExcel(params: ExportBoardingExcelPara
     standardDinnerDays = dCount;
   }
 
+  let sigConfig = params.sigConfig;
+  if (!sigConfig) {
+    try {
+      sigConfig = await StorageService.getBoardingSignatureConfig(classId);
+    } catch (e) {
+      console.warn('Could not fetch signature config:', e);
+    }
+  }
+
+  let monthSig = params.monthSig;
+  if (monthSig === undefined) {
+    try {
+      monthSig = await StorageService.getBoardingMonthSignature(classId, monthStr);
+    } catch (e) {
+      console.warn('Could not fetch month signature:', e);
+    }
+  }
+
+  const effectiveTeacher = params.teacherName || sigConfig?.teacher_name || teacherName || 'Giáo viên chủ nhiệm';
+  const effectiveTeacherTitle = params.teacherTitle || sigConfig?.teacher_title || 'GIÁO VIÊN CHỦ NHIỆM';
+
   const wb = new ExcelJS.Workbook();
   wb.creator = 'Phần mềm Quản lý Sĩ số & Bán trú';
   wb.created = new Date();
@@ -795,8 +928,11 @@ export async function exportMonthlyBoardingExcel(params: ExportBoardingExcelPara
     standardBreakfastDays,
     standardLunchDays,
     standardDinnerDays,
-    teacherName,
+    teacherName: effectiveTeacher,
+    teacherTitle: effectiveTeacherTitle,
     principalName,
+    sigConfig,
+    monthSig,
   };
 
   const loc = params.locationName?.trim() || 'Xa Dung';

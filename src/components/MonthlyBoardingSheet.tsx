@@ -506,6 +506,9 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
         const autoSyncReports: BoardingDailyReport[] = [];
 
         classDaily.forEach((dr) => {
+          // Chỉ đồng bộ những ngày GVCN ĐÃ THỰC SỰ NỘP BÁO CÁO SĨ SỐ (SUBMITTED hoặc LOCKED)
+          // Tuyệt đối KHÔNG tự động chấm ăn các ngày chưa báo (ví dụ 06/10 chưa báo thì để trống)
+          if (dr.status !== 'SUBMITTED' && dr.status !== 'LOCKED') return;
           const cleanDate = String(dr.report_date).split('T')[0].trim();
 
           if (!reportMap.has(cleanDate)) {
@@ -656,6 +659,8 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
       const reportsToSave: BoardingDailyReport[] = [];
 
       classDaily.forEach((dr) => {
+        // Chỉ đồng bộ những ngày GVCN ĐÃ THỰC SỰ NỘP BÁO CÁO SĨ SỐ (SUBMITTED hoặc LOCKED)
+        if (dr.status !== 'SUBMITTED' && dr.status !== 'LOCKED') return;
         const cleanDate = String(dr.report_date).split('T')[0].trim();
         const absentMap = new Map<string, { reason?: string }>();
         if (dr.absent_students) {
@@ -1168,12 +1173,15 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
         monthStr: selectedMonth,
         students: students, // Pass all students so export function can auto-generate if empty
         teacherName: effectiveTeacherName,
+        teacherTitle: sigConfig.teacher_title || 'GIÁO VIÊN CHỦ NHIỆM',
         principalName: settings?.principal_name || 'Hiệu trưởng',
         signingDate: effectiveSigningDateText,
         existingMatrix: Object.keys(mealMatrix).length > 0 ? mealMatrix : undefined,
         standardBreakfastDays,
         standardLunchDays,
         standardDinnerDays,
+        sigConfig,
+        monthSig,
       });
       showToast('Đã xuất file Excel Sổ Chấm Cơm chuẩn biểu mẫu thành công!');
     } catch (e: any) {

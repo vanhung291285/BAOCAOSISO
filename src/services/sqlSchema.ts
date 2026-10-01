@@ -194,6 +194,66 @@ CREATE TABLE IF NOT EXISTS public.notifications (
     created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
 );
 
+-- 14. TABLE: boarding_reports (Báo cáo chấm ăn bán trú ngày)
+CREATE TABLE IF NOT EXISTS public.boarding_reports (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    class_id TEXT NOT NULL REFERENCES public.classes(id) ON DELETE CASCADE,
+    date DATE NOT NULL,
+    status TEXT NOT NULL DEFAULT 'SUBMITTED' CHECK (status IN ('DRAFT', 'SUBMITTED', 'LOCKED')),
+    total_boarding_students INTEGER DEFAULT 0,
+    breakfast_count INTEGER DEFAULT 0,
+    lunch_count INTEGER DEFAULT 0,
+    dinner_count INTEGER DEFAULT 0,
+    absent_count INTEGER DEFAULT 0,
+    total_meals INTEGER DEFAULT 0,
+    notes TEXT,
+    records JSONB NOT NULL DEFAULT '[]'::jsonb,
+    submitted_by TEXT,
+    submitted_by_name TEXT,
+    submitted_at TIMESTAMPTZ,
+    locked_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
+    CONSTRAINT unique_class_boarding_date UNIQUE (class_id, date)
+);
+
+-- 15. TABLE: boarding_signature_configs (Cấu hình chữ ký số & địa danh ký)
+CREATE TABLE IF NOT EXISTS public.boarding_signature_configs (
+    id TEXT PRIMARY KEY,
+    class_id TEXT REFERENCES public.classes(id) ON DELETE CASCADE,
+    location_name TEXT DEFAULT 'Xa Dung',
+    teacher_title TEXT DEFAULT 'GIÁO VIÊN CHỦ NHIỆM',
+    teacher_name TEXT NOT NULL DEFAULT '',
+    principal_title TEXT DEFAULT 'HIỆU TRƯỞNG',
+    principal_name TEXT DEFAULT '',
+    accountant_title TEXT DEFAULT 'KẾ TOÁN BÁN TRÚ',
+    accountant_name TEXT DEFAULT '',
+    enable_digital_signature BOOLEAN DEFAULT true,
+    signature_image_url TEXT DEFAULT '',
+    stamp_image_url TEXT DEFAULT '',
+    certificate_serial TEXT DEFAULT '',
+    created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()),
+    updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now())
+);
+
+-- 16. TABLE: boarding_month_signatures (Nhật ký ký duyệt sổ bán trú tháng)
+CREATE TABLE IF NOT EXISTS public.boarding_month_signatures (
+    id TEXT PRIMARY KEY,
+    class_id TEXT NOT NULL REFERENCES public.classes(id) ON DELETE CASCADE,
+    month TEXT NOT NULL,
+    is_signed BOOLEAN DEFAULT false,
+    signed_by_name TEXT DEFAULT '',
+    signed_by_role TEXT DEFAULT 'GVCN',
+    signed_at TIMESTAMPTZ,
+    location_name TEXT DEFAULT 'Xa Dung',
+    signature_image_url TEXT DEFAULT '',
+    certificate_hash TEXT DEFAULT '',
+    notes TEXT DEFAULT '',
+    created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()),
+    updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()),
+    CONSTRAINT unique_class_month_signature UNIQUE (class_id, month)
+);
+
 -- ==============================================================================
 -- CẬP NHẬT CẤU TRÚC BẢNG (MIGRATIONS)
 -- Tự động thêm các cột mới nếu đã tạo bảng từ phiên bản trước đó
@@ -329,6 +389,9 @@ ALTER TABLE public.system_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.students ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.school_off_days ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.boarding_reports ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.boarding_signature_configs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.boarding_month_signatures ENABLE ROW LEVEL SECURITY;
 
 -- Cấp quyền truy cập cho anon & authenticated
 GRANT USAGE ON SCHEMA public TO anon, authenticated;
@@ -372,6 +435,15 @@ CREATE POLICY "Allow all for school_off_days" ON public.school_off_days FOR ALL 
 DROP POLICY IF EXISTS "Allow all for notifications" ON public.notifications;
 CREATE POLICY "Allow all for notifications" ON public.notifications FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Allow all for boarding_reports" ON public.boarding_reports;
+CREATE POLICY "Allow all for boarding_reports" ON public.boarding_reports FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow all for boarding_signature_configs" ON public.boarding_signature_configs;
+CREATE POLICY "Allow all for boarding_signature_configs" ON public.boarding_signature_configs FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow all for boarding_month_signatures" ON public.boarding_month_signatures;
+CREATE POLICY "Allow all for boarding_month_signatures" ON public.boarding_month_signatures FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
 -- ==============================================================================
 -- REALTIME SUBSCRIPTIONS
 -- Tự động đẩy thông báo thời gian thực khi có báo cáo mới hoặc thay đổi cấu hình
@@ -396,7 +468,10 @@ DECLARE
         'public.daily_report_values',
         'public.students',
         'public.school_off_days',
-        'public.notifications'
+        'public.notifications',
+        'public.boarding_reports',
+        'public.boarding_signature_configs',
+        'public.boarding_month_signatures'
     ];
 BEGIN
     FOR t IN SELECT unnest(tables) LOOP
@@ -419,6 +494,10 @@ CREATE INDEX IF NOT EXISTS idx_daily_reports_date ON public.daily_reports (repor
 CREATE INDEX IF NOT EXISTS idx_daily_report_values_report ON public.daily_report_values (report_id);
 CREATE INDEX IF NOT EXISTS idx_daily_report_values_indicator ON public.daily_report_values (indicator_group_id);
 CREATE INDEX IF NOT EXISTS idx_students_class ON public.students (class_id);
+CREATE INDEX IF NOT EXISTS idx_boarding_reports_class_date ON public.boarding_reports (class_id, date);
+CREATE INDEX IF NOT EXISTS idx_boarding_reports_date ON public.boarding_reports (date);
+CREATE INDEX IF NOT EXISTS idx_boarding_sig_configs_class ON public.boarding_signature_configs (class_id);
+CREATE INDEX IF NOT EXISTS idx_boarding_month_signatures_lookup ON public.boarding_month_signatures (class_id, month);
 
 -- ==============================================================================
 -- 15. VIEW: view_class_monthly_attendance_summary
@@ -870,6 +949,52 @@ ON CONFLICT (id) DO NOTHING;\n`;
           sql += `INSERT INTO public.system_logs (id, user_id, user_name, user_role, action, class_name, report_date, old_data, new_data)
 VALUES (${escapeSql(l.id)}, ${escapeSql(l.user_id)}, ${escapeSql(l.user_name)}, ${escapeSql(l.user_role)}, ${escapeSql(l.action)}, ${escapeSql(l.class_name)}, ${l.report_date ? `${escapeSql(l.report_date)}::date` : 'NULL'}, ${escapeSql(l.old_data)}, ${escapeSql(l.new_data)})
 ON CONFLICT (id) DO NOTHING;\n`;
+        });
+        sql += `\n`;
+      }
+    }
+
+    // 13. boarding_reports
+    const rawBoarding = localStorage.getItem('sso_boarding_reports');
+    if (rawBoarding) {
+      const bReports = JSON.parse(rawBoarding);
+      if (Array.isArray(bReports) && bReports.length > 0) {
+        sql += `-- 13. SỔ CHẤM ĂN BÁN TRÚ NGÀY (${bReports.length} báo cáo chấm ăn)\n`;
+        bReports.forEach((br) => {
+          const cleanDate = String(br.date).split('T')[0];
+          sql += `INSERT INTO public.boarding_reports (id, class_id, date, status, total_boarding_students, breakfast_count, lunch_count, dinner_count, absent_count, total_meals, notes, records, submitted_by, submitted_by_name, submitted_at, locked_at)
+VALUES (${escapeSql(br.id)}, ${escapeSql(br.class_id)}, ${escapeSql(cleanDate)}::date, ${escapeSql(br.status || 'SUBMITTED')}, ${escapeSql(Number(br.total_boarding_students) || 0)}, ${escapeSql(Number(br.breakfast_count) || 0)}, ${escapeSql(Number(br.lunch_count) || 0)}, ${escapeSql(Number(br.dinner_count) || 0)}, ${escapeSql(Number(br.absent_count) || 0)}, ${escapeSql(Number(br.total_meals) || 0)}, ${escapeSql(br.notes)}, ${escapeSql(br.records || [])}, ${escapeSql(br.submitted_by)}, ${escapeSql(br.submitted_by_name)}, ${escapeSql(br.submitted_at)}, ${escapeSql(br.locked_at)})
+ON CONFLICT (class_id, date) DO UPDATE SET status = EXCLUDED.status, total_boarding_students = EXCLUDED.total_boarding_students, breakfast_count = EXCLUDED.breakfast_count, lunch_count = EXCLUDED.lunch_count, dinner_count = EXCLUDED.dinner_count, absent_count = EXCLUDED.absent_count, total_meals = EXCLUDED.total_meals, notes = EXCLUDED.notes, records = EXCLUDED.records, submitted_by = EXCLUDED.submitted_by, submitted_by_name = EXCLUDED.submitted_by_name, submitted_at = EXCLUDED.submitted_at, locked_at = EXCLUDED.locked_at;\n`;
+        });
+        sql += `\n`;
+      }
+    }
+
+    // 14. boarding_signature_configs
+    const rawSigConfigs = localStorage.getItem('sso_boarding_signature_configs');
+    if (rawSigConfigs) {
+      const sigConfigs = JSON.parse(rawSigConfigs);
+      if (Array.isArray(sigConfigs) && sigConfigs.length > 0) {
+        sql += `-- 14. CẤU HÌNH CHỮ KÝ SỐ SỔ BÁN TRÚ (${sigConfigs.length} cấu hình)\n`;
+        sigConfigs.forEach((sc) => {
+          sql += `INSERT INTO public.boarding_signature_configs (id, class_id, location_name, teacher_title, teacher_name, principal_title, principal_name, accountant_title, accountant_name, enable_digital_signature, signature_image_url, stamp_image_url, certificate_serial)
+VALUES (${escapeSql(sc.id)}, ${escapeSql(sc.class_id)}, ${escapeSql(sc.location_name || 'Xa Dung')}, ${escapeSql(sc.teacher_title || 'GIÁO VIÊN CHỦ NHIỆM')}, ${escapeSql(sc.teacher_name)}, ${escapeSql(sc.principal_title || 'HIỆU TRƯỞNG')}, ${escapeSql(sc.principal_name)}, ${escapeSql(sc.accountant_title || 'KẾ TOÁN BÁN TRÚ')}, ${escapeSql(sc.accountant_name)}, ${escapeSql(Boolean(sc.enable_digital_signature ?? true))}, ${escapeSql(sc.signature_image_url)}, ${escapeSql(sc.stamp_image_url)}, ${escapeSql(sc.certificate_serial)})
+ON CONFLICT (id) DO UPDATE SET class_id = EXCLUDED.class_id, location_name = EXCLUDED.location_name, teacher_title = EXCLUDED.teacher_title, teacher_name = EXCLUDED.teacher_name, principal_title = EXCLUDED.principal_title, principal_name = EXCLUDED.principal_name, accountant_title = EXCLUDED.accountant_title, accountant_name = EXCLUDED.accountant_name, enable_digital_signature = EXCLUDED.enable_digital_signature, signature_image_url = EXCLUDED.signature_image_url, stamp_image_url = EXCLUDED.stamp_image_url, certificate_serial = EXCLUDED.certificate_serial;\n`;
+        });
+        sql += `\n`;
+      }
+    }
+
+    // 15. boarding_month_signatures
+    const rawMonthSigs = localStorage.getItem('sso_boarding_month_signatures');
+    if (rawMonthSigs) {
+      const monthSigs = JSON.parse(rawMonthSigs);
+      if (Array.isArray(monthSigs) && monthSigs.length > 0) {
+        sql += `-- 15. NHẬT KÝ KÝ SỐ SỔ BÁN TRÚ THÁNG (${monthSigs.length} lượt ký)\n`;
+        monthSigs.forEach((ms) => {
+          sql += `INSERT INTO public.boarding_month_signatures (id, class_id, month, is_signed, signed_by_name, signed_by_role, signed_at, location_name, signature_image_url, certificate_hash, notes)
+VALUES (${escapeSql(ms.id)}, ${escapeSql(ms.class_id)}, ${escapeSql(ms.month)}, ${escapeSql(Boolean(ms.is_signed))}, ${escapeSql(ms.signed_by_name)}, ${escapeSql(ms.signed_by_role || 'GVCN')}, ${escapeSql(ms.signed_at)}, ${escapeSql(ms.location_name || 'Xa Dung')}, ${escapeSql(ms.signature_image_url)}, ${escapeSql(ms.certificate_hash)}, ${escapeSql(ms.notes)})
+ON CONFLICT (class_id, month) DO UPDATE SET is_signed = EXCLUDED.is_signed, signed_by_name = EXCLUDED.signed_by_name, signed_by_role = EXCLUDED.signed_by_role, signed_at = EXCLUDED.signed_at, location_name = EXCLUDED.location_name, signature_image_url = EXCLUDED.signature_image_url, certificate_hash = EXCLUDED.certificate_hash, notes = EXCLUDED.notes;\n`;
         });
         sql += `\n`;
       }

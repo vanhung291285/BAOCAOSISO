@@ -149,7 +149,7 @@ export const BoardingPrintPreviewModal: React.FC<BoardingPrintPreviewModalProps>
     return (
       <div className="w-full bg-white text-slate-900 select-none">
         {/* Paper Top Title */}
-        <div className="flex items-start justify-between pb-2 mb-2 border-b border-black text-left">
+        <div className="flex items-start justify-between pb-2 mb-3 text-left">
           <div>
             <div className="font-extrabold text-[11px] uppercase tracking-tight">
               TRƯỜNG PTDTBT THCS XA DUNG

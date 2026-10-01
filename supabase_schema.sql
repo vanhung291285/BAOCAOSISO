@@ -194,6 +194,66 @@ CREATE TABLE IF NOT EXISTS public.notifications (
     created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
 );
 
+-- 14. TABLE: boarding_reports (Báo cáo chấm ăn bán trú ngày)
+CREATE TABLE IF NOT EXISTS public.boarding_reports (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    class_id TEXT NOT NULL REFERENCES public.classes(id) ON DELETE CASCADE,
+    date DATE NOT NULL,
+    status TEXT NOT NULL DEFAULT 'SUBMITTED' CHECK (status IN ('DRAFT', 'SUBMITTED', 'LOCKED')),
+    total_boarding_students INTEGER DEFAULT 0,
+    breakfast_count INTEGER DEFAULT 0,
+    lunch_count INTEGER DEFAULT 0,
+    dinner_count INTEGER DEFAULT 0,
+    absent_count INTEGER DEFAULT 0,
+    total_meals INTEGER DEFAULT 0,
+    notes TEXT,
+    records JSONB NOT NULL DEFAULT '[]'::jsonb,
+    submitted_by TEXT,
+    submitted_by_name TEXT,
+    submitted_at TIMESTAMPTZ,
+    locked_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
+    CONSTRAINT unique_class_boarding_date UNIQUE (class_id, date)
+);
+
+-- 15. TABLE: boarding_signature_configs (Cấu hình chữ ký số & địa danh ký)
+CREATE TABLE IF NOT EXISTS public.boarding_signature_configs (
+    id TEXT PRIMARY KEY,
+    class_id TEXT REFERENCES public.classes(id) ON DELETE CASCADE,
+    location_name TEXT DEFAULT 'Xa Dung',
+    teacher_title TEXT DEFAULT 'GIÁO VIÊN CHỦ NHIỆM',
+    teacher_name TEXT NOT NULL DEFAULT '',
+    principal_title TEXT DEFAULT 'HIỆU TRƯỞNG',
+    principal_name TEXT DEFAULT '',
+    accountant_title TEXT DEFAULT 'KẾ TOÁN BÁN TRÚ',
+    accountant_name TEXT DEFAULT '',
+    enable_digital_signature BOOLEAN DEFAULT true,
+    signature_image_url TEXT DEFAULT '',
+    stamp_image_url TEXT DEFAULT '',
+    certificate_serial TEXT DEFAULT '',
+    created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()),
+    updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now())
+);
+
+-- 16. TABLE: boarding_month_signatures (Nhật ký ký duyệt sổ bán trú tháng)
+CREATE TABLE IF NOT EXISTS public.boarding_month_signatures (
+    id TEXT PRIMARY KEY,
+    class_id TEXT NOT NULL REFERENCES public.classes(id) ON DELETE CASCADE,
+    month TEXT NOT NULL,
+    is_signed BOOLEAN DEFAULT false,
+    signed_by_name TEXT DEFAULT '',
+    signed_by_role TEXT DEFAULT 'GVCN',
+    signed_at TIMESTAMPTZ,
+    location_name TEXT DEFAULT 'Xa Dung',
+    signature_image_url TEXT DEFAULT '',
+    certificate_hash TEXT DEFAULT '',
+    notes TEXT DEFAULT '',
+    created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()),
+    updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()),
+    CONSTRAINT unique_class_month_signature UNIQUE (class_id, month)
+);
+
 -- ==============================================================================
 -- CẬP NHẬT CẤU TRÚC BẢNG (MIGRATIONS)
 -- Tự động thêm các cột mới nếu đã tạo bảng từ phiên bản trước đó
@@ -328,6 +388,9 @@ ALTER TABLE public.system_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.students ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.school_off_days ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.boarding_reports ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.boarding_signature_configs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.boarding_month_signatures ENABLE ROW LEVEL SECURITY;
 
 GRANT USAGE ON SCHEMA public TO anon, authenticated;
 GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated;
@@ -369,6 +432,15 @@ CREATE POLICY "Allow all for school_off_days" ON public.school_off_days FOR ALL 
 DROP POLICY IF EXISTS "Allow all for notifications" ON public.notifications;
 CREATE POLICY "Allow all for notifications" ON public.notifications FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Allow all for boarding_reports" ON public.boarding_reports;
+CREATE POLICY "Allow all for boarding_reports" ON public.boarding_reports FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow all for boarding_signature_configs" ON public.boarding_signature_configs;
+CREATE POLICY "Allow all for boarding_signature_configs" ON public.boarding_signature_configs FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow all for boarding_month_signatures" ON public.boarding_month_signatures;
+CREATE POLICY "Allow all for boarding_month_signatures" ON public.boarding_month_signatures FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
 -- ==============================================================================
 -- REALTIME SUBSCRIPTIONS
 -- ==============================================================================
@@ -392,7 +464,10 @@ DECLARE
         'public.daily_report_values',
         'public.students',
         'public.school_off_days',
-        'public.notifications'
+        'public.notifications',
+        'public.boarding_reports',
+        'public.boarding_signature_configs',
+        'public.boarding_month_signatures'
     ];
 BEGIN
     FOR t IN SELECT unnest(tables) LOOP
@@ -415,6 +490,10 @@ CREATE INDEX IF NOT EXISTS idx_daily_reports_date ON public.daily_reports (repor
 CREATE INDEX IF NOT EXISTS idx_daily_report_values_report ON public.daily_report_values (report_id);
 CREATE INDEX IF NOT EXISTS idx_daily_report_values_indicator ON public.daily_report_values (indicator_group_id);
 CREATE INDEX IF NOT EXISTS idx_students_class ON public.students (class_id);
+CREATE INDEX IF NOT EXISTS idx_boarding_reports_class_date ON public.boarding_reports (class_id, date);
+CREATE INDEX IF NOT EXISTS idx_boarding_reports_date ON public.boarding_reports (date);
+CREATE INDEX IF NOT EXISTS idx_boarding_sig_configs_class ON public.boarding_signature_configs (class_id);
+CREATE INDEX IF NOT EXISTS idx_boarding_month_signatures_lookup ON public.boarding_month_signatures (class_id, month);
 
 -- ==============================================================================
 -- VIEW: view_class_monthly_attendance_summary
