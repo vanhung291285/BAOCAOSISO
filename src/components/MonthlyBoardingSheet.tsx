@@ -29,6 +29,8 @@ import {
   Check,
   PenTool,
   Clock,
+  Maximize2,
+  Minimize2,
 } from 'lucide-react';
 
 interface MonthlyBoardingSheetProps {
@@ -133,6 +135,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
     }
   }, [updateCrosshair]);
   const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null);
 
   // Class info
@@ -1128,7 +1131,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
   };
 
   return (
-    <div className="space-y-4">
+    <div className={`space-y-4 transition-all duration-300 ${isFullscreen ? 'fixed inset-0 z-50 bg-slate-100 overflow-y-auto p-4 sm:p-8 shadow-2xl' : ''}`}>
       {/* Toast */}
       {toastMessage && (
         <div
@@ -1252,6 +1255,20 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
           >
             <Printer className="w-3.5 h-3.5" />
             <span>In sổ A3/A4</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setIsFullscreen(!isFullscreen)}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm ${
+              isFullscreen
+                ? 'bg-amber-500 text-slate-950 font-black ring-2 ring-amber-300'
+                : 'bg-indigo-600 hover:bg-indigo-700 text-white'
+            }`}
+            title={isFullscreen ? 'Thu nhỏ màn hình' : 'Phóng to toàn màn hình chấm ăn rõ nét'}
+          >
+            {isFullscreen ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+            <span>{isFullscreen ? 'Thu nhỏ' : 'Toàn màn hình'}</span>
           </button>
 
           <button
