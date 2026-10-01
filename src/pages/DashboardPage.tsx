@@ -138,13 +138,20 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSele
     loadData(selectedDate, selectedCampus);
     loadMyClassRanking();
 
-    // Realtime subscription
-    const unsub = subscribeRealtime(() => {
-      loadData(selectedDate, selectedCampus);
-      loadMyClassRanking();
+    // Debounced realtime subscription to prevent lag during concurrent rush hours
+    let debounceTimer: any = null;
+    const unsub = subscribeRealtime((event) => {
+      if (['daily_reports', 'daily_report_values', 'classes', 'notifications', 'all'].includes(event?.table)) {
+        if (debounceTimer) clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => {
+          loadData(selectedDate, selectedCampus);
+          loadMyClassRanking();
+        }, 350);
+      }
     });
 
     return () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
       unsub();
     };
   }, [selectedDate, selectedCampus, isGVCN, currentUser?.assigned_class_id]);
