@@ -586,58 +586,234 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
         }
 
         // Parse header and find columns
-        let headerRowIndex = 0;
+        let detectedHeaderRowIndex = -1;
         let colIndexName = -1;
+        let colIndexHoDem = -1;
+        let colIndexTen = -1;
         let colIndexGender = -1;
         let colIndexVillage = -1;
         let colIndexCode = -1;
         let colIndexBirth = -1;
         let colIndexEthnicity = -1;
+        let colIndexBoarding = -1;
+        let colIndexSTT = -1;
 
-        for (let i = 0; i < Math.min(10, rawData.length); i++) {
-          const row = rawData[i];
+        for (let r = 0; r < Math.min(15, rawData.length); r++) {
+          const row = rawData[r];
           if (!row || !Array.isArray(row)) continue;
 
+          let headerScore = 0;
+          let tempName = -1;
+          let tempHoDem = -1;
+          let tempTen = -1;
+          let tempGender = -1;
+          let tempVillage = -1;
+          let tempCode = -1;
+          let tempBirth = -1;
+          let tempEthnicity = -1;
+          let tempBoarding = -1;
+          let tempSTT = -1;
+
           row.forEach((cell, idx) => {
-            const val = String(cell || '').toLowerCase().trim();
-            if (val.includes('họ và tên') || val.includes('họ tên') || val === 'tên' || val === 'học sinh') {
-              headerRowIndex = i;
-              colIndexName = idx;
+            const rawVal = String(cell || '').trim();
+            const val = rawVal.toLowerCase();
+            if (!val) return;
+
+            if (val === 'stt' || val === 'số tt' || val === 'tt' || val === 'no.') {
+              tempSTT = idx;
+              headerScore += 2;
             }
-            if (val.includes('giới tính') || val === 'nam/nữ' || val === 'nữ') colIndexGender = idx;
-            if (val.includes('thôn') || val.includes('bản') || val.includes('địa chỉ') || val.includes('nơi ở')) colIndexVillage = idx;
-            if (val.includes('mã') || val.includes('mã hs') || val.includes('mã định danh')) colIndexCode = idx;
-            if (val.includes('ngày sinh') || val.includes('năm sinh')) colIndexBirth = idx;
-            if (val.includes('dân tộc')) colIndexEthnicity = idx;
+
+            if (
+              val === 'họ và tên' ||
+              val === 'họ tên' ||
+              val === 'họ và tên học sinh' ||
+              val === 'họ tên học sinh' ||
+              val === 'họ và tên hs' ||
+              val === 'tên học sinh' ||
+              val.includes('họ và tên') ||
+              val.includes('họ tên')
+            ) {
+              tempName = idx;
+              headerScore += 5;
+            } else if (val === 'họ đệm' || val === 'họ lót' || val === 'họ và tên đệm' || val === 'họ') {
+              tempHoDem = idx;
+              headerScore += 3;
+            } else if (val === 'tên' || val === 'tên hs') {
+              tempTen = idx;
+              headerScore += 3;
+            }
+
+            if (val.includes('giới tính') || val === 'nam/nữ' || val === 'nữ' || val === 'nam' || val === 'phái') {
+              tempGender = idx;
+              headerScore += 2;
+            }
+            if (
+              val.includes('thôn') ||
+              val.includes('bản') ||
+              val.includes('địa chỉ') ||
+              val.includes('nơi ở') ||
+              val.includes('quê quán') ||
+              val.includes('hộ khẩu') ||
+              val.includes('nơi cư trú')
+            ) {
+              tempVillage = idx;
+              headerScore += 2;
+            }
+            if (
+              val.includes('mã hs') ||
+              val.includes('mã học sinh') ||
+              val.includes('mã định danh') ||
+              val.includes('mã số') ||
+              val === 'mã'
+            ) {
+              tempCode = idx;
+              headerScore += 2;
+            }
+            if (val.includes('ngày sinh') || val.includes('năm sinh') || val === 'ns' || val === 'd.o.b') {
+              tempBirth = idx;
+              headerScore += 2;
+            }
+            if (val.includes('dân tộc') || val === 'dt') {
+              tempEthnicity = idx;
+              headerScore += 2;
+            }
+            if (val.includes('bán trú') || val.includes('diện ở') || val.includes('ở nội trú') || val.includes('bt')) {
+              tempBoarding = idx;
+              headerScore += 2;
+            }
           });
 
-          if (colIndexName !== -1) break;
+          // Check if this row is a genuine header row
+          if (headerScore >= 3 || tempName !== -1 || (tempHoDem !== -1 && tempTen !== -1)) {
+            detectedHeaderRowIndex = r;
+            colIndexName = tempName;
+            colIndexHoDem = tempHoDem;
+            colIndexTen = tempTen;
+            colIndexGender = tempGender;
+            colIndexVillage = tempVillage;
+            colIndexCode = tempCode;
+            colIndexBirth = tempBirth;
+            colIndexEthnicity = tempEthnicity;
+            colIndexBoarding = tempBoarding;
+            colIndexSTT = tempSTT;
+            break;
+          }
         }
 
-        if (colIndexName === -1) {
-          // Fallback: assume column 1 or column 0 is Name
-          colIndexName = rawData[0]?.length > 1 ? 1 : 0;
-          headerRowIndex = 0;
+        let startRow = 0;
+        if (detectedHeaderRowIndex !== -1) {
+          startRow = detectedHeaderRowIndex + 1;
+        } else {
+          // If no header found, check if row 0 has STT + Name pattern
+          startRow = 0;
+          const firstRow = rawData[0] || [];
+          if (firstRow.length > 1 && !isNaN(Number(firstRow[0])) && isNaN(Number(firstRow[1]))) {
+            colIndexSTT = 0;
+            colIndexName = 1;
+            if (firstRow.length > 2) colIndexGender = 2;
+            if (firstRow.length > 3) colIndexVillage = 3;
+            if (firstRow.length > 4) colIndexEthnicity = 4;
+            if (firstRow.length > 5) colIndexBirth = 5;
+          } else {
+            colIndexName = firstRow.length > 1 ? 1 : 0;
+          }
         }
 
         const parsedList: Array<Omit<Student, 'id' | 'created_at'>> = [];
-        for (let i = headerRowIndex + 1; i < rawData.length; i++) {
+        for (let i = startRow; i < rawData.length; i++) {
           const row = rawData[i];
-          if (!row || !row[colIndexName]) continue;
+          if (!row || !Array.isArray(row) || row.length === 0) continue;
 
-          const fullName = String(row[colIndexName]).trim();
-          if (!fullName || fullName.toLowerCase().includes('họ và tên') || fullName.toLowerCase().includes('tổng số')) continue;
-
-          let gender = 'Nam';
-          if (colIndexGender !== -1 && row[colIndexGender]) {
-            const gVal = String(row[colIndexGender]).trim().toLowerCase();
-            if (gVal === 'nữ' || gVal === 'nu' || gVal === 'f' || gVal === 'x') gender = 'Nữ';
+          let fullName = '';
+          if (colIndexName !== -1 && row[colIndexName] !== undefined && row[colIndexName] !== null) {
+            fullName = String(row[colIndexName]).trim();
+          } else if (colIndexHoDem !== -1 && colIndexTen !== -1) {
+            const ho = String(row[colIndexHoDem] || '').trim();
+            const ten = String(row[colIndexTen] || '').trim();
+            fullName = `${ho} ${ten}`.trim();
+          } else {
+            for (let c = 0; c < row.length; c++) {
+              const cellStr = String(row[c] || '').trim();
+              if (cellStr.length > 2 && isNaN(Number(cellStr))) {
+                fullName = cellStr;
+                break;
+              }
+            }
           }
 
-          const village = colIndexVillage !== -1 && row[colIndexVillage] ? String(row[colIndexVillage]).trim() : '';
-          const studentCode = colIndexCode !== -1 && row[colIndexCode] ? String(row[colIndexCode]).trim() : '';
-          const birthDate = colIndexBirth !== -1 && row[colIndexBirth] ? String(row[colIndexBirth]).trim() : '';
-          const ethnicity = colIndexEthnicity !== -1 && row[colIndexEthnicity] ? String(row[colIndexEthnicity]).trim() : 'Mông';
+          if (!fullName) continue;
+
+          // Strip leading number in case name cell contains "1. Nguyễn Văn A"
+          fullName = fullName.replace(/^[\d]+[\.\/\)\-\:\s]+/, '').trim();
+          if (!fullName) continue;
+
+          const lowerName = fullName.toLowerCase();
+          if (
+            lowerName === 'stt' ||
+            lowerName.includes('họ và tên') ||
+            lowerName.includes('họ tên') ||
+            lowerName.includes('tổng số') ||
+            lowerName.includes('tổng cộng') ||
+            lowerName.includes('người lập') ||
+            lowerName.includes('hiệu trưởng') ||
+            lowerName.includes('danh sách học sinh') ||
+            lowerName.includes('ban giám hiệu') ||
+            lowerName.includes('giáo viên chủ nhiệm')
+          ) {
+            continue;
+          }
+
+          let gender = 'Nam';
+          if (colIndexGender !== -1 && row[colIndexGender] !== undefined) {
+            const gVal = String(row[colIndexGender]).trim().toLowerCase();
+            if (gVal === 'nữ' || gVal === 'nu' || gVal === 'f' || gVal === 'female' || gVal === 'x' || gVal === '1') {
+              gender = 'Nữ';
+            } else if (gVal === 'nam' || gVal === 'm' || gVal === 'male' || gVal === '0') {
+              gender = 'Nam';
+            }
+          }
+
+          let village = '';
+          if (colIndexVillage !== -1 && row[colIndexVillage] !== undefined) {
+            village = String(row[colIndexVillage]).trim();
+          }
+
+          let studentCode = '';
+          if (colIndexCode !== -1 && row[colIndexCode] !== undefined) {
+            studentCode = String(row[colIndexCode]).trim();
+          }
+
+          let birthDate = '';
+          if (colIndexBirth !== -1 && row[colIndexBirth] !== undefined) {
+            const rawBirth = row[colIndexBirth];
+            if (typeof rawBirth === 'number') {
+              try {
+                const d = new Date(Math.round((rawBirth - 25569) * 86400 * 1000));
+                const day = String(d.getDate()).padStart(2, '0');
+                const month = String(d.getMonth() + 1).padStart(2, '0');
+                const year = d.getFullYear();
+                birthDate = `${day}/${month}/${year}`;
+              } catch {
+                birthDate = String(rawBirth);
+              }
+            } else {
+              birthDate = String(rawBirth).trim();
+            }
+          }
+
+          let ethnicity = 'Mông';
+          if (colIndexEthnicity !== -1 && row[colIndexEthnicity] !== undefined) {
+            ethnicity = String(row[colIndexEthnicity]).trim();
+          }
+
+          let isBoarding = true;
+          if (colIndexBoarding !== -1 && row[colIndexBoarding] !== undefined) {
+            const bVal = String(row[colIndexBoarding]).trim().toLowerCase();
+            if (bVal === 'không' || bVal === 'k' || bVal === 'no' || bVal === '0' || bVal === 'false') {
+              isBoarding = false;
+            }
+          }
 
           parsedList.push({
             class_id: selectedClassId,
@@ -648,7 +824,7 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
             address: village || undefined,
             birth_date: birthDate || undefined,
             ethnicity: ethnicity || undefined,
-            isBoarding: true,
+            isBoarding,
             notes: '',
           });
         }
@@ -694,18 +870,45 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
     const parsed: Array<Omit<Student, 'id' | 'created_at'>> = [];
 
     lines.forEach((line) => {
-      // Check if tab separated: Name \t Village \t Gender
       const parts = line.split('\t').map((p) => p.trim()).filter(Boolean);
-      if (parts.length >= 1) {
-        // remove leading numbers like "1.", "1/ ", "1 "
-        const cleanedName = parts[0].replace(/^[\d\.\-\)\s]+/, '').trim();
-        if (cleanedName) {
+      let name = '';
+      let village = '';
+      let gender = 'Nam';
+      let ethnicity = 'Mông';
+
+      if (parts.length > 1 && !isNaN(Number(parts[0])) && isNaN(Number(parts[1]))) {
+        // parts[0] is STT, parts[1] is Name
+        name = parts[1].replace(/^[\d\.\-\)\s]+/, '').trim();
+        village = parts[2] || '';
+        if (parts[3] === 'Nữ' || parts[3] === 'F' || parts[3] === 'nữ') gender = 'Nữ';
+        if (parts[4]) ethnicity = parts[4];
+      } else if (parts.length >= 1) {
+        name = parts[0].replace(/^[\d\.\-\)\s]+/, '').trim();
+        village = parts[1] || '';
+        if (parts[2] === 'Nữ' || parts[2] === 'F' || parts[2] === 'nữ') gender = 'Nữ';
+        if (parts[3]) ethnicity = parts[3];
+      } else {
+        const cleaned = line.replace(/^[\d]+[\.\/\)\-\:\s]+/, '').trim();
+        const subparts = cleaned.split(/[\-\:,]/).map((p) => p.trim());
+        name = subparts[0];
+        village = subparts.slice(1).join(' - ');
+      }
+
+      if (name) {
+        const lowerName = name.toLowerCase();
+        if (
+          lowerName !== 'stt' &&
+          !lowerName.includes('họ và tên') &&
+          !lowerName.includes('họ tên') &&
+          !lowerName.includes('tổng số')
+        ) {
           parsed.push({
             class_id: selectedClassId,
-            full_name: cleanedName,
-            village: parts[1] || undefined,
-            address: parts[1] || undefined,
-            gender: parts[2] === 'Nữ' || parts[2] === 'F' ? 'Nữ' : 'Nam',
+            full_name: name,
+            village: village || undefined,
+            address: village || undefined,
+            gender,
+            ethnicity: ethnicity || undefined,
             isBoarding: true,
           });
         }
