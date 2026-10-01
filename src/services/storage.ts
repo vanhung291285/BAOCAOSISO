@@ -1518,20 +1518,53 @@ export const StorageService = {
     ensureInitialized();
     const supabase = getSupabaseClient();
 
+    // Thu thập toàn bộ định danh hợp lệ của lớp (UUID và tên lớp)
+    const validIds = new Set<string>([classId]);
+    const rawCls = localStorage.getItem(STORAGE_KEYS.CLASSES);
+    if (rawCls) {
+      try {
+        const clsList = JSON.parse(rawCls);
+        const match = clsList.find(
+          (c: any) =>
+            c.id === classId ||
+            c.class_name === classId ||
+            String(c.class_name).trim().toLowerCase() === String(classId).trim().toLowerCase()
+        );
+        if (match) {
+          if (match.id) validIds.add(match.id);
+          if (match.class_name) validIds.add(match.class_name);
+        }
+      } catch {}
+    }
+    const validIdArr = Array.from(validIds);
+
     if (supabase && isSupabaseConnected()) {
       try {
         let query = supabase
           .from('daily_reports')
           .select('*')
-          .eq('class_id', classId);
+          .in('class_id', validIdArr);
 
         if (beforeDate) {
           query = query.lt('report_date', beforeDate);
         }
 
-        const { data: reps, error: rErr } = await query
+        let { data: reps, error: rErr } = await query
           .order('report_date', { ascending: false })
           .limit(5);
+
+        // Fallback: nếu chưa có ngày nào trước beforeDate, tìm báo cáo gần nhất bất kỳ của lớp
+        if (!rErr && (!reps || reps.length === 0)) {
+          const { data: anyReps } = await supabase
+            .from('daily_reports')
+            .select('*')
+            .in('class_id', validIdArr)
+            .order('report_date', { ascending: false })
+            .limit(3);
+          if (anyReps && anyReps.length > 0) {
+            reps = anyReps;
+          }
+        }
 
         if (!rErr && reps && reps.length > 0) {
           for (const rep of reps) {
@@ -1552,9 +1585,16 @@ export const StorageService = {
 
     const rawReports = localStorage.getItem(STORAGE_KEYS.REPORTS);
     const reports: DailyReport[] = rawReports ? JSON.parse(rawReports) : [];
-    const classReports = reports
-      .filter((r) => r.class_id === classId && (!beforeDate || r.report_date < beforeDate))
+    let classReports = reports
+      .filter((r) => validIds.has(r.class_id) && (!beforeDate || r.report_date < beforeDate))
       .sort((a, b) => b.report_date.localeCompare(a.report_date));
+
+    // Fallback nếu không có báo cáo trước beforeDate, lấy báo cáo gần nhất bất kỳ của lớp
+    if (classReports.length === 0) {
+      classReports = reports
+        .filter((r) => validIds.has(r.class_id))
+        .sort((a, b) => b.report_date.localeCompare(a.report_date));
+    }
 
     const rawValues = localStorage.getItem(STORAGE_KEYS.VALUES);
     const allValues: DailyReportValue[] = rawValues ? JSON.parse(rawValues) : [];

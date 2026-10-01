@@ -101,6 +101,17 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
     }
   }, [initialClassId, isGVCN, currentUser]);
 
+  useEffect(() => {
+    if (!selectedClassId && classes.length > 0) {
+      if (isGVCN && currentUser?.assigned_class_id) {
+        setSelectedClassId(currentUser.assigned_class_id);
+      } else {
+        const firstActive = classes.find((c) => c.active && !c.is_locked);
+        setSelectedClassId(firstActive?.id || classes[0]?.id || '');
+      }
+    }
+  }, [classes, selectedClassId, isGVCN, currentUser]);
+
   // Get active selected class
   const selectedClass = useMemo(() => {
     return classes.find((c) => c.id === selectedClassId) || null;
@@ -192,52 +203,6 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
           };
         });
 
-        // Tự động đồng bộ với danh sách học sinh thực tế của lớp (nếu GVCN vừa import danh sách mới)
-        if (classStudents.length > 0) {
-          const expBoarding = classStudents.filter((s) => s.isBoarding === true);
-          const rosterBoarding = expBoarding.length > 0 ? expBoarding.length : classStudents.filter((s) => s.isBoarding !== false).length;
-          const rosterNonBoarding = Math.max(0, classStudents.length - rosterBoarding);
-
-          enabledIndicators.forEach((ig, idx) => {
-            if (idx === 0) {
-              const curAbs = Number(newVals[ig.id]?.absent) || (report.absent_students?.length || 0);
-              newVals[ig.id] = {
-                total: classStudents.length,
-                absent: curAbs,
-                present: Math.max(0, classStudents.length - curAbs),
-              };
-            } else if (
-              ig.id === 'ig_boarding' ||
-              ig.id === 'ig_boarding_half' ||
-              ig.code.includes('BOARDING') ||
-              ig.name.toLowerCase().includes('bán trú') ||
-              ig.name.toLowerCase().includes('ăn trưa')
-            ) {
-              const curAbs = Number(newVals[ig.id]?.absent) || 0;
-              newVals[ig.id] = {
-                total: rosterBoarding,
-                absent: curAbs,
-                present: Math.max(0, rosterBoarding - curAbs),
-              };
-            } else if (
-              ig.id === 'ig_day' ||
-              ig.id === 'ig_ngoaitru' ||
-              ig.code.includes('NON_BOARDING') ||
-              ig.code.includes('DAY') ||
-              ig.name.toLowerCase().includes('ngoại trú') ||
-              ig.name.toLowerCase().includes('không ăn') ||
-              ig.name.toLowerCase().includes('về nhà')
-            ) {
-              const curAbs = Number(newVals[ig.id]?.absent) || 0;
-              newVals[ig.id] = {
-                total: rosterNonBoarding,
-                absent: curAbs,
-                present: Math.max(0, rosterNonBoarding - curAbs),
-              };
-            }
-          });
-        }
-
         // Ensure all active indicator groups have entry
         enabledIndicators.forEach((ig) => {
           if (!newVals[ig.id]) {
@@ -247,35 +212,32 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
 
         setFormValues(newVals);
       } else {
-        // No report for this date: Kế thừa dữ liệu từ báo cáo ngày hôm trước gần nhất
+        // No report for this date: Lấy đúng sĩ số gần nhất mà GVCN đã báo cáo
         const { report: latestReport, values: latestValues } = await StorageService.getLatestReport(selectedClassId, selectedDate);
 
         if (latestReport && latestValues.length > 0) {
           setInheritedReport({ report: latestReport, values: latestValues });
 
-          // Inherit previous day's report data: totals, present counts, absent counts
+          // Lấy 100% số liệu sĩ số (Tổng số HS, Bán trú, Ngoại trú...) gần nhất của GVCN
           const newVals: Record<string, { total: number | ''; present: number | ''; absent: number | '' }> = {};
           latestValues.forEach((v) => {
+            const totalCount = v.total_count !== undefined ? Number(v.total_count) : 0;
             newVals[v.indicator_group_id] = {
-              total: v.total_count,
-              present: v.present_count,
-              absent: v.absent_count,
+              total: totalCount,
+              present: totalCount, // Mặc định đầu ngày mới là có mặt đủ sĩ số
+              absent: 0,
             };
           });
 
-          // Tự động đồng bộ số lượng thực tế của lớp (nếu sĩ số lớp đã thay đổi / import mới)
-          if (classStudents.length > 0) {
-            const expBoarding = classStudents.filter((s) => s.isBoarding === true);
-            const rosterBoarding = expBoarding.length > 0 ? expBoarding.length : classStudents.filter((s) => s.isBoarding !== false).length;
-            const rosterNonBoarding = Math.max(0, classStudents.length - rosterBoarding);
-
-            enabledIndicators.forEach((ig, idx) => {
+          // Đối với các chỉ tiêu mới thêm chưa có trong báo cáo cũ:
+          enabledIndicators.forEach((ig, idx) => {
+            if (!newVals[ig.id] || Number(newVals[ig.id]?.total) === 0) {
               if (idx === 0) {
-                const curAbs = Number(newVals[ig.id]?.absent) || (latestReport.absent_students?.length || 0);
+                const totalStds = classStudents.length > 0 ? classStudents.length : 35;
                 newVals[ig.id] = {
-                  total: classStudents.length,
-                  absent: curAbs,
-                  present: Math.max(0, classStudents.length - curAbs),
+                  total: totalStds,
+                  present: totalStds,
+                  absent: 0,
                 };
               } else if (
                 ig.id === 'ig_boarding' ||
@@ -284,41 +246,22 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                 ig.name.toLowerCase().includes('bán trú') ||
                 ig.name.toLowerCase().includes('ăn trưa')
               ) {
-                const curAbs = Number(newVals[ig.id]?.absent) || 0;
+                const expBoarding = classStudents.filter((s) => s.isBoarding === true);
+                const rosterBoarding = expBoarding.length > 0 ? expBoarding.length : (classStudents.length > 0 ? classStudents.length : 25);
                 newVals[ig.id] = {
                   total: rosterBoarding,
-                  absent: curAbs,
-                  present: Math.max(0, rosterBoarding - curAbs),
+                  present: rosterBoarding,
+                  absent: 0,
                 };
-              } else if (
-                ig.id === 'ig_day' ||
-                ig.id === 'ig_ngoaitru' ||
-                ig.code.includes('NON_BOARDING') ||
-                ig.code.includes('DAY') ||
-                ig.name.toLowerCase().includes('ngoại trú') ||
-                ig.name.toLowerCase().includes('không ăn') ||
-                ig.name.toLowerCase().includes('về nhà')
-              ) {
-                const curAbs = Number(newVals[ig.id]?.absent) || 0;
-                newVals[ig.id] = {
-                  total: rosterNonBoarding,
-                  absent: curAbs,
-                  present: Math.max(0, rosterNonBoarding - curAbs),
-                };
+              } else {
+                newVals[ig.id] = { total: 0, present: 0, absent: 0 };
               }
-            });
-          }
-
-          // Ensure all active indicator groups have entry
-          enabledIndicators.forEach((ig) => {
-            if (!newVals[ig.id]) {
-              newVals[ig.id] = { total: 0, present: 0, absent: 0 };
             }
           });
 
           setFormValues(newVals);
-          setNotes(latestReport.notes || '');
-          setAbsentStudents(latestReport.absent_students ? [...latestReport.absent_students] : []);
+          setNotes('');
+          setAbsentStudents([]);
         } else {
           setInheritedReport(null);
           // Fallback to smart defaults

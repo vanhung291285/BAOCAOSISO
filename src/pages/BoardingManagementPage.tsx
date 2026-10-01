@@ -138,6 +138,7 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
   const [mealNotes, setMealNotes] = useState<string>('');
   const [isLoadingReport, setIsLoadingReport] = useState<boolean>(true);
   const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [hoveredDailyStudentId, setHoveredDailyStudentId] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null);
 
   // Kitchen Summary State
@@ -235,7 +236,9 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
       // Strictly map 1-to-1 over classBoardingStudents: mealRecords.length will always equal classBoardingStudents.length
       const syncedRecords: BoardingMealRecord[] = classBoardingStudents.map((st) => {
         const normName = st.full_name.trim().toLowerCase();
-        const existing = recordById.get(st.id) || recordByName.get(normName);
+        // Ưu tiên khớp chuẩn tuyệt đối theo ID học sinh để học sinh trùng tên không bị ghi đè dữ liệu của nhau
+        const sameNameCount = classBoardingStudents.filter((s) => s.full_name.trim().toLowerCase() === normName).length;
+        const existing = recordById.get(st.id) || (sameNameCount === 1 ? recordByName.get(normName) : undefined);
 
         if (existing) {
           return {
@@ -1061,6 +1064,16 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
     ];
 
     const ws = XLSX.utils.json_to_sheet(sampleData);
+    ws['!cols'] = [
+      { wch: 6 },  // STT
+      { wch: 14 }, // Mã HS
+      { wch: 22 }, // Họ và tên
+      { wch: 10 }, // Giới tính
+      { wch: 18 }, // Thôn/Bản
+      { wch: 12 }, // Dân tộc
+      { wch: 14 }, // Ngày sinh
+      { wch: 10 }, // Bán trú
+    ];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'DanhSachBanTru');
     XLSX.writeFile(wb, `Mau_Danh_Sach_Hoc_Sinh_Ban_Tru_XaDung.xlsx`);
@@ -1088,6 +1101,16 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
     }));
 
     const ws = XLSX.utils.json_to_sheet(exportData);
+    // Tự động co giãn kích thước cột theo nội dung thực tế
+    const colKeys = Object.keys(exportData[0] || {});
+    ws['!cols'] = colKeys.map((key) => {
+      const maxLen = Math.max(
+        key.length,
+        ...exportData.map((row) => String((row as any)[key] || '').length)
+      );
+      return { wch: Math.min(Math.max(maxLen + 3, 7), 32) };
+    });
+
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'HocSinhBanTru');
     XLSX.writeFile(wb, `Danh_Sach_HS_Ban_Tru_Lop_${selectedClass?.class_name || 'All'}.xlsx`);
@@ -1128,6 +1151,16 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
     } as any);
 
     const ws = XLSX.utils.json_to_sheet(exportData);
+    // Tự động co giãn kích thước cột báo cáo nhà bếp
+    const colKeys = Object.keys(exportData[0] || {});
+    ws['!cols'] = colKeys.map((key) => {
+      const maxLen = Math.max(
+        key.length,
+        ...exportData.map((row) => String((row as any)[key] || '').length)
+      );
+      return { wch: Math.min(Math.max(maxLen + 3, 8), 35) };
+    });
+
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'BaoCaoNhaBep');
     XLSX.writeFile(wb, `Bao_Cao_Suat_An_Nha_Bep_${selectedDate}.xlsx`);
@@ -1561,15 +1594,21 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
               <div>
                 {/* 1. Mobile Phone Card View (Hiển thị tối ưu tuyệt đối cho màn hình điện thoại) */}
                 <div className="md:hidden divide-y divide-slate-100 p-2 sm:p-3 space-y-3">
-                  {mealRecords.map((st, idx) => (
-                    <div
-                      key={st.student_id}
-                      className={`p-3 rounded-2xl border transition-all ${
-                        st.is_absent
-                          ? 'bg-rose-50/60 border-rose-200'
-                          : 'bg-white border-slate-200 shadow-2xs'
-                      }`}
-                    >
+                  {mealRecords.map((st, idx) => {
+                    const isHovered = hoveredDailyStudentId === st.student_id;
+                    return (
+                      <div
+                        key={st.student_id}
+                        onMouseEnter={() => setHoveredDailyStudentId(st.student_id)}
+                        onMouseLeave={() => setHoveredDailyStudentId(null)}
+                        className={`p-3 rounded-2xl border transition-all ${
+                          isHovered
+                            ? 'bg-amber-50/90 border-blue-400 ring-2 ring-blue-500/60 shadow-md'
+                            : st.is_absent
+                            ? 'bg-rose-50/60 border-rose-200'
+                            : 'bg-white border-slate-200 shadow-2xs'
+                        }`}
+                      >
                       {/* Row 1: STT & Name & Info */}
                       <div className="flex items-start justify-between gap-2 mb-2">
                         <div className="flex items-center gap-2">
@@ -1694,7 +1733,8 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
                         className="w-full bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
                       />
                     </div>
-                  ))}
+                  );
+                })}
                 </div>
 
                 {/* 2. Desktop Table View */}
@@ -1738,20 +1778,35 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {mealRecords.map((st, idx) => (
-                        <tr
-                          key={st.student_id}
-                          className={`transition-colors hover:bg-slate-50 ${
-                            st.is_absent ? 'bg-rose-50/30 text-slate-400' : ''
-                          }`}
-                        >
-                          <td className="py-2.5 px-3 text-center text-slate-400 font-bold">{idx + 1}</td>
-                          <td className="py-2.5 px-3">
-                            <div className="font-extrabold text-slate-900">{st.student_name}</div>
-                            <div className="text-[10px] text-slate-400 md:hidden">
-                              {[st.gender, st.village].filter(Boolean).join(' • ')}
-                            </div>
-                          </td>
+                      {mealRecords.map((st, idx) => {
+                        const isHovered = hoveredDailyStudentId === st.student_id;
+                        return (
+                          <tr
+                            key={st.student_id}
+                            onMouseEnter={() => setHoveredDailyStudentId(st.student_id)}
+                            onMouseLeave={() => setHoveredDailyStudentId(null)}
+                            className={`transition-all duration-150 ${
+                              isHovered
+                                ? 'bg-amber-100/90 ring-2 ring-blue-500/70 border-l-4 border-l-blue-600 shadow-sm font-bold'
+                                : st.is_absent
+                                ? 'bg-rose-50/30 text-slate-400'
+                                : 'hover:bg-slate-50'
+                            }`}
+                          >
+                            <td className={`py-2.5 px-3 text-center font-black ${isHovered ? 'bg-amber-200 text-blue-950' : 'text-slate-400'}`}>{idx + 1}</td>
+                            <td className="py-2.5 px-3">
+                              <div className="flex items-center gap-2">
+                                <span className={`font-black ${isHovered ? 'text-blue-950 font-black' : 'text-slate-900'}`}>{st.student_name}</span>
+                                {isHovered && (
+                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-black bg-blue-600 text-white tracking-wider">
+                                    Đang chấm
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-[10px] text-slate-400 md:hidden">
+                                {[st.gender, st.village].filter(Boolean).join(' • ')}
+                              </div>
+                            </td>
                           <td className="py-2.5 px-3 text-slate-600 hidden md:table-cell">{st.village || '—'}</td>
                           <td className="py-2.5 px-2 text-center text-slate-500 hidden sm:table-cell">{st.gender || '—'}</td>
 
@@ -1844,7 +1899,8 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
                             />
                           </td>
                         </tr>
-                      ))}
+                      );
+                    })}
                     </tbody>
                   </table>
                 </div>
