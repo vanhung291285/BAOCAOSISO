@@ -107,32 +107,39 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
     ].filter(Boolean) as string[]);
   }, [selectedClassId, selectedClass]);
 
-  // Students belonging to selected class
+  // Students belonging to selected class (with de-duplication)
   const classStudents = useMemo(() => {
     if (!selectedClassId) return [];
-    return students.filter((s) => validClassIds.has(s.class_id));
+    const raw = students.filter((s) => validClassIds.has(s.class_id));
+    const seenIds = new Set<string>();
+    const seenNames = new Set<string>();
+    const unique: Student[] = [];
+    for (const s of raw) {
+      if (!s || !s.full_name) continue;
+      const nameKey = s.full_name.trim().toLowerCase();
+      if (seenIds.has(s.id) || seenNames.has(nameKey)) continue;
+      seenIds.add(s.id);
+      seenNames.add(nameKey);
+      unique.push(s);
+    }
+    return unique;
   }, [students, validClassIds, selectedClassId]);
 
   // Boarding students belonging to selected class (or all if not filtered)
   const classBoardingStudents = useMemo(() => {
     const explicitBoarding = classStudents.filter((s) => s.isBoarding === true);
-    let list = [];
     if (explicitBoarding.length > 0) {
-      list = explicitBoarding;
-    } else {
-      const notFalse = classStudents.filter((s) => s.isBoarding !== false);
-      if (notFalse.length > 0) {
-        list = notFalse;
-      } else if (classStudents.length > 0) {
-        list = classStudents;
-      } else {
-        list = generateDefaultBoardingStudentsForClass(selectedClassId, selectedClass?.class_name || 'Lớp');
-      }
+      return explicitBoarding;
     }
-
-    // Giữ nguyên 100% thứ tự danh sách học sinh theo file Excel gốc của lớp (không xáo trộn)
-    return list;
-  }, [classStudents, selectedClassId, selectedClass]);
+    const notFalse = classStudents.filter((s) => s.isBoarding !== false);
+    if (notFalse.length > 0) {
+      return notFalse;
+    }
+    if (classStudents.length > 0) {
+      return classStudents;
+    }
+    return [];
+  }, [classStudents]);
 
   // Day Meal Schedule
   const mealSchedule = useMemo(() => {
@@ -217,27 +224,68 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
         });
       }
 
+      // Lookup maps for previously saved meal records
+      const recordById = new Map<string, BoardingMealRecord>();
+      const recordByName = new Map<string, BoardingMealRecord>();
+
       if (rep && rep.records && rep.records.length > 0) {
         setMealReport(rep);
         setMealNotes(rep.notes || '');
-
-        // Sync new students if any student was added recently
-        const currentStudentIds = new Set(rep.records.map((r) => r.student_id));
-        const missingStudents = classBoardingStudents.filter((s) => !currentStudentIds.has(s.id));
-
-        if (missingStudents.length > 0) {
-          const newRecords = buildDefaultMealRecords(missingStudents, selectedDate, selectedClassId, absentMap);
-          setMealRecords([...rep.records, ...newRecords]);
-        } else {
-          setMealRecords(rep.records);
+        let recs = rep.records;
+        if (typeof recs === 'string') {
+          try { recs = JSON.parse(recs); } catch { recs = []; }
+        }
+        if (Array.isArray(recs)) {
+          recs.forEach((r) => {
+            if (r.student_id) recordById.set(r.student_id, r);
+            if (r.student_name) recordByName.set(r.student_name.trim().toLowerCase(), r);
+          });
         }
       } else {
-        // Initialize default records: Not absent = Ate according to weekday rules
         setMealReport(null);
         setMealNotes('');
-        const initialRecords = buildDefaultMealRecords(classBoardingStudents, selectedDate, selectedClassId, absentMap);
-        setMealRecords(initialRecords);
       }
+
+      // Strictly map 1-to-1 over classBoardingStudents: mealRecords.length will always equal classBoardingStudents.length
+      const syncedRecords: BoardingMealRecord[] = classBoardingStudents.map((st) => {
+        const normName = st.full_name.trim().toLowerCase();
+        const existing = recordById.get(st.id) || recordByName.get(normName);
+
+        if (existing) {
+          return {
+            ...existing,
+            id: existing.id || `meal_${selectedClassId}_${selectedDate}_${st.id}`,
+            class_id: selectedClassId,
+            date: selectedDate,
+            student_id: st.id,
+            student_name: st.full_name,
+            gender: st.gender || existing.gender,
+            village: st.village || existing.village,
+          };
+        }
+
+        const isAbsentInDaily = absentMap.has(st.id) || absentMap.has(normName);
+        const absentInfo = absentMap.get(st.id) || absentMap.get(normName);
+        const isAbsent = Boolean(isAbsentInDaily);
+
+        return {
+          id: `meal_${selectedClassId}_${selectedDate}_${st.id}`,
+          class_id: selectedClassId,
+          date: selectedDate,
+          student_id: st.id,
+          student_name: st.full_name,
+          gender: st.gender,
+          village: st.village,
+          breakfast: !isAbsent && mealSchedule.breakfastAllowed,
+          lunch: !isAbsent && mealSchedule.lunchAllowed,
+          dinner: !isAbsent && mealSchedule.dinnerAllowed,
+          is_absent: isAbsent,
+          absent_reason: isAbsent ? (absentInfo?.reason || 'Vắng theo báo cáo sĩ số') : undefined,
+          notes: '',
+        };
+      });
+
+      setMealRecords(syncedRecords);
     } catch (err) {
       console.error('Error loading boarding meal report:', err);
     } finally {
@@ -898,12 +946,13 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
     if (importPreviewData.length === 0) return;
     try {
       if (selectedClassId) {
-        await deleteStudentsByClass(selectedClassId);
+        await deleteStudentsByClass(selectedClassId, selectedClass?.class_name);
       }
-      await importStudents(importPreviewData);
+      await importStudents(importPreviewData, selectedClassId, selectedClass?.class_name);
       showToast(`Đã nhập thành công ${importPreviewData.length} học sinh vào lớp ${selectedClass?.class_name}! Giữ nguyên 100% thứ tự file Excel.`);
       setShowImportModal(false);
       setImportPreviewData([]);
+      await loadMealAttendance();
     } catch (e) {
       console.error(e);
       showToast('Lỗi khi lưu danh sách học sinh!', 'error');
@@ -972,10 +1021,14 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
     }
 
     try {
-      await importStudents(parsed);
+      if (selectedClassId) {
+        await deleteStudentsByClass(selectedClassId, selectedClass?.class_name);
+      }
+      await importStudents(parsed, selectedClassId, selectedClass?.class_name);
       showToast(`Đã thêm nhanh ${parsed.length} học sinh bán trú!`);
       setShowQuickPasteModal(false);
       setQuickPasteText('');
+      await loadMealAttendance();
     } catch (e) {
       console.error(e);
       showToast('Lỗi khi lưu học sinh!', 'error');
@@ -1369,11 +1422,25 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
               <button
                 type="button"
                 onClick={handleSyncFromDailyAttendance}
-                className="px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 flex items-center gap-1.5 transition-all shadow-xs"
+                className="px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
                 title="Tự động lấy học sinh vắng từ báo cáo sĩ số ngày"
               >
                 <Sparkles className="w-4 h-4 text-blue-600" />
                 <span>Đồng bộ từ Báo cáo sĩ số</span>
+              </button>
+
+              {/* Sync with class boarding roster */}
+              <button
+                type="button"
+                onClick={async () => {
+                  await loadMealAttendance();
+                  showToast(`Đã đồng bộ chuẩn xác ${classBoardingStudents.length} học sinh bán trú của lớp!`);
+                }}
+                className="px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-300 flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
+                title="Đồng bộ danh sách chấm ăn đúng với số lượng học sinh bán trú hiện tại của lớp"
+              >
+                <RotateCcw className="w-4 h-4 text-emerald-600" />
+                <span>Đồng bộ DS bán trú ({classBoardingStudents.length} HS)</span>
               </button>
 
               {/* Toggle all breakfast */}

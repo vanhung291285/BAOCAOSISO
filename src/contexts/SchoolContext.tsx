@@ -34,8 +34,8 @@ interface SchoolContextType {
   addStudent: (student: Omit<Student, 'id' | 'created_at'>) => Promise<void>;
   updateStudent: (studentId: string, partial: Partial<Student>) => Promise<void>;
   deleteStudent: (studentId: string) => Promise<void>;
-  deleteStudentsByClass: (classId: string) => Promise<void>;
-  importStudents: (students: Array<Omit<Student, 'id' | 'created_at'>>) => Promise<void>;
+  deleteStudentsByClass: (classId: string, className?: string) => Promise<void>;
+  importStudents: (students: Array<Omit<Student, 'id' | 'created_at'>>, replaceClassId?: string, replaceClassName?: string) => Promise<void>;
 }
 
 const SchoolContext = createContext<SchoolContextType | undefined>(undefined);
@@ -353,12 +353,19 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     await refreshAll();
   };
 
-  const deleteStudentsByClass = async (classId: string) => {
-    await StorageService.deleteStudentsByClass(classId);
+  const deleteStudentsByClass = async (classId: string, className?: string) => {
+    await StorageService.deleteStudentsByClass(classId, className);
     await refreshAll();
   };
 
-  const importStudents = async (newStudents: Array<Omit<Student, 'id' | 'created_at'>>) => {
+  const importStudents = async (
+    newStudents: Array<Omit<Student, 'id' | 'created_at'>>,
+    replaceClassId?: string,
+    replaceClassName?: string
+  ) => {
+    if (replaceClassId) {
+      await StorageService.deleteStudentsByClass(replaceClassId, replaceClassName);
+    }
     const baseTime = Date.now();
     const studentsToSave: Student[] = newStudents.map((s, idx) => ({
       ...s,

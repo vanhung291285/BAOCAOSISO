@@ -76,24 +76,31 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
   // Boarding students
   const classBoardingStudents = useMemo(() => {
     if (!selectedClassId) return [];
-    const classSts = students.filter((s) => validClassIds.has(s.class_id));
-    const explicitBoarding = classSts.filter((s) => s.isBoarding === true);
-    let list = [];
-    if (explicitBoarding.length > 0) {
-      list = explicitBoarding;
-    } else {
-      const notFalse = classSts.filter((s) => s.isBoarding !== false);
-      if (notFalse.length > 0) {
-        list = notFalse;
-      } else if (classSts.length > 0) {
-        list = classSts;
-      } else {
-        list = generateDefaultBoardingStudentsForClass(selectedClassId, currentClass?.class_name || 'Lớp');
-      }
+    const rawSts = students.filter((s) => validClassIds.has(s.class_id));
+    const seenIds = new Set<string>();
+    const seenNames = new Set<string>();
+    const classSts: Student[] = [];
+    for (const s of rawSts) {
+      if (!s || !s.full_name) continue;
+      const nameKey = s.full_name.trim().toLowerCase();
+      if (seenIds.has(s.id) || seenNames.has(nameKey)) continue;
+      seenIds.add(s.id);
+      seenNames.add(nameKey);
+      classSts.push(s);
     }
 
-    // Giữ nguyên 100% thứ tự danh sách học sinh theo file Excel gốc của lớp (không xáo trộn)
-    return list;
+    const explicitBoarding = classSts.filter((s) => s.isBoarding === true);
+    if (explicitBoarding.length > 0) {
+      return explicitBoarding;
+    }
+    const notFalse = classSts.filter((s) => s.isBoarding !== false);
+    if (notFalse.length > 0) {
+      return notFalse;
+    }
+    if (classSts.length > 0) {
+      return classSts;
+    }
+    return [];
   }, [students, selectedClassId, validClassIds, currentClass]);
 
   // Parse Year and Month
@@ -308,12 +315,33 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
     if (!selectedClassId || !selectedMonth) return;
     setIsLoading(true);
     try {
+      const todayStr = getTodayDateStr();
+
+      // Dọn dẹp bất kỳ báo cáo thử nghiệm nào ở ngày tương lai trong bộ nhớ
+      try {
+        const raw = localStorage.getItem('sso_boarding_reports_v1');
+        if (raw) {
+          const list = JSON.parse(raw);
+          const cleaned = list.filter((r: any) => {
+            const dStr = r.date ? String(r.date).split('T')[0].trim() : '';
+            if (r.class_id === selectedClassId && dStr > todayStr) return false;
+            return true;
+          });
+          if (cleaned.length !== list.length) {
+            localStorage.setItem('sso_boarding_reports_v1', JSON.stringify(cleaned));
+          }
+        }
+      } catch {}
+
       // 1. Lấy danh sách báo ăn bán trú đã lưu trong tháng (Supabase + Local)
       const reports = await StorageService.getBoardingReportsByClassAndMonth(selectedClassId, selectedMonth);
       const reportMap = new Map<string, BoardingDailyReport>();
       reports.forEach((r) => {
         if (!r) return;
         const cleanDate = String(r.date).split('T')[0].trim();
+        // Tuyệt đối không nhận các báo cáo của ngày tương lai
+        if (cleanDate > todayStr) return;
+
         let recs = r.records;
         if (typeof recs === 'string') {
           try { recs = JSON.parse(recs); } catch { recs = []; }
@@ -336,6 +364,9 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
 
         classDaily.forEach((dr) => {
           const cleanDate = String(dr.report_date).split('T')[0].trim();
+          // Tuyệt đối không đồng bộ ngày tương lai (sau ngày hôm nay)
+          if (cleanDate > todayStr) return;
+
           if (!reportMap.has(cleanDate)) {
             const absentMap = new Map<string, { reason?: string }>();
             if (dr.absent_students) {
@@ -393,6 +424,16 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
         const normName = st.full_name.trim().toLowerCase();
 
         monthDays.forEach((day) => {
+          // Các ngày chưa tới trong tương lai (sau ngày hôm nay) TUYỆT ĐỐI để trống hoàn toàn
+          if (day.dateStr > todayStr) {
+            initialMatrix[st.id][day.dateStr] = {
+              breakfast: false,
+              lunch: false,
+              dinner: false,
+            };
+            return;
+          }
+
           // Ngày nào GVCN đã báo ăn (trong reportMap) thì hiển thị dấu (+), ngày chưa báo thì để trống hoàn toàn
           const rep = reportMap.get(day.dateStr);
           if (!rep) {
@@ -731,14 +772,25 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
       }
     > = {};
 
+    const todayStr = getTodayDateStr();
+
     classBoardingStudents.forEach((st) => {
       const stDays = mealMatrix[st.id] || {};
       let eatenB = 0;
       let eatenL = 0;
       let eatenD = 0;
+      let distinctEatenDays = 0;
 
       monthDays.forEach((d) => {
+        // Chỉ tính các ngày từ đầu tháng đến ngày hôm nay (không tính các ngày chưa tới trong tương lai)
+        if (d.dateStr > todayStr) return;
+
         const dayRecord = stDays[d.dateStr];
+        const hasMeal = dayRecord?.breakfast || dayRecord?.lunch || dayRecord?.dinner;
+        if (hasMeal) {
+          distinctEatenDays++;
+        }
+
         if (dayRecord) {
           if (dayRecord.breakfast) eatenB++;
           if (dayRecord.lunch) eatenL++;
@@ -746,11 +798,13 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
         }
       });
 
+      // Quy tắc kế toán bán trú: Số ngày báo ăn (S, T, T) + Số ngày không báo ăn (S, T, T) = Định mức báo (S, T, T)
       const missedB = Math.max(0, standardBreakfastDays - eatenB);
       const missedL = Math.max(0, standardLunchDays - eatenL);
       const missedD = Math.max(0, standardDinnerDays - eatenD);
-      // Quy đổi số ngày ăn thực = (eatenB + eatenL + eatenD) / 3 hoặc theo bữa trưa
-      const actualDays = Math.round(((eatenB + eatenL + eatenD) / 3) * 10) / 10;
+
+      // Số ngày báo ăn thực tế: Số ngày học sinh có ăn cơm thực tế trong tháng
+      const actualDays = distinctEatenDays;
 
       summaries[st.id] = {
         eatenBreakfast: eatenB,
@@ -774,8 +828,13 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
   // Daily column meal counts for footer CỘNG
   const columnTotals = useMemo(() => {
     const dailyTotals: Record<string, { breakfast: number; lunch: number; dinner: number }> = {};
+    const todayStr = getTodayDateStr();
 
     displayedMonthDays.forEach((d) => {
+      if (d.dateStr > todayStr) {
+        dailyTotals[d.dateStr] = { breakfast: 0, lunch: 0, dinner: 0 };
+        return;
+      }
       let b = 0;
       let l = 0;
       let dn = 0;
@@ -1130,8 +1189,8 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
             <Info className="w-4 h-4 text-amber-600" />
             <span>Định mức số ngày ăn chuẩn trong tháng (Mặc định tự động tính theo lịch)</span>
           </div>
-          <p className="text-[11px] text-slate-500">
-            Giáo viên có thể nhập đè số ngày để điều chỉnh định mức khi có ngày nghỉ lễ, nghỉ thời tiết...
+          <p className="text-[11px] text-slate-600 font-medium">
+            Quy tắc chuẩn: <strong>Số ngày báo ăn (S, T, T) + Số ngày không báo ăn (S, T, T) = Định mức báo (S, T, T)</strong>. GVCN có thể nhập đè số ngày để điều chỉnh định mức khi có nghỉ lễ, nghỉ thời tiết...
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">

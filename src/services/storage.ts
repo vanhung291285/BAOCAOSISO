@@ -854,14 +854,41 @@ export const StorageService = {
       const raw = localStorage.getItem(STORAGE_KEYS.STUDENTS);
       data = raw ? JSON.parse(raw) : [];
     }
-    
-    return data;
+
+    // Auto-deduplicate any duplicate student records by class_id and normalized student name
+    const seen = new Set<string>();
+    const cleaned: import('../types').Student[] = [];
+    let hadDuplicates = false;
+
+    for (const s of data) {
+      if (!s || !s.full_name) continue;
+      const key = `${s.class_id || ''}:::${s.full_name.trim().toLowerCase()}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        cleaned.push(s);
+      } else {
+        hadDuplicates = true;
+      }
+    }
+
+    if (hadDuplicates) {
+      localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(cleaned));
+    }
+
+    return cleaned;
   },
 
   async saveStudent(student: import('../types').Student): Promise<void> {
     const list = await this.getStudents();
-    const idx = list.findIndex((s) => s.id === student.id);
-    if (idx >= 0) list[idx] = student;
+    const normName = (student.full_name || '').trim().toLowerCase();
+    let idx = list.findIndex((s) => s.id === student.id);
+    if (idx < 0) {
+      idx = list.findIndex(
+        (s) => s.class_id === student.class_id && (s.full_name || '').trim().toLowerCase() === normName
+      );
+    }
+
+    if (idx >= 0) list[idx] = { ...list[idx], ...student };
     else list.push(student);
     
     localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(list));
@@ -903,15 +930,40 @@ export const StorageService = {
     notifyRealtimeChange('students');
   },
 
-  async deleteStudentsByClass(classId: string): Promise<void> {
+  async deleteStudentsByClass(classId: string, className?: string): Promise<void> {
     const list = await this.getStudents();
-    const filtered = list.filter((s) => s.class_id !== classId);
+    const rawKeys = [classId, className].filter(Boolean) as string[];
+    const normKeys = new Set(rawKeys.map((k) => k.trim().toLowerCase()));
+
+    // Also look up classes list in storage to grab both id and class_name
+    try {
+      const clsRaw = localStorage.getItem(STORAGE_KEYS.CLASSES);
+      if (clsRaw) {
+        const clsList = JSON.parse(clsRaw);
+        const match = clsList.find(
+          (c: any) =>
+            normKeys.has(String(c.id).trim().toLowerCase()) ||
+            normKeys.has(String(c.class_name).trim().toLowerCase())
+        );
+        if (match) {
+          normKeys.add(String(match.id).trim().toLowerCase());
+          normKeys.add(String(match.class_name).trim().toLowerCase());
+        }
+      }
+    } catch {}
+
+    const filtered = list.filter((s) => {
+      const sCls = String(s.class_id || '').trim().toLowerCase();
+      return !normKeys.has(sCls);
+    });
     localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(filtered));
 
     const supabase = getSupabaseClient();
     if (supabase && isSupabaseConnected()) {
       try {
-        await supabase.from('students').delete().eq('class_id', classId);
+        for (const k of normKeys) {
+          await supabase.from('students').delete().eq('class_id', k);
+        }
       } catch (e) {
         console.error('Supabase deleteStudentsByClass error:', e);
       }
@@ -920,17 +972,30 @@ export const StorageService = {
     notifyRealtimeChange('students');
   },
 
-  async getStudentsByClass(classId: string): Promise<import('../types').Student[]> {
+  async getStudentsByClass(classId: string, className?: string): Promise<import('../types').Student[]> {
     const all = await this.getStudents();
-    return all.filter((s) => s.class_id === classId);
+    const rawKeys = [classId, className].filter(Boolean) as string[];
+    const normKeys = new Set(rawKeys.map((k) => k.trim().toLowerCase()));
+    return all.filter((s) => normKeys.has(String(s.class_id || '').trim().toLowerCase()));
   },
 
   async saveStudents(students: import('../types').Student[]): Promise<void> {
     const all = await this.getStudents();
     const updated = [...all];
     for (const student of students) {
-      const idx = updated.findIndex((s) => s.id === student.id);
-      if (idx >= 0) updated[idx] = student;
+      if (!student || !student.full_name) continue;
+      const normName = student.full_name.trim().toLowerCase();
+      const sCls = String(student.class_id || '').trim().toLowerCase();
+
+      let idx = updated.findIndex((s) => s.id === student.id);
+      if (idx < 0) {
+        idx = updated.findIndex(
+          (s) =>
+            String(s.class_id || '').trim().toLowerCase() === sCls &&
+            (s.full_name || '').trim().toLowerCase() === normName
+        );
+      }
+      if (idx >= 0) updated[idx] = { ...updated[idx], ...student };
       else updated.push(student);
     }
     localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(updated));

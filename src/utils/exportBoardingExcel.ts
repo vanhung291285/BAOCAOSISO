@@ -314,6 +314,7 @@ function buildBoardingWorksheet(
         if (dRec?.dinner) eatenD++;
       });
 
+      // Quy tắc kế toán bán trú: Số ngày báo ăn (S, T, T) + Số ngày không báo ăn (S, T, T) = Định mức báo (S, T, T)
       const missedB = Math.max(0, standardBreakfastDays - eatenB);
       const missedL = Math.max(0, standardLunchDays - eatenL);
       const missedD = Math.max(0, standardDinnerDays - eatenD);
@@ -322,9 +323,9 @@ function buildBoardingWorksheet(
       rowObj.getCell(sumColIdx + 1).value = eatenL;
       rowObj.getCell(sumColIdx + 2).value = eatenD;
 
-      rowObj.getCell(sumColIdx + 3).value = missedB > 0 ? missedB : '';
-      rowObj.getCell(sumColIdx + 4).value = missedL > 0 ? missedL : '';
-      rowObj.getCell(sumColIdx + 5).value = missedD > 0 ? missedD : '';
+      rowObj.getCell(sumColIdx + 3).value = missedB;
+      rowObj.getCell(sumColIdx + 4).value = missedL;
+      rowObj.getCell(sumColIdx + 5).value = missedD;
     }
 
     // Row styles
@@ -466,9 +467,10 @@ export async function exportMonthlyBoardingExcel(params: ExportBoardingExcelPara
   const safeStudents = Array.isArray(students) ? students : [];
 
   // 1. Lọc danh sách học sinh bán trú của lớp
-  let boardingStudents = safeStudents.filter(
-    (s) => s.class_id === classId && s.isBoarding !== false
-  );
+  const explicit = safeStudents.filter((s) => s.class_id === classId && s.isBoarding === true);
+  let boardingStudents = explicit.length > 0
+    ? explicit
+    : safeStudents.filter((s) => s.class_id === classId && s.isBoarding !== false);
 
   // 2. Nếu chưa đánh dấu bán trú nhưng đã có học sinh trong lớp, lấy toàn bộ học sinh của lớp
   if (boardingStudents.length === 0) {
@@ -523,8 +525,19 @@ export async function exportMonthlyBoardingExcel(params: ExportBoardingExcelPara
     boardingStudents = [];
   }
 
-  // Giữ nguyên 100% thứ tự danh sách học sinh theo file Excel gốc của lớp (không xáo trộn)
-  boardingStudents = [...boardingStudents];
+  // Giữ nguyên 100% thứ tự danh sách học sinh theo file Excel gốc của lớp và loại bỏ trùng lặp (nếu có)
+  const seenIds = new Set<string>();
+  const seenNames = new Set<string>();
+  const uniqueBoarding: Student[] = [];
+  for (const s of boardingStudents) {
+    if (!s || !s.full_name) continue;
+    const nameKey = s.full_name.trim().toLowerCase();
+    if (seenIds.has(s.id) || seenNames.has(nameKey)) continue;
+    seenIds.add(s.id);
+    seenNames.add(nameKey);
+    uniqueBoarding.push(s);
+  }
+  boardingStudents = uniqueBoarding;
 
   const [yStr, mStr] = monthStr.split('-');
   const yearNum = Number(yStr);

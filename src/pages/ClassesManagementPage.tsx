@@ -112,7 +112,7 @@ export const ClassesManagementPage: React.FC = () => {
     });
     
     if (parsedStudents.length > 0) {
-      await importStudents(parsedStudents);
+      await importStudents(parsedStudents, rosterClassId, rosterClass?.class_name);
       setBulkStudentText('');
       setShowBulkImport(false);
       setSuccessToast(`Đã thêm ${parsedStudents.length} học sinh thành công!`);
@@ -123,7 +123,7 @@ export const ClassesManagementPage: React.FC = () => {
   const handleAutoGenerateStudentsForRosterClass = async () => {
     if (!rosterClassId || !rosterClass) return;
     const generated = generateDefaultBoardingStudentsForClass(rosterClassId, rosterClass.class_name);
-    await importStudents(generated);
+    await importStudents(generated, rosterClassId, rosterClass.class_name);
     setSuccessToast(`Đã tự động khởi tạo 35 học sinh cho lớp ${rosterClass.class_name}!`);
     setTimeout(() => setSuccessToast(''), 3000);
   };
