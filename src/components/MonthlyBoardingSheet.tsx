@@ -85,19 +85,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
       seenIds.add(s.id);
       classSts.push(s);
     }
-
-    const explicitBoarding = classSts.filter((s) => s.isBoarding === true);
-    if (explicitBoarding.length > 0) {
-      return explicitBoarding;
-    }
-    const notFalse = classSts.filter((s) => s.isBoarding !== false);
-    if (notFalse.length > 0) {
-      return notFalse;
-    }
-    if (classSts.length > 0) {
-      return classSts;
-    }
-    return [];
+    return classSts;
   }, [students, selectedClassId, validClassIds, currentClass]);
 
   // Parse Year and Month

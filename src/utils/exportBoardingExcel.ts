@@ -466,28 +466,13 @@ export async function exportMonthlyBoardingExcel(params: ExportBoardingExcelPara
 
   const safeStudents = Array.isArray(students) ? students : [];
 
-  // 1. Lọc danh sách học sinh bán trú của lớp
-  const explicit = safeStudents.filter((s) => s.class_id === classId && s.isBoarding === true);
-  let boardingStudents = explicit.length > 0
-    ? explicit
-    : safeStudents.filter((s) => s.class_id === classId && s.isBoarding !== false);
-
-  // 2. Nếu chưa đánh dấu bán trú nhưng đã có học sinh trong lớp, lấy toàn bộ học sinh của lớp
-  if (boardingStudents.length === 0) {
-    const allClassStudents = safeStudents.filter((s) => s.class_id === classId);
-    if (allClassStudents.length > 0) {
-      boardingStudents = allClassStudents;
-    }
-  }
+  // Lấy toàn bộ danh sách học sinh của lớp để xuất biểu mẫu ăn bán trú đầy đủ 100%
+  let boardingStudents = safeStudents.filter((s) => s.class_id === classId);
 
   // 2b. Nếu trong mảng truyền vào rỗng, kiểm tra trực tiếp từ StorageService
   if (boardingStudents.length === 0) {
     try {
-      const storedStudents = await StorageService.getStudentsByClass(classId);
-      if (storedStudents && storedStudents.length > 0) {
-        const b = storedStudents.filter((s) => s.isBoarding !== false);
-        boardingStudents = b.length > 0 ? b : storedStudents;
-      }
+      boardingStudents = await StorageService.getStudentsByClass(classId);
     } catch (e) {
       console.warn('Could not fetch students from StorageService:', e);
     }

@@ -124,18 +124,7 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
 
   // Boarding students belonging to selected class (or all if not filtered)
   const classBoardingStudents = useMemo(() => {
-    const explicitBoarding = classStudents.filter((s) => s.isBoarding === true);
-    if (explicitBoarding.length > 0) {
-      return explicitBoarding;
-    }
-    const notFalse = classStudents.filter((s) => s.isBoarding !== false);
-    if (notFalse.length > 0) {
-      return notFalse;
-    }
-    if (classStudents.length > 0) {
-      return classStudents;
-    }
-    return [];
+    return classStudents;
   }, [classStudents]);
 
   // Day Meal Schedule
@@ -901,12 +890,6 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
           }
 
           let isBoarding = true;
-          if (colIndexBoarding !== -1 && row[colIndexBoarding] !== undefined) {
-            const bVal = String(row[colIndexBoarding]).trim().toLowerCase();
-            if (bVal === 'không' || bVal === 'k' || bVal === 'no' || bVal === '0' || bVal === 'false') {
-              isBoarding = false;
-            }
-          }
 
           parsedList.push({
             class_id: selectedClassId,

@@ -875,6 +875,9 @@ export const StorageService = {
       localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(cleaned));
     }
 
+    // Sắp xếp danh sách học sinh theo thứ tự chữ cái của ID (đảm bảo giữ nguyên 100% thứ tự import ban đầu)
+    cleaned.sort((a, b) => (a.id || '').localeCompare(b.id || ''));
+
     return cleaned;
   },
 
