@@ -328,3 +328,38 @@ export interface AppNotification {
   created_by_name?: string;
   urgent?: boolean;
 }
+
+export interface BoardingSignatureConfig {
+  id: string; // e.g. "sig_config_6A1" or "default"
+  class_id?: string;
+  location_name: string; // Địa danh ký (e.g. "Xa Dung")
+  teacher_title: string; // "GIÁO VIÊN CHỦ NHIỆM"
+  teacher_name: string; // Họ tên GVCN
+  principal_title?: string; // "HIỆU TRƯỞNG"
+  principal_name?: string; // Họ tên Hiệu trưởng
+  accountant_title?: string; // "KẾ TOÁN BÁN TRÚ"
+  accountant_name?: string; // Họ tên Kế toán
+  enable_digital_signature: boolean; // Bật chữ ký số / con dấu
+  signature_image_url?: string; // Ảnh chữ ký GVCN (base64 hoặc URL)
+  stamp_image_url?: string; // Ảnh con dấu đỏ điện tử
+  certificate_serial?: string; // Mã chứng thư số / Hash xác thực
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface BoardingMonthSignature {
+  id: string; // "sig_${class_id}_${monthStr}"
+  class_id: string;
+  month: string; // "YYYY-MM"
+  is_signed: boolean;
+  signed_by_name: string;
+  signed_by_role: string;
+  signed_at?: string;
+  location_name: string;
+  signature_image_url?: string;
+  certificate_hash?: string;
+  notes?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+

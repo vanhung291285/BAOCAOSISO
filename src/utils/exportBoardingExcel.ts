@@ -130,7 +130,7 @@ function buildBoardingWorksheet(
       horizontalCentered: true,
       verticalCentered: false,
       margins: { left: 0.2, right: 0.2, top: 0.25, bottom: 0.25, header: 0.1, footer: 0.1 },
-      showGridLines: true,
+      showGridLines: false, // Tắt dòng kẻ mặc định của trang in để không bị kẻ ô li ti ở phần tiêu đề và chữ ký
       printTitlesRow: '7:9', // Lặp lại hàng tiêu đề STT, Họ tên, Thứ, Ngày, Bữa ăn trên tất cả các trang in khi nhiều trang
     },
     views: [

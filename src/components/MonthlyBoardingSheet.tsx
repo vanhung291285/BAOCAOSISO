@@ -4,11 +4,13 @@ import { useSchool } from '../contexts/SchoolContext';
 import { useAuth } from '../contexts/AuthContext';
 import { StorageService, subscribeRealtime } from '../services/storage';
 import { getSupabaseClient, isSupabaseConnected } from '../services/supabase';
-import { Student, BoardingDailyReport, BoardingMealRecord } from '../types';
+import { Student, BoardingDailyReport, BoardingMealRecord, BoardingSignatureConfig, BoardingMonthSignature } from '../types';
 import { getMealScheduleForDate, buildDefaultMealRecords, generateDefaultBoardingStudentsForClass } from '../utils/boardingRules';
 import { formatDateVN, getTodayDateStr } from '../utils/schoolWeeks';
 import { exportMonthlyBoardingExcel } from '../utils/exportBoardingExcel';
 import { DEFAULT_CLASS_TEACHER_MAP } from '../utils/exportAttendanceStandardExcel';
+import { BoardingPrintPreviewModal } from './BoardingPrintPreviewModal';
+import { BoardingDigitalSignatureModal } from './BoardingDigitalSignatureModal';
 import {
   Calendar,
   Download,
@@ -31,6 +33,9 @@ import {
   Clock,
   Maximize2,
   Minimize2,
+  Eye,
+  FileDown,
+  ShieldCheck,
 } from 'lucide-react';
 
 interface MonthlyBoardingSheetProps {
@@ -169,6 +174,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
   }, [updateCrosshair]);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
+  const [isPreviewOpen, setIsPreviewOpen] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null);
 
   // Class info
@@ -398,6 +404,34 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
   }, [selectedClassId, currentClass, isGVCN, currentUser]);
 
   const [customTeacherName, setCustomTeacherName] = useState<string>('');
+  const [sigConfig, setSigConfig] = useState<BoardingSignatureConfig>({
+    id: `sig_config_${selectedClassId}`,
+    class_id: selectedClassId,
+    location_name: 'Xa Dung',
+    teacher_title: 'GIÁO VIÊN CHỦ NHIỆM',
+    teacher_name: '',
+    enable_digital_signature: true,
+  });
+  const [monthSig, setMonthSig] = useState<BoardingMonthSignature | null>(null);
+  const [showDigitalSigModal, setShowDigitalSigModal] = useState<boolean>(false);
+
+  useEffect(() => {
+    async function loadSignatureData() {
+      if (!selectedClassId) return;
+      try {
+        const cfg = await StorageService.getBoardingSignatureConfig(selectedClassId);
+        setSigConfig(cfg);
+        if (cfg.location_name) setSigningLocation(cfg.location_name);
+        if (cfg.teacher_name) setCustomTeacherName(cfg.teacher_name);
+
+        const mSig = await StorageService.getBoardingMonthSignature(selectedClassId, selectedMonth);
+        setMonthSig(mSig);
+      } catch (e) {
+        console.warn('Error loading signature config:', e);
+      }
+    }
+    loadSignatureData();
+  }, [selectedClassId, selectedMonth]);
 
   useEffect(() => {
     const saved = localStorage.getItem(`sso_boarding_teacher_${selectedClassId}`);
@@ -1273,6 +1307,26 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
 
           <button
             type="button"
+            onClick={() => setIsPreviewOpen(true)}
+            className="px-3.5 py-2 rounded-xl text-xs font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
+            title="Xem trước bản in chuẩn khổ giấy A4 ngang và xuất file PDF"
+          >
+            <Eye className="w-3.5 h-3.5 text-indigo-600" />
+            <span>Xem trước khi in</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setIsPreviewOpen(true)}
+            className="px-3.5 py-2 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white shadow-md shadow-rose-600/20 flex items-center gap-1.5 transition-all cursor-pointer"
+            title="Xuất file PDF hoặc In ra file PDF chuẩn A4"
+          >
+            <FileDown className="w-3.5 h-3.5" />
+            <span>In / Xuất PDF</span>
+          </button>
+
+          <button
+            type="button"
             onClick={handleExportExcel}
             className="px-3.5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/20 flex items-center gap-1.5 transition-all cursor-pointer"
             title="Xuất file Excel chuẩn Bộ GD&ĐT tự động chia 2 trang (Trang 1: Ngày 1-15, Trang 2: Ngày 16-hết) khi in không bị co chữ"
@@ -1285,6 +1339,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
             type="button"
             onClick={() => window.print()}
             className="px-3 py-2 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 flex items-center gap-1.5 transition-all"
+            title="In nhanh trực tiếp qua trình duyệt"
           >
             <Printer className="w-3.5 h-3.5" />
             <span>In sổ A3/A4</span>
@@ -1456,6 +1511,20 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
               </strong>
             </span>
           </div>
+
+          {/* Button open Digital Signature Modal */}
+          <button
+            type="button"
+            onClick={() => setShowDigitalSigModal(true)}
+            className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-sm flex items-center gap-1.5 cursor-pointer transition-all"
+            title="Cấu hình chữ ký số điện tử, con dấu đỏ và đồng bộ Supabase Cloud"
+          >
+            <ShieldCheck className="w-4 h-4 text-blue-200" />
+            <span>Chữ ký số & Supabase</span>
+            {monthSig?.is_signed && (
+              <span className="w-2 h-2 rounded-full bg-emerald-400" />
+            )}
+          </button>
         </div>
       </div>
 
@@ -2045,11 +2114,36 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
                     {effectiveSigningDateText}
                   </div>
                   <div className="text-xs font-bold text-slate-900 uppercase">
-                    GIÁO VIÊN CHỦ NHIỆM
+                    {sigConfig.teacher_title || 'GIÁO VIÊN CHỦ NHIỆM'}
                   </div>
-                  <div className="text-[11px] text-slate-500 italic mb-16">
-                    (Ký và ghi rõ họ tên)
-                  </div>
+
+                  {/* Digital Signature Image / Badge / Stamp */}
+                  {sigConfig.enable_digital_signature && (monthSig?.is_signed || sigConfig.signature_image_url || sigConfig.stamp_image_url) ? (
+                    <div className="my-1.5 py-1 flex flex-col items-center justify-center relative min-h-[52px]">
+                      {sigConfig.signature_image_url && (
+                        <img src={sigConfig.signature_image_url} alt="Chữ ký" className="h-10 object-contain" />
+                      )}
+                      {sigConfig.stamp_image_url && (
+                        <img src={sigConfig.stamp_image_url} alt="Con dấu" className="h-12 object-contain absolute opacity-85 pointer-events-none" />
+                      )}
+                      {monthSig?.is_signed ? (
+                        <div className="border border-emerald-600 bg-emerald-50/90 rounded-lg px-2 py-0.5 text-[9px] font-bold text-emerald-800 flex items-center gap-1 shadow-2xs mt-1">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                          <span>ĐÃ KÝ ĐIỆN TỬ</span>
+                          {monthSig.certificate_hash && (
+                            <span className="font-mono text-[8px] text-emerald-700">({monthSig.certificate_hash})</span>
+                          )}
+                        </div>
+                      ) : !sigConfig.signature_image_url ? (
+                        <div className="text-[10px] text-slate-500 italic py-2">(Chữ ký điện tử)</div>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <div className="text-[11px] text-slate-500 italic mb-16">
+                      (Ký và ghi rõ họ tên)
+                    </div>
+                  )}
+
                   <div className="text-xs font-bold text-slate-900">
                     {effectiveTeacherName}
                   </div>
@@ -2059,6 +2153,51 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
           </div>
         )}
       </div>
+
+      {/* Print Preview & PDF Modal */}
+      <BoardingPrintPreviewModal
+        isOpen={isPreviewOpen}
+        onClose={() => setIsPreviewOpen(false)}
+        classNameStr={currentClass?.class_name || ''}
+        campusName={currentCampus?.name || 'Suối Lư'}
+        selectedMonth={selectedMonth}
+        monthNum={monthNum}
+        yearNum={yearNum}
+        daysInMonth={daysInMonth}
+        monthDays={monthDays}
+        students={classBoardingStudents}
+        mealMatrix={mealMatrix}
+        studentSummaries={studentSummaries}
+        columnTotals={columnTotals}
+        effectiveTeacherName={effectiveTeacherName}
+        effectiveSigningDateText={effectiveSigningDateText}
+        sigConfig={sigConfig}
+        monthSig={monthSig}
+        onExportExcel={handleExportExcel}
+      />
+
+      {/* Digital Signature & Supabase Config Modal */}
+      <BoardingDigitalSignatureModal
+        isOpen={showDigitalSigModal}
+        onClose={() => setShowDigitalSigModal(false)}
+        classId={selectedClassId}
+        classNameStr={currentClass?.class_name || ''}
+        selectedMonth={selectedMonth}
+        monthNum={monthNum}
+        yearNum={yearNum}
+        currentTeacherName={effectiveTeacherName}
+        currentLocation={signingLocation}
+        sigConfig={sigConfig}
+        monthSig={monthSig}
+        onConfigSaved={(updated) => {
+          setSigConfig(updated);
+          if (updated.location_name) setSigningLocation(updated.location_name);
+          if (updated.teacher_name) setCustomTeacherName(updated.teacher_name);
+        }}
+        onMonthSigSaved={(updatedSig) => {
+          setMonthSig(updatedSig);
+        }}
+      />
     </div>
   );
 };

@@ -258,7 +258,7 @@ export async function exportAttendanceDailyExcel(params: ExportAttendanceDailyEx
       horizontalCentered: true,
       verticalCentered: false,
       margins: { left: 0.5, right: 0.5, top: 0.6, bottom: 0.6, header: 0.3, footer: 0.3 },
-      showGridLines: true,
+      showGridLines: false,
     },
   });
 
@@ -723,7 +723,7 @@ export async function exportAttendanceMonthlyClassExcel(params: ExportAttendance
       horizontalCentered: true,
       verticalCentered: false,
       margins: { left: 0.5, right: 0.5, top: 0.6, bottom: 0.6, header: 0.3, footer: 0.3 },
-      showGridLines: true,
+      showGridLines: false,
     },
   });
 

@@ -22,6 +22,8 @@ import {
   BoardingDailyReport,
   BoardingMealRecord,
   BoardingMealSummaryRow,
+  BoardingSignatureConfig,
+  BoardingMonthSignature,
 } from '../types';
 import { getSupabaseClient, isSupabaseConnected } from './supabase';
 import {
@@ -38,7 +40,7 @@ import {
   getTodayDateStr,
   formatDateVN,
 } from '../utils/schoolWeeks';
-import { resolveTeacherName } from '../utils/exportAttendanceStandardExcel';
+import { resolveTeacherName, DEFAULT_CLASS_TEACHER_MAP } from '../utils/exportAttendanceStandardExcel';
 
 const STORAGE_KEYS = {
   SETTINGS: 'sso_school_settings_v1',
@@ -54,6 +56,8 @@ const STORAGE_KEYS = {
   STUDENTS: 'sso_students_v1',
   NOTIFICATIONS: 'sso_notifications_v1',
   BOARDING_REPORTS: 'sso_boarding_reports_v1',
+  SIGNATURE_CONFIGS: 'sso_boarding_signature_configs_v1',
+  MONTH_SIGNATURES: 'sso_boarding_month_signatures_v1',
 };
 
 export interface TableSyncStatus {
@@ -1272,6 +1276,151 @@ export const StorageService = {
     }
 
     notifyRealtimeChange('boarding_reports', { reportId });
+  },
+
+  // --- 13. Boarding Digital Signature Configuration & Month Signatures ---
+  async getBoardingSignatureConfig(classId?: string): Promise<BoardingSignatureConfig> {
+    ensureInitialized();
+    const configId = classId ? `sig_config_${classId}` : 'default';
+    const raw = localStorage.getItem(STORAGE_KEYS.SIGNATURE_CONFIGS);
+    const list: BoardingSignatureConfig[] = raw ? JSON.parse(raw) : [];
+    let cfg = list.find((c) => c.id === configId || (classId && c.class_id === classId)) || null;
+
+    const supabase = getSupabaseClient();
+    if (supabase && isSupabaseConnected()) {
+      try {
+        const { data, error } = await supabase
+          .from('boarding_signature_configs')
+          .select('*')
+          .eq('id', configId)
+          .maybeSingle();
+
+        if (!error && data) {
+          cfg = data as BoardingSignatureConfig;
+          const idx = list.findIndex((c) => c.id === cfg!.id);
+          if (idx >= 0) list[idx] = cfg;
+          else list.push(cfg);
+          localStorage.setItem(STORAGE_KEYS.SIGNATURE_CONFIGS, JSON.stringify(list));
+        }
+      } catch (e) {
+        console.warn('Fetch signature config error:', e);
+      }
+    }
+
+    if (!cfg) {
+      // Default fallback
+      const settings = await this.getSettings();
+      let defaultTeacher = '';
+      if (classId) {
+        const classes = await this.getClasses();
+        const cls = classes.find((c) => c.id === classId);
+        defaultTeacher = cls?.class_name ? (DEFAULT_CLASS_TEACHER_MAP as any)[cls.class_name] || '' : '';
+      }
+      cfg = {
+        id: configId,
+        class_id: classId,
+        location_name: settings?.commune?.replace(/^Xã\s+/i, '') || 'Xa Dung',
+        teacher_title: 'GIÁO VIÊN CHỦ NHIỆM',
+        teacher_name: defaultTeacher,
+        principal_title: 'HIỆU TRƯỞNG',
+        principal_name: settings?.principal_name || '',
+        accountant_title: 'KẾ TOÁN BÁN TRÚ',
+        accountant_name: '',
+        enable_digital_signature: true,
+        signature_image_url: '',
+        stamp_image_url: '',
+        certificate_serial: '',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+    }
+
+    return cfg;
+  },
+
+  async saveBoardingSignatureConfig(config: BoardingSignatureConfig): Promise<BoardingSignatureConfig> {
+    ensureInitialized();
+    const updated: BoardingSignatureConfig = {
+      ...config,
+      updated_at: new Date().toISOString(),
+    };
+
+    const raw = localStorage.getItem(STORAGE_KEYS.SIGNATURE_CONFIGS);
+    const list: BoardingSignatureConfig[] = raw ? JSON.parse(raw) : [];
+    const idx = list.findIndex((c) => c.id === updated.id);
+    if (idx >= 0) list[idx] = updated;
+    else list.push(updated);
+    localStorage.setItem(STORAGE_KEYS.SIGNATURE_CONFIGS, JSON.stringify(list));
+
+    const supabase = getSupabaseClient();
+    if (supabase && isSupabaseConnected()) {
+      try {
+        await supabase.from('boarding_signature_configs').upsert(updated);
+      } catch (e) {
+        console.error('Save signature config to Supabase error:', e);
+      }
+    }
+
+    notifyRealtimeChange('boarding_signature_configs', updated);
+    return updated;
+  },
+
+  async getBoardingMonthSignature(classId: string, month: string): Promise<BoardingMonthSignature | null> {
+    ensureInitialized();
+    const sigId = `sig_${classId}_${month}`;
+    const raw = localStorage.getItem(STORAGE_KEYS.MONTH_SIGNATURES);
+    const list: BoardingMonthSignature[] = raw ? JSON.parse(raw) : [];
+    let sig = list.find((s) => s.id === sigId || (s.class_id === classId && s.month === month)) || null;
+
+    const supabase = getSupabaseClient();
+    if (supabase && isSupabaseConnected()) {
+      try {
+        const { data, error } = await supabase
+          .from('boarding_month_signatures')
+          .select('*')
+          .eq('id', sigId)
+          .maybeSingle();
+
+        if (!error && data) {
+          sig = data as BoardingMonthSignature;
+          const idx = list.findIndex((s) => s.id === sig!.id);
+          if (idx >= 0) list[idx] = sig;
+          else list.push(sig);
+          localStorage.setItem(STORAGE_KEYS.MONTH_SIGNATURES, JSON.stringify(list));
+        }
+      } catch (e) {
+        console.warn('Fetch month signature error:', e);
+      }
+    }
+
+    return sig;
+  },
+
+  async saveBoardingMonthSignature(sig: BoardingMonthSignature): Promise<BoardingMonthSignature> {
+    ensureInitialized();
+    const updated: BoardingMonthSignature = {
+      ...sig,
+      updated_at: new Date().toISOString(),
+    };
+
+    const raw = localStorage.getItem(STORAGE_KEYS.MONTH_SIGNATURES);
+    const list: BoardingMonthSignature[] = raw ? JSON.parse(raw) : [];
+    const idx = list.findIndex((s) => s.id === updated.id);
+    if (idx >= 0) list[idx] = updated;
+    else list.push(updated);
+    localStorage.setItem(STORAGE_KEYS.MONTH_SIGNATURES, JSON.stringify(list));
+
+    const supabase = getSupabaseClient();
+    if (supabase && isSupabaseConnected()) {
+      try {
+        await supabase.from('boarding_month_signatures').upsert(updated);
+      } catch (e) {
+        console.error('Save month signature to Supabase error:', e);
+      }
+    }
+
+    notifyRealtimeChange('boarding_month_signatures', updated);
+    return updated;
   },
 
   async getBoardingSummaryByDate(date: string, campusId?: string): Promise<{
