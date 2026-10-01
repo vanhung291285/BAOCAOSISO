@@ -78,14 +78,11 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
     if (!selectedClassId) return [];
     const rawSts = students.filter((s) => validClassIds.has(s.class_id));
     const seenIds = new Set<string>();
-    const seenNames = new Set<string>();
     const classSts: Student[] = [];
     for (const s of rawSts) {
       if (!s || !s.full_name) continue;
-      const nameKey = s.full_name.trim().toLowerCase();
-      if (seenIds.has(s.id) || seenNames.has(nameKey)) continue;
+      if (seenIds.has(s.id)) continue;
       seenIds.add(s.id);
-      seenNames.add(nameKey);
       classSts.push(s);
     }
 

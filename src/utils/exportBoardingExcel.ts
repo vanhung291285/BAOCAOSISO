@@ -527,14 +527,11 @@ export async function exportMonthlyBoardingExcel(params: ExportBoardingExcelPara
 
   // Giữ nguyên 100% thứ tự danh sách học sinh theo file Excel gốc của lớp và loại bỏ trùng lặp (nếu có)
   const seenIds = new Set<string>();
-  const seenNames = new Set<string>();
   const uniqueBoarding: Student[] = [];
   for (const s of boardingStudents) {
     if (!s || !s.full_name) continue;
-    const nameKey = s.full_name.trim().toLowerCase();
-    if (seenIds.has(s.id) || seenNames.has(nameKey)) continue;
+    if (seenIds.has(s.id)) continue;
     seenIds.add(s.id);
-    seenNames.add(nameKey);
     uniqueBoarding.push(s);
   }
   boardingStudents = uniqueBoarding;

@@ -125,14 +125,11 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
     if (!selectedClassId) return [];
     const raw = students.filter((s) => validClassIds.has(s.class_id));
     const seenIds = new Set<string>();
-    const seenNames = new Set<string>();
     const unique: Student[] = [];
     for (const s of raw) {
       if (!s || !s.full_name) continue;
-      const nameKey = s.full_name.trim().toLowerCase();
-      if (seenIds.has(s.id) || seenNames.has(nameKey)) continue;
+      if (seenIds.has(s.id)) continue;
       seenIds.add(s.id);
-      seenNames.add(nameKey);
       unique.push(s);
     }
     return unique;
