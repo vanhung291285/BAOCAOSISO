@@ -42,8 +42,41 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
   selectedClassId,
   onClassChange,
 }) => {
-  const { classes, campuses, students, settings } = useSchool();
+  const { classes, campuses, students, settings, addStudent } = useSchool();
   const { currentUser, isGVCN, isAdmin, isBGH } = useAuth();
+
+  // Quick inline add student
+  const [isAddingStudent, setIsAddingStudent] = useState<boolean>(false);
+  const [newStudentName, setNewStudentName] = useState<string>('');
+  const newStudentInputRef = useRef<HTMLInputElement>(null);
+
+  const handleSaveNewStudent = async () => {
+    if (!newStudentName.trim() || !selectedClassId) return;
+    try {
+      await addStudent({
+        full_name: newStudentName.trim(),
+        class_id: selectedClassId,
+        gender: 'Nam',
+        isBoarding: true,
+        village: '',
+      });
+      setNewStudentName('');
+      setIsAddingStudent(false);
+      showToast(`Đã thêm học sinh ${newStudentName.trim()} vào lớp thành công!`);
+    } catch (e) {
+      console.error('Error adding student:', e);
+      showToast('Lỗi khi thêm học sinh!', 'error');
+    }
+  };
+
+  const handleKeyDownNewStudent = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      handleSaveNewStudent();
+    } else if (e.key === 'Escape') {
+      setIsAddingStudent(false);
+      setNewStudentName('');
+    }
+  };
 
   // Current Month-Year: 'YYYY-MM'
   const [selectedMonth, setSelectedMonth] = useState<string>(() => {
@@ -1569,99 +1602,89 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
           /* Table Sheet Grid */
           <div>
             <div
-              className="relative max-h-[calc(100vh-220px)] min-h-[480px] overflow-auto border border-slate-300 rounded-xl shadow-sm bg-white select-none"
+              className="relative max-h-[calc(100vh-220px)] min-h-[480px] overflow-auto border border-slate-400 rounded-xl shadow-xs bg-white select-none"
               onMouseLeave={clearCrosshair}
             >
-              <table className="w-full text-center border-collapse text-[10px] sm:text-[11px] border-separate border-spacing-0">
+              <table className="w-full text-center border-collapse text-[11px] border-separate border-spacing-0">
                 <thead>
-                  {/* Row 1: STT, Họ và tên, Ngày, Số ngày ăn trong tháng */}
-                  <tr className="bg-slate-100 font-black text-slate-900 sticky top-0 z-30">
-                    <th rowSpan={3} className="py-2 px-1 w-9 min-w-[36px] border-r border-b border-slate-300 sticky top-0 left-0 z-50 bg-slate-100">STT</th>
-                    <th rowSpan={3} className="py-2 px-2 min-w-[140px] text-left border-r border-b border-slate-300 sticky top-0 left-9 z-50 bg-slate-100">
-                      Họ và tên
+                  {/* Row 1: STT (spans 3 rows), [Thứ - Ngày], Day numbers 1..N */}
+                  <tr className="bg-slate-100 font-bold text-slate-900 sticky top-0 z-30 h-[28px]">
+                    <th
+                      rowSpan={3}
+                      className="py-1 px-1 w-9 min-w-[36px] border-r border-b border-slate-400 sticky top-0 left-0 z-50 bg-slate-100 text-center font-bold text-slate-900"
+                    >
+                      STT
+                    </th>
+                    <th
+                      className="py-1 px-2 min-w-[150px] border-r border-b border-slate-400 sticky top-0 left-9 z-50 bg-slate-100 font-bold"
+                    >
+                      <div className="flex items-center justify-between px-2 text-[11px] font-bold text-slate-900">
+                        <span>Thứ</span>
+                        <span>Ngày</span>
+                      </div>
                     </th>
                     {displayedMonthDays.map((d) => {
-                      const todayStr = getTodayDateStr();
-                      const isFuture = d.dateStr > todayStr;
-                      const isReported = classBoardingStudents.some(
-                        (st) => mealMatrix[st.id]?.[d.dateStr]?.breakfast || mealMatrix[st.id]?.[d.dateStr]?.lunch || mealMatrix[st.id]?.[d.dateStr]?.dinner
-                      );
                       const isDateHovered = hoveredDateStr === d.dateStr;
-
                       return (
                         <th
                           key={d.dayNum}
                           colSpan={3}
                           onMouseEnter={() => updateCrosshair(hoverRef.current.studentId, d.dateStr, hoverRef.current.meal)}
-                          className={`py-1 px-1 border-r border-b border-slate-300 text-center cursor-pointer sticky top-0 z-30 ${
+                          className={`py-0.5 px-0.5 border-r border-b border-slate-400 text-center cursor-pointer sticky top-0 z-30 transition-colors ${
                             isDateHovered
-                              ? 'bg-amber-300 text-blue-950 font-black ring-1 ring-inset ring-blue-600'
-                              : !d.isSchoolMealDay
-                              ? 'bg-slate-200/70 text-slate-500'
-                              : isReported
-                              ? 'bg-emerald-50 text-emerald-950 font-black'
-                              : isFuture
-                              ? 'bg-slate-50 text-slate-400'
-                              : 'bg-slate-100'
+                              ? 'bg-amber-100 text-slate-950 font-black'
+                              : 'bg-slate-100 text-slate-900 font-bold'
                           }`}
-                          title={
-                            isReported
-                              ? `Ngày ${d.dayNum} (${d.dayOfWeekShort === 'CN' ? 'Chủ Nhật' : `Thứ ${d.dayOfWeekShort}`}) - Đã chấm báo ăn`
-                              : isFuture
-                              ? `Ngày ${d.dayNum} (${d.dayOfWeekShort === 'CN' ? 'Chủ Nhật' : `Thứ ${d.dayOfWeekShort}`}) - Chưa tới (Để trống)`
-                              : `Ngày ${d.dayNum} (${d.dayOfWeekShort === 'CN' ? 'Chủ Nhật' : `Thứ ${d.dayOfWeekShort}`}) - Chưa chấm báo ăn (Để trống)`
-                          }
                         >
-                          <div className="flex flex-col items-center justify-center">
-                            <span className="leading-tight font-black">{d.dayNum}</span>
-                          </div>
+                          <span className="text-[11px] font-bold">{d.dayNum}</span>
                         </th>
                       );
                     })}
                     {showSummaryColumns && (
                       <>
-                        <th colSpan={6} className="py-1 px-2 border-r border-b border-slate-300 bg-amber-50 text-amber-950 font-black sticky top-0 z-30">
+                        <th colSpan={6} className="py-1 px-2 border-r border-b border-slate-400 bg-slate-100 text-slate-900 font-bold sticky top-0 z-30">
                           Số ngày ăn trong tháng
                         </th>
-                        <th rowSpan={3} className="py-2 px-1.5 w-14 bg-emerald-50 text-emerald-950 font-black border-b border-slate-300 sticky top-0 z-30">
+                        <th rowSpan={3} className="py-2 px-1.5 w-14 bg-slate-100 text-slate-900 font-bold border-b border-slate-400 sticky top-0 z-30">
                           Ngày thực
                         </th>
                       </>
                     )}
                   </tr>
 
-                  {/* Row 2: Thứ, Nhóm Số ngày báo ăn, Số ngày không báo ăn */}
-                  <tr className="bg-slate-50 font-bold text-slate-800 sticky top-[33px] z-30">
+                  {/* Row 2: Họ và tên (spans 2 rows), Day of week: 5, 6, 7, CN, 2, 3... */}
+                  <tr className="bg-slate-100 font-bold text-slate-800 sticky top-[28px] z-30 h-[24px]">
+                    <th
+                      rowSpan={2}
+                      className="py-1 px-2 min-w-[150px] text-center border-r border-b border-slate-400 sticky top-[28px] left-9 z-50 bg-slate-100 font-bold text-slate-900"
+                    >
+                      Họ và tên
+                    </th>
                     {displayedMonthDays.map((d) => {
                       const isDateHovered = hoveredDateStr === d.dateStr;
-                      const isWeekend = d.dayOfWeekShort === '7' || d.dayOfWeekShort === 'CN';
                       return (
                         <th
                           key={d.dayNum}
                           colSpan={3}
                           onMouseEnter={() => updateCrosshair(hoverRef.current.studentId, d.dateStr, hoverRef.current.meal)}
-                          className={`py-0.5 px-1 border-r border-b border-slate-300 text-center cursor-pointer sticky top-[33px] z-30 ${
+                          className={`py-0.5 px-0.5 border-r border-b border-slate-400 text-center cursor-pointer sticky top-[28px] z-30 transition-colors ${
                             isDateHovered
-                              ? 'bg-amber-200 text-blue-950 font-black ring-1 ring-inset ring-blue-600'
-                              : isWeekend
-                              ? 'bg-rose-50/80 text-red-600 font-black'
-                              : 'bg-slate-50 text-slate-800'
+                              ? 'bg-amber-100 text-slate-950 font-black'
+                              : 'bg-slate-100 text-slate-800 font-bold'
                           }`}
                         >
-                          <div className="flex items-center justify-center">
-                            <span className={isDateHovered ? 'text-blue-950 font-black' : isWeekend ? 'text-red-600 font-black' : 'text-slate-800'}>
-                              {d.dayOfWeekShort === 'CN' ? 'CN' : `T${d.dayOfWeekShort}`}
-                            </span>
-                          </div>
+                          <span className="text-[11px] font-bold">
+                            {d.dayOfWeekShort}
+                          </span>
                         </th>
                       );
                     })}
                     {showSummaryColumns && (
                       <>
-                        <th colSpan={3} className="py-0.5 px-1 border-r border-b border-slate-300 bg-blue-50 text-blue-900 font-bold sticky top-[33px] z-30">
+                        <th colSpan={3} className="py-0.5 px-1 border-r border-b border-slate-400 bg-slate-100 text-slate-900 font-bold sticky top-[28px] z-30">
                           Số ngày báo ăn
                         </th>
-                        <th colSpan={3} className="py-0.5 px-1 border-r border-b border-slate-300 bg-rose-50 text-rose-900 font-bold sticky top-[33px] z-30">
+                        <th colSpan={3} className="py-0.5 px-1 border-r border-b border-slate-400 bg-slate-100 text-slate-900 font-bold sticky top-[28px] z-30">
                           Số ngày không báo ăn
                         </th>
                       </>
@@ -1669,19 +1692,19 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
                   </tr>
 
                   {/* Row 3: S, T, T headers */}
-                  <tr className="bg-slate-100 font-bold text-slate-600 sticky top-[59px] z-30 border-b-2 border-slate-300">
+                  <tr className="bg-slate-100 font-bold text-slate-800 sticky top-[52px] z-30 border-b border-slate-400 h-[22px]">
                     {displayedMonthDays.map((d) => {
                       const isDateHovered = hoveredDateStr === d.dateStr;
                       return (
                         <React.Fragment key={d.dayNum}>
                           <th
                             onMouseEnter={() => updateCrosshair(hoverRef.current.studentId, d.dateStr, 'breakfast')}
-                            className={`py-0.5 w-4 border-r border-b border-slate-200 cursor-pointer sticky top-[59px] z-30 bg-slate-100 ${
+                            className={`py-0.5 w-[22px] min-w-[20px] border-r border-b border-slate-400 cursor-pointer sticky top-[52px] z-30 font-bold ${
                               isDateHovered && hoveredMealType === 'breakfast'
-                                ? 'bg-blue-600 text-white font-black ring-1 ring-inset ring-blue-800 z-40 shadow-xs'
+                                ? 'bg-amber-200 text-black font-black'
                                 : isDateHovered
-                                ? 'bg-amber-200 text-blue-950 font-black'
-                                : 'text-blue-600 font-bold'
+                                ? 'bg-amber-100 text-black'
+                                : 'bg-slate-100 text-slate-800'
                             }`}
                             title={`Ngày ${d.dayNum} - Bữa Sáng (S)`}
                           >
@@ -1689,12 +1712,12 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
                           </th>
                           <th
                             onMouseEnter={() => updateCrosshair(hoverRef.current.studentId, d.dateStr, 'lunch')}
-                            className={`py-0.5 w-4 border-r border-b border-slate-200 cursor-pointer sticky top-[59px] z-30 bg-slate-100 ${
+                            className={`py-0.5 w-[22px] min-w-[20px] border-r border-b border-slate-400 cursor-pointer sticky top-[52px] z-30 font-bold ${
                               isDateHovered && hoveredMealType === 'lunch'
-                                ? 'bg-amber-600 text-white font-black ring-1 ring-inset ring-amber-800 z-40 shadow-xs'
+                                ? 'bg-amber-200 text-black font-black'
                                 : isDateHovered
-                                ? 'bg-amber-200 text-blue-950 font-black'
-                                : 'text-amber-700 font-bold'
+                                ? 'bg-amber-100 text-black'
+                                : 'bg-slate-100 text-slate-800'
                             }`}
                             title={`Ngày ${d.dayNum} - Bữa Trưa (T)`}
                           >
@@ -1702,12 +1725,12 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
                           </th>
                           <th
                             onMouseEnter={() => updateCrosshair(hoverRef.current.studentId, d.dateStr, 'dinner')}
-                            className={`py-0.5 w-4 border-r border-b border-slate-300 cursor-pointer sticky top-[59px] z-30 bg-slate-100 ${
+                            className={`py-0.5 w-[22px] min-w-[20px] border-r border-b border-slate-400 cursor-pointer sticky top-[52px] z-30 font-bold ${
                               isDateHovered && hoveredMealType === 'dinner'
-                                ? 'bg-purple-600 text-white font-black ring-1 ring-inset ring-purple-800 z-40 shadow-xs'
+                                ? 'bg-amber-200 text-black font-black'
                                 : isDateHovered
-                                ? 'bg-amber-200 text-blue-950 font-black'
-                                : 'text-purple-700 font-bold'
+                                ? 'bg-amber-100 text-black'
+                                : 'bg-slate-100 text-slate-800'
                             }`}
                             title={`Ngày ${d.dayNum} - Bữa Tối (T)`}
                           >
@@ -1716,288 +1739,296 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
                         </React.Fragment>
                       );
                     })}
-                  {showSummaryColumns && (
-                    <>
-                      {/* Summary S,T,T for eaten */}
-                      <th className="py-0.5 w-6 border-r border-b border-slate-200 bg-blue-50 text-blue-700 font-bold sticky top-[59px] z-30">S</th>
-                      <th className="py-0.5 w-6 border-r border-b border-slate-200 bg-blue-50 text-blue-700 font-bold sticky top-[59px] z-30">T</th>
-                      <th className="py-0.5 w-6 border-r border-b border-slate-300 bg-blue-50 text-blue-700 font-bold sticky top-[59px] z-30">T</th>
-                      {/* Summary S,T,T for missed */}
-                      <th className="py-0.5 w-6 border-r border-b border-slate-200 bg-rose-50 text-rose-700 font-bold sticky top-[59px] z-30">S</th>
-                      <th className="py-0.5 w-6 border-r border-b border-slate-200 bg-rose-50 text-rose-700 font-bold sticky top-[59px] z-30">T</th>
-                      <th className="py-0.5 w-6 border-r border-b border-slate-300 bg-rose-50 text-rose-700 font-bold sticky top-[59px] z-30">T</th>
-                    </>
-                  )}
-                </tr>
-              </thead>
+                    {showSummaryColumns && (
+                      <>
+                        {/* Summary S,T,T for eaten */}
+                        <th className="py-0.5 w-6 border-r border-b border-slate-400 bg-slate-100 text-slate-800 font-bold sticky top-[52px] z-30">S</th>
+                        <th className="py-0.5 w-6 border-r border-b border-slate-400 bg-slate-100 text-slate-800 font-bold sticky top-[52px] z-30">T</th>
+                        <th className="py-0.5 w-6 border-r border-b border-slate-400 bg-slate-100 text-slate-800 font-bold sticky top-[52px] z-30">T</th>
+                        {/* Summary S,T,T for missed */}
+                        <th className="py-0.5 w-6 border-r border-b border-slate-400 bg-slate-100 text-slate-800 font-bold sticky top-[52px] z-30">S</th>
+                        <th className="py-0.5 w-6 border-r border-b border-slate-400 bg-slate-100 text-slate-800 font-bold sticky top-[52px] z-30">T</th>
+                        <th className="py-0.5 w-6 border-r border-b border-slate-400 bg-slate-100 text-slate-800 font-bold sticky top-[52px] z-30">T</th>
+                      </>
+                    )}
+                  </tr>
+                </thead>
 
-              <tbody className="divide-y divide-slate-200" onMouseOver={handleTbodyMouseOver}>
-                {classBoardingStudents.map((st, idx) => {
-                  const stDays = mealMatrix[st.id] || {};
-                  const sum = studentSummaries.summaries[st.id] || {
-                    eatenBreakfast: 0,
-                    eatenLunch: 0,
-                    eatenDinner: 0,
-                    missedBreakfast: 0,
-                    missedLunch: 0,
-                    missedDinner: 0,
-                    actualDays: 0,
-                  };
+                <tbody className="divide-y divide-slate-300" onMouseOver={handleTbodyMouseOver}>
+                  {classBoardingStudents.map((st, idx) => {
+                    const stDays = mealMatrix[st.id] || {};
+                    const sum = studentSummaries.summaries[st.id] || {
+                      eatenBreakfast: 0,
+                      eatenLunch: 0,
+                      eatenDinner: 0,
+                      missedBreakfast: 0,
+                      missedLunch: 0,
+                      missedDinner: 0,
+                      actualDays: 0,
+                    };
 
-                  const isStudentHovered = hoveredStudentId === st.id;
+                    const isStudentHovered = hoveredStudentId === st.id;
 
-                  return (
-                    <tr
-                      key={st.id}
-                      data-student-id={st.id}
-                      className={`relative ${
-                        isStudentHovered
-                          ? 'bg-amber-100/80 border-y border-amber-300'
-                          : idx % 2 === 0
-                          ? 'bg-white'
-                          : 'bg-slate-50/60'
-                      }`}
-                    >
-                      <td
-                        className={`py-1.5 px-1 w-9 min-w-[36px] font-bold border-r border-b border-slate-200 sticky left-0 z-20 ${
-                          isStudentHovered
-                            ? 'bg-amber-200 text-blue-950 font-black'
-                            : idx % 2 === 0 ? 'bg-white text-slate-500' : 'bg-slate-50 text-slate-500'
-                        }`}
-                      >
-                        {idx + 1}
-                      </td>
-                      <td
-                        className={`py-1.5 px-2 min-w-[140px] text-left font-bold border-r border-b border-slate-300 whitespace-nowrap sticky left-9 z-20 ${
-                          isStudentHovered
-                            ? 'bg-amber-100 text-blue-950 font-black'
-                            : idx % 2 === 0 ? 'bg-white text-slate-900' : 'bg-slate-50 text-slate-900'
-                        }`}
-                      >
-                        <span className="truncate">{st.full_name}</span>
-                      </td>
-
-                      {/* Daily cells: S, T, T */}
-                      {displayedMonthDays.map((d) => {
-                        const todayStr = getTodayDateStr();
-                        const isFuture = d.dateStr > todayStr;
-                        const dMeal = stDays[d.dateStr] || { breakfast: false, lunch: false, dinner: false };
-                        const isWeekend = d.dayOfWeekShort === '7' || d.dayOfWeekShort === 'CN';
-                        const isDateHovered = hoveredDateStr === d.dateStr;
-
-                        const isSameDayStudent = isStudentHovered && isDateHovered;
-                        const isRowBeam = isStudentHovered && !isDateHovered;
-                        const isColBeam = !isStudentHovered && isDateHovered;
-
-                        const isCenterB = isSameDayStudent && hoveredMealType === 'breakfast';
-                        const isCenterL = isSameDayStudent && hoveredMealType === 'lunch';
-                        const isCenterD = isSameDayStudent && hoveredMealType === 'dinner';
-
-                        return (
-                          <React.Fragment key={d.dayNum}>
-                            {/* Sáng */}
-                            <td
-                              data-cell="meal"
-                              data-student-id={st.id}
-                              data-date-str={d.dateStr}
-                              data-meal="breakfast"
-                              onClick={() => handleToggleCell(st.id, d.dateStr, 'breakfast')}
-                              className={`py-1 w-4 border-r border-slate-200 select-none font-black cursor-pointer ${
-                                isCenterB
-                                  ? 'bg-amber-300 text-blue-950 ring-1 ring-inset ring-blue-600'
-                                  : isSameDayStudent
-                                  ? dMeal.breakfast
-                                    ? 'text-white bg-blue-600'
-                                    : 'bg-amber-200 text-blue-900'
-                                  : isRowBeam
-                                  ? dMeal.breakfast
-                                    ? 'text-white bg-blue-600'
-                                    : 'bg-amber-50/80'
-                                  : isColBeam
-                                  ? dMeal.breakfast
-                                    ? 'text-blue-900 bg-blue-100'
-                                    : hoveredMealType === 'breakfast'
-                                    ? 'bg-amber-100/50'
-                                    : 'bg-blue-50/40'
-                                  : dMeal.breakfast
-                                  ? 'text-blue-700 bg-blue-50/60'
-                                  : isWeekend
-                                  ? 'bg-slate-100/70'
-                                  : isFuture
-                                  ? 'bg-slate-50/30'
-                                  : 'hover:bg-slate-100'
-                              }`}
-                              title={`${st.full_name} | Thứ ${d.dayOfWeekShort === 'CN' ? 'Chủ Nhật' : d.dayOfWeekShort}, Ngày ${d.dayNum}/${monthNum} - Bữa Sáng: ${dMeal.breakfast ? 'Có ăn (+)' : 'Để trống'}`}
-                            >
-                              {dMeal.breakfast ? '+' : ''}
-                            </td>
-
-                            {/* Trưa */}
-                            <td
-                              data-cell="meal"
-                              data-student-id={st.id}
-                              data-date-str={d.dateStr}
-                              data-meal="lunch"
-                              onClick={() => handleToggleCell(st.id, d.dateStr, 'lunch')}
-                              className={`py-1 w-4 border-r border-slate-200 select-none font-black cursor-pointer ${
-                                isCenterL
-                                  ? 'bg-amber-300 text-amber-950 ring-1 ring-inset ring-blue-600'
-                                  : isSameDayStudent
-                                  ? dMeal.lunch
-                                    ? 'text-white bg-amber-600'
-                                    : 'bg-amber-200 text-amber-950'
-                                  : isRowBeam
-                                  ? dMeal.lunch
-                                    ? 'text-white bg-amber-600'
-                                    : 'bg-amber-50/80'
-                                  : isColBeam
-                                  ? dMeal.lunch
-                                    ? 'text-amber-950 bg-amber-100'
-                                    : hoveredMealType === 'lunch'
-                                    ? 'bg-amber-100/50'
-                                    : 'bg-blue-50/40'
-                                  : dMeal.lunch
-                                  ? 'text-amber-700 bg-amber-50/60'
-                                  : isWeekend
-                                  ? 'bg-slate-100/70'
-                                  : isFuture
-                                  ? 'bg-slate-50/30'
-                                  : 'hover:bg-slate-100'
-                              }`}
-                              title={`${st.full_name} | Thứ ${d.dayOfWeekShort === 'CN' ? 'Chủ Nhật' : d.dayOfWeekShort}, Ngày ${d.dayNum}/${monthNum} - Bữa Trưa: ${dMeal.lunch ? 'Có ăn (+)' : 'Để trống'}`}
-                            >
-                              {dMeal.lunch ? '+' : ''}
-                            </td>
-
-                            {/* Tối */}
-                            <td
-                              data-cell="meal"
-                              data-student-id={st.id}
-                              data-date-str={d.dateStr}
-                              data-meal="dinner"
-                              onClick={() => handleToggleCell(st.id, d.dateStr, 'dinner')}
-                              className={`py-1 w-4 border-r border-slate-300 select-none font-black cursor-pointer ${
-                                isCenterD
-                                  ? 'bg-amber-300 text-purple-950 ring-1 ring-inset ring-blue-600'
-                                  : isSameDayStudent
-                                  ? dMeal.dinner
-                                    ? 'text-white bg-purple-600'
-                                    : 'bg-amber-200 text-purple-950'
-                                  : isRowBeam
-                                  ? dMeal.dinner
-                                    ? 'text-white bg-purple-600'
-                                    : 'bg-amber-50/80'
-                                  : isColBeam
-                                  ? dMeal.dinner
-                                    ? 'text-purple-950 bg-purple-100'
-                                    : hoveredMealType === 'dinner'
-                                    ? 'bg-amber-100/50'
-                                    : 'bg-blue-50/40'
-                                  : dMeal.dinner
-                                  ? 'text-purple-700 bg-purple-50/60'
-                                  : isWeekend || d.dayOfWeekShort === '6'
-                                  ? 'bg-slate-100/70'
-                                  : isFuture
-                                  ? 'bg-slate-50/30'
-                                  : 'hover:bg-slate-100'
-                              }`}
-                              title={`${st.full_name} | Thứ ${d.dayOfWeekShort === 'CN' ? 'Chủ Nhật' : d.dayOfWeekShort}, Ngày ${d.dayNum}/${monthNum} - Bữa Tối: ${dMeal.dinner ? 'Có ăn (+)' : 'Để trống'}`}
-                            >
-                              {dMeal.dinner ? '+' : ''}
-                            </td>
-                          </React.Fragment>
-                        );
-                      })}
-
-                      {/* Summary Columns */}
-                      {showSummaryColumns && (
-                        <>
-                          {/* Summary Eaten: S, T, T */}
-                          <td className={`py-1.5 px-1 font-bold border-r border-slate-200 ${isStudentHovered ? 'bg-blue-100 text-blue-950 font-black' : 'text-blue-900 bg-blue-50/40'}`}>
-                            {sum.eatenBreakfast}
-                          </td>
-                          <td className={`py-1.5 px-1 font-bold border-r border-slate-200 ${isStudentHovered ? 'bg-blue-100 text-blue-950 font-black' : 'text-blue-900 bg-blue-50/40'}`}>
-                            {sum.eatenLunch}
-                          </td>
-                          <td className={`py-1.5 px-1 font-bold border-r border-slate-300 ${isStudentHovered ? 'bg-blue-100 text-blue-950 font-black' : 'text-blue-900 bg-blue-50/40'}`}>
-                            {sum.eatenDinner}
-                          </td>
-
-                          {/* Summary Missed: S, T, T */}
-                          <td className={`py-1.5 px-1 font-bold border-r border-slate-200 ${isStudentHovered ? 'bg-rose-100 text-rose-950 font-black' : 'text-rose-700 bg-rose-50/40'}`}>
-                            {sum.missedBreakfast}
-                          </td>
-                          <td className={`py-1.5 px-1 font-bold border-r border-slate-200 ${isStudentHovered ? 'bg-rose-100 text-rose-950 font-black' : 'text-rose-700 bg-rose-50/40'}`}>
-                            {sum.missedLunch}
-                          </td>
-                          <td className={`py-1.5 px-1 font-bold border-r border-slate-300 ${isStudentHovered ? 'bg-rose-100 text-rose-950 font-black' : 'text-rose-700 bg-rose-50/40'}`}>
-                            {sum.missedDinner}
-                          </td>
-
-                          {/* Actual Days */}
-                          <td className={`py-1.5 px-1 font-black ${isStudentHovered ? 'bg-amber-200 text-amber-950 font-black' : 'text-emerald-800 bg-emerald-50/60'}`}>
-                            {sum.actualDays}
-                          </td>
-                        </>
-                      )}
-                    </tr>
-                  );
-                })}
-              </tbody>
-
-              {/* Table Footer: CỘNG */}
-              <tfoot>
-                <tr className="bg-slate-100 font-black text-slate-900 border-t-2 border-slate-300">
-                  <td colSpan={2} className="py-2 px-2 text-center border-r border-slate-300 sticky left-0 bg-slate-100 z-10">
-                    CỘNG
-                  </td>
-                  {displayedMonthDays.map((d) => {
-                    const totals = columnTotals.dailyTotals[d.dateStr] || { breakfast: 0, lunch: 0, dinner: 0 };
-                    const isDateHovered = hoveredDateStr === d.dateStr;
                     return (
-                      <React.Fragment key={d.dayNum}>
-                        <td className={`py-1.5 px-0.5 border-r border-slate-200 font-bold ${isDateHovered ? 'bg-amber-200 text-blue-950 font-black' : 'text-blue-800'}`}>
-                          {totals.breakfast > 0 ? totals.breakfast : ''}
+                      <tr
+                        key={st.id}
+                        data-student-id={st.id}
+                        className={`relative ${
+                          isStudentHovered
+                            ? 'bg-amber-50/80'
+                            : 'bg-white'
+                        }`}
+                      >
+                        <td
+                          className={`py-1 px-1 w-9 min-w-[36px] font-medium border-r border-b border-slate-300 text-center sticky left-0 z-20 ${
+                            isStudentHovered
+                              ? 'bg-amber-100 text-slate-950 font-bold'
+                              : 'bg-white text-slate-800'
+                          }`}
+                        >
+                          {idx + 1}
                         </td>
-                        <td className={`py-1.5 px-0.5 border-r border-slate-200 font-bold ${isDateHovered ? 'bg-amber-200 text-blue-950 font-black' : 'text-amber-800'}`}>
-                          {totals.lunch > 0 ? totals.lunch : ''}
+                        <td
+                          className={`py-1 px-2 min-w-[150px] text-left font-medium border-r border-b border-slate-300 whitespace-nowrap sticky left-9 z-20 ${
+                            isStudentHovered
+                              ? 'bg-amber-50 text-slate-950 font-bold'
+                              : 'bg-white text-slate-900'
+                          }`}
+                        >
+                          <span className="truncate">{st.full_name}</span>
                         </td>
-                        <td className={`py-1.5 px-0.5 border-r border-slate-300 font-bold ${isDateHovered ? 'bg-amber-200 text-blue-950 font-black' : 'text-purple-800'}`}>
-                          {totals.dinner > 0 ? totals.dinner : ''}
-                        </td>
-                      </React.Fragment>
+
+                        {/* Daily cells: S, T, T */}
+                        {displayedMonthDays.map((d) => {
+                          const dMeal = stDays[d.dateStr] || { breakfast: false, lunch: false, dinner: false };
+                          const isDateHovered = hoveredDateStr === d.dateStr;
+
+                          const isColBeam = isDateHovered;
+                          const isRowBeam = isStudentHovered;
+
+                          return (
+                            <React.Fragment key={d.dayNum}>
+                              {/* Sáng */}
+                              <td
+                                data-cell="meal"
+                                data-student-id={st.id}
+                                data-date-str={d.dateStr}
+                                data-meal="breakfast"
+                                onClick={() => handleToggleCell(st.id, d.dateStr, 'breakfast')}
+                                className={`py-1 w-[22px] min-w-[20px] border-r border-b border-slate-300 select-none text-center font-bold text-xs sm:text-sm cursor-pointer transition-colors ${
+                                  isColBeam && isRowBeam
+                                    ? 'bg-amber-200 text-slate-950 font-black'
+                                    : isColBeam
+                                    ? 'bg-[#fff9d6]'
+                                    : isRowBeam
+                                    ? 'bg-amber-50/70'
+                                    : 'bg-white hover:bg-slate-50'
+                                }`}
+                                title={`${st.full_name} | Thứ ${d.dayOfWeekShort}, Ngày ${d.dayNum}/${monthNum} - Bữa Sáng (S)`}
+                              >
+                                {dMeal.breakfast ? '+' : ''}
+                              </td>
+
+                              {/* Trưa */}
+                              <td
+                                data-cell="meal"
+                                data-student-id={st.id}
+                                data-date-str={d.dateStr}
+                                data-meal="lunch"
+                                onClick={() => handleToggleCell(st.id, d.dateStr, 'lunch')}
+                                className={`py-1 w-[22px] min-w-[20px] border-r border-b border-slate-300 select-none text-center font-bold text-xs sm:text-sm cursor-pointer transition-colors ${
+                                  isColBeam && isRowBeam
+                                    ? 'bg-amber-200 text-slate-950 font-black'
+                                    : isColBeam
+                                    ? 'bg-[#fff9d6]'
+                                    : isRowBeam
+                                    ? 'bg-amber-50/70'
+                                    : 'bg-white hover:bg-slate-50'
+                                }`}
+                                title={`${st.full_name} | Thứ ${d.dayOfWeekShort}, Ngày ${d.dayNum}/${monthNum} - Bữa Trưa (T)`}
+                              >
+                                {dMeal.lunch ? '+' : ''}
+                              </td>
+
+                              {/* Tối */}
+                              <td
+                                data-cell="meal"
+                                data-student-id={st.id}
+                                data-date-str={d.dateStr}
+                                data-meal="dinner"
+                                onClick={() => handleToggleCell(st.id, d.dateStr, 'dinner')}
+                                className={`py-1 w-[22px] min-w-[20px] border-r border-b border-slate-300 select-none text-center font-bold text-xs sm:text-sm cursor-pointer transition-colors ${
+                                  isColBeam && isRowBeam
+                                    ? 'bg-amber-200 text-slate-950 font-black'
+                                    : isColBeam
+                                    ? 'bg-[#fff9d6]'
+                                    : isRowBeam
+                                    ? 'bg-amber-50/70'
+                                    : 'bg-white hover:bg-slate-50'
+                                }`}
+                                title={`${st.full_name} | Thứ ${d.dayOfWeekShort}, Ngày ${d.dayNum}/${monthNum} - Bữa Tối (T)`}
+                              >
+                                {dMeal.dinner ? '+' : ''}
+                              </td>
+                            </React.Fragment>
+                          );
+                        })}
+
+                        {/* Summary Columns */}
+                        {showSummaryColumns && (
+                          <>
+                            {/* Summary Eaten: S, T, T */}
+                            <td className={`py-1 px-1 font-bold border-r border-b border-slate-300 text-slate-900 ${isStudentHovered ? 'bg-amber-50' : 'bg-white'}`}>
+                              {sum.eatenBreakfast}
+                            </td>
+                            <td className={`py-1 px-1 font-bold border-r border-b border-slate-300 text-slate-900 ${isStudentHovered ? 'bg-amber-50' : 'bg-white'}`}>
+                              {sum.eatenLunch}
+                            </td>
+                            <td className={`py-1 px-1 font-bold border-r border-b border-slate-300 text-slate-900 ${isStudentHovered ? 'bg-amber-50' : 'bg-white'}`}>
+                              {sum.eatenDinner}
+                            </td>
+
+                            {/* Summary Missed: S, T, T */}
+                            <td className={`py-1 px-1 font-bold border-r border-b border-slate-300 text-slate-900 ${isStudentHovered ? 'bg-amber-50' : 'bg-white'}`}>
+                              {sum.missedBreakfast}
+                            </td>
+                            <td className={`py-1 px-1 font-bold border-r border-b border-slate-300 text-slate-900 ${isStudentHovered ? 'bg-amber-50' : 'bg-white'}`}>
+                              {sum.missedLunch}
+                            </td>
+                            <td className={`py-1 px-1 font-bold border-r border-b border-slate-300 text-slate-900 ${isStudentHovered ? 'bg-amber-50' : 'bg-white'}`}>
+                              {sum.missedDinner}
+                            </td>
+
+                            {/* Actual Days */}
+                            <td className={`py-1 px-1 font-bold border-b border-slate-300 text-slate-900 ${isStudentHovered ? 'bg-amber-100 font-black' : 'bg-white'}`}>
+                              {sum.actualDays}
+                            </td>
+                          </>
+                        )}
+                      </tr>
                     );
                   })}
-                  {showSummaryColumns && (
-                    <>
-                      <td className="py-1.5 px-1 border-r border-slate-200 text-blue-900 bg-blue-100/50 font-black">
-                        {columnTotals.totalEatenB}
-                      </td>
-                      <td className="py-1.5 px-1 border-r border-slate-200 text-blue-900 bg-blue-100/50 font-black">
-                        {columnTotals.totalEatenL}
-                      </td>
-                      <td className="py-1.5 px-1 border-r border-slate-300 text-blue-900 bg-blue-100/50 font-black">
-                        {columnTotals.totalEatenD}
-                      </td>
-                      <td className="py-1.5 px-1 border-r border-slate-200 text-rose-800 bg-rose-100/50 font-black">
-                        {columnTotals.totalMissedB}
-                      </td>
-                      <td className="py-1.5 px-1 border-r border-slate-200 text-rose-800 bg-rose-100/50 font-black">
-                        {columnTotals.totalMissedL}
-                      </td>
-                      <td className="py-1.5 px-1 border-r border-slate-300 text-rose-800 bg-rose-100/50 font-black">
-                        {columnTotals.totalMissedD}
-                      </td>
-                      <td className="py-1.5 px-1 text-emerald-900 bg-emerald-100/50 font-black">
-                        {columnTotals.totalActualDays}
-                      </td>
-                    </>
-                  )}
-                </tr>
-              </tfoot>
-            </table>
+
+                  {/* Row: + Thêm học sinh mới... as in Image 1 */}
+                  <tr className="bg-white hover:bg-slate-50/80">
+                    <td className="py-1.5 px-1 w-9 min-w-[36px] font-black text-emerald-700 border-r border-b border-slate-300 text-center sticky left-0 z-20 bg-white">
+                      +
+                    </td>
+                    <td className="py-1.5 px-2 min-w-[150px] text-left border-r border-b border-slate-300 sticky left-9 z-20 bg-white">
+                      {isAddingStudent ? (
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            ref={newStudentInputRef}
+                            type="text"
+                            value={newStudentName}
+                            onChange={(e) => setNewStudentName(e.target.value)}
+                            onKeyDown={handleKeyDownNewStudent}
+                            placeholder="Nhập họ và tên..."
+                            className="px-2 py-0.5 border border-emerald-500 rounded text-xs font-semibold focus:outline-hidden w-full bg-white text-slate-900"
+                            autoFocus
+                          />
+                          <button
+                            type="button"
+                            onClick={handleSaveNewStudent}
+                            className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[10px] font-bold cursor-pointer"
+                          >
+                            Lưu
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsAddingStudent(false);
+                              setNewStudentName('');
+                            }}
+                            className="px-1.5 py-0.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded text-[10px] cursor-pointer"
+                          >
+                            Hủy
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setIsAddingStudent(true)}
+                          className="text-emerald-700 hover:text-emerald-800 hover:underline font-semibold text-xs flex items-center gap-1 cursor-pointer w-full text-left"
+                        >
+                          Thêm học sinh mới...
+                        </button>
+                      )}
+                    </td>
+                    {displayedMonthDays.map((d) => (
+                      <React.Fragment key={d.dayNum}>
+                        <td className="py-1 w-[22px] min-w-[20px] border-r border-b border-slate-300 bg-white" />
+                        <td className="py-1 w-[22px] min-w-[20px] border-r border-b border-slate-300 bg-white" />
+                        <td className="py-1 w-[22px] min-w-[20px] border-r border-b border-slate-300 bg-white" />
+                      </React.Fragment>
+                    ))}
+                    {showSummaryColumns && (
+                      <>
+                        <td className="py-1 border-r border-b border-slate-300 bg-white" />
+                        <td className="py-1 border-r border-b border-slate-300 bg-white" />
+                        <td className="py-1 border-r border-b border-slate-300 bg-white" />
+                        <td className="py-1 border-r border-b border-slate-300 bg-white" />
+                        <td className="py-1 border-r border-b border-slate-300 bg-white" />
+                        <td className="py-1 border-r border-b border-slate-300 bg-white" />
+                        <td className="py-1 border-b border-slate-300 bg-white" />
+                      </>
+                    )}
+                  </tr>
+                </tbody>
+
+                {/* Table Footer: CỘNG */}
+                <tfoot>
+                  <tr className="bg-slate-100 font-bold text-slate-900 border-t-2 border-slate-400">
+                    <td colSpan={2} className="py-1.5 px-2 text-center border-r border-b border-slate-400 sticky left-0 bg-slate-100 z-10 font-bold">
+                      CỘNG
+                    </td>
+                    {displayedMonthDays.map((d) => {
+                      const totals = columnTotals.dailyTotals[d.dateStr] || { breakfast: 0, lunch: 0, dinner: 0 };
+                      const isDateHovered = hoveredDateStr === d.dateStr;
+                      return (
+                        <React.Fragment key={d.dayNum}>
+                          <td className={`py-1 px-0.5 border-r border-b border-slate-400 font-bold ${isDateHovered ? 'bg-amber-100 text-slate-950 font-black' : 'text-slate-900'}`}>
+                            {totals.breakfast > 0 ? totals.breakfast : ''}
+                          </td>
+                          <td className={`py-1 px-0.5 border-r border-b border-slate-400 font-bold ${isDateHovered ? 'bg-amber-100 text-slate-950 font-black' : 'text-slate-900'}`}>
+                            {totals.lunch > 0 ? totals.lunch : ''}
+                          </td>
+                          <td className={`py-1 px-0.5 border-r border-b border-slate-400 font-bold ${isDateHovered ? 'bg-amber-100 text-slate-950 font-black' : 'text-slate-900'}`}>
+                            {totals.dinner > 0 ? totals.dinner : ''}
+                          </td>
+                        </React.Fragment>
+                      );
+                    })}
+                    {showSummaryColumns && (
+                      <>
+                        <td className="py-1 px-1 border-r border-b border-slate-400 text-slate-900 font-bold">
+                          {columnTotals.totalEatenB}
+                        </td>
+                        <td className="py-1 px-1 border-r border-b border-slate-400 text-slate-900 font-bold">
+                          {columnTotals.totalEatenL}
+                        </td>
+                        <td className="py-1 px-1 border-r border-b border-slate-400 text-slate-900 font-bold">
+                          {columnTotals.totalEatenD}
+                        </td>
+                        <td className="py-1 px-1 border-r border-b border-slate-400 text-slate-900 font-bold">
+                          {columnTotals.totalMissedB}
+                        </td>
+                        <td className="py-1 px-1 border-r border-b border-slate-400 text-slate-900 font-bold">
+                          {columnTotals.totalMissedL}
+                        </td>
+                        <td className="py-1 px-1 border-r border-slate-400 text-slate-900 font-bold">
+                          {columnTotals.totalMissedD}
+                        </td>
+                        <td className="py-1 px-1 border-b border-slate-400 text-slate-900 font-bold">
+                          {columnTotals.totalActualDays}
+                        </td>
+                      </>
+                    )}
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
           </div>
-        </div>
       )}
 
         {/* Signatures block for printing / review */}
