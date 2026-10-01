@@ -829,10 +829,10 @@ export const StorageService = {
       gender: s.gender || '',
       birth_date: s.birth_date || '',
       class_id: s.class_id,
-      village: s.village || '',
-      address: s.village || '',
+      village: s.address || '',
+      address: s.address || '',
       ethnicity: s.ethnicity || '',
-      isBoarding: s.is_boarding !== undefined ? s.is_boarding : (s.isBoarding !== undefined ? s.isBoarding : false),
+      isBoarding: s.is_boarding !== undefined ? s.is_boarding : false,
       notes: s.notes || '',
     });
 
@@ -870,15 +870,10 @@ export const StorageService = {
 
     const mapJSToDBStudent = (s: any) => ({
       id: s.id,
-      student_code: s.student_code || '',
-      full_name: s.full_name,
-      gender: s.gender || '',
-      birth_date: s.birth_date || '',
       class_id: s.class_id,
-      village: s.village || s.address || '',
-      ethnicity: s.ethnicity || '',
-      is_boarding: s.isBoarding !== undefined ? s.isBoarding : (s.is_boarding !== undefined ? s.is_boarding : false),
-      notes: s.notes || '',
+      full_name: s.full_name,
+      address: s.village || s.address || '',
+      is_boarding: s.isBoarding !== undefined ? s.isBoarding : false,
     });
 
     const supabase = getSupabaseClient();
@@ -910,6 +905,23 @@ export const StorageService = {
     notifyRealtimeChange('students');
   },
 
+  async deleteStudentsByClass(classId: string): Promise<void> {
+    const list = await this.getStudents();
+    const filtered = list.filter((s) => s.class_id !== classId);
+    localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(filtered));
+
+    const supabase = getSupabaseClient();
+    if (supabase && isSupabaseConnected()) {
+      try {
+        await supabase.from('students').delete().eq('class_id', classId);
+      } catch (e) {
+        console.error('Supabase deleteStudentsByClass error:', e);
+      }
+    }
+
+    notifyRealtimeChange('students');
+  },
+
   async getStudentsByClass(classId: string): Promise<import('../types').Student[]> {
     const all = await this.getStudents();
     return all.filter((s) => s.class_id === classId);
@@ -929,15 +941,10 @@ export const StorageService = {
 
     const mapJSToDBStudent = (s: any) => ({
       id: s.id,
-      student_code: s.student_code || '',
-      full_name: s.full_name,
-      gender: s.gender || '',
-      birth_date: s.birth_date || '',
       class_id: s.class_id,
-      village: s.village || s.address || '',
-      ethnicity: s.ethnicity || '',
-      is_boarding: s.isBoarding !== undefined ? s.isBoarding : (s.is_boarding !== undefined ? s.is_boarding : false),
-      notes: s.notes || '',
+      full_name: s.full_name,
+      address: s.village || s.address || '',
+      is_boarding: s.isBoarding !== undefined ? s.isBoarding : false,
     });
 
     const supabase = getSupabaseClient();

@@ -34,6 +34,7 @@ interface SchoolContextType {
   addStudent: (student: Omit<Student, 'id' | 'created_at'>) => Promise<void>;
   updateStudent: (studentId: string, partial: Partial<Student>) => Promise<void>;
   deleteStudent: (studentId: string) => Promise<void>;
+  deleteStudentsByClass: (classId: string) => Promise<void>;
   importStudents: (students: Array<Omit<Student, 'id' | 'created_at'>>) => Promise<void>;
 }
 
@@ -352,6 +353,11 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     await refreshAll();
   };
 
+  const deleteStudentsByClass = async (classId: string) => {
+    await StorageService.deleteStudentsByClass(classId);
+    await refreshAll();
+  };
+
   const importStudents = async (newStudents: Array<Omit<Student, 'id' | 'created_at'>>) => {
     const studentsToSave: Student[] = newStudents.map((s, idx) => ({
       ...s,
@@ -395,6 +401,7 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         addStudent,
         updateStudent,
         deleteStudent,
+        deleteStudentsByClass,
         importStudents,
       }}
     >

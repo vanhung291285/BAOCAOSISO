@@ -116,6 +116,22 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
     Record<string, Record<string, { breakfast: boolean; lunch: boolean; dinner: boolean }>>
   >({});
 
+  // View mode: 'all' | 'page1' (1-15) | 'page2' (16-end)
+  const [viewMode, setViewMode] = useState<'all' | 'page1' | 'page2'>('all');
+
+  // Days to display according to current view mode
+  const displayedMonthDays = useMemo(() => {
+    if (viewMode === 'page1') {
+      return monthDays.filter((d) => d.dayNum <= 15);
+    }
+    if (viewMode === 'page2') {
+      return monthDays.filter((d) => d.dayNum >= 16);
+    }
+    return monthDays;
+  }, [monthDays, viewMode]);
+
+  const showSummaryColumns = viewMode === 'all' || viewMode === 'page2';
+
   const [overrideBreakfast, setOverrideBreakfast] = useState<number | null>(null);
   const [overrideLunch, setOverrideLunch] = useState<number | null>(null);
   const [overrideDinner, setOverrideDinner] = useState<number | null>(null);
@@ -506,6 +522,56 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
     };
   }, [classBoardingStudents, mealMatrix, monthDays, standardBreakfastDays, standardLunchDays, standardDinnerDays]);
 
+  // Daily column meal counts for footer CỘNG
+  const columnTotals = useMemo(() => {
+    const dailyTotals: Record<string, { breakfast: number; lunch: number; dinner: number }> = {};
+
+    displayedMonthDays.forEach((d) => {
+      let b = 0;
+      let l = 0;
+      let dn = 0;
+      classBoardingStudents.forEach((st) => {
+        const dMeal = mealMatrix[st.id]?.[d.dateStr];
+        if (dMeal?.breakfast) b++;
+        if (dMeal?.lunch) l++;
+        if (dMeal?.dinner) dn++;
+      });
+      dailyTotals[d.dateStr] = { breakfast: b, lunch: l, dinner: dn };
+    });
+
+    let totalEatenB = 0;
+    let totalEatenL = 0;
+    let totalEatenD = 0;
+    let totalMissedB = 0;
+    let totalMissedL = 0;
+    let totalMissedD = 0;
+    let totalActualDays = 0;
+
+    classBoardingStudents.forEach((st) => {
+      const sum = studentSummaries.summaries[st.id];
+      if (sum) {
+        totalEatenB += sum.eatenBreakfast;
+        totalEatenL += sum.eatenLunch;
+        totalEatenD += sum.eatenDinner;
+        totalMissedB += sum.missedBreakfast;
+        totalMissedL += sum.missedLunch;
+        totalMissedD += sum.missedDinner;
+        totalActualDays += sum.actualDays;
+      }
+    });
+
+    return {
+      dailyTotals,
+      totalEatenB,
+      totalEatenL,
+      totalEatenD,
+      totalMissedB,
+      totalMissedL,
+      totalMissedD,
+      totalActualDays: Math.round(totalActualDays * 10) / 10,
+    };
+  }, [displayedMonthDays, classBoardingStudents, mealMatrix, studentSummaries]);
+
   // Save all days in month
   const handleSaveMonth = async () => {
     if (!selectedClassId || !selectedMonth) return;
@@ -689,10 +755,11 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
           <button
             type="button"
             onClick={handleExportExcel}
-            className="px-3.5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/20 flex items-center gap-1.5 transition-all"
+            className="px-3.5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/20 flex items-center gap-1.5 transition-all cursor-pointer"
+            title="Xuất file Excel chuẩn Bộ GD&ĐT tự động chia 2 trang (Trang 1: Ngày 1-15, Trang 2: Ngày 16-hết) khi in không bị co chữ"
           >
             <Download className="w-3.5 h-3.5" />
-            <span>Xuất Excel chuẩn mẫu</span>
+            <span>Xuất Excel (2 Trang chuẩn mẫu)</span>
           </button>
 
           <button
@@ -814,11 +881,66 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
             <h2 className="text-base sm:text-xl font-black text-slate-900 uppercase tracking-tight">
               SỔ CHẤM CƠM LỚP: {currentClass?.class_name || ''} THÁNG {monthNum}/{yearNum}
             </h2>
+            {viewMode === 'page1' && (
+              <div className="text-xs font-bold text-blue-700 uppercase tracking-wide">
+                (TRANG 1: NỬA ĐẦU THÁNG - TỪ NGÀY 01 ĐẾN NGÀY 15)
+              </div>
+            )}
+            {viewMode === 'page2' && (
+              <div className="text-xs font-bold text-blue-700 uppercase tracking-wide">
+                (TRANG 2: NỬA CUỐI THÁNG - TỪ NGÀY 16 ĐẾN NGÀY {daysInMonth} & TỔNG HỢP)
+              </div>
+            )}
             <div className="text-[11px] text-slate-500 font-medium">
               Sĩ số bán trú: <strong className="text-slate-900">{classBoardingStudents.length} học sinh</strong>
             </div>
           </div>
         </div>
+
+        {/* View Mode Toggle (Trang 1 / Trang 2 / Cả tháng) */}
+        {classBoardingStudents.length > 0 && !isLoading && (
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-4 no-print">
+            <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-xl border border-slate-200">
+              <button
+                type="button"
+                onClick={() => setViewMode('all')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  viewMode === 'all'
+                    ? 'bg-white text-blue-700 shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Cả tháng (1 - {daysInMonth})
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('page1')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  viewMode === 'page1'
+                    ? 'bg-white text-blue-700 shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Trang 1 (Ngày 01 - 15)
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('page2')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  viewMode === 'page2'
+                    ? 'bg-white text-blue-700 shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Trang 2 (Ngày 16 - {daysInMonth})
+              </button>
+            </div>
+
+            <div className="text-[11px] text-slate-500 italic">
+              💡 Bấm <strong>Trang 1</strong> hoặc <strong>Trang 2</strong> để xem và in gọn gàng từng trang A4 không bị co chữ.
+            </div>
+          </div>
+        )}
 
         {isLoading ? (
           <div className="py-20 text-center text-slate-400 flex flex-col items-center gap-2">
@@ -861,13 +983,13 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
           <div className="overflow-x-auto border border-slate-300 rounded-xl">
             <table className="w-full text-center border-collapse text-[10px] sm:text-[11px]">
               <thead>
-                {/* Row 1: STT, Họ và tên, Ngày (1..daysInMonth), Số ngày ăn trong tháng */}
+                {/* Row 1: STT, Họ và tên, Ngày, Số ngày ăn trong tháng */}
                 <tr className="bg-slate-100 font-black text-slate-900 border-b border-slate-300">
                   <th rowSpan={3} className="py-2 px-1 w-8 border-r border-slate-300 sticky left-0 bg-slate-100 z-20">STT</th>
                   <th rowSpan={3} className="py-2 px-2 min-w-[130px] text-left border-r border-slate-300 sticky left-8 bg-slate-100 z-20">
                     Họ và tên
                   </th>
-                  {monthDays.map((d) => (
+                  {displayedMonthDays.map((d) => (
                     <th
                       key={d.dayNum}
                       colSpan={3}
@@ -878,17 +1000,21 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
                       {d.dayNum}
                     </th>
                   ))}
-                  <th colSpan={6} className="py-1 px-2 border-r border-slate-300 bg-amber-50/70 text-amber-950 font-black">
-                    Số ngày ăn trong tháng
-                  </th>
-                  <th rowSpan={3} className="py-2 px-1.5 w-14 bg-emerald-50 text-emerald-950 font-black">
-                    Ngày thực
-                  </th>
+                  {showSummaryColumns && (
+                    <>
+                      <th colSpan={6} className="py-1 px-2 border-r border-slate-300 bg-amber-50/70 text-amber-950 font-black">
+                        Số ngày ăn trong tháng
+                      </th>
+                      <th rowSpan={3} className="py-2 px-1.5 w-14 bg-emerald-50 text-emerald-950 font-black">
+                        Ngày thực
+                      </th>
+                    </>
+                  )}
                 </tr>
 
-                {/* Row 2: Thứ (2,3,4,5,6,7,CN), Nhóm Số ngày báo ăn (S,T,T), Số ngày không báo ăn (S,T,T) */}
+                {/* Row 2: Thứ, Nhóm Số ngày báo ăn, Số ngày không báo ăn */}
                 <tr className="bg-slate-50 font-bold text-slate-800 border-b border-slate-300">
-                  {monthDays.map((d) => (
+                  {displayedMonthDays.map((d) => (
                     <th
                       key={d.dayNum}
                       colSpan={3}
@@ -901,31 +1027,39 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
                       {d.dayOfWeekShort}
                     </th>
                   ))}
-                  <th colSpan={3} className="py-0.5 px-1 border-r border-slate-300 bg-blue-50/70 text-blue-900">
-                    Số ngày báo ăn
-                  </th>
-                  <th colSpan={3} className="py-0.5 px-1 border-r border-slate-300 bg-rose-50/70 text-rose-900">
-                    Số ngày không báo ăn
-                  </th>
+                  {showSummaryColumns && (
+                    <>
+                      <th colSpan={3} className="py-0.5 px-1 border-r border-slate-300 bg-blue-50/70 text-blue-900">
+                        Số ngày báo ăn
+                      </th>
+                      <th colSpan={3} className="py-0.5 px-1 border-r border-slate-300 bg-rose-50/70 text-rose-900">
+                        Số ngày không báo ăn
+                      </th>
+                    </>
+                  )}
                 </tr>
 
                 {/* Row 3: S, T, T headers */}
                 <tr className="bg-slate-100 font-bold text-slate-600 border-b-2 border-slate-300">
-                  {monthDays.map((d) => (
+                  {displayedMonthDays.map((d) => (
                     <React.Fragment key={d.dayNum}>
                       <th className="py-0.5 w-4 border-r border-slate-200 text-blue-700">S</th>
                       <th className="py-0.5 w-4 border-r border-slate-200 text-amber-700">T</th>
                       <th className="py-0.5 w-4 border-r border-slate-300 text-purple-700">T</th>
                     </React.Fragment>
                   ))}
-                  {/* Summary S,T,T for eaten */}
-                  <th className="py-0.5 w-6 border-r border-slate-200 bg-blue-50 text-blue-800">S</th>
-                  <th className="py-0.5 w-6 border-r border-slate-200 bg-blue-50 text-blue-800">T</th>
-                  <th className="py-0.5 w-6 border-r border-slate-300 bg-blue-50 text-blue-800">T</th>
-                  {/* Summary S,T,T for missed */}
-                  <th className="py-0.5 w-6 border-r border-slate-200 bg-rose-50 text-rose-800">S</th>
-                  <th className="py-0.5 w-6 border-r border-slate-200 bg-rose-50 text-rose-800">T</th>
-                  <th className="py-0.5 w-6 border-r border-slate-300 bg-rose-50 text-rose-800">T</th>
+                  {showSummaryColumns && (
+                    <>
+                      {/* Summary S,T,T for eaten */}
+                      <th className="py-0.5 w-6 border-r border-slate-200 bg-blue-50 text-blue-800">S</th>
+                      <th className="py-0.5 w-6 border-r border-slate-200 bg-blue-50 text-blue-800">T</th>
+                      <th className="py-0.5 w-6 border-r border-slate-300 bg-blue-50 text-blue-800">T</th>
+                      {/* Summary S,T,T for missed */}
+                      <th className="py-0.5 w-6 border-r border-slate-200 bg-rose-50 text-rose-800">S</th>
+                      <th className="py-0.5 w-6 border-r border-slate-200 bg-rose-50 text-rose-800">T</th>
+                      <th className="py-0.5 w-6 border-r border-slate-300 bg-rose-50 text-rose-800">T</th>
+                    </>
+                  )}
                 </tr>
               </thead>
 
@@ -950,7 +1084,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
                       </td>
 
                       {/* Daily cells: S, T, T */}
-                      {monthDays.map((d) => {
+                      {displayedMonthDays.map((d) => {
                         const dMeal = stDays[d.dateStr] || { breakfast: false, lunch: false, dinner: false };
                         const isWeekend = d.dayOfWeekShort === '7' || d.dayOfWeekShort === 'CN';
 
@@ -992,37 +1126,126 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
                         );
                       })}
 
-                      {/* Summary Eaten: S, T, T */}
-                      <td className="py-1.5 px-1 font-bold text-blue-900 bg-blue-50/40 border-r border-slate-200">
-                        {sum.eatenBreakfast}
-                      </td>
-                      <td className="py-1.5 px-1 font-bold text-blue-900 bg-blue-50/40 border-r border-slate-200">
-                        {sum.eatenLunch}
-                      </td>
-                      <td className="py-1.5 px-1 font-bold text-blue-900 bg-blue-50/40 border-r border-slate-300">
-                        {sum.eatenDinner}
-                      </td>
+                      {/* Summary Columns */}
+                      {showSummaryColumns && (
+                        <>
+                          {/* Summary Eaten: S, T, T */}
+                          <td className="py-1.5 px-1 font-bold text-blue-900 bg-blue-50/40 border-r border-slate-200">
+                            {sum.eatenBreakfast}
+                          </td>
+                          <td className="py-1.5 px-1 font-bold text-blue-900 bg-blue-50/40 border-r border-slate-200">
+                            {sum.eatenLunch}
+                          </td>
+                          <td className="py-1.5 px-1 font-bold text-blue-900 bg-blue-50/40 border-r border-slate-300">
+                            {sum.eatenDinner}
+                          </td>
 
-                      {/* Summary Missed: S, T, T */}
-                      <td className="py-1.5 px-1 font-bold text-rose-700 bg-rose-50/40 border-r border-slate-200">
-                        {sum.missedBreakfast}
-                      </td>
-                      <td className="py-1.5 px-1 font-bold text-rose-700 bg-rose-50/40 border-r border-slate-200">
-                        {sum.missedLunch}
-                      </td>
-                      <td className="py-1.5 px-1 font-bold text-rose-700 bg-rose-50/40 border-r border-slate-300">
-                        {sum.missedDinner}
-                      </td>
+                          {/* Summary Missed: S, T, T */}
+                          <td className="py-1.5 px-1 font-bold text-rose-700 bg-rose-50/40 border-r border-slate-200">
+                            {sum.missedBreakfast}
+                          </td>
+                          <td className="py-1.5 px-1 font-bold text-rose-700 bg-rose-50/40 border-r border-slate-200">
+                            {sum.missedLunch}
+                          </td>
+                          <td className="py-1.5 px-1 font-bold text-rose-700 bg-rose-50/40 border-r border-slate-300">
+                            {sum.missedDinner}
+                          </td>
 
-                      {/* Actual Days */}
-                      <td className="py-1.5 px-1 font-black text-emerald-800 bg-emerald-50/60">
-                        {sum.actualDays}
-                      </td>
+                          {/* Actual Days */}
+                          <td className="py-1.5 px-1 font-black text-emerald-800 bg-emerald-50/60">
+                            {sum.actualDays}
+                          </td>
+                        </>
+                      )}
                     </tr>
                   );
                 })}
               </tbody>
+
+              {/* Table Footer: CỘNG */}
+              <tfoot>
+                <tr className="bg-slate-100 font-black text-slate-900 border-t-2 border-slate-300">
+                  <td colSpan={2} className="py-2 px-2 text-center border-r border-slate-300 sticky left-0 bg-slate-100 z-10">
+                    CỘNG
+                  </td>
+                  {displayedMonthDays.map((d) => {
+                    const totals = columnTotals.dailyTotals[d.dateStr] || { breakfast: 0, lunch: 0, dinner: 0 };
+                    return (
+                      <React.Fragment key={d.dayNum}>
+                        <td className="py-1.5 px-0.5 border-r border-slate-200 text-blue-800 font-bold">
+                          {totals.breakfast > 0 ? totals.breakfast : ''}
+                        </td>
+                        <td className="py-1.5 px-0.5 border-r border-slate-200 text-amber-800 font-bold">
+                          {totals.lunch > 0 ? totals.lunch : ''}
+                        </td>
+                        <td className="py-1.5 px-0.5 border-r border-slate-300 text-purple-800 font-bold">
+                          {totals.dinner > 0 ? totals.dinner : ''}
+                        </td>
+                      </React.Fragment>
+                    );
+                  })}
+                  {showSummaryColumns && (
+                    <>
+                      <td className="py-1.5 px-1 border-r border-slate-200 text-blue-900 bg-blue-100/50 font-black">
+                        {columnTotals.totalEatenB}
+                      </td>
+                      <td className="py-1.5 px-1 border-r border-slate-200 text-blue-900 bg-blue-100/50 font-black">
+                        {columnTotals.totalEatenL}
+                      </td>
+                      <td className="py-1.5 px-1 border-r border-slate-300 text-blue-900 bg-blue-100/50 font-black">
+                        {columnTotals.totalEatenD}
+                      </td>
+                      <td className="py-1.5 px-1 border-r border-slate-200 text-rose-800 bg-rose-100/50 font-black">
+                        {columnTotals.totalMissedB}
+                      </td>
+                      <td className="py-1.5 px-1 border-r border-slate-200 text-rose-800 bg-rose-100/50 font-black">
+                        {columnTotals.totalMissedL}
+                      </td>
+                      <td className="py-1.5 px-1 border-r border-slate-300 text-rose-800 bg-rose-100/50 font-black">
+                        {columnTotals.totalMissedD}
+                      </td>
+                      <td className="py-1.5 px-1 text-emerald-900 bg-emerald-100/50 font-black">
+                        {columnTotals.totalActualDays}
+                      </td>
+                    </>
+                  )}
+                </tr>
+              </tfoot>
             </table>
+          </div>
+        )}
+
+        {/* Signatures block for printing / review */}
+        {classBoardingStudents.length > 0 && !isLoading && (
+          <div className="mt-8 pt-4 grid grid-cols-2 gap-4 text-center">
+            <div className="flex flex-col items-center">
+              <div className="text-xs font-bold text-slate-900 uppercase">
+                GIÁO VIÊN CHỦ NHIỆM
+              </div>
+              <div className="text-[11px] text-slate-500 italic mb-16">
+                (Ký và ghi rõ họ tên)
+              </div>
+              <div className="text-xs font-bold text-slate-900">
+                {currentUser?.full_name || 'Giáo viên chủ nhiệm'}
+              </div>
+            </div>
+
+            <div className="flex flex-col items-center">
+              <div className="text-[11px] text-slate-600 italic mb-1">
+                {viewMode === 'page1'
+                  ? `Xa Dung, ngày 15 tháng ${String(monthNum).padStart(2, '0')} năm ${yearNum}`
+                  : `Xa Dung, ngày ${String(daysInMonth).padStart(2, '0')} tháng ${String(monthNum).padStart(2, '0')} năm ${yearNum}`}
+              </div>
+              <div className="text-xs font-bold text-slate-900 uppercase">
+                {viewMode === 'page1' ? 'BAN GIÁM HIỆU' : 'HIỆU TRƯỞNG'}
+              </div>
+              <div className="text-[11px] text-slate-500 italic mb-16">
+                {viewMode === 'page1' ? '(Ký duyệt)' : '(Ký, đóng dấu)'}
+              </div>
+              <div className="text-xs font-bold text-slate-900">
+                Hiệu trưởng
+              </div>
+            </div>
           </div>
         )}
       </div>

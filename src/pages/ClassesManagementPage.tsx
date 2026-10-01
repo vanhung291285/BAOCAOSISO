@@ -31,7 +31,7 @@ import {
 } from 'lucide-react';
 
 export const ClassesManagementPage: React.FC = () => {
-  const { classes, campuses, activeYear, addClass, updateClass, batchUpdateClasses, createTeacherAndAssign, deleteClass, toggleLockClass, students, addStudent, updateStudent, deleteStudent, importStudents } = useSchool();
+  const { classes, campuses, activeYear, addClass, updateClass, batchUpdateClasses, createTeacherAndAssign, deleteClass, toggleLockClass, students, addStudent, updateStudent, deleteStudent, deleteStudentsByClass, importStudents } = useSchool();
   const { allUsers, currentUser, isAdmin, isBGH, reloadUsers } = useAuth();
 
   // Filter & Search states
@@ -1327,9 +1327,28 @@ export const ClassesManagementPage: React.FC = () => {
 
               {/* Roster list */}
               <div className="space-y-2">
-                <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">
-                  Danh Sách Học Sinh Của Lớp ({rosterStudents.length})
-                </h4>
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">
+                    Danh Sách Học Sinh Của Lớp ({rosterStudents.length})
+                  </h4>
+                  {rosterStudents.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (rosterClassId && window.confirm(`Bạn có chắc muốn XÓA TOÀN BỘ ${rosterStudents.length} học sinh của lớp ${rosterClass?.class_name}?`)) {
+                          await deleteStudentsByClass(rosterClassId);
+                          setSuccessToast(`Đã xóa toàn bộ học sinh lớp ${rosterClass?.class_name}!`);
+                          setTimeout(() => setSuccessToast(''), 3000);
+                        }
+                      }}
+                      className="px-2.5 py-1 text-xs font-bold text-rose-600 hover:text-white hover:bg-rose-600 border border-rose-200 rounded-lg flex items-center gap-1 transition-all cursor-pointer"
+                      title="Xóa toàn bộ danh sách học sinh của lớp này"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Xóa toàn bộ</span>
+                    </button>
+                  )}
+                </div>
                 {rosterStudents.length === 0 ? (
                   <div className="text-center py-8 bg-slate-50 rounded-2xl border border-slate-200 border-dashed text-slate-400">
                     <User className="w-8 h-8 mx-auto opacity-35 mb-2" />

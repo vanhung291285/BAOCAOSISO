@@ -62,7 +62,7 @@ interface BoardingManagementPageProps {
 type TabType = 'daily-attendance' | 'monthly-sheet' | 'students-list' | 'kitchen-report' | 'rules-info';
 
 export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ onNavigate, initialTab }) => {
-  const { classes, campuses, students, addStudent, updateStudent, deleteStudent, importStudents } = useSchool();
+  const { classes, campuses, students, addStudent, updateStudent, deleteStudent, deleteStudentsByClass, importStudents } = useSchool();
   const { currentUser, isGVCN, isAdmin, isBGH } = useAuth();
 
   // Active Tab
@@ -550,6 +550,27 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
       } catch (e) {
         console.error(e);
         showToast('Lỗi khi xóa học sinh!', 'error');
+      }
+    }
+  };
+
+  // Delete All Students of Selected Class
+  const [isDeletingAll, setIsDeletingAll] = useState<boolean>(false);
+  const handleDeleteAllClassStudents = async () => {
+    if (!selectedClassId || classStudents.length === 0) return;
+    const count = classStudents.length;
+    const className = selectedClass?.class_name || '';
+    const confirmMsg = `Bạn có chắc chắn muốn XÓA TOÀN BỘ ${count} học sinh của lớp ${className}?\n\nLưu ý: Thao tác này sẽ xóa sạch danh sách học sinh của lớp trên hệ thống và đám mây để Thầy/Cô có thể tải lên lại từ file Excel!`;
+    if (window.confirm(confirmMsg)) {
+      setIsDeletingAll(true);
+      try {
+        await deleteStudentsByClass(selectedClassId);
+        showToast(`Đã xóa toàn bộ ${count} học sinh của lớp ${className}!`);
+      } catch (e) {
+        console.error(e);
+        showToast('Lỗi khi xóa toàn bộ danh sách học sinh!', 'error');
+      } finally {
+        setIsDeletingAll(false);
       }
     }
   };
@@ -1747,6 +1768,19 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
                 <span>Thêm học sinh</span>
               </button>
 
+              {classStudents.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleDeleteAllClassStudents}
+                  disabled={isDeletingAll}
+                  className="px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold bg-rose-50 text-rose-700 hover:bg-rose-100 hover:text-rose-800 border border-rose-200 flex items-center gap-1.5 transition-all shadow-xs cursor-pointer disabled:opacity-50"
+                  title="Xóa toàn bộ danh sách học sinh của lớp này"
+                >
+                  <Trash2 className="w-4 h-4 text-rose-600" />
+                  <span>{isDeletingAll ? 'Đang xóa...' : 'Xóa toàn bộ DS'}</span>
+                </button>
+              )}
+
               <button
                 type="button"
                 onClick={handleExportStudentsExcel}
@@ -1771,13 +1805,27 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
 
           {/* Students Roster Table */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+            <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
               <span className="font-extrabold text-xs text-slate-700 uppercase tracking-wider">
                 Danh sách học sinh lớp {selectedClass?.class_name} ({filteredStudents.length} học sinh)
               </span>
-              <span className="text-xs text-slate-500 font-medium">
-                Bán trú: <strong className="text-blue-700 font-bold">{classBoardingStudents.length}</strong> / {classStudents.length} em
-              </span>
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-slate-500 font-medium">
+                  Bán trú: <strong className="text-blue-700 font-bold">{classBoardingStudents.length}</strong> / {classStudents.length} em
+                </span>
+                {classStudents.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleDeleteAllClassStudents}
+                    disabled={isDeletingAll}
+                    className="px-2.5 py-1 text-xs font-bold text-rose-700 hover:text-white hover:bg-rose-600 border border-rose-300 rounded-lg flex items-center gap-1 transition-all cursor-pointer disabled:opacity-50"
+                    title="Xóa toàn bộ danh sách học sinh của lớp này"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>{isDeletingAll ? 'Đang xóa...' : `Xóa tất cả (${classStudents.length})`}</span>
+                  </button>
+                )}
+              </div>
             </div>
 
             {filteredStudents.length === 0 ? (
