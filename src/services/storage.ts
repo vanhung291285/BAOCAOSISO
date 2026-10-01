@@ -313,6 +313,7 @@ export function resetAllDataToEmpty() {
   localStorage.setItem(STORAGE_KEYS.VALUES, JSON.stringify(seed.dailyReportValues));
   localStorage.setItem(STORAGE_KEYS.LOGS, JSON.stringify(seed.logs));
   localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify([]));
+  localStorage.setItem(STORAGE_KEYS.BOARDING_REPORTS, JSON.stringify([]));
   localStorage.setItem(STORAGE_CLEAN_VERSION_KEY, 'v4_clean_blank_slate');
   localStorage.setItem('sso_current_user_id', 'u_admin');
   notifyRealtimeChange('all_reset');
@@ -978,6 +979,9 @@ export const StorageService = {
 
   async getBoardingReportsByClass(classId: string): Promise<BoardingDailyReport[]> {
     ensureInitialized();
+    const raw = localStorage.getItem(STORAGE_KEYS.BOARDING_REPORTS);
+    let list: BoardingDailyReport[] = raw ? JSON.parse(raw) : [];
+
     const supabase = getSupabaseClient();
     if (supabase && isSupabaseConnected()) {
       try {
@@ -985,53 +989,138 @@ export const StorageService = {
           .from('boarding_reports')
           .select('*')
           .eq('class_id', classId);
-        if (!error && data) {
-          // Update local cache
-          const raw = localStorage.getItem(STORAGE_KEYS.BOARDING_REPORTS);
-          let list: BoardingDailyReport[] = raw ? JSON.parse(raw) : [];
-          list = list.filter(r => r.class_id !== classId).concat(data);
+        if (!error && data && data.length > 0) {
+          data.forEach((cloudRep: BoardingDailyReport) => {
+            const idx = list.findIndex((r) => r.id === cloudRep.id || (r.class_id === cloudRep.class_id && r.date === cloudRep.date));
+            if (idx >= 0) list[idx] = cloudRep;
+            else list.push(cloudRep);
+          });
           localStorage.setItem(STORAGE_KEYS.BOARDING_REPORTS, JSON.stringify(list));
-
-          return data.sort((a, b) => b.date.localeCompare(a.date));
         }
       } catch (e) {
         console.warn('Supabase fetch boarding reports error:', e);
       }
     }
 
-    const list = await this.getBoardingReports();
     return list.filter((r) => r.class_id === classId).sort((a, b) => b.date.localeCompare(a.date));
   },
 
   async getBoardingReportsByClassAndMonth(classId: string, monthStr: string): Promise<BoardingDailyReport[]> {
     ensureInitialized();
+    const classes = await this.getClasses();
+    const cls = classes.find((c) => c.id === classId || c.class_name === classId);
+    const validClassIds = new Set([classId, cls?.id, cls?.class_name].filter(Boolean) as string[]);
+
+    const raw = localStorage.getItem(STORAGE_KEYS.BOARDING_REPORTS);
+    let list: BoardingDailyReport[] = raw ? JSON.parse(raw) : [];
+
     const supabase = getSupabaseClient();
     if (supabase && isSupabaseConnected()) {
       try {
         const { data, error } = await supabase
           .from('boarding_reports')
           .select('*')
-          .eq('class_id', classId)
+          .in('class_id', Array.from(validClassIds))
           .gte('date', `${monthStr}-01`)
           .lte('date', `${monthStr}-31`);
-        if (!error && data) {
-          // Update local cache
-          const raw = localStorage.getItem(STORAGE_KEYS.BOARDING_REPORTS);
-          let list: BoardingDailyReport[] = raw ? JSON.parse(raw) : [];
-          list = list.filter(r => r.class_id !== classId || !r.date.startsWith(monthStr)).concat(data);
+        if (!error && data && data.length > 0) {
+          data.forEach((cloudRep: any) => {
+            const cleanDate = String(cloudRep.date).split('T')[0].trim();
+            let parsedRecords = cloudRep.records;
+            if (typeof parsedRecords === 'string') {
+              try { parsedRecords = JSON.parse(parsedRecords); } catch { parsedRecords = []; }
+            }
+            const repObj: BoardingDailyReport = {
+              ...cloudRep,
+              date: cleanDate,
+              records: Array.isArray(parsedRecords) ? parsedRecords : [],
+            };
+            const idx = list.findIndex(
+              (r) => r.id === repObj.id || (validClassIds.has(r.class_id) && String(r.date).split('T')[0] === cleanDate)
+            );
+            if (idx >= 0) list[idx] = repObj;
+            else list.push(repObj);
+          });
           localStorage.setItem(STORAGE_KEYS.BOARDING_REPORTS, JSON.stringify(list));
-
-          return data.sort((a, b) => a.date.localeCompare(b.date));
         }
       } catch (e) {
         console.warn('Supabase fetch boarding reports month error:', e);
       }
     }
 
-    const list = await this.getBoardingReports();
     return list
-      .filter((r) => r.class_id === classId && r.date.startsWith(monthStr))
+      .filter((r) => validClassIds.has(r.class_id) && String(r.date).split('T')[0].startsWith(monthStr))
+      .map((r) => {
+        let recs = r.records;
+        if (typeof recs === 'string') {
+          try { recs = JSON.parse(recs); } catch { recs = []; }
+        }
+        return {
+          ...r,
+          date: String(r.date).split('T')[0].trim(),
+          records: Array.isArray(recs) ? recs : [],
+        };
+      })
       .sort((a, b) => a.date.localeCompare(b.date));
+  },
+
+  async getDailyReportsByMonth(classId: string, monthStr: string): Promise<DailyReport[]> {
+    ensureInitialized();
+    const classes = await this.getClasses();
+    const cls = classes.find((c) => c.id === classId || c.class_name === classId);
+    const validClassIds = new Set([classId, cls?.id, cls?.class_name].filter(Boolean) as string[]);
+
+    const raw = localStorage.getItem(STORAGE_KEYS.REPORTS);
+    let list: DailyReport[] = raw ? JSON.parse(raw) : [];
+
+    const supabase = getSupabaseClient();
+    if (supabase && isSupabaseConnected()) {
+      try {
+        const { data, error } = await supabase
+          .from('daily_reports')
+          .select('*')
+          .in('class_id', Array.from(validClassIds))
+          .gte('report_date', `${monthStr}-01`)
+          .lte('report_date', `${monthStr}-31`);
+        if (!error && data && data.length > 0) {
+          data.forEach((cloudRep: any) => {
+            const cleanDate = String(cloudRep.report_date).split('T')[0].trim();
+            let parsedAbsent = cloudRep.absent_students;
+            if (typeof parsedAbsent === 'string') {
+              try { parsedAbsent = JSON.parse(parsedAbsent); } catch { parsedAbsent = undefined; }
+            }
+            const repObj: DailyReport = {
+              ...cloudRep,
+              report_date: cleanDate,
+              absent_students: Array.isArray(parsedAbsent) ? parsedAbsent : undefined,
+            };
+            const idx = list.findIndex(
+              (r) => r.id === repObj.id || (validClassIds.has(r.class_id) && String(r.report_date).split('T')[0] === cleanDate)
+            );
+            if (idx >= 0) list[idx] = repObj;
+            else list.push(repObj);
+          });
+          localStorage.setItem(STORAGE_KEYS.REPORTS, JSON.stringify(list));
+        }
+      } catch (e) {
+        console.warn('Supabase fetch daily reports month error:', e);
+      }
+    }
+
+    return list
+      .filter((r) => validClassIds.has(r.class_id) && String(r.report_date).split('T')[0].startsWith(monthStr))
+      .map((r) => {
+        let parsedAbsent = r.absent_students;
+        if (typeof parsedAbsent === 'string') {
+          try { parsedAbsent = JSON.parse(parsedAbsent); } catch { parsedAbsent = undefined; }
+        }
+        return {
+          ...r,
+          report_date: String(r.report_date).split('T')[0].trim(),
+          absent_students: Array.isArray(parsedAbsent) ? parsedAbsent : undefined,
+        };
+      })
+      .sort((a, b) => a.report_date.localeCompare(b.report_date));
   },
 
   async saveBoardingReportsBulk(reports: BoardingDailyReport[], savedBy?: Profile): Promise<void> {

@@ -1008,7 +1008,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSele
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-4 gap-1.5 p-2 bg-slate-50 rounded-xl text-center text-xs">
+                  <div className="grid grid-cols-5 gap-1 p-2 bg-slate-50 rounded-xl text-center text-xs">
                     <div>
                       <span className="text-[10px] text-slate-400 block font-bold">Tổng</span>
                       <span className="font-extrabold text-slate-800">{total}</span>
@@ -1024,6 +1024,41 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSele
                     <div>
                       <span className="text-[10px] text-blue-600 block font-bold">Tỷ lệ</span>
                       <span className="font-extrabold text-blue-700">{isReported ? `${rate}%` : '-'}</span>
+                    </div>
+                    <div className="bg-amber-50 rounded-lg p-0.5 border border-amber-200/80">
+                      <span className="text-[10px] text-amber-800 block font-black">Báo ăn</span>
+                      <span className="font-black text-amber-950">{isReported && boardingVal !== null && boardingVal !== undefined ? boardingVal : '-'}</span>
+                    </div>
+                  </div>
+
+                  {/* Mobile Quick Action Buttons */}
+                  <div className="flex items-center justify-between pt-1 gap-2 text-xs">
+                    <span className="text-[11px] text-slate-500 font-medium">
+                      🍱 Bán trú: <strong className="text-teal-800 font-bold">{isReported && boardingVal !== null && boardingVal !== undefined ? `${boardingVal} suất` : 'Chưa có'}</strong>
+                    </span>
+                    <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (onSelectClassForInput) {
+                            onSelectClassForInput(row.classItem.id, selectedDate);
+                          } else {
+                            onNavigate('/attendance');
+                          }
+                        }}
+                        className="px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 font-bold text-[11px]"
+                      >
+                        {isReported ? 'Xem/Sửa' : 'Nhập'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onNavigate('/boarding')}
+                        className="px-2.5 py-1 rounded-lg bg-amber-400 hover:bg-amber-300 text-amber-950 font-black text-[11px] flex items-center gap-1 shadow-2xs cursor-pointer"
+                        title="Vào chấm báo ăn của lớp"
+                      >
+                        <Utensils className="w-3 h-3 text-slate-900" />
+                        <span>Báo ăn</span>
+                      </button>
                     </div>
                   </div>
                 </div>

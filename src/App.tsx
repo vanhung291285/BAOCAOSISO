@@ -28,6 +28,8 @@ import {
   Calendar,
   User,
   Code2,
+  Utensils,
+  FileSpreadsheet,
 } from 'lucide-react';
 
 const AppContent: React.FC = () => {
@@ -245,51 +247,71 @@ const AppContent: React.FC = () => {
 
       {/* Persistent Mobile Bottom Navigation Bar (Hidden when on /attendance page where docked actions exist) */}
       {currentPath !== '/attendance' && (
-        <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-30 bg-white/95 backdrop-blur-md border-t border-slate-200 px-3 py-1.5 flex items-center justify-around shadow-lg no-print pb-[env(safe-area-inset-bottom)]">
+        <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-30 bg-white/95 backdrop-blur-md border-t border-slate-200 px-2 py-1.5 flex items-center justify-around shadow-lg no-print pb-[env(safe-area-inset-bottom)]">
+          {/* 1. Tổng quan */}
           <button
             type="button"
             onClick={() => handleNavigate('/dashboard')}
-            className={`flex flex-col items-center justify-center min-w-[64px] py-1 transition-all ${
+            className={`flex flex-col items-center justify-center min-w-[56px] py-1 transition-all ${
               currentPath === '/dashboard' ? 'text-blue-600 font-bold' : 'text-slate-500 font-medium'
             }`}
           >
-            <LayoutDashboard className="w-5 h-5 mb-0.5" />
-            <span className="text-[10px] whitespace-nowrap">Tổng quan</span>
+            <LayoutDashboard className="w-4 h-4 mb-0.5" />
+            <span className="text-[9px] whitespace-nowrap">Tổng quan</span>
           </button>
 
+          {/* 2. Điểm danh sĩ số */}
           <button
             type="button"
             onClick={() => handleNavigate('/attendance')}
-            className="flex flex-col items-center justify-center relative -top-3 min-w-[72px]"
+            className={`flex flex-col items-center justify-center min-w-[56px] py-1 transition-all ${
+              currentPath === '/attendance' ? 'text-blue-600 font-bold' : 'text-slate-500 font-medium'
+            }`}
           >
-            <div className="w-12 h-12 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-lg active:scale-95 transition-transform">
-              <ClipboardList className="w-6 h-6" />
+            <ClipboardList className="w-4 h-4 mb-0.5" />
+            <span className="text-[9px] whitespace-nowrap">{isGVCN && assignedClass ? `Lớp ${assignedClass.class_name}` : 'Điểm danh'}</span>
+          </button>
+
+          {/* 3. Báo ăn Lớp (Nổi bật) */}
+          <button
+            type="button"
+            onClick={() => handleNavigate('/boarding')}
+            className="flex flex-col items-center justify-center relative -top-2.5 min-w-[62px]"
+          >
+            <div className={`w-11 h-11 rounded-full flex items-center justify-center shadow-lg active:scale-95 transition-transform ${
+              currentPath === '/boarding' || currentPath === '/boarding-meals'
+                ? 'bg-amber-500 text-slate-950 ring-2 ring-amber-300'
+                : 'bg-emerald-600 text-white'
+            }`}>
+              <Utensils className="w-5 h-5 stroke-[2.2]" />
             </div>
-            <span className="text-[10px] font-black text-blue-700 mt-0.5 whitespace-nowrap">
-              {isGVCN && assignedClass ? `Lớp ${assignedClass.class_name}` : 'Điểm danh'}
+            <span className="text-[9px] font-black text-emerald-800 mt-0.5 whitespace-nowrap">
+              Báo ăn
             </span>
           </button>
 
+          {/* 4. Sổ chấm cơm tháng */}
+          <button
+            type="button"
+            onClick={() => handleNavigate('/reports/boarding-monthly')}
+            className={`flex flex-col items-center justify-center min-w-[56px] py-1 transition-all ${
+              currentPath === '/reports/boarding-monthly' ? 'text-emerald-700 font-bold' : 'text-slate-500 font-medium'
+            }`}
+          >
+            <FileSpreadsheet className="w-4 h-4 mb-0.5 text-emerald-600" />
+            <span className="text-[9px] whitespace-nowrap">Sổ cơm</span>
+          </button>
+
+          {/* 5. Báo cáo theo ngày */}
           <button
             type="button"
             onClick={() => handleNavigate('/reports/daily')}
-            className={`flex flex-col items-center justify-center min-w-[64px] py-1 transition-all ${
+            className={`flex flex-col items-center justify-center min-w-[56px] py-1 transition-all ${
               currentPath === '/reports/daily' || currentPath === '/daily-report' ? 'text-blue-600 font-bold' : 'text-slate-500 font-medium'
             }`}
           >
-            <Calendar className="w-5 h-5 mb-0.5" />
-            <span className="text-[10px] whitespace-nowrap">Theo ngày</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => handleNavigate('/profile')}
-            className={`flex flex-col items-center justify-center min-w-[64px] py-1 transition-all ${
-              currentPath === '/profile' ? 'text-blue-600 font-bold' : 'text-slate-500 font-medium'
-            }`}
-          >
-            <User className="w-5 h-5 mb-0.5" />
-            <span className="text-[10px] whitespace-nowrap">Cá nhân</span>
+            <Calendar className="w-4 h-4 mb-0.5" />
+            <span className="text-[9px] whitespace-nowrap">Theo ngày</span>
           </button>
         </nav>
       )}

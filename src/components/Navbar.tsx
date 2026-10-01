@@ -27,6 +27,7 @@ import {
   LayoutDashboard,
   CalendarRange,
   Users,
+  Utensils,
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -235,11 +236,24 @@ export const Navbar: React.FC<NavbarProps> = ({ currentPath, onNavigate, onToggl
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-colors ${
                 currentPath === '/attendance'
                   ? 'bg-blue-600 text-white font-bold'
-                  : 'bg-blue-50/80 text-blue-700 font-bold'
+                  : 'bg-blue-50/80 text-blue-700 font-bold hover:bg-blue-100'
               }`}
             >
-              <ClipboardList className="w-4 h-4" />
+              <ClipboardList className="w-4 h-4 text-blue-600" />
               <span>{isGVCN && assignedClass ? `Báo cáo Lớp ${assignedClass.class_name}` : 'Báo cáo sĩ số'}</span>
+            </button>
+
+            {/* Báo ăn bán trú của lớp */}
+            <button
+              onClick={() => handleNav('/boarding')}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-colors ${
+                currentPath === '/boarding' || currentPath === '/boarding-meals'
+                  ? 'bg-amber-500 text-slate-950 font-black shadow-xs'
+                  : 'bg-amber-50 text-amber-900 font-bold hover:bg-amber-100 border border-amber-200'
+              }`}
+            >
+              <Utensils className="w-4 h-4 text-amber-600" />
+              <span>{isGVCN && assignedClass ? `Báo ăn Lớp ${assignedClass.class_name}` : 'Báo ăn Bán trú'}</span>
             </button>
           </div>
 
@@ -248,6 +262,15 @@ export const Navbar: React.FC<NavbarProps> = ({ currentPath, onNavigate, onToggl
             <div className="px-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
               Báo cáo & Thống kê
             </div>
+            <button
+              onClick={() => handleNav('/reports/boarding-monthly')}
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold transition-colors ${
+                currentPath === '/reports/boarding-monthly' ? 'bg-blue-50 text-blue-800 font-bold' : 'text-slate-700 hover:bg-slate-100'
+              }`}
+            >
+              <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+              <span>{isGVCN && assignedClass ? `Sổ chấm cơm ${assignedClass.class_name}` : 'Sổ chấm cơm tháng'}</span>
+            </button>
             <button
               onClick={() => handleNav('/reports/daily')}
               className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold transition-colors ${

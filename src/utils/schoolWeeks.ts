@@ -48,6 +48,19 @@ export function getDaysDifference(d1Str: string, d2Str: string): number {
  * Lấy ngày hôm nay dạng YYYY-MM-DD theo giờ địa phương (Việt Nam)
  */
 export function getTodayDateStr(): string {
+  try {
+    const vnStr = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Ho_Chi_Minh',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date());
+    if (vnStr && /^\d{4}-\d{2}-\d{2}$/.test(vnStr)) {
+      return vnStr;
+    }
+  } catch (e) {
+    // fallback
+  }
   const d = new Date();
   return formatDateYMD(d.getFullYear(), d.getMonth() + 1, d.getDate());
 }

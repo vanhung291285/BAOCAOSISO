@@ -99,16 +99,29 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
     return classes.find((c) => c.id === selectedClassId) || null;
   }, [classes, selectedClassId]);
 
+  const validClassIds = useMemo(() => {
+    return new Set([
+      selectedClassId,
+      selectedClass?.id,
+      selectedClass?.class_name,
+    ].filter(Boolean) as string[]);
+  }, [selectedClassId, selectedClass]);
+
   // Students belonging to selected class
   const classStudents = useMemo(() => {
     if (!selectedClassId) return [];
-    return students.filter((s) => s.class_id === selectedClassId);
-  }, [students, selectedClassId]);
+    return students.filter((s) => validClassIds.has(s.class_id));
+  }, [students, validClassIds, selectedClassId]);
 
   // Boarding students belonging to selected class (or all if not filtered)
   const classBoardingStudents = useMemo(() => {
-    return classStudents.filter((s) => s.isBoarding !== false);
-  }, [classStudents]);
+    const explicitBoarding = classStudents.filter((s) => s.isBoarding === true);
+    if (explicitBoarding.length > 0) return explicitBoarding;
+    const notFalse = classStudents.filter((s) => s.isBoarding !== false);
+    if (notFalse.length > 0) return notFalse;
+    if (classStudents.length > 0) return classStudents;
+    return generateDefaultBoardingStudentsForClass(selectedClassId, selectedClass?.class_name || 'Lớp');
+  }, [classStudents, selectedClassId, selectedClass]);
 
   // Day Meal Schedule
   const mealSchedule = useMemo(() => {
@@ -432,7 +445,7 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
 
       await StorageService.saveBoardingReport(newReport, currentUser || undefined);
       setMealReport(newReport);
-      showToast(`Đã lưu và gửi báo ăn lớp ${selectedClass?.class_name} thành công! (${stats.totalMeals} suất ăn)`);
+      showToast(`Đã lưu và đồng bộ báo ăn lớp ${selectedClass?.class_name} ngày ${formatDateVN(selectedDate)} vào Sổ Chấm Cơm thành công! (${stats.totalMeals} suất ăn)`);
     } catch (e) {
       console.error(e);
       showToast('Lỗi khi lưu báo cáo ăn bán trú!', 'error');
@@ -1481,155 +1494,296 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
                 </div>
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs sm:text-sm border-collapse">
-                  <thead>
-                    <tr className="bg-slate-100/75 text-slate-700 font-extrabold uppercase tracking-wider text-[11px] border-b border-slate-200">
-                      <th className="py-3 px-3 w-12 text-center">STT</th>
-                      <th className="py-3 px-3 min-w-[160px]">Họ và tên học sinh</th>
-                      <th className="py-3 px-3 min-w-[120px] hidden md:table-cell">Thôn / Bản</th>
-                      <th className="py-3 px-2 w-16 text-center hidden sm:table-cell">Phái</th>
-                      <th className="py-3 px-2 w-24 text-center bg-blue-50/70 border-x border-slate-200">
-                        <div className="flex flex-col items-center">
-                          <span className="text-blue-800">Sáng</span>
-                          <span className="text-[9px] text-blue-600 font-normal">Ăn sáng</span>
-                        </div>
-                      </th>
-                      <th className="py-3 px-2 w-24 text-center bg-amber-50/70 border-r border-slate-200">
-                        <div className="flex flex-col items-center">
-                          <span className="text-amber-800">Trưa</span>
-                          <span className="text-[9px] text-amber-600 font-normal">Ăn trưa</span>
-                        </div>
-                      </th>
-                      <th className={`py-3 px-2 w-24 text-center border-r border-slate-200 ${
-                        mealSchedule.dinnerAllowed ? 'bg-purple-50/70 text-purple-800' : 'bg-slate-50 text-slate-400'
-                      }`}>
-                        <div className="flex flex-col items-center">
-                          <span>Tối</span>
-                          <span className="text-[9px] font-normal">
-                            {mealSchedule.dinnerAllowed ? 'Ăn tối' : 'T6 HS về'}
+              <div>
+                {/* 1. Mobile Phone Card View (Hiển thị tối ưu tuyệt đối cho màn hình điện thoại) */}
+                <div className="md:hidden divide-y divide-slate-100 p-2 sm:p-3 space-y-3">
+                  {mealRecords.map((st, idx) => (
+                    <div
+                      key={st.student_id}
+                      className={`p-3 rounded-2xl border transition-all ${
+                        st.is_absent
+                          ? 'bg-rose-50/60 border-rose-200'
+                          : 'bg-white border-slate-200 shadow-2xs'
+                      }`}
+                    >
+                      {/* Row 1: STT & Name & Info */}
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <div className="flex items-center gap-2">
+                          <span className="w-6 h-6 rounded-lg bg-slate-100 text-slate-600 font-extrabold text-xs flex items-center justify-center shrink-0">
+                            {idx + 1}
                           </span>
-                        </div>
-                      </th>
-                      <th className="py-3 px-2 w-24 text-center bg-rose-50/70 border-r border-slate-200">
-                        <div className="flex flex-col items-center">
-                          <span className="text-rose-800">Vắng</span>
-                          <span className="text-[9px] text-rose-600 font-normal">Nghỉ cả ngày</span>
-                        </div>
-                      </th>
-                      <th className="py-3 px-3 min-w-[150px]">Lý do / Ghi chú</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {mealRecords.map((st, idx) => (
-                      <tr
-                        key={st.student_id}
-                        className={`transition-colors hover:bg-slate-50 ${
-                          st.is_absent ? 'bg-rose-50/30 text-slate-400' : ''
-                        }`}
-                      >
-                        <td className="py-2.5 px-3 text-center text-slate-400 font-bold">{idx + 1}</td>
-                        <td className="py-2.5 px-3">
-                          <div className="font-extrabold text-slate-900">{st.student_name}</div>
-                          <div className="text-[10px] text-slate-400 md:hidden">
-                            {[st.gender, st.village].filter(Boolean).join(' • ')}
+                          <div>
+                            <div className="font-black text-slate-900 text-sm">
+                              {st.student_name}
+                            </div>
+                            <div className="text-[11px] text-slate-500">
+                              {[st.gender, st.village].filter(Boolean).join(' • ') || 'HS Bán trú'}
+                            </div>
                           </div>
-                        </td>
-                        <td className="py-2.5 px-3 text-slate-600 hidden md:table-cell">{st.village || '—'}</td>
-                        <td className="py-2.5 px-2 text-center text-slate-500 hidden sm:table-cell">{st.gender || '—'}</td>
+                        </div>
 
-                        {/* Breakfast Toggle */}
-                        <td className="py-2.5 px-2 text-center bg-blue-50/30 border-x border-slate-100">
-                          <button
-                            type="button"
-                            onClick={() => handleToggleMeal(st.student_id, 'breakfast')}
-                            className={`w-8 h-8 rounded-xl font-bold flex items-center justify-center mx-auto transition-all ${
-                              st.breakfast
-                                ? 'bg-blue-600 text-white shadow-xs scale-105'
-                                : 'bg-slate-100 text-slate-300 hover:bg-blue-100 hover:text-blue-600'
-                            }`}
-                            title={st.breakfast ? 'Có ăn sáng' : 'Không ăn sáng'}
-                          >
-                            <Check className={`w-4 h-4 ${st.breakfast ? 'stroke-[3]' : 'opacity-0'}`} />
-                          </button>
-                        </td>
+                        {st.is_absent ? (
+                          <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-300">
+                            Vắng cả ngày
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
+                            Có ăn cơm
+                          </span>
+                        )}
+                      </div>
 
-                        {/* Lunch Toggle */}
-                        <td className="py-2.5 px-2 text-center bg-amber-50/30 border-r border-slate-100">
-                          <button
-                            type="button"
-                            onClick={() => handleToggleMeal(st.student_id, 'lunch')}
-                            className={`w-8 h-8 rounded-xl font-bold flex items-center justify-center mx-auto transition-all ${
-                              st.lunch
-                                ? 'bg-amber-500 text-white shadow-xs scale-105'
-                                : 'bg-slate-100 text-slate-300 hover:bg-amber-100 hover:text-amber-600'
-                            }`}
-                            title={st.lunch ? 'Có ăn trưa' : 'Không ăn trưa'}
-                          >
-                            <Check className={`w-4 h-4 ${st.lunch ? 'stroke-[3]' : 'opacity-0'}`} />
-                          </button>
-                        </td>
+                      {/* Row 2: 4 Quick Toggle Buttons for Meals */}
+                      <div className="grid grid-cols-4 gap-1.5 mb-2">
+                        {/* Sáng */}
+                        <button
+                          type="button"
+                          onClick={() => handleToggleMeal(st.student_id, 'breakfast')}
+                          className={`py-2 px-1 rounded-xl text-xs font-black flex flex-col items-center justify-center gap-0.5 transition-all active:scale-95 ${
+                            st.breakfast
+                              ? 'bg-blue-600 text-white shadow-xs'
+                              : 'bg-slate-100 text-slate-400 hover:bg-blue-50'
+                          }`}
+                        >
+                          <div className="flex items-center gap-1">
+                            <Coffee className="w-3.5 h-3.5" />
+                            <span>Sáng</span>
+                          </div>
+                          <span className="text-[9px] font-medium opacity-90">
+                            {st.breakfast ? 'Có ăn' : 'Nghỉ'}
+                          </span>
+                        </button>
 
-                        {/* Dinner Toggle */}
-                        <td className={`py-2.5 px-2 text-center border-r border-slate-100 ${
-                          mealSchedule.dinnerAllowed ? 'bg-purple-50/30' : 'bg-slate-50/50'
+                        {/* Trưa */}
+                        <button
+                          type="button"
+                          onClick={() => handleToggleMeal(st.student_id, 'lunch')}
+                          className={`py-2 px-1 rounded-xl text-xs font-black flex flex-col items-center justify-center gap-0.5 transition-all active:scale-95 ${
+                            st.lunch
+                              ? 'bg-amber-500 text-white shadow-xs'
+                              : 'bg-slate-100 text-slate-400 hover:bg-amber-50'
+                          }`}
+                        >
+                          <div className="flex items-center gap-1">
+                            <Sun className="w-3.5 h-3.5" />
+                            <span>Trưa</span>
+                          </div>
+                          <span className="text-[9px] font-medium opacity-90">
+                            {st.lunch ? 'Có ăn' : 'Nghỉ'}
+                          </span>
+                        </button>
+
+                        {/* Tối */}
+                        <button
+                          type="button"
+                          onClick={() => handleToggleMeal(st.student_id, 'dinner')}
+                          disabled={!mealSchedule.dinnerAllowed}
+                          className={`py-2 px-1 rounded-xl text-xs font-black flex flex-col items-center justify-center gap-0.5 transition-all active:scale-95 ${
+                            !mealSchedule.dinnerAllowed
+                              ? 'bg-slate-100 text-slate-300 opacity-60 cursor-not-allowed'
+                              : st.dinner
+                              ? 'bg-purple-600 text-white shadow-xs'
+                              : 'bg-slate-100 text-slate-400 hover:bg-purple-50'
+                          }`}
+                        >
+                          <div className="flex items-center gap-1">
+                            <Moon className="w-3.5 h-3.5" />
+                            <span>Tối</span>
+                          </div>
+                          <span className="text-[9px] font-medium opacity-90">
+                            {!mealSchedule.dinnerAllowed ? 'T6 HS về' : st.dinner ? 'Có ăn' : 'Nghỉ'}
+                          </span>
+                        </button>
+
+                        {/* Vắng / Nghỉ cả ngày */}
+                        <button
+                          type="button"
+                          onClick={() => handleToggleAbsent(st.student_id)}
+                          className={`py-2 px-1 rounded-xl text-xs font-black flex flex-col items-center justify-center gap-0.5 transition-all active:scale-95 ${
+                            st.is_absent
+                              ? 'bg-rose-600 text-white shadow-xs'
+                              : 'bg-slate-100 text-slate-500 hover:bg-rose-50'
+                          }`}
+                        >
+                          <div className="flex items-center gap-1">
+                            <UserX className="w-3.5 h-3.5" />
+                            <span>Vắng</span>
+                          </div>
+                          <span className="text-[9px] font-medium opacity-90">
+                            {st.is_absent ? 'Nghỉ' : 'Có mặt'}
+                          </span>
+                        </button>
+                      </div>
+
+                      {/* Row 3: Reason / Note input */}
+                      <input
+                        type="text"
+                        value={st.is_absent ? (st.absent_reason || '') : (st.notes || '')}
+                        onChange={(e) =>
+                          handleUpdateStudentNote(
+                            st.student_id,
+                            st.is_absent ? 'absent_reason' : 'notes',
+                            e.target.value
+                          )
+                        }
+                        placeholder={st.is_absent ? 'Nhập lý do vắng...' : 'Ghi chú học sinh này (nếu có)...'}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      />
+                    </div>
+                  ))}
+                </div>
+
+                {/* 2. Desktop Table View */}
+                <div className="hidden md:block overflow-x-auto">
+                  <table className="w-full text-left text-xs sm:text-sm border-collapse">
+                    <thead>
+                      <tr className="bg-slate-100/75 text-slate-700 font-extrabold uppercase tracking-wider text-[11px] border-b border-slate-200">
+                        <th className="py-3 px-3 w-12 text-center">STT</th>
+                        <th className="py-3 px-3 min-w-[160px]">Họ và tên học sinh</th>
+                        <th className="py-3 px-3 min-w-[120px] hidden md:table-cell">Thôn / Bản</th>
+                        <th className="py-3 px-2 w-16 text-center hidden sm:table-cell">Phái</th>
+                        <th className="py-3 px-2 w-24 text-center bg-blue-50/70 border-x border-slate-200">
+                          <div className="flex flex-col items-center">
+                            <span className="text-blue-800">Sáng</span>
+                            <span className="text-[9px] text-blue-600 font-normal">Ăn sáng</span>
+                          </div>
+                        </th>
+                        <th className="py-3 px-2 w-24 text-center bg-amber-50/70 border-r border-slate-200">
+                          <div className="flex flex-col items-center">
+                            <span className="text-amber-800">Trưa</span>
+                            <span className="text-[9px] text-amber-600 font-normal">Ăn trưa</span>
+                          </div>
+                        </th>
+                        <th className={`py-3 px-2 w-24 text-center border-r border-slate-200 ${
+                          mealSchedule.dinnerAllowed ? 'bg-purple-50/70 text-purple-800' : 'bg-slate-50 text-slate-400'
                         }`}>
-                          <button
-                            type="button"
-                            onClick={() => handleToggleMeal(st.student_id, 'dinner')}
-                            className={`w-8 h-8 rounded-xl font-bold flex items-center justify-center mx-auto transition-all ${
-                              st.dinner
-                                ? 'bg-purple-600 text-white shadow-xs scale-105'
-                                : 'bg-slate-100 text-slate-300 hover:bg-purple-100 hover:text-purple-600'
-                            }`}
-                            title={
-                              !mealSchedule.dinnerAllowed
-                                ? 'Chiều thứ 6 học sinh về nhà (mặc định không ăn tối)'
-                                : st.dinner
-                                ? 'Có ăn tối'
-                                : 'Không ăn tối'
-                            }
-                          >
-                            <Check className={`w-4 h-4 ${st.dinner ? 'stroke-[3]' : 'opacity-0'}`} />
-                          </button>
-                        </td>
-
-                        {/* Absent Toggle */}
-                        <td className="py-2.5 px-2 text-center bg-rose-50/30 border-r border-slate-100">
-                          <button
-                            type="button"
-                            onClick={() => handleToggleAbsent(st.student_id)}
-                            className={`w-8 h-8 rounded-xl font-bold flex items-center justify-center mx-auto transition-all ${
-                              st.is_absent
-                                ? 'bg-rose-600 text-white shadow-xs scale-105'
-                                : 'bg-slate-100 text-slate-300 hover:bg-rose-100 hover:text-rose-600'
-                            }`}
-                            title={st.is_absent ? 'Học sinh báo vắng / nghỉ ăn' : 'Học sinh có mặt'}
-                          >
-                            <X className={`w-4 h-4 ${st.is_absent ? 'stroke-[3]' : 'opacity-0'}`} />
-                          </button>
-                        </td>
-
-                        {/* Note & Reason */}
-                        <td className="py-2.5 px-3">
-                          <input
-                            type="text"
-                            value={st.is_absent ? (st.absent_reason || '') : (st.notes || '')}
-                            onChange={(e) =>
-                              handleUpdateStudentNote(
-                                st.student_id,
-                                st.is_absent ? 'absent_reason' : 'notes',
-                                e.target.value
-                              )
-                            }
-                            placeholder={st.is_absent ? 'Nhập lý do vắng...' : 'Ghi chú thêm...'}
-                            className="w-full bg-slate-50 hover:bg-white focus:bg-white border border-transparent focus:border-blue-400 rounded-lg px-2 py-1 text-xs text-slate-700 focus:outline-none transition-all"
-                          />
-                        </td>
+                          <div className="flex flex-col items-center">
+                            <span>Tối</span>
+                            <span className="text-[9px] font-normal">
+                              {mealSchedule.dinnerAllowed ? 'Ăn tối' : 'T6 HS về'}
+                            </span>
+                          </div>
+                        </th>
+                        <th className="py-3 px-2 w-24 text-center bg-rose-50/70 border-r border-slate-200">
+                          <div className="flex flex-col items-center">
+                            <span className="text-rose-800">Vắng</span>
+                            <span className="text-[9px] text-rose-600 font-normal">Nghỉ cả ngày</span>
+                          </div>
+                        </th>
+                        <th className="py-3 px-3 min-w-[150px]">Lý do / Ghi chú</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {mealRecords.map((st, idx) => (
+                        <tr
+                          key={st.student_id}
+                          className={`transition-colors hover:bg-slate-50 ${
+                            st.is_absent ? 'bg-rose-50/30 text-slate-400' : ''
+                          }`}
+                        >
+                          <td className="py-2.5 px-3 text-center text-slate-400 font-bold">{idx + 1}</td>
+                          <td className="py-2.5 px-3">
+                            <div className="font-extrabold text-slate-900">{st.student_name}</div>
+                            <div className="text-[10px] text-slate-400 md:hidden">
+                              {[st.gender, st.village].filter(Boolean).join(' • ')}
+                            </div>
+                          </td>
+                          <td className="py-2.5 px-3 text-slate-600 hidden md:table-cell">{st.village || '—'}</td>
+                          <td className="py-2.5 px-2 text-center text-slate-500 hidden sm:table-cell">{st.gender || '—'}</td>
+
+                          {/* Breakfast Toggle */}
+                          <td className="py-2.5 px-2 text-center bg-blue-50/30 border-x border-slate-100">
+                            <button
+                              type="button"
+                              onClick={() => handleToggleMeal(st.student_id, 'breakfast')}
+                              className={`w-8 h-8 rounded-xl font-bold flex items-center justify-center mx-auto transition-all ${
+                                st.breakfast
+                                  ? 'bg-blue-600 text-white shadow-xs scale-105'
+                                  : 'bg-slate-100 text-slate-300 hover:bg-blue-100 hover:text-blue-600'
+                              }`}
+                              title={st.breakfast ? 'Có ăn sáng' : 'Không ăn sáng'}
+                            >
+                              <Check className={`w-4 h-4 ${st.breakfast ? 'stroke-[3]' : 'opacity-0'}`} />
+                            </button>
+                          </td>
+
+                          {/* Lunch Toggle */}
+                          <td className="py-2.5 px-2 text-center bg-amber-50/30 border-r border-slate-100">
+                            <button
+                              type="button"
+                              onClick={() => handleToggleMeal(st.student_id, 'lunch')}
+                              className={`w-8 h-8 rounded-xl font-bold flex items-center justify-center mx-auto transition-all ${
+                                st.lunch
+                                  ? 'bg-amber-500 text-white shadow-xs scale-105'
+                                  : 'bg-slate-100 text-slate-300 hover:bg-amber-100 hover:text-amber-600'
+                              }`}
+                              title={st.lunch ? 'Có ăn trưa' : 'Không ăn trưa'}
+                            >
+                              <Check className={`w-4 h-4 ${st.lunch ? 'stroke-[3]' : 'opacity-0'}`} />
+                            </button>
+                          </td>
+
+                          {/* Dinner Toggle */}
+                          <td className={`py-2.5 px-2 text-center border-r border-slate-100 ${
+                            mealSchedule.dinnerAllowed ? 'bg-purple-50/30' : 'bg-slate-50/50'
+                          }`}>
+                            <button
+                              type="button"
+                              onClick={() => handleToggleMeal(st.student_id, 'dinner')}
+                              className={`w-8 h-8 rounded-xl font-bold flex items-center justify-center mx-auto transition-all ${
+                                st.dinner
+                                  ? 'bg-purple-600 text-white shadow-xs scale-105'
+                                  : 'bg-slate-100 text-slate-300 hover:bg-purple-100 hover:text-purple-600'
+                              }`}
+                              title={
+                                !mealSchedule.dinnerAllowed
+                                  ? 'Chiều thứ 6 học sinh về nhà (mặc định không ăn tối)'
+                                  : st.dinner
+                                  ? 'Có ăn tối'
+                                  : 'Không ăn tối'
+                              }
+                            >
+                              <Check className={`w-4 h-4 ${st.dinner ? 'stroke-[3]' : 'opacity-0'}`} />
+                            </button>
+                          </td>
+
+                          {/* Absent Toggle */}
+                          <td className="py-2.5 px-2 text-center bg-rose-50/30 border-r border-slate-100">
+                            <button
+                              type="button"
+                              onClick={() => handleToggleAbsent(st.student_id)}
+                              className={`w-8 h-8 rounded-xl font-bold flex items-center justify-center mx-auto transition-all ${
+                                st.is_absent
+                                  ? 'bg-rose-600 text-white shadow-xs scale-105'
+                                  : 'bg-slate-100 text-slate-300 hover:bg-rose-100 hover:text-rose-600'
+                              }`}
+                              title={st.is_absent ? 'Học sinh báo vắng / nghỉ ăn' : 'Học sinh có mặt'}
+                            >
+                              <X className={`w-4 h-4 ${st.is_absent ? 'stroke-[3]' : 'opacity-0'}`} />
+                            </button>
+                          </td>
+
+                          {/* Note & Reason */}
+                          <td className="py-2.5 px-3">
+                            <input
+                              type="text"
+                              value={st.is_absent ? (st.absent_reason || '') : (st.notes || '')}
+                              onChange={(e) =>
+                                handleUpdateStudentNote(
+                                  st.student_id,
+                                  st.is_absent ? 'absent_reason' : 'notes',
+                                  e.target.value
+                                )
+                              }
+                              placeholder={st.is_absent ? 'Nhập lý do vắng...' : 'Ghi chú thêm...'}
+                              className="w-full bg-slate-50 hover:bg-white focus:bg-white border border-transparent focus:border-blue-400 rounded-lg px-2 py-1 text-xs text-slate-700 focus:outline-none transition-all"
+                            />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
 

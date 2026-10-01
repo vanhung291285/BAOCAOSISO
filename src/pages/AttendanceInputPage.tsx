@@ -3,9 +3,10 @@ import { useSchool } from '../contexts/SchoolContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useNotifications } from '../contexts/NotificationContext';
 import { StorageService } from '../services/storage';
-import { AbsentStudent, DailyReport, DailyReportValue, Student } from '../types';
+import { AbsentStudent, DailyReport, DailyReportValue, Student, BoardingDailyReport } from '../types';
 import { DateNavigator } from '../components/DateNavigator';
 import { getTodayDateStr, formatDateVN } from '../utils/schoolWeeks';
+import { buildDefaultMealRecords } from '../utils/boardingRules';
 import {
   CheckCircle2,
   RotateCcw,
@@ -39,6 +40,7 @@ import {
   School,
   Download,
   FileSpreadsheet,
+  ClipboardList,
 } from 'lucide-react';
 import { getIndicatorMeta } from '../utils/indicatorIcons';
 import { exportMonthlyBoardingExcel } from '../utils/exportBoardingExcel';
@@ -966,6 +968,59 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
         absentStudents
       );
 
+      // Tự động đồng bộ báo ăn sang Sổ chấm cơm bán trú (biểu xử lý) ngay lập tức
+      try {
+        const validClassIds = new Set([selectedClassId, selectedClass?.id, selectedClass?.class_name].filter(Boolean));
+        const classBoardingStudents = students.filter(
+          (s) => validClassIds.has(s.class_id) && s.isBoarding !== false
+        );
+
+        if (classBoardingStudents.length > 0) {
+          const absentMap = new Map<string, { reason?: string }>();
+          if (absentStudents) {
+            absentStudents.forEach((ab) => {
+              if (ab.id) absentMap.set(ab.id, { reason: ab.reason });
+              if (ab.full_name) absentMap.set(ab.full_name.trim().toLowerCase(), { reason: ab.reason });
+            });
+          }
+          const synthRecords = buildDefaultMealRecords(classBoardingStudents, selectedDate, selectedClassId, absentMap);
+          let bCount = 0;
+          let lCount = 0;
+          let dCount = 0;
+          let abCount = 0;
+          synthRecords.forEach((r) => {
+            if (r.breakfast) bCount++;
+            if (r.lunch) lCount++;
+            if (r.dinner) dCount++;
+            if (r.is_absent) abCount++;
+          });
+
+          const synthReport: BoardingDailyReport = {
+            id: `boarding_rep_${selectedClassId}_${selectedDate}`,
+            class_id: selectedClassId,
+            date: selectedDate,
+            status: 'SUBMITTED',
+            total_boarding_students: classBoardingStudents.length,
+            breakfast_count: bCount,
+            lunch_count: lCount,
+            dinner_count: dCount,
+            absent_count: abCount,
+            total_meals: bCount + lCount + dCount,
+            notes: notes || 'Tự động đồng bộ từ Báo cáo sĩ số ngày',
+            records: synthRecords,
+            submitted_by: currentUser.id,
+            submitted_by_name: currentUser.full_name || 'GVCN',
+            submitted_at: new Date().toISOString(),
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          };
+
+          await StorageService.saveBoardingReport(synthReport, currentUser);
+        }
+      } catch (syncErr) {
+        console.warn('Auto sync boarding report error:', syncErr);
+      }
+
       setToastMessage({
         text: existingReport ? 'Đã cập nhật báo cáo thành công!' : 'Đã gửi báo cáo thành công!',
         type: 'success',
@@ -1162,7 +1217,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                 setTimeout(() => setIsPlayingSoundTest(false), 1200);
               }}
               title="Bấm để thử âm thanh chuông báo và rung điện thoại"
-              className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all border shadow-2xs active:scale-95 cursor-pointer ${
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all border shadow-2xs active:scale-95 cursor-pointer ${
                 isPlayingSoundTest
                   ? 'bg-emerald-100 text-emerald-900 border-emerald-300 ring-2 ring-emerald-400'
                   : isAudioBlocked
@@ -1170,7 +1225,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                   : 'bg-slate-50 text-slate-700 hover:bg-slate-100 border-slate-300'
               }`}
             >
-              <Volume2 className="w-4 h-4 text-blue-600" />
+              <Volume2 className="w-3.5 h-3.5 text-blue-600" />
               <span>
                 {isPlayingSoundTest
                   ? 'Đang reo...'
@@ -1183,11 +1238,23 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
             {onNavigate && (
               <button
                 type="button"
+                onClick={() => onNavigate('/boarding')}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-amber-950 bg-amber-400 hover:bg-amber-300 border border-amber-500/50 shadow-2xs transition-all active:scale-95 cursor-pointer"
+                title="Mở phần chấm báo ăn bán trú hằng ngày của lớp"
+              >
+                <Utensils className="w-3.5 h-3.5 text-amber-950" />
+                <span>Báo ăn lớp</span>
+              </button>
+            )}
+
+            {onNavigate && (
+              <button
+                type="button"
                 onClick={() => onNavigate('/reports/boarding-monthly')}
-                className="hidden md:inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-300 transition-colors cursor-pointer"
+                className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-emerald-900 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 transition-colors cursor-pointer"
                 title="Mở toàn bộ Sổ chấm cơm bán trú theo tháng của lớp"
               >
-                <Utensils className="w-3.5 h-3.5 text-amber-600" />
+                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
                 <span>Sổ chấm cơm</span>
               </button>
             )}
@@ -1196,13 +1263,30 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
               <button
                 type="button"
                 onClick={() => onNavigate('/dashboard')}
-                className="hidden sm:inline-flex items-center gap-1 px-3 py-2 rounded-xl text-xs font-bold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors border border-slate-200"
+                className="hidden md:inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors border border-slate-200"
               >
                 <ArrowLeft className="w-3.5 h-3.5" />
                 Tổng quan
               </button>
             )}
           </div>
+        </div>
+
+        {/* Quick Switcher between Báo cáo Sĩ số & Báo ăn của lớp (Tối ưu tuyệt đối cho điện thoại) */}
+        <div className="mt-3.5 pt-3 border-t border-slate-100 flex items-center gap-2">
+          <div className="flex-1 py-2 px-3 rounded-xl bg-blue-600 text-white font-black text-xs sm:text-sm text-center shadow-xs flex items-center justify-center gap-1.5">
+            <ClipboardList className="w-4 h-4" />
+            <span>1. Điểm danh sĩ số</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => onNavigate && onNavigate('/boarding')}
+            className="flex-1 py-2 px-3 rounded-xl bg-amber-50 text-amber-900 border border-amber-300 hover:bg-amber-100 font-bold text-xs sm:text-sm text-center transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs active:scale-95"
+            title="Mở giao diện Chấm báo ăn bán trú hằng ngày của lớp"
+          >
+            <Utensils className="w-4 h-4 text-amber-600" />
+            <span>2. Báo ăn của lớp (Bán trú)</span>
+          </button>
         </div>
 
         {/* Date & Class Controls */}
@@ -1539,84 +1623,95 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
         })}
       </div>
 
-      {/* Đối chiếu phân loại Sĩ số: Báo ăn (Bán trú) & Không ăn (Ngoại trú) chuẩn theo mẫu báo cáo */}
+      {/* PHẦN BÁO ĂN BÁN TRÚ CỦA LỚP & ĐỐI CHIẾU PHÂN LOẠI SĨ SỐ (Luôn hiển thị đầy đủ trên điện thoại và máy tính) */}
       {(() => {
         const primaryInd = enabledIndicators[0];
         const boardingInd = enabledIndicators.find(
           (i) => i.code === 'BOARDING_HALF' || i.id === 'ig_boarding_half' || i.name.toLowerCase().includes('bán trú')
         );
-        const hasExplicitNgoaiTru = enabledIndicators.some(
-          (i) => i.name.toLowerCase().includes('ngoại trú') || i.name.toLowerCase().includes('không ăn')
-        );
 
-        if (!primaryInd || !boardingInd || hasExplicitNgoaiTru) return null;
+        const pTotal = primaryInd ? Number(formValues[primaryInd.id]?.total) || classStudents.length : classStudents.length;
+        const pAbsent = primaryInd ? Number(formValues[primaryInd.id]?.absent) || absentStudents.length : absentStudents.length;
+        
+        const rosterBoardingCount = classStudents.filter((s) => s.isBoarding !== false).length;
+        const rosterAbsentBoarding = absentStudents.filter((s) => s.isBoarding).length;
 
-        const pTotal = Number(formValues[primaryInd.id]?.total) || 0;
-        const pAbsent = Number(formValues[primaryInd.id]?.absent) || 0;
-        const bTotal = Number(formValues[boardingInd.id]?.total) || 0;
-        const bAbsent = Number(formValues[boardingInd.id]?.absent) || 0;
+        const bTotal = boardingInd ? (Number(formValues[boardingInd.id]?.total) || rosterBoardingCount) : rosterBoardingCount;
+        const bAbsent = boardingInd ? (Number(formValues[boardingInd.id]?.absent) || rosterAbsentBoarding) : rosterAbsentBoarding;
 
         const baoAn = Math.max(0, bTotal - bAbsent);
         const ngoaiTruTotal = Math.max(0, pTotal - bTotal);
         const ngoaiTruAbsent = Math.max(0, pAbsent - bAbsent);
         const ngoaiTruPresent = Math.max(0, ngoaiTruTotal - ngoaiTruAbsent);
 
-        if (pTotal === 0 && bTotal === 0) return null;
-
         return (
           <div className="bg-white rounded-2xl border-2 border-slate-200 shadow-sm p-4 sm:p-5 mb-5 overflow-hidden">
-            <div className="flex items-center justify-between pb-3 mb-3.5 border-b border-slate-100">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 mb-3.5 border-b border-slate-100 gap-2">
               <span className="text-xs font-black text-slate-900 uppercase tracking-tight flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-blue-600" />
-                ĐỐI CHIẾU PHÂN LOẠI THEO MẪU BÁO CÁO BGH & NHÀ BẾP
+                <Utensils className="w-4 h-4 text-emerald-600" />
+                PHẦN BÁO ĂN CỦA LỚP & ĐỐI CHIẾU SĨ SỐ NHÀ BẾP
               </span>
-              <span className="text-[11px] font-bold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-200">
-                Tự động cân đối số liệu
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-bold text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
+                  Lớp {selectedClass?.class_name} • {formatDateVN(selectedDate)}
+                </span>
+                {onNavigate && (
+                  <button
+                    type="button"
+                    onClick={() => onNavigate('/boarding')}
+                    className="text-[11px] font-black text-amber-950 bg-amber-400 hover:bg-amber-300 px-3 py-1 rounded-xl shadow-2xs transition-all active:scale-95 flex items-center gap-1 cursor-pointer"
+                  >
+                    <Utensils className="w-3 h-3 text-slate-900" />
+                    <span>Chấm báo ăn ngày</span>
+                  </button>
+                )}
+              </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
               {/* CỘT 1: Học sinh bán trú (Báo ăn) - MÀU XANH EMERALD ĐẶC TRƯNG */}
-              <div className="bg-gradient-to-br from-emerald-50/80 to-teal-50/40 p-4 rounded-xl border-2 border-emerald-300 shadow-2xs flex items-center justify-between">
+              <div className="bg-gradient-to-br from-emerald-50/90 to-teal-50/50 p-4 rounded-xl border-2 border-emerald-300 shadow-2xs flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-600 to-teal-700 text-white flex items-center justify-center font-bold shadow-xs">
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-600 to-teal-700 text-white flex items-center justify-center font-bold shadow-xs shrink-0">
                     <Utensils className="w-5 h-5" />
                   </div>
                   <div>
-                    <div className="text-xs font-black text-emerald-950 uppercase">
-                      Học sinh Bán trú
+                    <div className="text-xs font-black text-emerald-950 uppercase flex items-center gap-1.5">
+                      <span>Học sinh Bán trú</span>
+                      <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-emerald-200 text-emerald-900">Báo ăn</span>
                     </div>
                     <div className="text-[11px] font-semibold text-emerald-800 mt-0.5">
-                      Tổng: {bTotal} • Có mặt: {baoAn} • Vắng: {bAbsent}
+                      Tổng: <strong>{bTotal}</strong> • Ăn cơm: <strong className="text-emerald-950 font-black">{baoAn}</strong> • Nghỉ: <strong>{bAbsent}</strong>
                     </div>
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="text-xl font-black text-emerald-700">{baoAn} suất</div>
-                  <div className="text-[10px] font-extrabold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded border border-emerald-300 inline-block mt-0.5">
+                  <div className="text-xl sm:text-2xl font-black text-emerald-700">{baoAn} suất</div>
+                  <div className="text-[10px] font-extrabold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded border border-emerald-300 inline-block mt-0.5 whitespace-nowrap">
                     BÁO ĂN NHÀ BẾP
                   </div>
                 </div>
               </div>
 
               {/* CỘT 2: Học sinh ngoại trú (Không ăn) - MÀU VÀNG CAM AMBER ĐẶC TRƯNG */}
-              <div className="bg-gradient-to-br from-amber-50/80 to-orange-50/40 p-4 rounded-xl border-2 border-amber-300 shadow-2xs flex items-center justify-between">
+              <div className="bg-gradient-to-br from-amber-50/90 to-orange-50/50 p-4 rounded-xl border-2 border-amber-300 shadow-2xs flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 text-white flex items-center justify-center font-bold shadow-xs">
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 text-white flex items-center justify-center font-bold shadow-xs shrink-0">
                     <Home className="w-5 h-5" />
                   </div>
                   <div>
-                    <div className="text-xs font-black text-amber-950 uppercase">
-                      Học sinh Ngoại trú
+                    <div className="text-xs font-black text-amber-950 uppercase flex items-center gap-1.5">
+                      <span>Học sinh Ngoại trú</span>
+                      <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-amber-200 text-amber-900">Về nhà</span>
                     </div>
                     <div className="text-[11px] font-semibold text-amber-800 mt-0.5">
-                      Tổng: {ngoaiTruTotal} • Có mặt: {ngoaiTruPresent} • Vắng: {ngoaiTruAbsent}
+                      Tổng: <strong>{ngoaiTruTotal}</strong> • Có mặt: <strong>{ngoaiTruPresent}</strong> • Vắng: <strong>{ngoaiTruAbsent}</strong>
                     </div>
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="text-xl font-black text-amber-800">{ngoaiTruTotal} em</div>
-                  <div className="text-[10px] font-extrabold text-amber-800 bg-amber-100 px-2 py-0.5 rounded border border-amber-300 inline-block mt-0.5">
+                  <div className="text-xl sm:text-2xl font-black text-amber-800">{ngoaiTruTotal} em</div>
+                  <div className="text-[10px] font-extrabold text-amber-800 bg-amber-100 px-2 py-0.5 rounded border border-amber-300 inline-block mt-0.5 whitespace-nowrap">
                     KHÔNG ĂN TẠI TRƯỜNG
                   </div>
                 </div>
@@ -1624,12 +1719,22 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
             </div>
 
             {/* Thanh công cụ Xuất Excel Báo ăn bán trú trong tháng dành cho GVCN */}
-            <div className="mt-3.5 pt-3 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-slate-50/70 p-3 rounded-xl border border-slate-200/80">
+            <div className="mt-3.5 pt-3 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-slate-50/90 p-3 rounded-xl border border-slate-200/80">
               <div className="text-xs text-slate-700 font-semibold flex items-center gap-2">
                 <FileSpreadsheet className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span>Biểu tổng hợp các ngày ăn trong tháng của học sinh bán trú (Sổ chấm cơm theo định mức S - T - T)</span>
+                <span>Biểu tổng hợp các ngày ăn trong tháng (Sổ chấm cơm theo định mức S - T - T)</span>
               </div>
               <div className="flex flex-wrap items-center gap-2">
+                {onNavigate && (
+                  <button
+                    type="button"
+                    onClick={() => onNavigate('/boarding')}
+                    className="px-3.5 py-1.5 rounded-xl text-xs font-black text-amber-950 bg-amber-400 hover:bg-amber-300 shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer"
+                  >
+                    <Utensils className="w-3.5 h-3.5 text-slate-900" />
+                    <span>Chấm báo ăn ngày</span>
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => handleExportBoardingMonthlyFromAttendance()}
@@ -1638,7 +1743,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                   title="Tải về file Excel biểu tổng hợp các ngày ăn bán trú trong tháng của học sinh theo mẫu quy định"
                 >
                   <Download className="w-3.5 h-3.5" />
-                  <span>{isExportingBoarding ? 'Đang xuất Excel...' : `Xuất Excel Sổ Chấm Cơm Tháng ${Number(selectedDate.substring(5, 7))}`}</span>
+                  <span>{isExportingBoarding ? 'Đang xuất Excel...' : `Xuất Excel Sổ Cơm Tháng ${Number(selectedDate.substring(5, 7))}`}</span>
                 </button>
                 {onNavigate && (
                   <button
@@ -1647,7 +1752,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                     className="px-3 py-1.5 rounded-xl text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 transition-colors flex items-center gap-1 cursor-pointer"
                     title="Xem biểu mẫu trực quan và điều chỉnh bữa ăn bán trú"
                   >
-                    <Utensils className="w-3.5 h-3.5 text-blue-600" />
+                    <FileSpreadsheet className="w-3.5 h-3.5 text-blue-600" />
                     <span>Xem Sổ chấm cơm</span>
                   </button>
                 )}

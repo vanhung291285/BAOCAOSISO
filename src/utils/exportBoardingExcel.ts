@@ -1,17 +1,20 @@
 import ExcelJS from 'exceljs';
 import { StorageService } from '../services/storage';
 import { Student, BoardingDailyReport } from '../types';
-import { getMealScheduleForDate } from './boardingRules';
+import { getMealScheduleForDate, buildDefaultMealRecords } from './boardingRules';
+import { getTodayDateStr } from './schoolWeeks';
 
 export interface ExportBoardingExcelParams {
   classId: string;
   className: string;
   campusName?: string;
   schoolName?: string;
+  locationName?: string; // Địa danh ký (e.g. 'Xa Dung')
   monthStr: string; // 'YYYY-MM'
   students: Student[];
   teacherName?: string;
   principalName?: string;
+  signingDate?: string; // Ngày ký tự động / tùy chỉnh
   existingMatrix?: Record<string, Record<string, { breakfast: boolean; lunch: boolean; dinner: boolean }>>;
   standardBreakfastDays?: number;
   standardLunchDays?: number;
@@ -273,6 +276,7 @@ function buildBoardingWorksheet(
   }
 
   // Data rows (Students)
+  const todayStr = getTodayDateStr();
   let currentExcelRow = 10;
 
   boardingStudents.forEach((st, idx) => {
@@ -284,10 +288,11 @@ function buildBoardingWorksheet(
 
     // Populate day cells for this sheet
     sheetDays.forEach((day, dIdx) => {
+      const isFuture = day.dateStr > todayStr;
       const dRec = stDays[day.dateStr];
-      const hasB = Boolean(dRec?.breakfast);
-      const hasL = Boolean(dRec?.lunch);
-      const hasD = Boolean(dRec?.dinner);
+      const hasB = !isFuture && Boolean(dRec?.breakfast);
+      const hasL = !isFuture && Boolean(dRec?.lunch);
+      const hasD = !isFuture && Boolean(dRec?.dinner);
 
       const colStart = 3 + dIdx * 3;
       rowObj.getCell(colStart).value = hasB ? '+' : '';
@@ -302,6 +307,7 @@ function buildBoardingWorksheet(
       let eatenD = 0;
 
       monthDays.forEach((day) => {
+        if (day.dateStr > todayStr) return; // Không tính ngày tương lai
         const dRec = stDays[day.dateStr];
         if (dRec?.breakfast) eatenB++;
         if (dRec?.lunch) eatenL++;
@@ -389,63 +395,45 @@ function buildBoardingWorksheet(
   // Signatures block
   currentExcelRow += 2;
 
-  // Date line
   const leftColLetterStart = 'B';
   const leftColLetterEnd = getColLetter(Math.min(7, totalColsCount - 1));
   const rightColLetterStart = getColLetter(Math.max(8, totalColsCount - 7));
   const rightColLetterEnd = getColLetter(totalColsCount - 1);
 
-  // Date on the right
-  ws.mergeCells(`${rightColLetterStart}${currentExcelRow}:${rightColLetterEnd}${currentExcelRow}`);
-  const dateCell = ws.getCell(`${rightColLetterStart}${currentExcelRow}`);
-  dateCell.value = signDateText;
-  dateCell.font = { name: 'Times New Roman', size: 10.5, italic: true };
-  dateCell.alignment = { horizontal: 'center', vertical: 'middle' };
+  if (includeMonthSummary) {
+    // TRANG 2 (NGÀY 16 ĐẾN CUỐI THÁNG) & CẢ THÁNG (TOÀN BỘ THÁNG):
+    // CHỈ LẤY CHỮ KÝ CỦA GVCN, BỎ CHỮ KÝ HIỆU TRƯỞNG!
+    ws.mergeCells(`${rightColLetterStart}${currentExcelRow}:${rightColLetterEnd}${currentExcelRow}`);
+    const dateCell = ws.getCell(`${rightColLetterStart}${currentExcelRow}`);
+    dateCell.value = signDateText;
+    dateCell.font = { name: 'Times New Roman', size: 10.5, italic: true };
+    dateCell.alignment = { horizontal: 'center', vertical: 'middle' };
 
-  currentExcelRow++;
-  // Titles: GIÁO VIÊN CHỦ NHIỆM & HIỆU TRƯỞNG
-  ws.mergeCells(`${leftColLetterStart}${currentExcelRow}:${leftColLetterEnd}${currentExcelRow}`);
-  ws.mergeCells(`${rightColLetterStart}${currentExcelRow}:${rightColLetterEnd}${currentExcelRow}`);
+    currentExcelRow++;
+    ws.mergeCells(`${rightColLetterStart}${currentExcelRow}:${rightColLetterEnd}${currentExcelRow}`);
+    const gvcnTitle = ws.getCell(`${rightColLetterStart}${currentExcelRow}`);
+    gvcnTitle.value = 'GIÁO VIÊN CHỦ NHIỆM';
+    gvcnTitle.font = { name: 'Times New Roman', size: 11, bold: true };
+    gvcnTitle.alignment = { horizontal: 'center', vertical: 'middle' };
 
-  const gvcnTitle = ws.getCell(`${leftColLetterStart}${currentExcelRow}`);
-  gvcnTitle.value = 'GIÁO VIÊN CHỦ NHIỆM';
-  gvcnTitle.font = { name: 'Times New Roman', size: 11, bold: true };
-  gvcnTitle.alignment = { horizontal: 'center', vertical: 'middle' };
+    currentExcelRow++;
+    ws.mergeCells(`${rightColLetterStart}${currentExcelRow}:${rightColLetterEnd}${currentExcelRow}`);
+    const gvcnSub = ws.getCell(`${rightColLetterStart}${currentExcelRow}`);
+    gvcnSub.value = '(Ký và ghi rõ họ tên)';
+    gvcnSub.font = { name: 'Times New Roman', size: 9.5, italic: true };
+    gvcnSub.alignment = { horizontal: 'center', vertical: 'middle' };
 
-  const bghTitle = ws.getCell(`${rightColLetterStart}${currentExcelRow}`);
-  bghTitle.value = includeMonthSummary ? 'HIỆU TRƯỞNG' : 'BAN GIÁM HIỆU';
-  bghTitle.font = { name: 'Times New Roman', size: 11, bold: true };
-  bghTitle.alignment = { horizontal: 'center', vertical: 'middle' };
-
-  currentExcelRow++;
-  // Sub-titles: (Ký và ghi rõ họ tên), (Ký, đóng dấu)
-  ws.mergeCells(`${leftColLetterStart}${currentExcelRow}:${leftColLetterEnd}${currentExcelRow}`);
-  ws.mergeCells(`${rightColLetterStart}${currentExcelRow}:${rightColLetterEnd}${currentExcelRow}`);
-
-  const gvcnSub = ws.getCell(`${leftColLetterStart}${currentExcelRow}`);
-  gvcnSub.value = '(Ký và ghi rõ họ tên)';
-  gvcnSub.font = { name: 'Times New Roman', size: 9.5, italic: true };
-  gvcnSub.alignment = { horizontal: 'center', vertical: 'middle' };
-
-  const bghSub = ws.getCell(`${rightColLetterStart}${currentExcelRow}`);
-  bghSub.value = includeMonthSummary ? '(Ký, đóng dấu)' : '(Ký duyệt)';
-  bghSub.font = { name: 'Times New Roman', size: 9.5, italic: true };
-  bghSub.alignment = { horizontal: 'center', vertical: 'middle' };
-
-  // Space for physical signature
-  currentExcelRow += 4;
-  ws.mergeCells(`${leftColLetterStart}${currentExcelRow}:${leftColLetterEnd}${currentExcelRow}`);
-  ws.mergeCells(`${rightColLetterStart}${currentExcelRow}:${rightColLetterEnd}${currentExcelRow}`);
-
-  const gvcnName = ws.getCell(`${leftColLetterStart}${currentExcelRow}`);
-  gvcnName.value = teacherName;
-  gvcnName.font = { name: 'Times New Roman', size: 11, bold: true };
-  gvcnName.alignment = { horizontal: 'center', vertical: 'middle' };
-
-  const bghName = ws.getCell(`${rightColLetterStart}${currentExcelRow}`);
-  bghName.value = principalName;
-  bghName.font = { name: 'Times New Roman', size: 11, bold: true };
-  bghName.alignment = { horizontal: 'center', vertical: 'middle' };
+    // Space for physical signature
+    currentExcelRow += 4;
+    ws.mergeCells(`${rightColLetterStart}${currentExcelRow}:${rightColLetterEnd}${currentExcelRow}`);
+    const gvcnName = ws.getCell(`${rightColLetterStart}${currentExcelRow}`);
+    gvcnName.value = teacherName;
+    gvcnName.font = { name: 'Times New Roman', size: 11, bold: true };
+    gvcnName.alignment = { horizontal: 'center', vertical: 'middle' };
+  } else {
+    // TRANG 1 (NỬA ĐẦU THÁNG: NGÀY 01 ĐẾN 15):
+    // BỎ CHỮ KÝ CỦA CẢ GVCN VÀ HIỆU TRƯỞNG (KHÔNG XUẤT KHỐI CHỮ KÝ)
+  }
 }
 
 /**
@@ -567,34 +555,140 @@ export async function exportMonthlyBoardingExcel(params: ExportBoardingExcelPara
   }
 
   // Chuẩn bị ma trận ăn: studentId -> { dateStr: { breakfast, lunch, dinner } }
-  let matrix = existingMatrix;
-  if (!matrix) {
-    matrix = {};
+  const todayStr = getTodayDateStr();
+  let matrix: Record<string, Record<string, { breakfast: boolean; lunch: boolean; dinner: boolean }>> = {};
+
+  if (existingMatrix) {
+    // Làm sạch existingMatrix: Đảm bảo các ngày tương lai và ngày chưa chấm luôn để trống 100%
+    boardingStudents.forEach((st) => {
+      matrix[st.id] = {};
+      monthDays.forEach((day) => {
+        if (day.dateStr > todayStr) {
+          matrix[st.id][day.dateStr] = { breakfast: false, lunch: false, dinner: false };
+        } else {
+          const rec = existingMatrix[st.id]?.[day.dateStr];
+          matrix[st.id][day.dateStr] = {
+            breakfast: Boolean(rec?.breakfast),
+            lunch: Boolean(rec?.lunch),
+            dinner: Boolean(rec?.dinner),
+          };
+        }
+      });
+    });
+  } else {
     const reports: BoardingDailyReport[] = await StorageService.getBoardingReportsByClassAndMonth(classId, monthStr);
     const reportMap = new Map<string, BoardingDailyReport>();
-    reports.forEach((r) => reportMap.set(r.date, r));
+    reports.forEach((r) => {
+      if (!r) return;
+      const cleanDate = String(r.date).split('T')[0].trim();
+      if (cleanDate <= todayStr) {
+        let recs = r.records;
+        if (typeof recs === 'string') {
+          try { recs = JSON.parse(recs); } catch { recs = []; }
+        }
+        if (!Array.isArray(recs) || recs.length === 0) {
+          recs = buildDefaultMealRecords(boardingStudents, cleanDate, classId);
+        }
+        reportMap.set(cleanDate, {
+          ...r,
+          date: cleanDate,
+          records: recs,
+        });
+      }
+    });
+
+    // Fallback: Đồng bộ từ daily_reports nếu chưa có boarding_reports
+    try {
+      const dailyReports = await StorageService.getDailyReportsByMonth(classId, monthStr);
+      dailyReports.forEach((dr) => {
+        const cleanDate = String(dr.report_date).split('T')[0].trim();
+        if (cleanDate <= todayStr && !reportMap.has(cleanDate)) {
+          const absentMap = new Map<string, { reason?: string }>();
+          if (dr.absent_students) {
+            dr.absent_students.forEach((ab) => {
+              if (ab.id) absentMap.set(ab.id, { reason: ab.reason });
+              if (ab.full_name) absentMap.set(ab.full_name.trim().toLowerCase(), { reason: ab.reason });
+            });
+          }
+          const synthRecords = buildDefaultMealRecords(boardingStudents, cleanDate, classId, absentMap);
+          let bCount = 0, lCount = 0, dCount = 0, abCount = 0;
+          synthRecords.forEach((r) => {
+            if (r.breakfast) bCount++;
+            if (r.lunch) lCount++;
+            if (r.dinner) dCount++;
+            if (r.is_absent) abCount++;
+          });
+          reportMap.set(cleanDate, {
+            id: `boarding_rep_${classId}_${cleanDate}`,
+            class_id: classId,
+            date: cleanDate,
+            status: 'SUBMITTED',
+            total_boarding_students: boardingStudents.length,
+            breakfast_count: bCount,
+            lunch_count: lCount,
+            dinner_count: dCount,
+            absent_count: abCount,
+            total_meals: bCount + lCount + dCount,
+            records: synthRecords,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          });
+        }
+      });
+    } catch (err) {
+      console.warn('Excel export daily report sync fallback warning:', err);
+    }
 
     boardingStudents.forEach((st) => {
-      matrix![st.id] = {};
+      matrix[st.id] = {};
+      const normName = st.full_name.trim().toLowerCase();
+
       monthDays.forEach((day) => {
+        // Không chấm trước các ngày của tháng: Các ngày sau hôm nay (tương lai) mặc định để trống
+        if (day.dateStr > todayStr) {
+          matrix[st.id][day.dateStr] = {
+            breakfast: false,
+            lunch: false,
+            dinner: false,
+          };
+          return;
+        }
+
         const rep = reportMap.get(day.dateStr);
-        if (rep && rep.records) {
-          const stRec = rep.records.find((r) => r.student_id === st.id);
+        if (rep) {
+          let recs = rep.records;
+          if (typeof recs === 'string') {
+            try { recs = JSON.parse(recs); } catch { recs = []; }
+          }
+          const stRec = Array.isArray(recs)
+            ? recs.find((r) => r.student_id === st.id || (r.student_name && r.student_name.trim().toLowerCase() === normName))
+            : undefined;
+
           if (stRec) {
-            matrix![st.id][day.dateStr] = {
-              breakfast: Boolean(stRec.breakfast),
-              lunch: Boolean(stRec.lunch),
-              dinner: Boolean(stRec.dinner),
+            if (!stRec.is_absent) {
+              matrix[st.id][day.dateStr] = {
+                breakfast: Boolean(stRec.breakfast),
+                lunch: Boolean(stRec.lunch),
+                dinner: Boolean(stRec.dinner),
+              };
+              return;
+            }
+          } else {
+            // Ngày này lớp có báo ăn, học sinh không vắng -> tính ăn theo ngày
+            matrix[st.id][day.dateStr] = {
+              breakfast: Boolean(day.allowedMeals.breakfast),
+              lunch: Boolean(day.allowedMeals.lunch),
+              dinner: Boolean(day.allowedMeals.dinner),
             };
             return;
           }
         }
 
-        // Mặc định theo quy tắc ngày trong tuần
-        matrix![st.id][day.dateStr] = {
-          breakfast: day.allowedMeals.breakfast,
-          lunch: day.allowedMeals.lunch,
-          dinner: day.allowedMeals.dinner,
+        // Mặc định để trống hoàn toàn khi chưa chấm / chưa báo ăn (KHÔNG điền trước dấu +)
+        matrix[st.id][day.dateStr] = {
+          breakfast: false,
+          lunch: false,
+          dinner: false,
         };
       });
     });
@@ -634,9 +728,10 @@ export async function exportMonthlyBoardingExcel(params: ExportBoardingExcelPara
     principalName,
   };
 
+  const loc = params.locationName?.trim() || 'Xa Dung';
   const midDay = 15;
 
-  // 1. TẠO TRANG 1: NỬA ĐẦU THÁNG (NGÀY 01 ĐẾN 15)
+  // 1. TẠO TRANG 1: NỬA ĐẦU THÁNG (NGÀY 01 ĐẾN 15) - Bỏ chữ ký của cả GVCN và Hiệu trưởng
   buildBoardingWorksheet(
     wb,
     {
@@ -645,12 +740,12 @@ export async function exportMonthlyBoardingExcel(params: ExportBoardingExcelPara
       startDay: 1,
       endDay: midDay,
       includeMonthSummary: false,
-      signDateText: `Xa Dung, ngày ${midDay} tháng ${String(monthNum).padStart(2, '0')} năm ${yearNum}`,
+      signDateText: `${loc}, ngày ${midDay} tháng ${String(monthNum).padStart(2, '0')} năm ${yearNum}`,
     },
     context
   );
 
-  // 2. TẠO TRANG 2: NỬA CUỐI THÁNG (NGÀY 16 ĐẾN CUỐI THÁNG & TỔNG HỢP CẢ THÁNG)
+  // 2. TẠO TRANG 2: NỬA CUỐI THÁNG (NGÀY 16 ĐẾN CUỐI THÁNG & TỔNG HỢP CẢ THÁNG) - Chỉ lấy chữ ký của GVCN, bỏ chữ ký Hiệu trưởng
   buildBoardingWorksheet(
     wb,
     {
@@ -659,12 +754,12 @@ export async function exportMonthlyBoardingExcel(params: ExportBoardingExcelPara
       startDay: midDay + 1,
       endDay: daysInMonth,
       includeMonthSummary: true,
-      signDateText: `Xa Dung, ngày ${daysInMonth} tháng ${String(monthNum).padStart(2, '0')} năm ${yearNum}`,
+      signDateText: params.signingDate || `${loc}, ngày ${daysInMonth} tháng ${String(monthNum).padStart(2, '0')} năm ${yearNum}`,
     },
     context
   );
 
-  // 3. TẠO SHEET 3: TOÀN BỘ THÁNG (Cho người dùng cần xem liền mạch trên máy tính)
+  // 3. TẠO SHEET 3: TOÀN BỘ THÁNG (Cho người dùng cần xem liền mạch trên máy tính) - Chỉ lấy chữ ký của GVCN, bỏ chữ ký Hiệu trưởng
   buildBoardingWorksheet(
     wb,
     {
@@ -673,7 +768,7 @@ export async function exportMonthlyBoardingExcel(params: ExportBoardingExcelPara
       startDay: 1,
       endDay: daysInMonth,
       includeMonthSummary: true,
-      signDateText: `Xa Dung, ngày ${daysInMonth} tháng ${String(monthNum).padStart(2, '0')} năm ${yearNum}`,
+      signDateText: params.signingDate || `${loc}, ngày ${daysInMonth} tháng ${String(monthNum).padStart(2, '0')} năm ${yearNum}`,
     },
     context
   );
