@@ -203,17 +203,22 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
       loadMonthlyData(true);
     }
 
+    let debounceTimer: any = null;
     const unsub = subscribeRealtime((event) => {
       if (event.table === 'daily_reports' || event.table === 'daily_report_values') {
-        if (reportMode === 'daily') {
-          loadReportData(false);
-        } else {
-          loadMonthlyData(false);
-        }
+        if (debounceTimer) clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => {
+          if (reportMode === 'daily') {
+            loadReportData(false);
+          } else {
+            loadMonthlyData(false);
+          }
+        }, 350);
       }
     });
 
     return () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
       unsub();
     };
   }, [reportMode, loadReportData, loadMonthlyData]);
