@@ -135,34 +135,34 @@ function buildBoardingWorksheet(
   });
 
   // Column Widths
-  ws.getColumn(1).width = 4.5; // STT
-  ws.getColumn(2).width = 20; // Họ và tên
+  ws.getColumn(1).width = 7.5; // STT
+  ws.getColumn(2).width = 30; // Họ và tên
 
   // Daily columns
   for (let d = 0; d < numDays; d++) {
     const colStart = 3 + d * 3;
-    ws.getColumn(colStart).width = 3.2; // S
-    ws.getColumn(colStart + 1).width = 3.2; // T
-    ws.getColumn(colStart + 2).width = 3.2; // T
+    ws.getColumn(colStart).width = 5.2; // S
+    ws.getColumn(colStart + 1).width = 5.2; // T
+    ws.getColumn(colStart + 2).width = 5.2; // T
   }
 
   // Summary columns
   if (includeMonthSummary && sumColIdx > 0) {
-    ws.getColumn(sumColIdx).width = 4.8; // S báo ăn
-    ws.getColumn(sumColIdx + 1).width = 4.8; // T báo ăn
-    ws.getColumn(sumColIdx + 2).width = 4.8; // T báo ăn
-    ws.getColumn(sumColIdx + 3).width = 4.8; // S không báo ăn
-    ws.getColumn(sumColIdx + 4).width = 4.8; // T không báo ăn
-    ws.getColumn(sumColIdx + 5).width = 4.8; // T không báo ăn
+    ws.getColumn(sumColIdx).width = 8.5; // S báo ăn
+    ws.getColumn(sumColIdx + 1).width = 8.5; // T báo ăn
+    ws.getColumn(sumColIdx + 2).width = 8.5; // T báo ăn
+    ws.getColumn(sumColIdx + 3).width = 8.5; // S không báo ăn
+    ws.getColumn(sumColIdx + 4).width = 8.5; // T không báo ăn
+    ws.getColumn(sumColIdx + 5).width = 8.5; // T không báo ăn
   }
 
   // Header 1: School & Campus info (Rows 1 & 2)
   ws.getCell('A1').value = schoolName.toUpperCase();
-  ws.getCell('A1').font = { name: 'Times New Roman', size: 9.5, bold: true };
+  ws.getCell('A1').font = { name: 'Times New Roman', size: 13, bold: true };
   ws.getCell('A1').alignment = { horizontal: 'left', vertical: 'middle' };
 
   ws.getCell('A2').value = `PHÂN HIỆU: ${(campusName || 'XA DUNG').toUpperCase()}`;
-  ws.getCell('A2').font = { name: 'Times New Roman', size: 9.5, bold: true };
+  ws.getCell('A2').font = { name: 'Times New Roman', size: 13, bold: true };
   ws.getCell('A2').alignment = { horizontal: 'left', vertical: 'middle' };
 
   // Header Main Title (Row 4)
@@ -170,18 +170,18 @@ function buildBoardingWorksheet(
   ws.mergeCells(titleRange);
   const titleCell = ws.getCell('A4');
   titleCell.value = `SỔ CHẤM CƠM LỚP: ${className.toUpperCase()} THÁNG ${monthNum}/${yearNum}`;
-  titleCell.font = { name: 'Times New Roman', size: 14, bold: true };
+  titleCell.font = { name: 'Times New Roman', size: 20, bold: true };
   titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
-  ws.getRow(4).height = 22;
+  ws.getRow(4).height = 36;
 
   // Header Subtitle (Row 5): e.g. "(TRANG 1: NỬA ĐẦU THÁNG - TỪ NGÀY 01 ĐẾN 15)"
   const subtitleRange = `A5:${getColLetter(totalColsCount - 1)}5`;
   ws.mergeCells(subtitleRange);
   const subtitleCell = ws.getCell('A5');
   subtitleCell.value = pageSubtitle.toUpperCase();
-  subtitleCell.font = { name: 'Times New Roman', size: 10.5, bold: true, italic: true };
+  subtitleCell.font = { name: 'Times New Roman', size: 14, bold: true, italic: true };
   subtitleCell.alignment = { horizontal: 'center', vertical: 'middle' };
-  ws.getRow(5).height = 18;
+  ws.getRow(5).height = 26;
 
   // Table Headers (Rows 7, 8, 9)
   const headerRow1 = 7;
@@ -252,16 +252,16 @@ function buildBoardingWorksheet(
   }
 
   // Style Header rows
-  ws.getRow(headerRow1).height = 19;
-  ws.getRow(headerRow2).height = 18;
-  ws.getRow(headerRow3).height = 16;
+  ws.getRow(headerRow1).height = 30;
+  ws.getRow(headerRow2).height = 26;
+  ws.getRow(headerRow3).height = 24;
 
   for (let r = headerRow1; r <= headerRow3; r++) {
     const row = ws.getRow(r);
     for (let c = 1; c <= totalColsCount; c++) {
       const cell = row.getCell(c);
       cell.border = thinBorder;
-      cell.font = { name: 'Times New Roman', size: 9, bold: true };
+      cell.font = { name: 'Times New Roman', size: 13, bold: true };
       cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
 
       // Highlight summary headers
@@ -328,11 +328,14 @@ function buildBoardingWorksheet(
     }
 
     // Row styles
-    rowObj.height = 18;
+    rowObj.height = 26;
     for (let c = 1; c <= totalColsCount; c++) {
       const cell = rowObj.getCell(c);
       cell.border = thinBorder;
-      cell.font = { name: 'Times New Roman', size: 9.5 };
+      
+      // Select appropriate font style: student name (c===2) and sum totals are bold
+      const isBold = c === 2 || (includeMonthSummary && c >= sumColIdx);
+      cell.font = { name: 'Times New Roman', size: 13, bold: isBold };
 
       if (c === 2) {
         cell.alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
@@ -342,7 +345,7 @@ function buildBoardingWorksheet(
 
       // Bold '+' marks
       if (c >= 3 && (!includeMonthSummary || c < sumColIdx) && cell.value === '+') {
-        cell.font = { name: 'Times New Roman', size: 9.5, bold: true };
+        cell.font = { name: 'Times New Roman', size: 13, bold: true };
       }
     }
 
@@ -356,7 +359,7 @@ function buildBoardingWorksheet(
 
   const sumLabelCell = sumRowObj.getCell(1);
   sumLabelCell.value = 'CỘNG';
-  sumLabelCell.font = { name: 'Times New Roman', size: 10, bold: true };
+  sumLabelCell.font = { name: 'Times New Roman', size: 13, bold: true };
   sumLabelCell.alignment = { horizontal: 'center', vertical: 'middle' };
   sumLabelCell.border = thinBorder;
   sumRowObj.getCell(2).border = thinBorder;
@@ -371,7 +374,7 @@ function buildBoardingWorksheet(
     const endCellRef = `${colLetter}${lastDataRow}`;
     const cell = sumRowObj.getCell(c);
     cell.value = { formula: `COUNTIF(${startCellRef}:${endCellRef}, "+")` };
-    cell.font = { name: 'Times New Roman', size: 9, bold: true };
+    cell.font = { name: 'Times New Roman', size: 13, bold: true };
     cell.alignment = { horizontal: 'center', vertical: 'middle' };
     cell.border = thinBorder;
   }
@@ -384,13 +387,13 @@ function buildBoardingWorksheet(
       const endCellRef = `${colLetter}${lastDataRow}`;
       const cell = sumRowObj.getCell(c);
       cell.value = { formula: `SUM(${startCellRef}:${endCellRef})` };
-      cell.font = { name: 'Times New Roman', size: 9, bold: true };
+      cell.font = { name: 'Times New Roman', size: 13, bold: true };
       cell.alignment = { horizontal: 'center', vertical: 'middle' };
       cell.border = thinBorder;
     }
   }
 
-  sumRowObj.height = 20;
+  sumRowObj.height = 30;
 
   // Signatures block
   currentExcelRow += 2;
@@ -406,21 +409,21 @@ function buildBoardingWorksheet(
     ws.mergeCells(`${rightColLetterStart}${currentExcelRow}:${rightColLetterEnd}${currentExcelRow}`);
     const dateCell = ws.getCell(`${rightColLetterStart}${currentExcelRow}`);
     dateCell.value = signDateText;
-    dateCell.font = { name: 'Times New Roman', size: 10.5, italic: true };
+    dateCell.font = { name: 'Times New Roman', size: 12, italic: true };
     dateCell.alignment = { horizontal: 'center', vertical: 'middle' };
 
     currentExcelRow++;
     ws.mergeCells(`${rightColLetterStart}${currentExcelRow}:${rightColLetterEnd}${currentExcelRow}`);
     const gvcnTitle = ws.getCell(`${rightColLetterStart}${currentExcelRow}`);
     gvcnTitle.value = 'GIÁO VIÊN CHỦ NHIỆM';
-    gvcnTitle.font = { name: 'Times New Roman', size: 11, bold: true };
+    gvcnTitle.font = { name: 'Times New Roman', size: 13, bold: true };
     gvcnTitle.alignment = { horizontal: 'center', vertical: 'middle' };
 
     currentExcelRow++;
     ws.mergeCells(`${rightColLetterStart}${currentExcelRow}:${rightColLetterEnd}${currentExcelRow}`);
     const gvcnSub = ws.getCell(`${rightColLetterStart}${currentExcelRow}`);
     gvcnSub.value = '(Ký và ghi rõ họ tên)';
-    gvcnSub.font = { name: 'Times New Roman', size: 9.5, italic: true };
+    gvcnSub.font = { name: 'Times New Roman', size: 11, italic: true };
     gvcnSub.alignment = { horizontal: 'center', vertical: 'middle' };
 
     // Space for physical signature
@@ -428,7 +431,7 @@ function buildBoardingWorksheet(
     ws.mergeCells(`${rightColLetterStart}${currentExcelRow}:${rightColLetterEnd}${currentExcelRow}`);
     const gvcnName = ws.getCell(`${rightColLetterStart}${currentExcelRow}`);
     gvcnName.value = teacherName;
-    gvcnName.font = { name: 'Times New Roman', size: 11, bold: true };
+    gvcnName.font = { name: 'Times New Roman', size: 13, bold: true };
     gvcnName.alignment = { horizontal: 'center', vertical: 'middle' };
   } else {
     // TRANG 1 (NỬA ĐẦU THÁNG: NGÀY 01 ĐẾN 15):
@@ -519,6 +522,9 @@ export async function exportMonthlyBoardingExcel(params: ExportBoardingExcelPara
   if (boardingStudents.length === 0) {
     boardingStudents = [];
   }
+
+  // Giữ nguyên 100% thứ tự danh sách học sinh theo file Excel gốc của lớp (không xáo trộn)
+  boardingStudents = [...boardingStudents];
 
   const [yStr, mStr] = monthStr.split('-');
   const yearNum = Number(yStr);

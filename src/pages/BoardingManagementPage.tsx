@@ -116,11 +116,22 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
   // Boarding students belonging to selected class (or all if not filtered)
   const classBoardingStudents = useMemo(() => {
     const explicitBoarding = classStudents.filter((s) => s.isBoarding === true);
-    if (explicitBoarding.length > 0) return explicitBoarding;
-    const notFalse = classStudents.filter((s) => s.isBoarding !== false);
-    if (notFalse.length > 0) return notFalse;
-    if (classStudents.length > 0) return classStudents;
-    return generateDefaultBoardingStudentsForClass(selectedClassId, selectedClass?.class_name || 'Lớp');
+    let list = [];
+    if (explicitBoarding.length > 0) {
+      list = explicitBoarding;
+    } else {
+      const notFalse = classStudents.filter((s) => s.isBoarding !== false);
+      if (notFalse.length > 0) {
+        list = notFalse;
+      } else if (classStudents.length > 0) {
+        list = classStudents;
+      } else {
+        list = generateDefaultBoardingStudentsForClass(selectedClassId, selectedClass?.class_name || 'Lớp');
+      }
+    }
+
+    // Giữ nguyên 100% thứ tự danh sách học sinh theo file Excel gốc của lớp (không xáo trộn)
+    return list;
   }, [classStudents, selectedClassId, selectedClass]);
 
   // Day Meal Schedule
@@ -463,7 +474,7 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
   // STUDENT MANAGEMENT TAB ACTIONS
   // ----------------------------------------------------
   const filteredStudents = useMemo(() => {
-    return classStudents.filter((st) => {
+    const list = classStudents.filter((st) => {
       const matchSearch =
         !studentSearchText ||
         st.full_name.toLowerCase().includes(studentSearchText.toLowerCase()) ||
@@ -476,6 +487,9 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
 
       return matchSearch && matchGender;
     });
+
+    // Giữ nguyên 100% thứ tự danh sách học sinh theo file Excel gốc của lớp (không xáo trộn)
+    return list;
   }, [classStudents, studentSearchText, studentGenderFilter]);
 
   // Open Add Student Modal
@@ -883,8 +897,11 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
   const handleConfirmImport = async () => {
     if (importPreviewData.length === 0) return;
     try {
+      if (selectedClassId) {
+        await deleteStudentsByClass(selectedClassId);
+      }
       await importStudents(importPreviewData);
-      showToast(`Đã nhập thành công ${importPreviewData.length} học sinh bán trú vào lớp ${selectedClass?.class_name}!`);
+      showToast(`Đã nhập thành công ${importPreviewData.length} học sinh vào lớp ${selectedClass?.class_name}! Giữ nguyên 100% thứ tự file Excel.`);
       setShowImportModal(false);
       setImportPreviewData([]);
     } catch (e) {

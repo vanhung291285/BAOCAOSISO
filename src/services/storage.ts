@@ -839,7 +839,7 @@ export const StorageService = {
 
     if (supabase && isSupabaseConnected()) {
       try {
-        const { data: cloudData, error } = await supabase.from('students').select('*').order('full_name', { ascending: true });
+        const { data: cloudData, error } = await supabase.from('students').select('*');
         if (!error && cloudData && cloudData.length > 0) {
           const mapped = cloudData.map(mapDBToJSStudent);
           localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(mapped));
@@ -855,8 +855,7 @@ export const StorageService = {
       data = raw ? JSON.parse(raw) : [];
     }
     
-    const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
-    return data.sort((a, b) => collator.compare(a.full_name, b.full_name));
+    return data;
   },
 
   async saveStudent(student: import('../types').Student): Promise<void> {
@@ -865,8 +864,6 @@ export const StorageService = {
     if (idx >= 0) list[idx] = student;
     else list.push(student);
     
-    const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
-    list.sort((a, b) => collator.compare(a.full_name, b.full_name));
     localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(list));
 
     const mapJSToDBStudent = (s: any) => ({
@@ -936,8 +933,6 @@ export const StorageService = {
       if (idx >= 0) updated[idx] = student;
       else updated.push(student);
     }
-    const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
-    updated.sort((a, b) => collator.compare(a.full_name, b.full_name));
     localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(updated));
 
     const mapJSToDBStudent = (s: any) => ({

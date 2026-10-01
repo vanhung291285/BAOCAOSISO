@@ -359,9 +359,11 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const importStudents = async (newStudents: Array<Omit<Student, 'id' | 'created_at'>>) => {
+    const baseTime = Date.now();
     const studentsToSave: Student[] = newStudents.map((s, idx) => ({
       ...s,
-      id: `std_${Date.now()}_${idx}_${Math.random().toString(36).substr(2, 5)}`,
+      id: `std_${baseTime}_${String(idx).padStart(4, '0')}`,
+      created_at: new Date(baseTime + idx * 10).toISOString(),
     }));
     await StorageService.saveStudents(studentsToSave);
     await refreshAll();

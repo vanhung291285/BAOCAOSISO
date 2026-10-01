@@ -78,11 +78,22 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
     if (!selectedClassId) return [];
     const classSts = students.filter((s) => validClassIds.has(s.class_id));
     const explicitBoarding = classSts.filter((s) => s.isBoarding === true);
-    if (explicitBoarding.length > 0) return explicitBoarding;
-    const notFalse = classSts.filter((s) => s.isBoarding !== false);
-    if (notFalse.length > 0) return notFalse;
-    if (classSts.length > 0) return classSts;
-    return generateDefaultBoardingStudentsForClass(selectedClassId, currentClass?.class_name || 'Lớp');
+    let list = [];
+    if (explicitBoarding.length > 0) {
+      list = explicitBoarding;
+    } else {
+      const notFalse = classSts.filter((s) => s.isBoarding !== false);
+      if (notFalse.length > 0) {
+        list = notFalse;
+      } else if (classSts.length > 0) {
+        list = classSts;
+      } else {
+        list = generateDefaultBoardingStudentsForClass(selectedClassId, currentClass?.class_name || 'Lớp');
+      }
+    }
+
+    // Giữ nguyên 100% thứ tự danh sách học sinh theo file Excel gốc của lớp (không xáo trộn)
+    return list;
   }, [students, selectedClassId, validClassIds, currentClass]);
 
   // Parse Year and Month
