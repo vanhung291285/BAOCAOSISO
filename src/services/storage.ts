@@ -143,6 +143,56 @@ export function subscribeRealtime(callback: (event: { table: string; payload?: a
         .on('postgres_changes', { event: '*', schema: 'public', table: 'classes' }, (payload) => {
           callback({ table: 'classes', payload });
         })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'students' }, (payload) => {
+          try {
+            if (payload.new && (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE')) {
+              const newSt = payload.new as Student;
+              const raw = localStorage.getItem(STORAGE_KEYS.STUDENTS);
+              let stds: Student[] = raw ? JSON.parse(raw) : [];
+              const idx = stds.findIndex(s => s.id === newSt.id);
+              if (idx >= 0) stds[idx] = newSt;
+              else stds.push(newSt);
+              localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(stds));
+            } else if (payload.old && payload.eventType === 'DELETE') {
+              const oldId = (payload.old as any).id;
+              const raw = localStorage.getItem(STORAGE_KEYS.STUDENTS);
+              let stds: Student[] = raw ? JSON.parse(raw) : [];
+              stds = stds.filter(s => s.id !== oldId);
+              localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(stds));
+            }
+          } catch (e) {
+            console.warn('Error merging realtime students:', e);
+          }
+          callback({ table: 'students', payload });
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'boarding_reports' }, (payload) => {
+          try {
+            if (payload.new && (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE')) {
+              const newRep = payload.new as BoardingDailyReport;
+              const raw = localStorage.getItem(STORAGE_KEYS.BOARDING_REPORTS);
+              let reps: BoardingDailyReport[] = raw ? JSON.parse(raw) : [];
+              const idx = reps.findIndex(r => r.id === newRep.id || (r.class_id === newRep.class_id && r.date === newRep.date));
+              if (idx >= 0) reps[idx] = newRep;
+              else reps.push(newRep);
+              localStorage.setItem(STORAGE_KEYS.BOARDING_REPORTS, JSON.stringify(reps));
+            } else if (payload.old && payload.eventType === 'DELETE') {
+              const oldId = (payload.old as any).id;
+              const raw = localStorage.getItem(STORAGE_KEYS.BOARDING_REPORTS);
+              let reps: BoardingDailyReport[] = raw ? JSON.parse(raw) : [];
+              reps = reps.filter(r => r.id !== oldId);
+              localStorage.setItem(STORAGE_KEYS.BOARDING_REPORTS, JSON.stringify(reps));
+            }
+          } catch (e) {
+            console.warn('Error merging realtime boarding_reports:', e);
+          }
+          callback({ table: 'boarding_reports', payload });
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'boarding_signature_configs' }, (payload) => {
+          callback({ table: 'boarding_signature_configs', payload });
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'boarding_month_signatures' }, (payload) => {
+          callback({ table: 'boarding_month_signatures', payload });
+        })
         .on('postgres_changes', { event: '*', schema: 'public', table: 'school_settings' }, (payload) => {
           callback({ table: 'school_settings', payload });
         })
