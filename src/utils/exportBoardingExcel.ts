@@ -642,14 +642,17 @@ export async function exportMonthlyBoardingExcel(params: ExportBoardingExcelPara
 
   const safeStudents = Array.isArray(students) ? students : [];
 
-  // Lấy toàn bộ danh sách học sinh của lớp để xuất biểu mẫu ăn bán trú đầy đủ 100%
+  // Lấy toàn bộ danh sách học sinh bán trú của lớp để xuất biểu mẫu ăn bán trú đầy đủ 100%
   const validClassKeys = new Set([classId, className].filter(Boolean) as string[]);
-  let boardingStudents = safeStudents.filter((s) => validClassKeys.has(s.class_id));
+  let boardingStudents = safeStudents.filter(
+    (s) => (validClassKeys.size === 0 || validClassKeys.has(s.class_id)) && s.isBoarding !== false
+  );
 
   // 2b. Nếu trong mảng truyền vào rỗng, kiểm tra trực tiếp từ StorageService
   if (boardingStudents.length === 0) {
     try {
-      boardingStudents = await StorageService.getStudentsByClass(classId, className);
+      const clsStds = await StorageService.getStudentsByClass(classId, className);
+      boardingStudents = clsStds.filter((s) => s.isBoarding !== false);
     } catch (e) {
       console.warn('Could not fetch students from StorageService:', e);
     }
@@ -875,12 +878,12 @@ export async function exportMonthlyBoardingExcel(params: ExportBoardingExcelPara
     });
   }
 
-  // Tính số ngày tiêu chuẩn trong tháng
-  let standardBreakfastDays = params.standardBreakfastDays !== undefined ? params.standardBreakfastDays : 0;
-  let standardLunchDays = params.standardLunchDays !== undefined ? params.standardLunchDays : 0;
-  let standardDinnerDays = params.standardDinnerDays !== undefined ? params.standardDinnerDays : 0;
+  // Tính số ngày tiêu chuẩn trong tháng (Định mức báo ăn)
+  let standardBreakfastDays = params.standardBreakfastDays ?? 0;
+  let standardLunchDays = params.standardLunchDays ?? 0;
+  let standardDinnerDays = params.standardDinnerDays ?? 0;
 
-  if (params.standardBreakfastDays === undefined) {
+  if (standardBreakfastDays === 0 && standardLunchDays === 0 && standardDinnerDays === 0) {
     let bCount = 0;
     let lCount = 0;
     let dCount = 0;
@@ -969,7 +972,7 @@ export async function exportMonthlyBoardingExcel(params: ExportBoardingExcelPara
       startDay: midDay + 1,
       endDay: daysInMonth,
       includeMonthSummary: true,
-      signDateText: params.signingDate || `${loc}, ngày ${daysInMonth} tháng ${String(monthNum).padStart(2, '0')} năm ${yearNum}`,
+      signDateText: `${loc}, ngày ${daysInMonth} tháng ${String(monthNum).padStart(2, '0')} năm ${yearNum}`,
     },
     context
   );
@@ -983,7 +986,7 @@ export async function exportMonthlyBoardingExcel(params: ExportBoardingExcelPara
       startDay: 1,
       endDay: daysInMonth,
       includeMonthSummary: true,
-      signDateText: params.signingDate || `${loc}, ngày ${daysInMonth} tháng ${String(monthNum).padStart(2, '0')} năm ${yearNum}`,
+      signDateText: `${loc}, ngày ${daysInMonth} tháng ${String(monthNum).padStart(2, '0')} năm ${yearNum}`,
     },
     context
   );

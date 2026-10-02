@@ -22,12 +22,20 @@ export async function exportElementToPdf(
 
   try {
     const canvas = await html2canvas(element, {
-      scale: quality, // Crisp text rendering
+      scale: quality,
       useCORS: true,
+      allowTaint: true,
       logging: false,
       backgroundColor: '#ffffff',
-      windowWidth: element.scrollWidth,
-      windowHeight: element.scrollHeight,
+      scrollX: 0,
+      scrollY: 0,
+      onclone: (clonedDoc) => {
+        // Reset transforms on cloned element and all ancestors to avoid clipping/distortion
+        const allTransformed = clonedDoc.querySelectorAll('[style*="transform"]');
+        allTransformed.forEach((el) => {
+          (el as HTMLElement).style.transform = 'none';
+        });
+      },
     });
 
     const imgData = canvas.toDataURL('image/png');
@@ -41,17 +49,19 @@ export async function exportElementToPdf(
     const pdfWidth = orientation === 'landscape' ? 297 : 210;
     const pdfHeight = orientation === 'landscape' ? 210 : 297;
 
-    const margin = 6; // 6mm margin
+    const margin = 5; // 5mm margin for maximum printable area
     const availableWidth = pdfWidth - margin * 2;
     const availableHeight = pdfHeight - margin * 2;
 
-    const imgWidth = availableWidth;
-    const imgHeight = (canvas.height * imgWidth) / canvas.width;
+    // Scale proportionally to fit within A4 page without clipping signatures or totals
+    const scaleFactor = Math.min(availableWidth / canvas.width, availableHeight / canvas.height);
+    const imgWidth = canvas.width * scaleFactor;
+    const imgHeight = canvas.height * scaleFactor;
 
-    const x = margin;
-    const y = margin;
+    const x = margin + (availableWidth - imgWidth) / 2;
+    const y = margin + (availableHeight - imgHeight) / 2;
 
-    pdf.addImage(imgData, 'PNG', x, y, imgWidth, Math.min(imgHeight, availableHeight));
+    pdf.addImage(imgData, 'PNG', x, y, imgWidth, imgHeight, undefined, 'FAST');
     pdf.save(fileName);
   } catch (error) {
     console.error('Error exporting PDF:', error);
@@ -84,7 +94,7 @@ export async function exportElementsToMultiPagePdf(
 
     const pdfWidth = orientation === 'landscape' ? 297 : 210;
     const pdfHeight = orientation === 'landscape' ? 210 : 297;
-    const margin = 6;
+    const margin = 5;
     const availableWidth = pdfWidth - margin * 2;
     const availableHeight = pdfHeight - margin * 2;
 
@@ -97,17 +107,28 @@ export async function exportElementsToMultiPagePdf(
       const canvas = await html2canvas(el, {
         scale: quality,
         useCORS: true,
+        allowTaint: true,
         logging: false,
         backgroundColor: '#ffffff',
-        windowWidth: el.scrollWidth,
-        windowHeight: el.scrollHeight,
+        scrollX: 0,
+        scrollY: 0,
+        onclone: (clonedDoc) => {
+          const allTransformed = clonedDoc.querySelectorAll('[style*="transform"]');
+          allTransformed.forEach((e) => {
+            (e as HTMLElement).style.transform = 'none';
+          });
+        },
       });
 
       const imgData = canvas.toDataURL('image/png');
-      const imgWidth = availableWidth;
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      const scaleFactor = Math.min(availableWidth / canvas.width, availableHeight / canvas.height);
+      const imgWidth = canvas.width * scaleFactor;
+      const imgHeight = canvas.height * scaleFactor;
 
-      pdf.addImage(imgData, 'PNG', margin, margin, imgWidth, Math.min(imgHeight, availableHeight));
+      const x = margin + (availableWidth - imgWidth) / 2;
+      const y = margin + (availableHeight - imgHeight) / 2;
+
+      pdf.addImage(imgData, 'PNG', x, y, imgWidth, imgHeight, undefined, 'FAST');
     }
 
     pdf.save(fileName);

@@ -342,7 +342,7 @@ export const BoardingPrintPreviewModal: React.FC<BoardingPrintPreviewModalProps>
           <div className="mt-4 flex justify-end pr-8">
             <div className="flex flex-col items-center w-64 text-center">
               <div className="text-[10px] text-slate-700 italic mb-0.5">
-                {effectiveSigningDateText}
+                {(sigConfig?.location_name?.trim() || 'Xa Dung')}, ngày {daysInMonth} tháng {String(monthNum).padStart(2, '0')} năm {yearNum}
               </div>
               <div className="text-[11px] font-bold text-slate-900 uppercase">
                 {sigConfig?.teacher_title || 'GIÁO VIÊN CHỦ NHIỆM'}
@@ -386,9 +386,9 @@ export const BoardingPrintPreviewModal: React.FC<BoardingPrintPreviewModalProps>
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-slate-900/80 backdrop-blur-xs text-slate-100 overflow-hidden select-none">
+    <div className="fixed inset-0 z-50 flex flex-col bg-slate-900/90 backdrop-blur-xs text-slate-100 overflow-hidden select-none print:fixed print:inset-0 print:bg-white print:text-black print:overflow-visible print:z-[9999]">
       {/* Top Controls Bar */}
-      <div className="bg-slate-900 border-b border-slate-800 px-4 py-3 flex flex-wrap items-center justify-between gap-3 shadow-lg shrink-0">
+      <div className="bg-slate-900 border-b border-slate-800 px-4 py-3 flex flex-wrap items-center justify-between gap-3 shadow-lg shrink-0 no-print">
         {/* Title & Page Switcher */}
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-2 text-white font-bold text-sm sm:text-base">
@@ -523,16 +523,16 @@ export const BoardingPrintPreviewModal: React.FC<BoardingPrintPreviewModalProps>
       </div>
 
       {/* Main Preview Scroll Area */}
-      <div className="flex-1 overflow-auto p-4 sm:p-8 flex flex-col items-center gap-8 bg-slate-950">
+      <div className="flex-1 overflow-auto p-4 sm:p-8 flex flex-col items-center gap-8 bg-slate-950 print:bg-white print:p-0 print:m-0 print:overflow-visible">
         {/* Style applied based on zoom */}
         <div
           style={{ transform: `scale(${zoomLevel / 100})`, transformOrigin: 'top center' }}
-          className="transition-transform duration-150 flex flex-col items-center gap-8"
+          className="transition-transform duration-150 flex flex-col items-center gap-8 print:transform-none print:m-0 print:p-0 print:gap-0 print:w-full"
         >
           {activeTab === 'page1' && (
             <div
               ref={page1Ref}
-              className="w-[297mm] min-h-[210mm] max-w-[1120px] bg-white p-[10mm] shadow-2xl rounded-sm border border-slate-300 print:shadow-none print:border-none print:m-0 print:p-0"
+              className="w-[297mm] min-h-[210mm] max-w-[1120px] bg-white p-[10mm] shadow-2xl rounded-sm border border-slate-300 print:shadow-none print:border-none print:m-0 print:p-0 print:w-full print:max-w-none"
             >
               {renderSheetTable(page1Days, false, false)}
             </div>
@@ -541,7 +541,7 @@ export const BoardingPrintPreviewModal: React.FC<BoardingPrintPreviewModalProps>
           {activeTab === 'page2' && (
             <div
               ref={page2Ref}
-              className="w-[297mm] min-h-[210mm] max-w-[1120px] bg-white p-[10mm] shadow-2xl rounded-sm border border-slate-300 print:shadow-none print:border-none print:m-0 print:p-0"
+              className="w-[297mm] min-h-[210mm] max-w-[1120px] bg-white p-[10mm] shadow-2xl rounded-sm border border-slate-300 print:shadow-none print:border-none print:m-0 print:p-0 print:w-full print:max-w-none"
             >
               {renderSheetTable(page2Days, true, true)}
             </div>
@@ -551,7 +551,7 @@ export const BoardingPrintPreviewModal: React.FC<BoardingPrintPreviewModalProps>
             <>
               <div
                 ref={page1Ref}
-                className="w-[297mm] min-h-[210mm] max-w-[1120px] bg-white p-[10mm] shadow-2xl rounded-sm border border-slate-300 print:shadow-none print:border-none print:m-0 print:p-0 relative"
+                className="w-[297mm] min-h-[210mm] max-w-[1120px] bg-white p-[10mm] shadow-2xl rounded-sm border border-slate-300 print:shadow-none print:border-none print:m-0 print:p-0 print:w-full print:max-w-none print:break-after-page relative"
               >
                 <div className="absolute top-2 right-4 text-[10px] text-slate-400 font-bold uppercase no-print">
                   Trang 1 / 2
@@ -561,7 +561,7 @@ export const BoardingPrintPreviewModal: React.FC<BoardingPrintPreviewModalProps>
 
               <div
                 ref={page2Ref}
-                className="w-[297mm] min-h-[210mm] max-w-[1120px] bg-white p-[10mm] shadow-2xl rounded-sm border border-slate-300 print:shadow-none print:border-none print:m-0 print:p-0 relative"
+                className="w-[297mm] min-h-[210mm] max-w-[1120px] bg-white p-[10mm] shadow-2xl rounded-sm border border-slate-300 print:shadow-none print:border-none print:m-0 print:p-0 print:w-full print:max-w-none relative"
               >
                 <div className="absolute top-2 right-4 text-[10px] text-slate-400 font-bold uppercase no-print">
                   Trang 2 / 2
@@ -574,7 +574,7 @@ export const BoardingPrintPreviewModal: React.FC<BoardingPrintPreviewModalProps>
           {activeTab === 'all' && (
             <div
               ref={allRef}
-              className="w-[420mm] min-h-[297mm] max-w-[1550px] bg-white p-[10mm] shadow-2xl rounded-sm border border-slate-300 print:shadow-none print:border-none print:m-0 print:p-0"
+              className="w-[420mm] min-h-[297mm] max-w-[1550px] bg-white p-[10mm] shadow-2xl rounded-sm border border-slate-300 print:shadow-none print:border-none print:m-0 print:p-0 print:w-full print:max-w-none"
             >
               {renderSheetTable(monthDays, true, true)}
             </div>

@@ -444,9 +444,9 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
 
   const effectiveTeacherName = customTeacherName || defaultTeacherName;
 
-  // Tính ngày ký tự động theo ngày:
-  // - Trang 1 (1 - 15): Tự động lấy ngày 15 của tháng
-  // - Trang 2 (16 - cuối tháng) & Cả tháng: Tự động lấy ngày cuối của tháng (28/29/30/31)
+  // Tính ngày ký tự động theo tháng:
+  // - Trang 1 (1 - 15): Ngày 15 của tháng
+  // - Trang 2 (16 - cuối tháng) & Cả tháng: Tự động cập nhật chuẩn xác ngày cuối cùng của tháng (ví dụ: ngày 31 tháng 10 năm 2026, ngày 30 tháng 09 năm 2026, ngày 28/29 tháng 02, ...)
   const effectiveSigningDay = useMemo(() => {
     if (viewMode === 'page1') {
       return 15;
@@ -455,9 +455,14 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
   }, [viewMode, daysInMonth]);
 
   const effectiveSigningDateText = useMemo(() => {
-    const loc = signingLocation.trim() || 'Xa Dung';
+    const loc = sigConfig.location_name?.trim() || signingLocation.trim() || 'Xa Dung';
     return `${loc}, ngày ${effectiveSigningDay} tháng ${String(monthNum).padStart(2, '0')} năm ${yearNum}`;
-  }, [signingLocation, effectiveSigningDay, monthNum, yearNum]);
+  }, [sigConfig.location_name, signingLocation, effectiveSigningDay, monthNum, yearNum]);
+
+  const monthEndSigningDateText = useMemo(() => {
+    const loc = sigConfig.location_name?.trim() || signingLocation.trim() || 'Xa Dung';
+    return `${loc}, ngày ${daysInMonth} tháng ${String(monthNum).padStart(2, '0')} năm ${yearNum}`;
+  }, [sigConfig.location_name, signingLocation, daysInMonth, monthNum, yearNum]);
 
   const showToast = (text: string, type: 'success' | 'error' | 'info' = 'success') => {
     setToastMessage({ text, type });
@@ -1189,11 +1194,11 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
         schoolName: settings?.school_name || 'TRƯỜNG PTDTBT THCS XA DUNG',
         locationName: signingLocation.trim() || 'Xa Dung',
         monthStr: selectedMonth,
-        students: students, // Pass all students so export function can auto-generate if empty
+        students: classBoardingStudents, // Đúng 100% danh sách học sinh bán trú đang hiển thị
         teacherName: effectiveTeacherName,
         teacherTitle: sigConfig.teacher_title || 'GIÁO VIÊN CHỦ NHIỆM',
         principalName: settings?.principal_name || 'Hiệu trưởng',
-        signingDate: effectiveSigningDateText,
+        signingDate: monthEndSigningDateText,
         existingMatrix: Object.keys(mealMatrix).length > 0 ? mealMatrix : undefined,
         standardBreakfastDays,
         standardLunchDays,
