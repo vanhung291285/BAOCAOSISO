@@ -1,3 +1,5 @@
+import { resolveStudentGender } from '../utils/studentUtils';
+
 export const SUPABASE_SQL_SCHEMA = `-- ==============================================================================
 -- SCHEMA CƠ SỞ DỮ LIỆU SUPABASE CHO:
 -- SỔ BÁO CÁO SĨ SỐ HỌC SINH - TRƯỜNG PTDTBT THCS XA DUNG
@@ -376,6 +378,35 @@ BEGIN
     BEGIN
         ALTER TABLE public.campuses ADD COLUMN reporter_title TEXT;
     EXCEPTION WHEN duplicate_column THEN END;
+
+    -- Migrations for public.students
+    BEGIN
+        ALTER TABLE public.students ADD COLUMN gender TEXT;
+    EXCEPTION WHEN duplicate_column THEN END;
+
+    BEGIN
+        ALTER TABLE public.students ADD COLUMN student_code TEXT;
+    EXCEPTION WHEN duplicate_column THEN END;
+
+    BEGIN
+        ALTER TABLE public.students ADD COLUMN birth_date TEXT;
+    EXCEPTION WHEN duplicate_column THEN END;
+
+    BEGIN
+        ALTER TABLE public.students ADD COLUMN ethnicity TEXT;
+    EXCEPTION WHEN duplicate_column THEN END;
+
+    BEGIN
+        ALTER TABLE public.students ADD COLUMN notes TEXT;
+    EXCEPTION WHEN duplicate_column THEN END;
+
+    BEGIN
+        ALTER TABLE public.students ADD COLUMN address TEXT;
+    EXCEPTION WHEN duplicate_column THEN END;
+
+    BEGIN
+        ALTER TABLE public.students ADD COLUMN is_boarding BOOLEAN DEFAULT false;
+    EXCEPTION WHEN duplicate_column THEN END;
 END $$;
 
 -- ==============================================================================
@@ -753,6 +784,11 @@ export const generateFullDatabaseSqlScript = (): string => {
     return `'${str}'`;
   };
 
+  const getLocalItem = (key: string): string | null => {
+    if (typeof localStorage === 'undefined') return null;
+    return localStorage.getItem(key + '_v1') || localStorage.getItem(key);
+  };
+
   let sql = `${SUPABASE_SQL_SCHEMA}\n\n`;
   sql += `-- ==============================================================================\n`;
   sql += `-- DỮ LIỆU THỰC TẾ TRONG HỆ THỐNG (DATA DUMP INSERT / UPSERT)\n`;
@@ -761,7 +797,7 @@ export const generateFullDatabaseSqlScript = (): string => {
 
   try {
     // 1. school_settings
-    const rawSettings = localStorage.getItem('sso_school_settings');
+    const rawSettings = getLocalItem('sso_school_settings');
     if (rawSettings) {
       const s = JSON.parse(rawSettings);
       sql += `-- 1. DỮ LIỆU CẤU HÌNH TRƯỜNG\n`;
@@ -794,7 +830,7 @@ export const generateFullDatabaseSqlScript = (): string => {
     }
 
     // 2. school_years
-    const rawYears = localStorage.getItem('sso_school_years');
+    const rawYears = getLocalItem('sso_school_years');
     if (rawYears) {
       const years = JSON.parse(rawYears);
       if (Array.isArray(years) && years.length > 0) {
@@ -809,7 +845,7 @@ ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, is_active = EXCLUDED.is_act
     }
 
     // 3. campuses
-    const rawCampuses = localStorage.getItem('sso_campuses');
+    const rawCampuses = getLocalItem('sso_campuses');
     if (rawCampuses) {
       const campuses = JSON.parse(rawCampuses);
       if (Array.isArray(campuses) && campuses.length > 0) {
@@ -824,7 +860,7 @@ ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, active = EXCLUDED.active;\n
     }
 
     // 4. profiles
-    const rawProfiles = localStorage.getItem('sso_profiles');
+    const rawProfiles = getLocalItem('sso_profiles');
     if (rawProfiles) {
       const profiles = JSON.parse(rawProfiles);
       if (Array.isArray(profiles) && profiles.length > 0) {
@@ -839,7 +875,7 @@ ON CONFLICT (id) DO UPDATE SET full_name = EXCLUDED.full_name, email = EXCLUDED.
     }
 
     // 5. classes
-    const rawClasses = localStorage.getItem('sso_classes');
+    const rawClasses = getLocalItem('sso_classes');
     if (rawClasses) {
       const classes = JSON.parse(rawClasses);
       if (Array.isArray(classes) && classes.length > 0) {
@@ -854,7 +890,7 @@ ON CONFLICT (id) DO UPDATE SET class_name = EXCLUDED.class_name, grade = EXCLUDE
     }
 
     // 6. indicator_groups
-    const rawIndicators = localStorage.getItem('sso_indicator_groups');
+    const rawIndicators = getLocalItem('sso_indicator_groups');
     if (rawIndicators) {
       const indicators = JSON.parse(rawIndicators);
       if (Array.isArray(indicators) && indicators.length > 0) {
@@ -869,14 +905,15 @@ ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, code = EXCLUDED.code, enabl
     }
 
     // 7. students
-    const rawStudents = localStorage.getItem('sso_students');
+    const rawStudents = getLocalItem('sso_students');
     if (rawStudents) {
       const students = JSON.parse(rawStudents);
       if (Array.isArray(students) && students.length > 0) {
         sql += `-- 7. DANH SÁCH HỌC SINH (${students.length} học sinh)\n`;
         students.forEach((s) => {
+          const finalGender = resolveStudentGender(s.gender, s.full_name);
           sql += `INSERT INTO public.students (id, class_id, full_name, address, gender, student_code, birth_date, ethnicity, notes, is_boarding)
-VALUES (${escapeSql(s.id)}, ${escapeSql(s.class_id)}, ${escapeSql(s.full_name)}, ${escapeSql(s.address)}, ${escapeSql(s.gender)}, ${escapeSql(s.student_code)}, ${escapeSql(s.birth_date)}, ${escapeSql(s.ethnicity)}, ${escapeSql(s.notes)}, ${escapeSql(Boolean(s.isBoarding ?? s.is_boarding))})
+VALUES (${escapeSql(s.id)}, ${escapeSql(s.class_id)}, ${escapeSql(s.full_name)}, ${escapeSql(s.address || s.village || '')}, ${escapeSql(finalGender)}, ${escapeSql(s.student_code)}, ${escapeSql(s.birth_date)}, ${escapeSql(s.ethnicity)}, ${escapeSql(s.notes)}, ${escapeSql(Boolean(s.isBoarding ?? s.is_boarding))})
 ON CONFLICT (id) DO UPDATE SET full_name = EXCLUDED.full_name, class_id = EXCLUDED.class_id, address = EXCLUDED.address, gender = EXCLUDED.gender, student_code = EXCLUDED.student_code, birth_date = EXCLUDED.birth_date, ethnicity = EXCLUDED.ethnicity, notes = EXCLUDED.notes, is_boarding = EXCLUDED.is_boarding;\n`;
         });
         sql += `\n`;
@@ -884,7 +921,7 @@ ON CONFLICT (id) DO UPDATE SET full_name = EXCLUDED.full_name, class_id = EXCLUD
     }
 
     // 8. daily_reports
-    const rawReports = localStorage.getItem('sso_daily_reports');
+    const rawReports = getLocalItem('sso_daily_reports');
     if (rawReports) {
       const reports = JSON.parse(rawReports);
       if (Array.isArray(reports) && reports.length > 0) {
@@ -900,7 +937,7 @@ ON CONFLICT (class_id, report_date) DO UPDATE SET created_by = EXCLUDED.created_
     }
 
     // 9. daily_report_values
-    const rawValues = localStorage.getItem('sso_daily_report_values');
+    const rawValues = getLocalItem('sso_daily_report_values');
     if (rawValues) {
       const values = JSON.parse(rawValues);
       if (Array.isArray(values) && values.length > 0) {
@@ -915,7 +952,7 @@ ON CONFLICT (report_id, indicator_group_id) DO UPDATE SET total_count = EXCLUDED
     }
 
     // 10. school_off_days
-    const rawOffDays = localStorage.getItem('sso_school_off_days');
+    const rawOffDays = getLocalItem('sso_school_off_days');
     if (rawOffDays) {
       const offDays = JSON.parse(rawOffDays);
       if (Array.isArray(offDays) && offDays.length > 0) {
@@ -930,7 +967,7 @@ ON CONFLICT (date) DO UPDATE SET name = EXCLUDED.name, type = EXCLUDED.type, app
     }
 
     // 11. notifications
-    const rawNotifs = localStorage.getItem('sso_notifications');
+    const rawNotifs = getLocalItem('sso_notifications');
     if (rawNotifs) {
       const notifs = JSON.parse(rawNotifs);
       if (Array.isArray(notifs) && notifs.length > 0) {
@@ -945,7 +982,7 @@ ON CONFLICT (id) DO NOTHING;\n`;
     }
 
     // 12. system_logs
-    const rawLogs = localStorage.getItem('sso_system_logs');
+    const rawLogs = getLocalItem('sso_system_logs');
     if (rawLogs) {
       const logs = JSON.parse(rawLogs);
       if (Array.isArray(logs) && logs.length > 0) {
@@ -960,7 +997,7 @@ ON CONFLICT (id) DO NOTHING;\n`;
     }
 
     // 13. boarding_reports
-    const rawBoarding = localStorage.getItem('sso_boarding_reports');
+    const rawBoarding = getLocalItem('sso_boarding_reports');
     if (rawBoarding) {
       const bReports = JSON.parse(rawBoarding);
       if (Array.isArray(bReports) && bReports.length > 0) {
@@ -976,7 +1013,7 @@ ON CONFLICT (class_id, date) DO UPDATE SET status = EXCLUDED.status, total_board
     }
 
     // 14. boarding_signature_configs
-    const rawSigConfigs = localStorage.getItem('sso_boarding_signature_configs');
+    const rawSigConfigs = getLocalItem('sso_boarding_signature_configs');
     if (rawSigConfigs) {
       const sigConfigs = JSON.parse(rawSigConfigs);
       if (Array.isArray(sigConfigs) && sigConfigs.length > 0) {
@@ -991,7 +1028,7 @@ ON CONFLICT (id) DO UPDATE SET class_id = EXCLUDED.class_id, location_name = EXC
     }
 
     // 15. boarding_month_signatures
-    const rawMonthSigs = localStorage.getItem('sso_boarding_month_signatures');
+    const rawMonthSigs = getLocalItem('sso_boarding_month_signatures');
     if (rawMonthSigs) {
       const monthSigs = JSON.parse(rawMonthSigs);
       if (Array.isArray(monthSigs) && monthSigs.length > 0) {

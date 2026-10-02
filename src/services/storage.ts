@@ -41,6 +41,7 @@ import {
   formatDateVN,
 } from '../utils/schoolWeeks';
 import { resolveTeacherName, DEFAULT_CLASS_TEACHER_MAP } from '../utils/exportAttendanceStandardExcel';
+import { resolveStudentGender, inferGenderFromName } from '../utils/studentUtils';
 
 const STORAGE_KEYS = {
   SETTINGS: 'sso_school_settings_v1',
@@ -894,7 +895,7 @@ export const StorageService = {
       id: s.id,
       student_code: s.student_code || '',
       full_name: s.full_name,
-      gender: s.gender || '',
+      gender: resolveStudentGender(s.gender, s.full_name),
       birth_date: s.birth_date || '',
       class_id: s.class_id,
       village: s.address || '',
@@ -918,7 +919,7 @@ export const StorageService = {
                 ...existing,
                 full_name: existing.full_name || mapped.full_name,
                 class_id: existing.class_id || mapped.class_id,
-                gender: existing.gender || mapped.gender,
+                gender: resolveStudentGender(existing.gender || mapped.gender, existing.full_name || mapped.full_name),
                 birth_date: existing.birth_date || mapped.birth_date,
                 student_code: existing.student_code || mapped.student_code,
                 ethnicity: existing.ethnicity || mapped.ethnicity,
@@ -959,10 +960,12 @@ export const StorageService = {
 
   async saveStudent(student: import('../types').Student): Promise<void> {
     const list = await this.getStudents();
-    let idx = list.findIndex((s) => s.id === student.id);
+    const finalGender = resolveStudentGender(student.gender, student.full_name);
+    const studentToSave = { ...student, gender: finalGender };
 
-    if (idx >= 0) list[idx] = { ...list[idx], ...student };
-    else list.push(student);
+    let idx = list.findIndex((s) => s.id === student.id);
+    if (idx >= 0) list[idx] = { ...list[idx], ...studentToSave };
+    else list.push(studentToSave);
     
     localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(list));
 
@@ -971,7 +974,7 @@ export const StorageService = {
       class_id: s.class_id,
       full_name: s.full_name,
       address: s.village || s.address || '',
-      gender: s.gender || '',
+      gender: resolveStudentGender(s.gender, s.full_name),
       student_code: s.student_code || '',
       birth_date: s.birth_date || '',
       ethnicity: s.ethnicity || '',
@@ -982,7 +985,19 @@ export const StorageService = {
     const supabase = getSupabaseClient();
     if (supabase && isSupabaseConnected()) {
       try {
-        await supabase.from('students').upsert(mapJSToDBStudent(student));
+        const { error } = await supabase.from('students').upsert(mapJSToDBStudent(studentToSave));
+        if (error) {
+          console.warn('Supabase saveStudent warning:', error.message);
+          if (error.message?.includes('column') || error.code === 'PGRST204') {
+            await supabase.from('students').upsert({
+              id: studentToSave.id,
+              class_id: studentToSave.class_id,
+              full_name: studentToSave.full_name,
+              address: studentToSave.village || studentToSave.address || '',
+              is_boarding: studentToSave.isBoarding !== undefined ? studentToSave.isBoarding : false,
+            });
+          }
+        }
       } catch (e) {
         console.error('Supabase saveStudent error:', e);
       }
@@ -1060,12 +1075,17 @@ export const StorageService = {
   async saveStudents(students: import('../types').Student[]): Promise<void> {
     const all = await this.getStudents();
     const updated = [...all];
+    const studentsToSave: import('../types').Student[] = [];
+
     for (const student of students) {
       if (!student || !student.id) continue;
+      const finalGender = resolveStudentGender(student.gender, student.full_name);
+      const sCopy = { ...student, gender: finalGender };
+      studentsToSave.push(sCopy);
 
       let idx = updated.findIndex((s) => s.id === student.id);
-      if (idx >= 0) updated[idx] = { ...updated[idx], ...student };
-      else updated.push(student);
+      if (idx >= 0) updated[idx] = { ...updated[idx], ...sCopy };
+      else updated.push(sCopy);
     }
     localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(updated));
 
@@ -1074,7 +1094,7 @@ export const StorageService = {
       class_id: s.class_id,
       full_name: s.full_name,
       address: s.village || s.address || '',
-      gender: s.gender || '',
+      gender: resolveStudentGender(s.gender, s.full_name),
       student_code: s.student_code || '',
       birth_date: s.birth_date || '',
       ethnicity: s.ethnicity || '',
@@ -1085,7 +1105,20 @@ export const StorageService = {
     const supabase = getSupabaseClient();
     if (supabase && isSupabaseConnected()) {
       try {
-        await supabase.from('students').upsert(students.map(mapJSToDBStudent));
+        const { error } = await supabase.from('students').upsert(studentsToSave.map(mapJSToDBStudent));
+        if (error) {
+          console.warn('Supabase saveStudents bulk warning:', error.message);
+          if (error.message?.includes('column') || error.code === 'PGRST204') {
+            const fallback = studentsToSave.map((s) => ({
+              id: s.id,
+              class_id: s.class_id,
+              full_name: s.full_name,
+              address: s.village || s.address || '',
+              is_boarding: s.isBoarding !== undefined ? s.isBoarding : false,
+            }));
+            await supabase.from('students').upsert(fallback);
+          }
+        }
       } catch (e) {
         console.error('Supabase saveStudents bulk error:', e);
       }
@@ -3750,7 +3783,7 @@ export const StorageService = {
           class_id: s.class_id,
           full_name: s.full_name,
           address: s.address || '',
-          gender: s.gender || '',
+          gender: resolveStudentGender(s.gender, s.full_name),
           student_code: s.student_code || '',
           birth_date: s.birth_date || '',
           ethnicity: s.ethnicity || '',
@@ -3763,7 +3796,19 @@ export const StorageService = {
         let stErrors: string | undefined;
         for (let i = 0; i < validStudents.length; i += 50) {
           const batch = validStudents.slice(i, i + 50);
-          const { error: stErr } = await supabase.from('students').upsert(batch);
+          let { error: stErr } = await supabase.from('students').upsert(batch);
+          if (stErr && (stErr.message?.includes('column') || stErr.code === 'PGRST204')) {
+            const fallbackBatch = batch.map((s) => ({
+              id: s.id,
+              class_id: s.class_id,
+              full_name: s.full_name,
+              address: s.address || '',
+              is_boarding: s.is_boarding,
+              created_at: s.created_at,
+            }));
+            const retrySt = await supabase.from('students').upsert(fallbackBatch);
+            stErr = retrySt.error;
+          }
           if (stErr) {
             stErrors = stErr.message;
           }
@@ -4139,7 +4184,7 @@ export const StorageService = {
             class_id: s.class_id,
             full_name: s.full_name,
             address: s.address || '',
-            gender: s.gender || '',
+            gender: resolveStudentGender(s.gender, s.full_name),
             student_code: s.student_code || '',
             birth_date: s.birth_date || '',
             ethnicity: s.ethnicity || '',
@@ -4149,7 +4194,19 @@ export const StorageService = {
           }));
 
         if (validStudents.length > 0) {
-          const { error } = await supabase.from('students').upsert(validStudents, { onConflict: 'id' });
+          let { error } = await supabase.from('students').upsert(validStudents, { onConflict: 'id' });
+          if (error && (error.message?.includes('column') || error.code === 'PGRST204')) {
+            const fallback = validStudents.map((s) => ({
+              id: s.id,
+              class_id: s.class_id,
+              full_name: s.full_name,
+              address: s.address || '',
+              is_boarding: s.is_boarding,
+              created_at: s.created_at,
+            }));
+            const retry = await supabase.from('students').upsert(fallback, { onConflict: 'id' });
+            error = retry.error;
+          }
           if (error) throw new Error(error.message);
         }
         return { success: true, message: `Đã đẩy ${validStudents.length} học sinh lên Supabase!`, count: validStudents.length };

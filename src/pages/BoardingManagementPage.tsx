@@ -17,6 +17,7 @@ import {
   buildDefaultMealRecords,
   generateDefaultBoardingStudentsForClass,
 } from '../utils/boardingRules';
+import { resolveStudentGender, inferGenderFromName } from '../utils/studentUtils';
 import {
   Utensils,
   Users,
@@ -566,10 +567,11 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
   // Open Edit Student Modal
   const handleOpenEditStudent = (st: Student) => {
     setEditingStudent(st);
+    const resolvedGender = resolveStudentGender(st.gender, st.full_name);
     setStudentForm({
       full_name: st.full_name,
       student_code: st.student_code || '',
-      gender: st.gender || 'Nam',
+      gender: resolvedGender,
       village: st.village || st.address || '',
       birth_date: st.birth_date || '',
       ethnicity: st.ethnicity || 'Mông',
@@ -587,12 +589,14 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
       return;
     }
 
+    const resolvedGender = resolveStudentGender(studentForm.gender, studentForm.full_name);
+
     try {
       if (editingStudent) {
         await updateStudent(editingStudent.id, {
           full_name: studentForm.full_name.trim(),
           student_code: studentForm.student_code.trim() || undefined,
-          gender: studentForm.gender,
+          gender: resolvedGender,
           village: studentForm.village.trim() || undefined,
           address: studentForm.village.trim() || undefined,
           birth_date: studentForm.birth_date || undefined,
@@ -606,7 +610,7 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
           class_id: selectedClassId,
           full_name: studentForm.full_name.trim(),
           student_code: studentForm.student_code.trim() || undefined,
-          gender: studentForm.gender,
+          gender: resolvedGender,
           village: studentForm.village.trim() || undefined,
           address: studentForm.village.trim() || undefined,
           birth_date: studentForm.birth_date || undefined,
@@ -867,7 +871,7 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
             continue;
           }
 
-          let gender = 'Nam';
+          let gender = resolveStudentGender('', fullName);
           if (colIndexGender !== -1 && row[colIndexGender] !== undefined) {
             const gVal = String(row[colIndexGender]).trim().toLowerCase();
             if (gVal === 'nữ' || gVal === 'nu' || gVal === 'f' || gVal === 'female' || gVal === 'x' || gVal === '1') {
@@ -974,25 +978,29 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
       const parts = line.split('\t').map((p) => p.trim()).filter(Boolean);
       let name = '';
       let village = '';
-      let gender = 'Nam';
       let ethnicity = 'Mông';
 
       if (parts.length > 1 && !isNaN(Number(parts[0])) && isNaN(Number(parts[1]))) {
         // parts[0] is STT, parts[1] is Name
         name = parts[1].replace(/^[\d\.\-\)\s]+/, '').trim();
         village = parts[2] || '';
-        if (parts[3] === 'Nữ' || parts[3] === 'F' || parts[3] === 'nữ') gender = 'Nữ';
         if (parts[4]) ethnicity = parts[4];
       } else if (parts.length >= 1) {
         name = parts[0].replace(/^[\d\.\-\)\s]+/, '').trim();
         village = parts[1] || '';
-        if (parts[2] === 'Nữ' || parts[2] === 'F' || parts[2] === 'nữ') gender = 'Nữ';
         if (parts[3]) ethnicity = parts[3];
       } else {
         const cleaned = line.replace(/^[\d]+[\.\/\)\-\:\s]+/, '').trim();
         const subparts = cleaned.split(/[\-\:,]/).map((p) => p.trim());
         name = subparts[0];
         village = subparts.slice(1).join(' - ');
+      }
+
+      let gender = resolveStudentGender('', name);
+      if (parts[3] === 'Nữ' || parts[3] === 'F' || parts[3] === 'nữ' || parts[2] === 'Nữ' || parts[2] === 'F' || parts[2] === 'nữ') {
+        gender = 'Nữ';
+      } else if (parts[3] === 'Nam' || parts[3] === 'M' || parts[3] === 'nam' || parts[2] === 'Nam' || parts[2] === 'M' || parts[2] === 'nam') {
+        gender = 'Nam';
       }
 
       if (name) {
@@ -2169,12 +2177,12 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
                         <td className="py-2.5 px-2 text-center">
                           <span
                             className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
-                              st.gender === 'Nữ'
+                              resolveStudentGender(st.gender, st.full_name) === 'Nữ'
                                 ? 'bg-pink-50 text-pink-700 border border-pink-200'
                                 : 'bg-blue-50 text-blue-700 border border-blue-200'
                             }`}
                           >
-                            {st.gender || 'Nam'}
+                            {resolveStudentGender(st.gender, st.full_name)}
                           </span>
                         </td>
                         <td className="py-2.5 px-3 text-slate-600">{st.village || st.address || '—'}</td>
