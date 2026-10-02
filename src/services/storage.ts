@@ -873,9 +873,22 @@ export const StorageService = {
   // --- 5.5. Students ---
   async getStudents(): Promise<import('../types').Student[]> {
     ensureInitialized();
-    let data: import('../types').Student[] | null = null;
-    const supabase = getSupabaseClient();
 
+    // 1. Load local students first as authoritative source for detailed attributes (gender, student_code, birth_date, ethnicity, notes, etc.)
+    const rawLocal = localStorage.getItem(STORAGE_KEYS.STUDENTS);
+    const localMap = new Map<string, import('../types').Student>();
+    if (rawLocal) {
+      try {
+        const parsed = JSON.parse(rawLocal);
+        if (Array.isArray(parsed)) {
+          parsed.forEach((s) => {
+            if (s && s.id) localMap.set(s.id, s);
+          });
+        }
+      } catch {}
+    }
+
+    const supabase = getSupabaseClient();
     // Map DB student row (snake_case) to JS student object (camelCase)
     const mapDBToJSStudent = (s: any) => ({
       id: s.id,
@@ -895,24 +908,34 @@ export const StorageService = {
       try {
         const { data: cloudData, error } = await supabase.from('students').select('*');
         if (!error && cloudData && cloudData.length > 0) {
-          const mapped = cloudData.map(mapDBToJSStudent);
-          localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(mapped));
-          data = mapped;
+          cloudData.forEach((row) => {
+            const mapped = mapDBToJSStudent(row);
+            const existing = localMap.get(mapped.id);
+            if (existing) {
+              // Merge: keep local detailed attributes (gender, code, birth_date, ethnicity, notes, etc.) as primary source, update basic info if needed
+              localMap.set(mapped.id, {
+                ...mapped,
+                ...existing,
+                full_name: existing.full_name || mapped.full_name,
+                class_id: existing.class_id || mapped.class_id,
+                isBoarding: existing.isBoarding !== undefined ? existing.isBoarding : mapped.isBoarding,
+              });
+            } else {
+              localMap.set(mapped.id, mapped);
+            }
+          });
         }
       } catch (err) {
         console.warn('Supabase fetch students fallback to local', err);
       }
     }
 
-    if (!data) {
-      const raw = localStorage.getItem(STORAGE_KEYS.STUDENTS);
-      data = raw ? JSON.parse(raw) : [];
-    }
+    const data = Array.from(localMap.values());
+    localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(data));
 
     // Auto-deduplicate any duplicate student records by id
     const seen = new Set<string>();
     const cleaned: import('../types').Student[] = [];
-    let hadDuplicates = false;
 
     for (const s of data) {
       if (!s || !s.id) continue;
@@ -920,13 +943,7 @@ export const StorageService = {
       if (!seen.has(key)) {
         seen.add(key);
         cleaned.push(s);
-      } else {
-        hadDuplicates = true;
       }
-    }
-
-    if (hadDuplicates) {
-      localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(cleaned));
     }
 
     // Sắp xếp danh sách học sinh theo thứ tự chữ cái của ID (đảm bảo giữ nguyên 100% thứ tự import ban đầu)
