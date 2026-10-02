@@ -346,7 +346,7 @@ export const BoardingPrintPreviewModal: React.FC<BoardingPrintPreviewModalProps>
           <div className="mt-4 flex justify-end pr-8">
             <div className="flex flex-col items-center w-64 text-center">
               <div className="text-[10px] text-slate-700 italic mb-0.5">
-                {effectiveSigningDateText || `${(sigConfig?.location_name?.trim() || 'Xa Dung')}, ngày ${daysInMonth} tháng ${String(monthNum).padStart(2, '0')} năm ${yearNum}`}
+                {`${sigConfig?.location_name?.trim() || 'Xa Dung'}, ngày ${daysInMonth} tháng ${String(monthNum).padStart(2, '0')} năm ${yearNum}`}
               </div>
               <div className="text-[11px] font-bold text-slate-900 uppercase">
                 {sigConfig?.teacher_title || 'GIÁO VIÊN CHỦ NHIỆM'}
