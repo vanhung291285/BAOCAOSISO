@@ -163,6 +163,11 @@ CREATE TABLE IF NOT EXISTS public.students (
     class_id TEXT NOT NULL REFERENCES public.classes(id) ON DELETE CASCADE,
     full_name TEXT NOT NULL,
     address TEXT,
+    gender TEXT,
+    student_code TEXT,
+    birth_date TEXT,
+    ethnicity TEXT,
+    notes TEXT,
     is_boarding BOOLEAN DEFAULT false,
     created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
 );
@@ -870,9 +875,9 @@ ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, code = EXCLUDED.code, enabl
       if (Array.isArray(students) && students.length > 0) {
         sql += `-- 7. DANH SÁCH HỌC SINH (${students.length} học sinh)\n`;
         students.forEach((s) => {
-          sql += `INSERT INTO public.students (id, class_id, full_name, address, is_boarding)
-VALUES (${escapeSql(s.id)}, ${escapeSql(s.class_id)}, ${escapeSql(s.full_name)}, ${escapeSql(s.address)}, ${escapeSql(Boolean(s.isBoarding ?? s.is_boarding))})
-ON CONFLICT (id) DO UPDATE SET full_name = EXCLUDED.full_name, class_id = EXCLUDED.class_id, address = EXCLUDED.address, is_boarding = EXCLUDED.is_boarding;\n`;
+          sql += `INSERT INTO public.students (id, class_id, full_name, address, gender, student_code, birth_date, ethnicity, notes, is_boarding)
+VALUES (${escapeSql(s.id)}, ${escapeSql(s.class_id)}, ${escapeSql(s.full_name)}, ${escapeSql(s.address)}, ${escapeSql(s.gender)}, ${escapeSql(s.student_code)}, ${escapeSql(s.birth_date)}, ${escapeSql(s.ethnicity)}, ${escapeSql(s.notes)}, ${escapeSql(Boolean(s.isBoarding ?? s.is_boarding))})
+ON CONFLICT (id) DO UPDATE SET full_name = EXCLUDED.full_name, class_id = EXCLUDED.class_id, address = EXCLUDED.address, gender = EXCLUDED.gender, student_code = EXCLUDED.student_code, birth_date = EXCLUDED.birth_date, ethnicity = EXCLUDED.ethnicity, notes = EXCLUDED.notes, is_boarding = EXCLUDED.is_boarding;\n`;
         });
         sql += `\n`;
       }
