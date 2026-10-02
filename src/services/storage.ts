@@ -912,12 +912,17 @@ export const StorageService = {
             const mapped = mapDBToJSStudent(row);
             const existing = localMap.get(mapped.id);
             if (existing) {
-              // Merge: keep local detailed attributes (gender, code, birth_date, ethnicity, notes, etc.) as primary source, update basic info if needed
+              // Merge: keep local detailed attributes or cloud attributes as preferred
               localMap.set(mapped.id, {
                 ...mapped,
                 ...existing,
                 full_name: existing.full_name || mapped.full_name,
                 class_id: existing.class_id || mapped.class_id,
+                gender: existing.gender || mapped.gender,
+                birth_date: existing.birth_date || mapped.birth_date,
+                student_code: existing.student_code || mapped.student_code,
+                ethnicity: existing.ethnicity || mapped.ethnicity,
+                notes: existing.notes || mapped.notes,
                 isBoarding: existing.isBoarding !== undefined ? existing.isBoarding : mapped.isBoarding,
               });
             } else {
@@ -966,6 +971,11 @@ export const StorageService = {
       class_id: s.class_id,
       full_name: s.full_name,
       address: s.village || s.address || '',
+      gender: s.gender || '',
+      student_code: s.student_code || '',
+      birth_date: s.birth_date || '',
+      ethnicity: s.ethnicity || '',
+      notes: s.notes || '',
       is_boarding: s.isBoarding !== undefined ? s.isBoarding : false,
     });
 
@@ -1064,6 +1074,11 @@ export const StorageService = {
       class_id: s.class_id,
       full_name: s.full_name,
       address: s.village || s.address || '',
+      gender: s.gender || '',
+      student_code: s.student_code || '',
+      birth_date: s.birth_date || '',
+      ethnicity: s.ethnicity || '',
+      notes: s.notes || '',
       is_boarding: s.isBoarding !== undefined ? s.isBoarding : false,
     });
 
@@ -3735,6 +3750,11 @@ export const StorageService = {
           class_id: s.class_id,
           full_name: s.full_name,
           address: s.address || '',
+          gender: s.gender || '',
+          student_code: s.student_code || '',
+          birth_date: s.birth_date || '',
+          ethnicity: s.ethnicity || '',
+          notes: s.notes || '',
           is_boarding: Boolean(s.isBoarding ?? (s as any).is_boarding),
           created_at: s.created_at || new Date().toISOString(),
         }));
@@ -4119,6 +4139,11 @@ export const StorageService = {
             class_id: s.class_id,
             full_name: s.full_name,
             address: s.address || '',
+            gender: s.gender || '',
+            student_code: s.student_code || '',
+            birth_date: s.birth_date || '',
+            ethnicity: s.ethnicity || '',
+            notes: s.notes || '',
             is_boarding: Boolean(s.isBoarding ?? (s as any).is_boarding),
             created_at: s.created_at || new Date().toISOString(),
           }));
