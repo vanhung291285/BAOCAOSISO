@@ -89,7 +89,7 @@ export const BoardingPrintPreviewModal: React.FC<BoardingPrintPreviewModalProps>
   monthSig,
   onExportExcel,
 }) => {
-  const [activeTab, setActiveTab] = useState<'page1' | 'page2' | 'both' | 'all'>('page1');
+  const [activeTab, setActiveTab] = useState<'page1' | 'page2' | 'both' | 'all'>('both');
   const [zoomLevel, setZoomLevel] = useState<number>(90);
   const [isExportingPdf, setIsExportingPdf] = useState<boolean>(false);
 
@@ -107,35 +107,39 @@ export const BoardingPrintPreviewModal: React.FC<BoardingPrintPreviewModalProps>
     try {
       if (activeTab === 'page1' && page1Ref.current) {
         await exportElementToPdf(page1Ref.current, {
-          fileName: `So_Cham_An_${classNameStr}_Thang_${monthNum}_${yearNum}_Trang_1.pdf`,
+          fileName: `So_Cham_An_${classNameStr}_Thang_${String(monthNum).padStart(2, '0')}_${yearNum}_Trang_1.pdf`,
           orientation: 'landscape',
-          quality: 2.2,
+          quality: 2,
         });
       } else if (activeTab === 'page2' && page2Ref.current) {
         await exportElementToPdf(page2Ref.current, {
-          fileName: `So_Cham_An_${classNameStr}_Thang_${monthNum}_${yearNum}_Trang_2.pdf`,
+          fileName: `So_Cham_An_${classNameStr}_Thang_${String(monthNum).padStart(2, '0')}_${yearNum}_Trang_2.pdf`,
           orientation: 'landscape',
-          quality: 2.2,
+          quality: 2,
         });
       } else if (activeTab === 'both') {
         const elements: HTMLElement[] = [];
         if (page1Ref.current) elements.push(page1Ref.current);
         if (page2Ref.current) elements.push(page2Ref.current);
+        if (elements.length === 0) {
+          throw new Error('Chưa tìm thấy phần tử hiển thị để xuất PDF.');
+        }
         await exportElementsToMultiPagePdf(elements, {
-          fileName: `So_Cham_An_${classNameStr}_Thang_${monthNum}_${yearNum}_2_Trang.pdf`,
+          fileName: `So_Cham_An_${classNameStr}_Thang_${String(monthNum).padStart(2, '0')}_${yearNum}_2_Trang.pdf`,
           orientation: 'landscape',
-          quality: 2.2,
+          quality: 2,
         });
       } else if (allRef.current) {
         await exportElementToPdf(allRef.current, {
-          fileName: `So_Cham_An_${classNameStr}_Thang_${monthNum}_${yearNum}_Ca_Thang.pdf`,
+          fileName: `So_Cham_An_${classNameStr}_Thang_${String(monthNum).padStart(2, '0')}_${yearNum}_Ca_Thang.pdf`,
           orientation: 'landscape',
-          quality: 2.2,
+          quality: 2,
         });
       }
     } catch (e) {
       console.error('Export PDF error:', e);
-      alert('Có lỗi xảy ra khi tạo file PDF. Vui lòng thử lại hoặc dùng chức năng In ra PDF!');
+      alert('Không thể tạo file PDF trực tiếp trên trình duyệt này. Hệ thống sẽ mở hộp thoại In để lưu ra file PDF chuẩn chất lượng cao!');
+      window.print();
     } finally {
       setIsExportingPdf(false);
     }
@@ -342,7 +346,7 @@ export const BoardingPrintPreviewModal: React.FC<BoardingPrintPreviewModalProps>
           <div className="mt-4 flex justify-end pr-8">
             <div className="flex flex-col items-center w-64 text-center">
               <div className="text-[10px] text-slate-700 italic mb-0.5">
-                {(sigConfig?.location_name?.trim() || 'Xa Dung')}, ngày {daysInMonth} tháng {String(monthNum).padStart(2, '0')} năm {yearNum}
+                {effectiveSigningDateText || `${(sigConfig?.location_name?.trim() || 'Xa Dung')}, ngày ${daysInMonth} tháng ${String(monthNum).padStart(2, '0')} năm ${yearNum}`}
               </div>
               <div className="text-[11px] font-bold text-slate-900 uppercase">
                 {sigConfig?.teacher_title || 'GIÁO VIÊN CHỦ NHIỆM'}
@@ -376,7 +380,7 @@ export const BoardingPrintPreviewModal: React.FC<BoardingPrintPreviewModalProps>
               )}
 
               <div className="text-[11px] font-bold text-slate-900">
-                {effectiveTeacherName}
+                {effectiveTeacherName || sigConfig?.teacher_name || 'Giáo viên chủ nhiệm'}
               </div>
             </div>
           </div>
