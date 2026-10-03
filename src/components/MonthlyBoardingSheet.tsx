@@ -321,7 +321,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
   const [overrideBreakfast, setOverrideBreakfast] = useState<number | null>(null);
   const [overrideLunch, setOverrideLunch] = useState<number | null>(null);
   const [overrideDinner, setOverrideDinner] = useState<number | null>(null);
-  const [isAutoSyncReported, setIsAutoSyncReported] = useState<boolean>(false);
+  const [isAutoSyncReported, setIsAutoSyncReported] = useState<boolean>(true);
 
   // Tính số ngày ăn chuẩn mặc định theo lịch cả tháng (T2-T6, trừ ngày nghỉ lễ/thời tiết)
   const { defaultStandardBreakfast, defaultStandardLunch, defaultStandardDinner } = useMemo(() => {
@@ -394,31 +394,43 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
         const configKey = `${selectedClassId}_${selectedMonth}`;
         const savedConfig = configs[configKey];
         if (savedConfig) {
-          if (savedConfig.auto_sync || savedConfig.mode === 'AUTO_REPORTED') {
-            setIsAutoSyncReported(true);
-            setOverrideBreakfast(null);
-            setOverrideLunch(null);
-            setOverrideDinner(null);
-          } else {
+          if (savedConfig.mode === 'CALENDAR' || (savedConfig.mode as string) === 'FIXED_SCHEDULE') {
             setIsAutoSyncReported(false);
             setOverrideBreakfast(savedConfig.breakfast !== undefined ? savedConfig.breakfast : null);
             setOverrideLunch(savedConfig.lunch !== undefined ? savedConfig.lunch : null);
             setOverrideDinner(savedConfig.dinner !== undefined ? savedConfig.dinner : null);
+          } else if (
+            (savedConfig.breakfast !== undefined && savedConfig.breakfast !== null) ||
+            (savedConfig.lunch !== undefined && savedConfig.lunch !== null) ||
+            (savedConfig.dinner !== undefined && savedConfig.dinner !== null)
+          ) {
+            setIsAutoSyncReported(false);
+            setOverrideBreakfast(savedConfig.breakfast !== undefined ? savedConfig.breakfast : null);
+            setOverrideLunch(savedConfig.lunch !== undefined ? savedConfig.lunch : null);
+            setOverrideDinner(savedConfig.dinner !== undefined ? savedConfig.dinner : null);
+          } else {
+            // Mặc định luôn là Tự động theo báo ăn
+            setIsAutoSyncReported(true);
+            setOverrideBreakfast(null);
+            setOverrideLunch(null);
+            setOverrideDinner(null);
           }
         } else {
-          setIsAutoSyncReported(false);
+          // Chưa có cấu hình riêng -> Mặc định là Tự động theo báo ăn
+          setIsAutoSyncReported(true);
           setOverrideBreakfast(null);
           setOverrideLunch(null);
           setOverrideDinner(null);
         }
       } else {
-        setIsAutoSyncReported(false);
+        // Chưa có dữ liệu lưu trữ -> Mặc định là Tự động theo báo ăn
+        setIsAutoSyncReported(true);
         setOverrideBreakfast(null);
         setOverrideLunch(null);
         setOverrideDinner(null);
       }
     } catch {
-      setIsAutoSyncReported(false);
+      setIsAutoSyncReported(true);
       setOverrideBreakfast(null);
       setOverrideLunch(null);
       setOverrideDinner(null);
@@ -429,19 +441,30 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
       .then((cfg) => {
         if (!isMounted) return;
         if (cfg) {
-          if (cfg.auto_sync || cfg.mode === 'AUTO_REPORTED') {
-            setIsAutoSyncReported(true);
-            setOverrideBreakfast(null);
-            setOverrideLunch(null);
-            setOverrideDinner(null);
-          } else {
+          if (cfg.mode === 'CALENDAR' || (cfg.mode as string) === 'FIXED_SCHEDULE') {
             setIsAutoSyncReported(false);
             setOverrideBreakfast(cfg.breakfast !== undefined ? cfg.breakfast : null);
             setOverrideLunch(cfg.lunch !== undefined ? cfg.lunch : null);
             setOverrideDinner(cfg.dinner !== undefined ? cfg.dinner : null);
+          } else if (
+            (cfg.breakfast !== undefined && cfg.breakfast !== null) ||
+            (cfg.lunch !== undefined && cfg.lunch !== null) ||
+            (cfg.dinner !== undefined && cfg.dinner !== null)
+          ) {
+            setIsAutoSyncReported(false);
+            setOverrideBreakfast(cfg.breakfast !== undefined ? cfg.breakfast : null);
+            setOverrideLunch(cfg.lunch !== undefined ? cfg.lunch : null);
+            setOverrideDinner(cfg.dinner !== undefined ? cfg.dinner : null);
+          } else {
+            // Mặc định luôn là Tự động theo báo ăn
+            setIsAutoSyncReported(true);
+            setOverrideBreakfast(null);
+            setOverrideLunch(null);
+            setOverrideDinner(null);
           }
         } else {
-          setIsAutoSyncReported(false);
+          // Chưa có cấu hình trên Cloud -> Mặc định là Tự động theo báo ăn
+          setIsAutoSyncReported(true);
           setOverrideBreakfast(null);
           setOverrideLunch(null);
           setOverrideDinner(null);
@@ -546,37 +569,43 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
   };
 
   const handleResetStandardConfig = async () => {
-    setIsAutoSyncReported(false);
+    setIsAutoSyncReported(true);
     setOverrideBreakfast(null);
     setOverrideLunch(null);
     setOverrideDinner(null);
-    await saveCustomStandardConfig(null, null, null, false);
+    await saveCustomStandardConfig(null, null, null, true);
     showToast(
-      `Đã reset định mức ngày báo ăn Tháng ${monthNum}/${yearNum} về chuẩn lịch: Sáng ${defaultStandardBreakfast} ngày, Trưa ${defaultStandardLunch} ngày, Tối ${defaultStandardDinner} ngày!`
+      `Đã reset định mức ngày báo ăn Tháng ${monthNum}/${yearNum} về mặc định "✓ Đang tự động theo báo ăn": Sáng ${autoReportedMealDays.hasAnyReported ? autoReportedMealDays.autoBreakfast : defaultStandardBreakfast} ngày, Trưa ${autoReportedMealDays.hasAnyReported ? autoReportedMealDays.autoLunch : defaultStandardLunch} ngày, Tối ${autoReportedMealDays.hasAnyReported ? autoReportedMealDays.autoDinner : defaultStandardDinner} ngày!`
     );
   };
 
   // Định mức ngày ăn có hiệu lực (S, T, T)
   const standardBreakfastDays = useMemo(() => {
     if (isAutoSyncReported) {
-      return autoReportedMealDays.autoBreakfast;
+      return autoReportedMealDays.hasAnyReported
+        ? autoReportedMealDays.autoBreakfast
+        : defaultStandardBreakfast;
     }
     return overrideBreakfast !== null ? overrideBreakfast : defaultStandardBreakfast;
-  }, [isAutoSyncReported, autoReportedMealDays.autoBreakfast, overrideBreakfast, defaultStandardBreakfast]);
+  }, [isAutoSyncReported, autoReportedMealDays.hasAnyReported, autoReportedMealDays.autoBreakfast, overrideBreakfast, defaultStandardBreakfast]);
 
   const standardLunchDays = useMemo(() => {
     if (isAutoSyncReported) {
-      return autoReportedMealDays.autoLunch;
+      return autoReportedMealDays.hasAnyReported
+        ? autoReportedMealDays.autoLunch
+        : defaultStandardLunch;
     }
     return overrideLunch !== null ? overrideLunch : defaultStandardLunch;
-  }, [isAutoSyncReported, autoReportedMealDays.autoLunch, overrideLunch, defaultStandardLunch]);
+  }, [isAutoSyncReported, autoReportedMealDays.hasAnyReported, autoReportedMealDays.autoLunch, overrideLunch, defaultStandardLunch]);
 
   const standardDinnerDays = useMemo(() => {
     if (isAutoSyncReported) {
-      return autoReportedMealDays.autoDinner;
+      return autoReportedMealDays.hasAnyReported
+        ? autoReportedMealDays.autoDinner
+        : defaultStandardDinner;
     }
     return overrideDinner !== null ? overrideDinner : defaultStandardDinner;
-  }, [isAutoSyncReported, autoReportedMealDays.autoDinner, overrideDinner, defaultStandardDinner]);
+  }, [isAutoSyncReported, autoReportedMealDays.hasAnyReported, autoReportedMealDays.autoDinner, overrideDinner, defaultStandardDinner]);
 
   // --- Cấu hình chữ ký & Địa danh ký (Tự động cập nhật theo ngày) ---
   const [signingLocation, setSigningLocation] = useState<string>(() => {
