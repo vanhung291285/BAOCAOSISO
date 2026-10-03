@@ -24,6 +24,7 @@ import {
   BoardingMealSummaryRow,
   BoardingSignatureConfig,
   BoardingMonthSignature,
+  BoardingStandardMealConfig,
 } from '../types';
 import { getSupabaseClient, isSupabaseConnected } from './supabase';
 import {
@@ -59,6 +60,7 @@ const STORAGE_KEYS = {
   BOARDING_REPORTS: 'sso_boarding_reports_v1',
   SIGNATURE_CONFIGS: 'sso_boarding_signature_configs_v1',
   MONTH_SIGNATURES: 'sso_boarding_month_signatures_v1',
+  STANDARD_CONFIGS: 'sso_boarding_standard_configs_v1',
 };
 
 export interface TableSyncStatus {
@@ -1536,6 +1538,253 @@ export const StorageService = {
 
     notifyRealtimeChange('boarding_month_signatures', updated);
     return updated;
+  },
+
+  async getBoardingStandardConfig(classId: string, month: string): Promise<BoardingStandardMealConfig | null> {
+    ensureInitialized();
+    const configKey = `${classId}_${month}`;
+    let config: BoardingStandardMealConfig | null = null;
+
+    // 1. Kiểm tra bộ nhớ cục bộ trước để giao diện không bị giật lag
+    try {
+      const savedRaw = localStorage.getItem(STORAGE_KEYS.STANDARD_CONFIGS);
+      if (savedRaw) {
+        const configs = JSON.parse(savedRaw);
+        if (configs[configKey]) {
+          config = configs[configKey];
+        }
+      }
+    } catch (e) {
+      console.warn('Error reading local standard meal config:', e);
+    }
+
+    // 2. Đồng bộ trực tiếp từ Supabase Cloud (bảng boarding_month_signatures)
+    const supabase = getSupabaseClient();
+    if (supabase && isSupabaseConnected()) {
+      try {
+        const { data, error } = await supabase
+          .from('boarding_month_signatures')
+          .select('*')
+          .eq('class_id', classId)
+          .eq('month', month)
+          .maybeSingle();
+
+        if (!error && data) {
+          let b: number | undefined = undefined;
+          let l: number | undefined = undefined;
+          let d: number | undefined = undefined;
+          let hasExplicitCloudValue = false;
+          let isCloudReset = false;
+
+          if (data.standard_breakfast !== null && data.standard_breakfast !== undefined) {
+            b = Number(data.standard_breakfast);
+            hasExplicitCloudValue = true;
+          }
+          if (data.standard_lunch !== null && data.standard_lunch !== undefined) {
+            l = Number(data.standard_lunch);
+            hasExplicitCloudValue = true;
+          }
+          if (data.standard_dinner !== null && data.standard_dinner !== undefined) {
+            d = Number(data.standard_dinner);
+            hasExplicitCloudValue = true;
+          }
+
+          // Kiểm tra dự phòng trong trường notes nếu cột chưa tạo hoặc lưu dạng JSON
+          if (!hasExplicitCloudValue && data.notes) {
+            try {
+              if (data.notes === '__STANDARD_RESET__') {
+                isCloudReset = true;
+              } else if (typeof data.notes === 'string' && data.notes.trim().startsWith('{')) {
+                const parsedNotes = JSON.parse(data.notes);
+                if (parsedNotes && typeof parsedNotes === 'object') {
+                  if (parsedNotes.standard_reset) {
+                    isCloudReset = true;
+                  } else {
+                    if (parsedNotes.standard_breakfast !== undefined && parsedNotes.standard_breakfast !== null) {
+                      b = Number(parsedNotes.standard_breakfast);
+                      hasExplicitCloudValue = true;
+                    }
+                    if (parsedNotes.standard_lunch !== undefined && parsedNotes.standard_lunch !== null) {
+                      l = Number(parsedNotes.standard_lunch);
+                      hasExplicitCloudValue = true;
+                    }
+                    if (parsedNotes.standard_dinner !== undefined && parsedNotes.standard_dinner !== null) {
+                      d = Number(parsedNotes.standard_dinner);
+                      hasExplicitCloudValue = true;
+                    }
+                  }
+                }
+              }
+            } catch {}
+          }
+
+          // Nếu bản ghi trên Cloud tồn tại nhưng các cột standard_* đều là NULL và không có định mức trong notes,
+          // điều đó có nghĩa định mức đã được khôi phục về mặc định (reset) trên Cloud
+          if (!hasExplicitCloudValue && (data.standard_breakfast === null && data.standard_lunch === null && data.standard_dinner === null)) {
+            isCloudReset = true;
+          }
+
+          if (hasExplicitCloudValue && (b !== undefined || l !== undefined || d !== undefined)) {
+            config = {
+              breakfast: b,
+              lunch: l,
+              dinner: d,
+            };
+            // Cập nhật bộ nhớ cục bộ đồng bộ với Cloud
+            const savedRaw = localStorage.getItem(STORAGE_KEYS.STANDARD_CONFIGS);
+            const configs = savedRaw ? JSON.parse(savedRaw) : {};
+            configs[configKey] = config;
+            localStorage.setItem(STORAGE_KEYS.STANDARD_CONFIGS, JSON.stringify(configs));
+          } else if (isCloudReset) {
+            // Đã được người dùng đặt lại (reset) trên cloud -> xóa khỏi cache cục bộ
+            config = null;
+            const savedRaw = localStorage.getItem(STORAGE_KEYS.STANDARD_CONFIGS);
+            if (savedRaw) {
+              const configs = JSON.parse(savedRaw);
+              delete configs[configKey];
+              localStorage.setItem(STORAGE_KEYS.STANDARD_CONFIGS, JSON.stringify(configs));
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('Fetch boarding standard config error:', e);
+      }
+    }
+
+    return config;
+  },
+
+  async saveBoardingStandardConfig(
+    classId: string,
+    month: string,
+    cfg: BoardingStandardMealConfig | null
+  ): Promise<void> {
+    ensureInitialized();
+    const configKey = `${classId}_${month}`;
+
+    const isReset = !cfg || (cfg.breakfast === undefined && cfg.lunch === undefined && cfg.dinner === undefined);
+
+    // 1. Cập nhật localStorage ngay lập tức
+    try {
+      const savedRaw = localStorage.getItem(STORAGE_KEYS.STANDARD_CONFIGS);
+      const configs = savedRaw ? JSON.parse(savedRaw) : {};
+
+      if (isReset) {
+        delete configs[configKey];
+      } else {
+        configs[configKey] = {
+          breakfast: cfg.breakfast,
+          lunch: cfg.lunch,
+          dinner: cfg.dinner,
+        };
+      }
+      localStorage.setItem(STORAGE_KEYS.STANDARD_CONFIGS, JSON.stringify(configs));
+    } catch (e) {
+      console.warn('Error saving standard config locally:', e);
+    }
+
+    // 2. Lưu trực tiếp lên Supabase Cloud (bảng boarding_month_signatures)
+    const supabase = getSupabaseClient();
+    if (supabase && isSupabaseConnected()) {
+      try {
+        const sigId = `sig_${classId}_${month}`;
+
+        const b = isReset ? null : (cfg.breakfast !== undefined ? cfg.breakfast : null);
+        const l = isReset ? null : (cfg.lunch !== undefined ? cfg.lunch : null);
+        const d = isReset ? null : (cfg.dinner !== undefined ? cfg.dinner : null);
+
+        // Đọc bản ghi hiện có từ Cloud hoặc Local để bảo toàn chữ ký, địa danh và thông tin khác
+        const { data: cloudSig } = await supabase
+          .from('boarding_month_signatures')
+          .select('*')
+          .eq('class_id', classId)
+          .eq('month', month)
+          .maybeSingle();
+
+        const rawMonthSigs = localStorage.getItem(STORAGE_KEYS.MONTH_SIGNATURES);
+        const localMonthSigs: BoardingMonthSignature[] = rawMonthSigs ? JSON.parse(rawMonthSigs) : [];
+        const localSig = localMonthSigs.find((s) => s.id === sigId || (s.class_id === classId && s.month === month));
+
+        const baseSig = cloudSig || localSig || {};
+
+        let notesToSave = baseSig.notes || '';
+        try {
+          let parsed: any = null;
+          if (notesToSave && typeof notesToSave === 'string' && notesToSave.trim().startsWith('{')) {
+            parsed = JSON.parse(notesToSave);
+          }
+          if (isReset) {
+            if (parsed) {
+              delete parsed.standard_breakfast;
+              delete parsed.standard_lunch;
+              delete parsed.standard_dinner;
+              parsed.standard_reset = true;
+              notesToSave = JSON.stringify(parsed);
+            } else if (!notesToSave || notesToSave === '__STANDARD_RESET__') {
+              notesToSave = '__STANDARD_RESET__';
+            }
+          } else {
+            if (!parsed) parsed = {};
+            delete parsed.standard_reset;
+            parsed.standard_breakfast = b;
+            parsed.standard_lunch = l;
+            parsed.standard_dinner = d;
+            notesToSave = JSON.stringify(parsed);
+          }
+        } catch {
+          if (isReset && !notesToSave) notesToSave = '__STANDARD_RESET__';
+        }
+
+        const upsertData: any = {
+          id: baseSig.id || sigId,
+          class_id: classId,
+          month: month,
+          is_signed: Boolean(baseSig.is_signed),
+          signed_by_name: baseSig.signed_by_name || '',
+          signed_by_role: baseSig.signed_by_role || 'GVCN',
+          signed_at: baseSig.signed_at || null,
+          location_name: baseSig.location_name || 'Xa Dung',
+          signature_image_url: baseSig.signature_image_url || '',
+          certificate_hash: baseSig.certificate_hash || '',
+          notes: notesToSave,
+          standard_breakfast: b,
+          standard_lunch: l,
+          standard_dinner: d,
+          updated_at: new Date().toISOString(),
+        };
+
+        const { error } = await supabase
+          .from('boarding_month_signatures')
+          .upsert(upsertData, { onConflict: 'class_id,month' });
+
+        if (error) {
+          console.warn('Upsert boarding_month_signatures standard days error, trying fallback:', error.message);
+          // Dự phòng nếu cột standard_* chưa được tạo trong Supabase SQL
+          const fallbackData = {
+            id: baseSig.id || sigId,
+            class_id: classId,
+            month: month,
+            notes: notesToSave,
+            updated_at: new Date().toISOString(),
+          };
+          await supabase.from('boarding_month_signatures').upsert(fallbackData, { onConflict: 'class_id,month' });
+        }
+
+        // Cập nhật bộ nhớ cục bộ MONTH_SIGNATURES để đồng bộ toàn diện
+        const updatedLocalSig: BoardingMonthSignature = {
+          ...baseSig,
+          ...upsertData,
+        };
+        const mIdx = localMonthSigs.findIndex((s) => s.id === updatedLocalSig.id || (s.class_id === classId && s.month === month));
+        if (mIdx >= 0) localMonthSigs[mIdx] = updatedLocalSig;
+        else localMonthSigs.push(updatedLocalSig);
+        localStorage.setItem(STORAGE_KEYS.MONTH_SIGNATURES, JSON.stringify(localMonthSigs));
+      } catch (e) {
+        console.error('Save boarding standard config to Supabase error:', e);
+      }
+    }
+
+    notifyRealtimeChange('boarding_standard_configs', { classId, month, cfg });
   },
 
   async getBoardingSummaryByDate(date: string, campusId?: string): Promise<{
@@ -4045,6 +4294,97 @@ export const StorageService = {
         details.system_logs = { count: 0 };
       }
 
+      // 13. boarding_month_signatures (Bao gồm định mức ăn chuẩn S, T, T và chữ ký duyệt tháng)
+      const rawMonthSigs = localStorage.getItem(STORAGE_KEYS.MONTH_SIGNATURES);
+      const rawStandards = localStorage.getItem(STORAGE_KEYS.STANDARD_CONFIGS);
+      const monthSigsList: BoardingMonthSignature[] = rawMonthSigs ? JSON.parse(rawMonthSigs) : [];
+      let standardConfigsMap: Record<string, any> = {};
+      try {
+        if (rawStandards) standardConfigsMap = JSON.parse(rawStandards);
+      } catch {}
+
+      const allMergedSigsMap = new Map<string, any>();
+      monthSigsList.forEach((ms) => {
+        if (ms && ms.class_id && ms.month) {
+          const key = `${ms.class_id}_${ms.month}`;
+          const stdCfg = standardConfigsMap[key];
+          const b = ms.standard_breakfast !== undefined && ms.standard_breakfast !== null ? ms.standard_breakfast : (stdCfg?.breakfast !== undefined ? stdCfg.breakfast : null);
+          const l = ms.standard_lunch !== undefined && ms.standard_lunch !== null ? ms.standard_lunch : (stdCfg?.lunch !== undefined ? stdCfg.lunch : null);
+          const d = ms.standard_dinner !== undefined && ms.standard_dinner !== null ? ms.standard_dinner : (stdCfg?.dinner !== undefined ? stdCfg.dinner : null);
+          allMergedSigsMap.set(key, {
+            id: ms.id || `sig_${ms.class_id}_${ms.month}`,
+            class_id: ms.class_id,
+            month: ms.month,
+            is_signed: Boolean(ms.is_signed),
+            signed_by_name: ms.signed_by_name || '',
+            signed_by_role: ms.signed_by_role || 'GVCN',
+            signed_at: ms.signed_at || null,
+            location_name: ms.location_name || 'Xa Dung',
+            signature_image_url: ms.signature_image_url || '',
+            certificate_hash: ms.certificate_hash || '',
+            notes: ms.notes || '',
+            standard_breakfast: b,
+            standard_lunch: l,
+            standard_dinner: d,
+            updated_at: new Date().toISOString(),
+          });
+        }
+      });
+
+      Object.entries(standardConfigsMap).forEach(([key, stdCfg]: [string, any]) => {
+        if (!allMergedSigsMap.has(key)) {
+          const parts = key.split('_');
+          const classId = parts[0];
+          const month = parts.slice(1).join('_');
+          if (classId && month && stdCfg) {
+            allMergedSigsMap.set(key, {
+              id: `sig_${classId}_${month}`,
+              class_id: classId,
+              month: month,
+              is_signed: false,
+              signed_by_name: '',
+              signed_by_role: 'GVCN',
+              location_name: 'Xa Dung',
+              notes: '',
+              standard_breakfast: stdCfg.breakfast !== undefined ? stdCfg.breakfast : null,
+              standard_lunch: stdCfg.lunch !== undefined ? stdCfg.lunch : null,
+              standard_dinner: stdCfg.dinner !== undefined ? stdCfg.dinner : null,
+              updated_at: new Date().toISOString(),
+            });
+          }
+        }
+      });
+
+      const finalSigsToUpload = Array.from(allMergedSigsMap.values());
+      if (finalSigsToUpload.length > 0) {
+        let { error: msErr } = await supabase
+          .from('boarding_month_signatures')
+          .upsert(finalSigsToUpload, { onConflict: 'class_id,month' });
+        if (msErr && (msErr.message?.includes('standard_') || msErr.code === 'PGRST204')) {
+          const fallbackList = finalSigsToUpload.map(item => ({
+            id: item.id,
+            class_id: item.class_id,
+            month: item.month,
+            is_signed: item.is_signed,
+            signed_by_name: item.signed_by_name,
+            signed_by_role: item.signed_by_role,
+            signed_at: item.signed_at,
+            location_name: item.location_name,
+            notes: item.notes || JSON.stringify({
+              standard_breakfast: item.standard_breakfast,
+              standard_lunch: item.standard_lunch,
+              standard_dinner: item.standard_dinner,
+            }),
+            updated_at: item.updated_at,
+          }));
+          const retry = await supabase.from('boarding_month_signatures').upsert(fallbackList, { onConflict: 'class_id,month' });
+          msErr = retry.error;
+        }
+        details.boarding_month_signatures = { count: finalSigsToUpload.length, error: msErr?.message };
+      } else {
+        details.boarding_month_signatures = { count: 0 };
+      }
+
       const hasError = Object.values(details).some((d) => Boolean(d.error));
 
       let errorDetailsString = '';
@@ -4582,6 +4922,7 @@ export const StorageService = {
         offDays,
         notifications,
         logs,
+        monthSigs,
       ] = await Promise.all([
         supabase.from('school_settings').select('*').limit(1).maybeSingle(),
         this.fetchAllRowsFromCloud('school_years'),
@@ -4595,6 +4936,7 @@ export const StorageService = {
         this.fetchAllRowsFromCloud('school_off_days'),
         this.fetchAllRowsFromCloud('notifications'),
         this.fetchAllRowsFromCloud('system_logs'),
+        this.fetchAllRowsFromCloud('boarding_month_signatures'),
       ]);
 
       const settings = settingsRes?.data;
@@ -4630,6 +4972,33 @@ export const StorageService = {
       if (offDays && offDays.length > 0) counts.school_off_days = updateMergedList(STORAGE_KEYS.OFF_DAYS, offDays);
       if (notifications && notifications.length > 0) counts.notifications = updateMergedList(STORAGE_KEYS.NOTIFICATIONS, notifications);
       if (logs && logs.length > 0) counts.system_logs = updateMergedList(STORAGE_KEYS.LOGS, logs);
+
+      if (monthSigs && monthSigs.length > 0) {
+        counts.boarding_month_signatures = updateMergedList(STORAGE_KEYS.MONTH_SIGNATURES, monthSigs);
+        const rawStandards = localStorage.getItem(STORAGE_KEYS.STANDARD_CONFIGS);
+        const stdConfigs = rawStandards ? JSON.parse(rawStandards) : {};
+        monthSigs.forEach((ms: any) => {
+          if (ms.class_id && ms.month) {
+            let b = ms.standard_breakfast !== null && ms.standard_breakfast !== undefined ? Number(ms.standard_breakfast) : undefined;
+            let l = ms.standard_lunch !== null && ms.standard_lunch !== undefined ? Number(ms.standard_lunch) : undefined;
+            let d = ms.standard_dinner !== null && ms.standard_dinner !== undefined ? Number(ms.standard_dinner) : undefined;
+            if (b === undefined && l === undefined && d === undefined && ms.notes && typeof ms.notes === 'string' && ms.notes.trim().startsWith('{')) {
+              try {
+                const parsed = JSON.parse(ms.notes);
+                if (parsed.standard_breakfast !== undefined) b = Number(parsed.standard_breakfast);
+                if (parsed.standard_lunch !== undefined) l = Number(parsed.standard_lunch);
+                if (parsed.standard_dinner !== undefined) d = Number(parsed.standard_dinner);
+              } catch {}
+            }
+            if (b !== undefined || l !== undefined || d !== undefined) {
+              stdConfigs[`${ms.class_id}_${ms.month}`] = { breakfast: b, lunch: l, dinner: d };
+            } else if (ms.notes === '__STANDARD_RESET__' || (ms.standard_breakfast === null && ms.standard_lunch === null && ms.standard_dinner === null)) {
+              delete stdConfigs[`${ms.class_id}_${ms.month}`];
+            }
+          }
+        });
+        localStorage.setItem(STORAGE_KEYS.STANDARD_CONFIGS, JSON.stringify(stdConfigs));
+      }
 
       notifyRealtimeChange('all');
 
@@ -4668,6 +5037,7 @@ export const StorageService = {
       { key: 'school_off_days', label: 'Lịch nghỉ học sinh (school_off_days)', storageKey: STORAGE_KEYS.OFF_DAYS },
       { key: 'notifications', label: 'Thông báo hệ thống & Nhắc nhở (notifications)', storageKey: STORAGE_KEYS.NOTIFICATIONS },
       { key: 'system_logs', label: 'Nhật ký thao tác & kiểm toán (system_logs)', storageKey: STORAGE_KEYS.LOGS },
+      { key: 'boarding_month_signatures', label: 'Ký số & Định mức ăn tháng (boarding_month_signatures)', storageKey: STORAGE_KEYS.MONTH_SIGNATURES },
     ];
 
     const results: TableSyncStatus[] = [];

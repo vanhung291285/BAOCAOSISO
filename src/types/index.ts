@@ -347,6 +347,12 @@ export interface BoardingSignatureConfig {
   updated_at?: string;
 }
 
+export interface BoardingStandardMealConfig {
+  breakfast?: number;
+  lunch?: number;
+  dinner?: number;
+}
+
 export interface BoardingMonthSignature {
   id: string; // "sig_${class_id}_${monthStr}"
   class_id: string;
@@ -359,6 +365,9 @@ export interface BoardingMonthSignature {
   signature_image_url?: string;
   certificate_hash?: string;
   notes?: string;
+  standard_breakfast?: number | null;
+  standard_lunch?: number | null;
+  standard_dinner?: number | null;
   created_at?: string;
   updated_at?: string;
 }

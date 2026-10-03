@@ -256,6 +256,9 @@ CREATE TABLE IF NOT EXISTS public.boarding_month_signatures (
     signature_image_url TEXT DEFAULT '',
     certificate_hash TEXT DEFAULT '',
     notes TEXT DEFAULT '',
+    standard_breakfast INTEGER,
+    standard_lunch INTEGER,
+    standard_dinner INTEGER,
     created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()),
     updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()),
     CONSTRAINT unique_class_month_signature UNIQUE (class_id, month)
@@ -406,6 +409,19 @@ BEGIN
 
     BEGIN
         ALTER TABLE public.students ADD COLUMN is_boarding BOOLEAN DEFAULT false;
+    EXCEPTION WHEN duplicate_column THEN END;
+
+    -- Migrations for public.boarding_month_signatures (Định mức số ngày ăn chuẩn theo tháng)
+    BEGIN
+        ALTER TABLE public.boarding_month_signatures ADD COLUMN standard_breakfast INTEGER;
+    EXCEPTION WHEN duplicate_column THEN END;
+
+    BEGIN
+        ALTER TABLE public.boarding_month_signatures ADD COLUMN standard_lunch INTEGER;
+    EXCEPTION WHEN duplicate_column THEN END;
+
+    BEGIN
+        ALTER TABLE public.boarding_month_signatures ADD COLUMN standard_dinner INTEGER;
     EXCEPTION WHEN duplicate_column THEN END;
 END $$;
 
@@ -1027,19 +1043,53 @@ ON CONFLICT (id) DO UPDATE SET class_id = EXCLUDED.class_id, location_name = EXC
       }
     }
 
-    // 15. boarding_month_signatures
+    // 15. boarding_month_signatures & custom standard meal quotas
     const rawMonthSigs = getLocalItem('sso_boarding_month_signatures');
-    if (rawMonthSigs) {
-      const monthSigs = JSON.parse(rawMonthSigs);
-      if (Array.isArray(monthSigs) && monthSigs.length > 0) {
-        sql += `-- 15. NHẬT KÝ KÝ SỐ SỔ BÁN TRÚ THÁNG (${monthSigs.length} lượt ký)\n`;
-        monthSigs.forEach((ms) => {
-          sql += `INSERT INTO public.boarding_month_signatures (id, class_id, month, is_signed, signed_by_name, signed_by_role, signed_at, location_name, signature_image_url, certificate_hash, notes)
-VALUES (${escapeSql(ms.id)}, ${escapeSql(ms.class_id)}, ${escapeSql(ms.month)}, ${escapeSql(Boolean(ms.is_signed))}, ${escapeSql(ms.signed_by_name)}, ${escapeSql(ms.signed_by_role || 'GVCN')}, ${escapeSql(ms.signed_at)}, ${escapeSql(ms.location_name || 'Xa Dung')}, ${escapeSql(ms.signature_image_url)}, ${escapeSql(ms.certificate_hash)}, ${escapeSql(ms.notes)})
-ON CONFLICT (class_id, month) DO UPDATE SET is_signed = EXCLUDED.is_signed, signed_by_name = EXCLUDED.signed_by_name, signed_by_role = EXCLUDED.signed_by_role, signed_at = EXCLUDED.signed_at, location_name = EXCLUDED.location_name, signature_image_url = EXCLUDED.signature_image_url, certificate_hash = EXCLUDED.certificate_hash, notes = EXCLUDED.notes;\n`;
-        });
-        sql += `\n`;
-      }
+    const rawStandards = getLocalItem('sso_boarding_standard_configs');
+    let standardMap: Record<string, any> = {};
+    try {
+      if (rawStandards) standardMap = JSON.parse(rawStandards);
+    } catch {}
+
+    const exportedClassMonths = new Set<string>();
+    const monthSigs: any[] = rawMonthSigs ? JSON.parse(rawMonthSigs) : [];
+    if (Array.isArray(monthSigs) && monthSigs.length > 0) {
+      sql += `-- 15. NHẬT KÝ KÝ SỐ SỔ BÁN TRÚ THÁNG & ĐỊNH MỨC ĂN (${monthSigs.length} bản ghi)\n`;
+      monthSigs.forEach((ms) => {
+        exportedClassMonths.add(`${ms.class_id}_${ms.month}`);
+        const stdCfg = standardMap[`${ms.class_id}_${ms.month}`];
+        const b = ms.standard_breakfast !== undefined && ms.standard_breakfast !== null ? ms.standard_breakfast : (stdCfg?.breakfast !== undefined ? stdCfg.breakfast : null);
+        const l = ms.standard_lunch !== undefined && ms.standard_lunch !== null ? ms.standard_lunch : (stdCfg?.lunch !== undefined ? stdCfg.lunch : null);
+        const d = ms.standard_dinner !== undefined && ms.standard_dinner !== null ? ms.standard_dinner : (stdCfg?.dinner !== undefined ? stdCfg.dinner : null);
+
+        sql += `INSERT INTO public.boarding_month_signatures (id, class_id, month, is_signed, signed_by_name, signed_by_role, signed_at, location_name, signature_image_url, certificate_hash, notes, standard_breakfast, standard_lunch, standard_dinner)
+VALUES (${escapeSql(ms.id)}, ${escapeSql(ms.class_id)}, ${escapeSql(ms.month)}, ${escapeSql(Boolean(ms.is_signed))}, ${escapeSql(ms.signed_by_name)}, ${escapeSql(ms.signed_by_role || 'GVCN')}, ${escapeSql(ms.signed_at)}, ${escapeSql(ms.location_name || 'Xa Dung')}, ${escapeSql(ms.signature_image_url)}, ${escapeSql(ms.certificate_hash)}, ${escapeSql(ms.notes)}, ${b !== null ? b : 'NULL'}, ${l !== null ? l : 'NULL'}, ${d !== null ? d : 'NULL'})
+ON CONFLICT (class_id, month) DO UPDATE SET is_signed = EXCLUDED.is_signed, signed_by_name = EXCLUDED.signed_by_name, signed_by_role = EXCLUDED.signed_by_role, signed_at = EXCLUDED.signed_at, location_name = EXCLUDED.location_name, signature_image_url = EXCLUDED.signature_image_url, certificate_hash = EXCLUDED.certificate_hash, notes = EXCLUDED.notes, standard_breakfast = EXCLUDED.standard_breakfast, standard_lunch = EXCLUDED.standard_lunch, standard_dinner = EXCLUDED.standard_dinner;\n`;
+      });
+      sql += `\n`;
+    }
+
+    // Xuất các định mức ăn chuẩn chưa có trong chữ ký
+    const remainingStandards = Object.entries(standardMap).filter(([k]) => !exportedClassMonths.has(k));
+    if (remainingStandards.length > 0) {
+      sql += `-- 15.1. ĐỊNH MỨC BÁO ĂN CHUẨN ĐÃ THIẾT LẬP (${remainingStandards.length} lớp/tháng)\n`;
+      remainingStandards.forEach(([key, stdCfg]: [string, any]) => {
+        const parts = key.split('_');
+        const classId = parts[0];
+        const month = parts.slice(1).join('_');
+        if (classId && month && stdCfg) {
+          const b = stdCfg.breakfast !== undefined ? stdCfg.breakfast : null;
+          const l = stdCfg.lunch !== undefined ? stdCfg.lunch : null;
+          const d = stdCfg.dinner !== undefined ? stdCfg.dinner : null;
+          if (b !== null || l !== null || d !== null) {
+            const id = `sig_${classId}_${month}`;
+            sql += `INSERT INTO public.boarding_month_signatures (id, class_id, month, is_signed, signed_by_name, signed_by_role, location_name, standard_breakfast, standard_lunch, standard_dinner)
+VALUES (${escapeSql(id)}, ${escapeSql(classId)}, ${escapeSql(month)}, false, '', 'GVCN', 'Xa Dung', ${b !== null ? b : 'NULL'}, ${l !== null ? l : 'NULL'}, ${d !== null ? d : 'NULL'})
+ON CONFLICT (class_id, month) DO UPDATE SET standard_breakfast = EXCLUDED.standard_breakfast, standard_lunch = EXCLUDED.standard_lunch, standard_dinner = EXCLUDED.standard_dinner;\n`;
+          }
+        }
+      });
+      sql += `\n`;
     }
 
     sql += `-- ==============================================================================\n`;

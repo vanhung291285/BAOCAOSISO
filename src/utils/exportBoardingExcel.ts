@@ -888,17 +888,27 @@ export async function exportMonthlyBoardingExcel(params: ExportBoardingExcelPara
   let standardDinnerDays = params.standardDinnerDays ?? 0;
 
   if (standardBreakfastDays === 0 && standardLunchDays === 0 && standardDinnerDays === 0) {
+    try {
+      const customStd = await StorageService.getBoardingStandardConfig(classId, monthStr);
+      if (customStd) {
+        if (customStd.breakfast !== undefined) standardBreakfastDays = customStd.breakfast;
+        if (customStd.lunch !== undefined) standardLunchDays = customStd.lunch;
+        if (customStd.dinner !== undefined) standardDinnerDays = customStd.dinner;
+      }
+    } catch (e) {
+      console.warn('Could not load boarding standard config for Excel export:', e);
+    }
+  }
+
+  if (standardBreakfastDays === 0 && standardLunchDays === 0 && standardDinnerDays === 0) {
     let bCount = 0;
     let lCount = 0;
     let dCount = 0;
-    const useWholeMonth = reportedDates.size === 0;
 
     monthDays.forEach((d) => {
-      if (useWholeMonth || reportedDates.has(d.dateStr)) {
-        if (d.allowedMeals.breakfast) bCount++;
-        if (d.allowedMeals.lunch) lCount++;
-        if (d.allowedMeals.dinner) dCount++;
-      }
+      if (d.allowedMeals.breakfast) bCount++;
+      if (d.allowedMeals.lunch) lCount++;
+      if (d.allowedMeals.dinner) dCount++;
     });
     standardBreakfastDays = bCount;
     standardLunchDays = lCount;
