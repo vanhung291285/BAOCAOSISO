@@ -1676,6 +1676,8 @@ export const StorageService = {
           let d: number | undefined = undefined;
           let hasExplicitCloudValue = false;
           let isCloudReset = false;
+          let cloudAutoSync: boolean | undefined = undefined;
+          let cloudMode: 'CUSTOM' | 'CALENDAR' | 'AUTO_REPORTED' | undefined = undefined;
 
           if (data.standard_breakfast !== null && data.standard_breakfast !== undefined) {
             b = Number(data.standard_breakfast);
@@ -1691,7 +1693,7 @@ export const StorageService = {
           }
 
           // Kiểm tra dự phòng trong trường notes nếu cột chưa tạo hoặc lưu dạng JSON
-          if (!hasExplicitCloudValue && data.notes) {
+          if (data.notes) {
             try {
               if (data.notes === '__STANDARD_RESET__') {
                 isCloudReset = true;
@@ -1713,16 +1715,16 @@ export const StorageService = {
                       d = Number(parsedNotes.standard_dinner);
                       hasExplicitCloudValue = true;
                     }
+                    if (parsedNotes.auto_sync !== undefined) {
+                      cloudAutoSync = Boolean(parsedNotes.auto_sync);
+                    }
+                    if (parsedNotes.mode) {
+                      cloudMode = parsedNotes.mode;
+                    }
                   }
                 }
               }
             } catch {}
-          }
-
-          // Nếu bản ghi trên Cloud tồn tại nhưng các cột standard_* đều là NULL và không có định mức trong notes,
-          // điều đó có nghĩa định mức đã được khôi phục về mặc định (reset) trên Cloud
-          if (!hasExplicitCloudValue && (data.standard_breakfast === null && data.standard_lunch === null && data.standard_dinner === null)) {
-            isCloudReset = true;
           }
 
           if (hasExplicitCloudValue && (b !== undefined || l !== undefined || d !== undefined)) {
@@ -1730,21 +1732,25 @@ export const StorageService = {
               breakfast: b,
               lunch: l,
               dinner: d,
+              auto_sync: cloudAutoSync !== undefined ? cloudAutoSync : false,
+              mode: cloudMode || 'CUSTOM',
             };
-            if (data.notes) {
-              try {
-                const parsed = JSON.parse(data.notes);
-                if (parsed.auto_sync) config.auto_sync = true;
-                if (parsed.mode) config.mode = parsed.mode;
-              } catch {}
-            }
             // Cập nhật bộ nhớ cục bộ đồng bộ với Cloud
             const savedRaw = localStorage.getItem(STORAGE_KEYS.STANDARD_CONFIGS);
             const configs = savedRaw ? JSON.parse(savedRaw) : {};
             configs[configKey] = config;
             localStorage.setItem(STORAGE_KEYS.STANDARD_CONFIGS, JSON.stringify(configs));
+          } else if (cloudAutoSync || cloudMode === 'AUTO_REPORTED') {
+            config = {
+              auto_sync: true,
+              mode: 'AUTO_REPORTED',
+            };
+            const savedRaw = localStorage.getItem(STORAGE_KEYS.STANDARD_CONFIGS);
+            const configs = savedRaw ? JSON.parse(savedRaw) : {};
+            configs[configKey] = config;
+            localStorage.setItem(STORAGE_KEYS.STANDARD_CONFIGS, JSON.stringify(configs));
           } else if (isCloudReset) {
-            // Đã được người dùng đặt lại (reset) trên cloud -> xóa khỏi cache cục bộ
+            // Chỉ xóa cache cục bộ khi có cờ reset tường minh từ người dùng
             config = null;
             const savedRaw = localStorage.getItem(STORAGE_KEYS.STANDARD_CONFIGS);
             if (savedRaw) {
@@ -1785,7 +1791,7 @@ export const StorageService = {
           lunch: cfg.lunch,
           dinner: cfg.dinner,
           auto_sync: cfg.auto_sync,
-          mode: cfg.mode,
+          mode: cfg.mode || (cfg.auto_sync ? 'AUTO_REPORTED' : 'CUSTOM'),
         };
       }
       localStorage.setItem(STORAGE_KEYS.STANDARD_CONFIGS, JSON.stringify(configs));
@@ -1841,10 +1847,8 @@ export const StorageService = {
             parsed.standard_breakfast = b;
             parsed.standard_lunch = l;
             parsed.standard_dinner = d;
-            if (cfg.auto_sync) parsed.auto_sync = true;
-            else delete parsed.auto_sync;
-            if (cfg.mode) parsed.mode = cfg.mode;
-            else delete parsed.mode;
+            parsed.auto_sync = Boolean(cfg.auto_sync);
+            parsed.mode = cfg.mode || (cfg.auto_sync ? 'AUTO_REPORTED' : 'CUSTOM');
             notesToSave = JSON.stringify(parsed);
           }
         } catch {
@@ -5107,8 +5111,14 @@ export const StorageService = {
               } catch {}
             }
             if (b !== undefined || l !== undefined || d !== undefined) {
-              stdConfigs[`${ms.class_id}_${ms.month}`] = { breakfast: b, lunch: l, dinner: d };
-            } else if (ms.notes === '__STANDARD_RESET__' || (ms.standard_breakfast === null && ms.standard_lunch === null && ms.standard_dinner === null)) {
+              stdConfigs[`${ms.class_id}_${ms.month}`] = {
+                breakfast: b,
+                lunch: l,
+                dinner: d,
+                auto_sync: false,
+                mode: 'CUSTOM',
+              };
+            } else if (ms.notes === '__STANDARD_RESET__') {
               delete stdConfigs[`${ms.class_id}_${ms.month}`];
             }
           }
