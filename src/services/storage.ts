@@ -1229,9 +1229,24 @@ export const StorageService = {
 
   async getBoardingReportsByClassAndMonth(classId: string, monthStr: string): Promise<BoardingDailyReport[]> {
     ensureInitialized();
+    const [y, m] = monthStr.split('-').map(Number);
+    const lastDay = new Date(y, m, 0).getDate();
+    const lastDayStr = String(lastDay).padStart(2, '0');
+    const startDate = `${monthStr}-01`;
+    const endDate = `${monthStr}-${lastDayStr}`;
+
     const classes = await this.getClasses();
-    const cls = classes.find((c) => c.id === classId || c.class_name === classId);
-    const validClassIds = new Set([classId, cls?.id, cls?.class_name].filter(Boolean) as string[]);
+    const classIdTrimmed = String(classId || '').trim();
+    const cls = classes.find(
+      (c) =>
+        c.id === classIdTrimmed ||
+        c.class_name === classIdTrimmed ||
+        c.id.toLowerCase() === classIdTrimmed.toLowerCase() ||
+        c.class_name.toLowerCase() === classIdTrimmed.toLowerCase()
+    );
+    const rawIds = [classIdTrimmed, cls?.id, cls?.class_name, cls?.code].filter(Boolean) as string[];
+    const allQueryIds = Array.from(new Set(rawIds.flatMap((id) => [id, id.toLowerCase(), id.toUpperCase()])));
+    const normValidClassIds = new Set(allQueryIds.map((k) => k.toLowerCase()));
 
     const raw = localStorage.getItem(STORAGE_KEYS.BOARDING_REPORTS);
     let list: BoardingDailyReport[] = raw ? JSON.parse(raw) : [];
@@ -1242,9 +1257,9 @@ export const StorageService = {
         const { data, error } = await supabase
           .from('boarding_reports')
           .select('*')
-          .in('class_id', Array.from(validClassIds))
-          .gte('date', `${monthStr}-01`)
-          .lte('date', `${monthStr}-31`);
+          .in('class_id', allQueryIds)
+          .gte('date', startDate)
+          .lte('date', endDate);
         if (!error && data && data.length > 0) {
           data.forEach((cloudRep: any) => {
             const cleanDate = String(cloudRep.date).split('T')[0].trim();
@@ -1258,7 +1273,10 @@ export const StorageService = {
               records: Array.isArray(parsedRecords) ? parsedRecords : [],
             };
             const idx = list.findIndex(
-              (r) => r.id === repObj.id || (validClassIds.has(r.class_id) && String(r.date).split('T')[0] === cleanDate)
+              (r) =>
+                r.id === repObj.id ||
+                (normValidClassIds.has(String(r.class_id || '').trim().toLowerCase()) &&
+                  String(r.date).split('T')[0] === cleanDate)
             );
             if (idx >= 0) list[idx] = repObj;
             else list.push(repObj);
@@ -1271,7 +1289,13 @@ export const StorageService = {
     }
 
     return list
-      .filter((r) => validClassIds.has(r.class_id) && String(r.date).split('T')[0].startsWith(monthStr))
+      .filter((r) => {
+        if (!r || !r.date) return false;
+        const cleanDate = String(r.date).split('T')[0].trim();
+        const matchesClass = normValidClassIds.has(String(r.class_id || '').trim().toLowerCase());
+        const matchesMonth = cleanDate.startsWith(monthStr);
+        return matchesClass && matchesMonth;
+      })
       .map((r) => {
         let recs = r.records;
         if (typeof recs === 'string') {
@@ -1288,9 +1312,24 @@ export const StorageService = {
 
   async getDailyReportsByMonth(classId: string, monthStr: string): Promise<DailyReport[]> {
     ensureInitialized();
+    const [y, m] = monthStr.split('-').map(Number);
+    const lastDay = new Date(y, m, 0).getDate();
+    const lastDayStr = String(lastDay).padStart(2, '0');
+    const startDate = `${monthStr}-01`;
+    const endDate = `${monthStr}-${lastDayStr}`;
+
     const classes = await this.getClasses();
-    const cls = classes.find((c) => c.id === classId || c.class_name === classId);
-    const validClassIds = new Set([classId, cls?.id, cls?.class_name].filter(Boolean) as string[]);
+    const classIdTrimmed = String(classId || '').trim();
+    const cls = classes.find(
+      (c) =>
+        c.id === classIdTrimmed ||
+        c.class_name === classIdTrimmed ||
+        c.id.toLowerCase() === classIdTrimmed.toLowerCase() ||
+        c.class_name.toLowerCase() === classIdTrimmed.toLowerCase()
+    );
+    const rawIds = [classIdTrimmed, cls?.id, cls?.class_name, cls?.code].filter(Boolean) as string[];
+    const allQueryIds = Array.from(new Set(rawIds.flatMap((id) => [id, id.toLowerCase(), id.toUpperCase()])));
+    const normValidClassIds = new Set(allQueryIds.map((k) => k.toLowerCase()));
 
     const raw = localStorage.getItem(STORAGE_KEYS.REPORTS);
     let list: DailyReport[] = raw ? JSON.parse(raw) : [];
@@ -1301,9 +1340,9 @@ export const StorageService = {
         const { data, error } = await supabase
           .from('daily_reports')
           .select('*')
-          .in('class_id', Array.from(validClassIds))
-          .gte('report_date', `${monthStr}-01`)
-          .lte('report_date', `${monthStr}-31`);
+          .in('class_id', allQueryIds)
+          .gte('report_date', startDate)
+          .lte('report_date', endDate);
         if (!error && data && data.length > 0) {
           data.forEach((cloudRep: any) => {
             const cleanDate = String(cloudRep.report_date).split('T')[0].trim();
@@ -1317,7 +1356,10 @@ export const StorageService = {
               absent_students: Array.isArray(parsedAbsent) ? parsedAbsent : undefined,
             };
             const idx = list.findIndex(
-              (r) => r.id === repObj.id || (validClassIds.has(r.class_id) && String(r.report_date).split('T')[0] === cleanDate)
+              (r) =>
+                r.id === repObj.id ||
+                (normValidClassIds.has(String(r.class_id || '').trim().toLowerCase()) &&
+                  String(r.report_date).split('T')[0] === cleanDate)
             );
             if (idx >= 0) list[idx] = repObj;
             else list.push(repObj);
@@ -1330,7 +1372,13 @@ export const StorageService = {
     }
 
     return list
-      .filter((r) => validClassIds.has(r.class_id) && String(r.report_date).split('T')[0].startsWith(monthStr))
+      .filter((r) => {
+        if (!r || !r.report_date) return false;
+        const cleanDate = String(r.report_date).split('T')[0].trim();
+        const matchesClass = normValidClassIds.has(String(r.class_id || '').trim().toLowerCase());
+        const matchesMonth = cleanDate.startsWith(monthStr);
+        return matchesClass && matchesMonth;
+      })
       .map((r) => {
         let parsedAbsent = r.absent_students;
         if (typeof parsedAbsent === 'string') {
