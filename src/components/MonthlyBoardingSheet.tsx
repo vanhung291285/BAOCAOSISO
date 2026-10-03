@@ -702,18 +702,22 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
         const autoSyncReports: BoardingDailyReport[] = [];
 
         classDaily.forEach((dr) => {
-          // Chỉ đồng bộ những ngày GVCN ĐÃ THỰC SỰ NỘP BÁO CÁO SĨ SỐ (SUBMITTED hoặc LOCKED)
-          // Tuyệt đối KHÔNG tự động chấm ăn các ngày chưa báo (ví dụ 06/10 chưa báo thì để trống)
-          if (dr.status !== 'SUBMITTED' && dr.status !== 'LOCKED') return;
+          // Bỏ qua nếu là trạng thái Chưa báo cáo (NOT_REPORTED)
+          if (!dr || (dr.status as string) === 'NOT_REPORTED') return;
           const cleanDate = String(dr.report_date).split('T')[0].trim();
+          if (!cleanDate.startsWith(selectedMonth)) return;
 
-          if (!reportMap.has(cleanDate)) {
+          const existing = reportMap.get(cleanDate);
+          const needsSync = !existing || !Array.isArray(existing.records) || existing.records.length === 0;
+
+          if (needsSync) {
             const absentMap = new Map<string, { reason?: string }>();
-            if (dr.absent_students) {
+            if (dr.absent_students && Array.isArray(dr.absent_students)) {
               dr.absent_students.forEach((ab) => {
                 if (ab.id) {
                   absentMap.set(ab.id, { reason: ab.reason });
-                } else if (ab.full_name) {
+                }
+                if (ab.full_name) {
                   absentMap.set(ab.full_name.trim().toLowerCase(), { reason: ab.reason });
                 }
               });
@@ -731,10 +735,10 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
             });
 
             const synthReport: BoardingDailyReport = {
-              id: `boarding_rep_${selectedClassId}_${cleanDate}`,
+              id: existing?.id || `boarding_rep_${selectedClassId}_${cleanDate}`,
               class_id: selectedClassId,
               date: cleanDate,
-              status: 'SUBMITTED',
+              status: existing?.status || 'SUBMITTED',
               total_boarding_students: classBoardingStudents.length,
               breakfast_count: bCount,
               lunch_count: lCount,
@@ -785,20 +789,15 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
             return;
           }
 
-          // Lấy đúng số liệu GVCN đã chấm cho học sinh (tìm theo ID trước, chỉ fallback tên khi tên là duy nhất)
+          // Lấy đúng số liệu GVCN đã chấm cho học sinh (tìm theo ID trước, nếu không khớp tìm theo Họ tên)
           let recs = rep.records;
           if (typeof recs === 'string') {
             try { recs = JSON.parse(recs); } catch { recs = []; }
           }
-          const sameNameCount = classBoardingStudents.filter(
-            (s) => s.full_name.trim().toLowerCase() === normName
-          ).length;
 
           const stRec = Array.isArray(recs)
             ? recs.find((r) => r.student_id === st.id) ||
-              (sameNameCount === 1
-                ? recs.find((r) => !r.student_id && r.student_name && r.student_name.trim().toLowerCase() === normName)
-                : undefined)
+              recs.find((r) => r.student_name && r.student_name.trim().toLowerCase() === normName)
             : undefined;
 
           if (stRec) {
@@ -816,12 +815,13 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
               };
             }
           } else {
-            // Ngày này lớp có báo ăn nhưng học sinh chưa có trong bản ghi cũ (mới bổ sung):
-            // Mặc định để trống (false) để tránh tự động điền thêm số ngày ăn sai lệch
+            // Ngày này lớp có báo ăn: nếu học sinh không có trong danh sách vắng,
+            // tự động áp dụng lịch ăn chuẩn của ngày đó
+            const schedule = getMealScheduleForDate(day.dateStr, offDaysMap);
             initialMatrix[st.id][day.dateStr] = {
-              breakfast: false,
-              lunch: false,
-              dinner: false,
+              breakfast: schedule.breakfastAllowed,
+              lunch: schedule.lunchAllowed,
+              dinner: schedule.dinnerAllowed,
             };
           }
         });
@@ -886,24 +886,33 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
     if (!selectedClassId || !selectedMonth) return;
     setIsLoading(true);
     try {
+      // 1. Đảm bảo có danh sách học sinh đầy đủ
+      let currentStudents = classBoardingStudents;
+      if (!currentStudents || currentStudents.length === 0) {
+        currentStudents = await StorageService.getStudentsByClass(selectedClassId, currentClass?.class_name);
+      }
+
       const classDaily = await StorageService.getDailyReportsByMonth(selectedClassId, selectedMonth);
       const reportsToSave: BoardingDailyReport[] = [];
 
       classDaily.forEach((dr) => {
-        // Chỉ đồng bộ những ngày GVCN ĐÃ THỰC SỰ NỘP BÁO CÁO SĨ SỐ (SUBMITTED hoặc LOCKED)
-        if (dr.status !== 'SUBMITTED' && dr.status !== 'LOCKED') return;
+        // Đồng bộ mọi báo cáo đã nộp của GVCN (SUBMITTED, REPORTED, LOCKED, DRAFT có dữ liệu, không phải NOT_REPORTED)
+        if (!dr || (dr.status as string) === 'NOT_REPORTED') return;
         const cleanDate = String(dr.report_date).split('T')[0].trim();
+        if (!cleanDate.startsWith(selectedMonth)) return;
+
         const absentMap = new Map<string, { reason?: string }>();
-        if (dr.absent_students) {
+        if (dr.absent_students && Array.isArray(dr.absent_students)) {
           dr.absent_students.forEach((ab) => {
             if (ab.id) {
               absentMap.set(ab.id, { reason: ab.reason });
-            } else if (ab.full_name) {
+            }
+            if (ab.full_name) {
               absentMap.set(ab.full_name.trim().toLowerCase(), { reason: ab.reason });
             }
           });
         }
-        const synthRecords = buildDefaultMealRecords(classBoardingStudents, cleanDate, selectedClassId, absentMap);
+        const synthRecords = buildDefaultMealRecords(currentStudents, cleanDate, selectedClassId, absentMap);
         let bCount = 0;
         let lCount = 0;
         let dCount = 0;
@@ -920,7 +929,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
           class_id: selectedClassId,
           date: cleanDate,
           status: 'SUBMITTED',
-          total_boarding_students: classBoardingStudents.length,
+          total_boarding_students: currentStudents.length,
           breakfast_count: bCount,
           lunch_count: lCount,
           dinner_count: dCount,
@@ -938,11 +947,18 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
 
       if (reportsToSave.length > 0) {
         await StorageService.saveBoardingReportsBulk(reportsToSave, currentUser || undefined);
+        await loadMonthData();
+        const distinctDates = new Set(reportsToSave.map((r) => r.date));
+        showToast(
+          `Đã đồng bộ thành công! Có ${distinctDates.size} ngày báo cáo sĩ số tháng ${monthNum}/${yearNum} đã được cập nhật đầy đủ vào sổ chấm ăn.`
+        );
+      } else {
+        await loadMonthData();
+        showToast(
+          `Không tìm thấy báo cáo sĩ số nào của tháng ${monthNum}/${yearNum} cho lớp ${currentClass?.class_name || ''}. Thầy/Cô vui lòng kiểm tra lại tháng đã chọn hoặc vào mục Báo cáo sĩ số ngày để nộp báo cáo.`,
+          'info'
+        );
       }
-
-      await loadMonthData();
-      const distinctDates = new Set(reportsToSave.map(r => r.date));
-      showToast(`Đã đồng bộ thành công! Hiện có ${distinctDates.size} ngày báo ăn được cập nhật đầy đủ vào biểu.`);
     } catch (e) {
       console.error('Error syncing daily reports:', e);
       showToast('Lỗi khi đồng bộ số liệu báo ăn!', 'error');
@@ -1114,6 +1130,9 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
           (r) => !(r.class_id === selectedClassId && r.date.startsWith(selectedMonth))
         );
         localStorage.setItem('sso_boarding_reports_v1', JSON.stringify(cleaned));
+        const [y, m] = selectedMonth.split('-').map(Number);
+        const lastDay = new Date(y, m, 0).getDate();
+        const lastDayStr = String(lastDay).padStart(2, '0');
         const supabase = getSupabaseClient();
         if (supabase && isSupabaseConnected()) {
           await supabase
@@ -1121,7 +1140,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
             .delete()
             .eq('class_id', selectedClassId)
             .gte('date', `${selectedMonth}-01`)
-            .lte('date', `${selectedMonth}-31`);
+            .lte('date', `${selectedMonth}-${lastDayStr}`);
         }
 
         // Đưa ma trận về rỗng 100%
