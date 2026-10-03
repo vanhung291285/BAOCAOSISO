@@ -351,6 +351,8 @@ export interface BoardingStandardMealConfig {
   breakfast?: number;
   lunch?: number;
   dinner?: number;
+  auto_sync?: boolean;
+  mode?: 'AUTO_REPORTED' | 'CALENDAR' | 'CUSTOM';
 }
 
 export interface BoardingMonthSignature {

@@ -108,16 +108,23 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
     ].filter(Boolean) as string[]);
   }, [selectedClassId, selectedClass]);
 
-  // Students belonging to selected class (with de-duplication)
+  // Students belonging to selected class (with strict de-duplication by id and full_name)
   const classStudents = useMemo(() => {
     if (!selectedClassId) return [];
     const raw = students.filter((s) => validClassIds.has(s.class_id));
     const seenIds = new Set<string>();
+    const seenNames = new Set<string>();
     const unique: Student[] = [];
     for (const s of raw) {
       if (!s || !s.full_name) continue;
-      if (seenIds.has(s.id)) continue;
-      seenIds.add(s.id);
+      const sId = String(s.id || '').trim();
+      const normName = String(s.full_name || '').trim().toLowerCase();
+
+      if (sId && seenIds.has(sId)) continue;
+      if (normName && seenNames.has(normName)) continue;
+
+      if (sId) seenIds.add(sId);
+      if (normName) seenNames.add(normName);
       unique.push(s);
     }
     return unique;
@@ -326,8 +333,10 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
     if (!selectedClass) return;
     setIsGeneratingStudents(true);
     try {
+      await StorageService.deleteStudentsByClass(selectedClassId, selectedClass.class_name);
       const defaultStds = generateDefaultBoardingStudentsForClass(selectedClassId, selectedClass.class_name);
       await StorageService.saveStudents(defaultStds);
+      await StorageService.getStudents();
       showToast(`Đã khởi tạo thành công 35 học sinh bán trú lớp ${selectedClass.class_name}!`);
       await loadMealAttendance();
     } catch (e: any) {

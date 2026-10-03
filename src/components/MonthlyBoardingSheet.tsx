@@ -200,11 +200,18 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
     if (!selectedClassId) return [];
     const rawSts = students.filter((s) => validClassIds.has(s.class_id));
     const seenIds = new Set<string>();
+    const seenNames = new Set<string>();
     const classSts: Student[] = [];
     for (const s of rawSts) {
       if (!s || !s.full_name) continue;
-      if (seenIds.has(s.id)) continue;
-      seenIds.add(s.id);
+      const sId = String(s.id || '').trim();
+      const normName = String(s.full_name || '').trim().toLowerCase();
+
+      if (sId && seenIds.has(sId)) continue;
+      if (normName && seenNames.has(normName)) continue;
+
+      if (sId) seenIds.add(sId);
+      if (normName) seenNames.add(normName);
       classSts.push(s);
     }
     return classSts;
@@ -314,13 +321,14 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
   const [overrideBreakfast, setOverrideBreakfast] = useState<number | null>(null);
   const [overrideLunch, setOverrideLunch] = useState<number | null>(null);
   const [overrideDinner, setOverrideDinner] = useState<number | null>(null);
+  const [isAutoSyncReported, setIsAutoSyncReported] = useState<boolean>(false);
 
+  // Tính số ngày ăn chuẩn mặc định theo lịch cả tháng (T2-T6, trừ ngày nghỉ lễ/thời tiết)
   const { defaultStandardBreakfast, defaultStandardLunch, defaultStandardDinner } = useMemo(() => {
     let bCount = 0;
     let lCount = 0;
     let dCount = 0;
     
-    // Định mức chuẩn tự động tính cho cả tháng theo lịch học của trường (T2-T6, T7/CN nghỉ)
     monthDays.forEach((d) => {
       if (d.allowedMeals.breakfast) bCount++;
       if (d.allowedMeals.lunch) lCount++;
@@ -333,6 +341,45 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
       defaultStandardDinner: dCount,
     };
   }, [monthDays]);
+
+  // Tính số ngày ăn thực tế GVCN đã báo ăn / chấm ăn trong tháng theo từng bữa
+  const autoReportedMealDays = useMemo(() => {
+    let bCount = 0;
+    let lCount = 0;
+    let dCount = 0;
+
+    monthDays.forEach((d) => {
+      let dayHasB = false;
+      let dayHasL = false;
+      let dayHasD = false;
+
+      // 1. Kiểm tra từ ma trận chấm ăn của học sinh
+      classBoardingStudents.forEach((st) => {
+        const meal = mealMatrix[st.id]?.[d.dateStr];
+        if (meal?.breakfast) dayHasB = true;
+        if (meal?.lunch) dayHasL = true;
+        if (meal?.dinner) dayHasD = true;
+      });
+
+      // 2. Kiểm tra từ danh sách các ngày đã nộp báo ăn
+      if (reportedDates.has(d.dateStr)) {
+        if (d.allowedMeals.breakfast) dayHasB = true;
+        if (d.allowedMeals.lunch) dayHasL = true;
+        if (d.allowedMeals.dinner) dayHasD = true;
+      }
+
+      if (dayHasB) bCount++;
+      if (dayHasL) lCount++;
+      if (dayHasD) dCount++;
+    });
+
+    return {
+      autoBreakfast: bCount,
+      autoLunch: lCount,
+      autoDinner: dCount,
+      hasAnyReported: bCount > 0 || lCount > 0 || dCount > 0,
+    };
+  }, [monthDays, classBoardingStudents, mealMatrix, reportedDates]);
 
   // Load custom standard days config from localStorage & Supabase Cloud
   useEffect(() => {
@@ -347,20 +394,31 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
         const configKey = `${selectedClassId}_${selectedMonth}`;
         const savedConfig = configs[configKey];
         if (savedConfig) {
-          setOverrideBreakfast(savedConfig.breakfast !== undefined ? savedConfig.breakfast : null);
-          setOverrideLunch(savedConfig.lunch !== undefined ? savedConfig.lunch : null);
-          setOverrideDinner(savedConfig.dinner !== undefined ? savedConfig.dinner : null);
+          if (savedConfig.auto_sync || savedConfig.mode === 'AUTO_REPORTED') {
+            setIsAutoSyncReported(true);
+            setOverrideBreakfast(null);
+            setOverrideLunch(null);
+            setOverrideDinner(null);
+          } else {
+            setIsAutoSyncReported(false);
+            setOverrideBreakfast(savedConfig.breakfast !== undefined ? savedConfig.breakfast : null);
+            setOverrideLunch(savedConfig.lunch !== undefined ? savedConfig.lunch : null);
+            setOverrideDinner(savedConfig.dinner !== undefined ? savedConfig.dinner : null);
+          }
         } else {
+          setIsAutoSyncReported(false);
           setOverrideBreakfast(null);
           setOverrideLunch(null);
           setOverrideDinner(null);
         }
       } else {
+        setIsAutoSyncReported(false);
         setOverrideBreakfast(null);
         setOverrideLunch(null);
         setOverrideDinner(null);
       }
     } catch {
+      setIsAutoSyncReported(false);
       setOverrideBreakfast(null);
       setOverrideLunch(null);
       setOverrideDinner(null);
@@ -371,10 +429,19 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
       .then((cfg) => {
         if (!isMounted) return;
         if (cfg) {
-          setOverrideBreakfast(cfg.breakfast !== undefined ? cfg.breakfast : null);
-          setOverrideLunch(cfg.lunch !== undefined ? cfg.lunch : null);
-          setOverrideDinner(cfg.dinner !== undefined ? cfg.dinner : null);
+          if (cfg.auto_sync || cfg.mode === 'AUTO_REPORTED') {
+            setIsAutoSyncReported(true);
+            setOverrideBreakfast(null);
+            setOverrideLunch(null);
+            setOverrideDinner(null);
+          } else {
+            setIsAutoSyncReported(false);
+            setOverrideBreakfast(cfg.breakfast !== undefined ? cfg.breakfast : null);
+            setOverrideLunch(cfg.lunch !== undefined ? cfg.lunch : null);
+            setOverrideDinner(cfg.dinner !== undefined ? cfg.dinner : null);
+          }
         } else {
+          setIsAutoSyncReported(false);
           setOverrideBreakfast(null);
           setOverrideLunch(null);
           setOverrideDinner(null);
@@ -393,10 +460,11 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
   const saveCustomStandardConfig = async (
     breakfast: number | null,
     lunch: number | null,
-    dinner: number | null
+    dinner: number | null,
+    autoSync = false
   ) => {
     if (!selectedClassId || !selectedMonth) return;
-    const isReset = breakfast === null && lunch === null && dinner === null;
+    const isReset = !autoSync && breakfast === null && lunch === null && dinner === null;
     const configKey = `${selectedClassId}_${selectedMonth}`;
 
     // 1. Cập nhật localStorage ngay lập tức
@@ -411,6 +479,8 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
           breakfast: breakfast !== null ? breakfast : undefined,
           lunch: lunch !== null ? lunch : undefined,
           dinner: dinner !== null ? dinner : undefined,
+          auto_sync: autoSync,
+          mode: autoSync ? 'AUTO_REPORTED' : (breakfast !== null || lunch !== null || dinner !== null ? 'CUSTOM' : 'CALENDAR'),
         };
       }
       
@@ -430,6 +500,8 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
               breakfast: breakfast !== null ? breakfast : undefined,
               lunch: lunch !== null ? lunch : undefined,
               dinner: dinner !== null ? dinner : undefined,
+              auto_sync: autoSync,
+              mode: autoSync ? 'AUTO_REPORTED' : (breakfast !== null || lunch !== null || dinner !== null ? 'CUSTOM' : 'CALENDAR'),
             }
       );
     } catch (e) {
@@ -438,33 +510,73 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
   };
 
   const updateOverrideBreakfast = (val: number | null) => {
+    setIsAutoSyncReported(false);
     setOverrideBreakfast(val);
-    saveCustomStandardConfig(val, overrideLunch, overrideDinner);
+    saveCustomStandardConfig(val, overrideLunch, overrideDinner, false);
   };
 
   const updateOverrideLunch = (val: number | null) => {
+    setIsAutoSyncReported(false);
     setOverrideLunch(val);
-    saveCustomStandardConfig(overrideBreakfast, val, overrideDinner);
+    saveCustomStandardConfig(overrideBreakfast, val, overrideDinner, false);
   };
 
   const updateOverrideDinner = (val: number | null) => {
+    setIsAutoSyncReported(false);
     setOverrideDinner(val);
-    saveCustomStandardConfig(overrideBreakfast, overrideLunch, val);
+    saveCustomStandardConfig(overrideBreakfast, overrideLunch, val, false);
   };
 
-  const handleResetStandardConfig = async () => {
+  const handleToggleAutoSyncReported = async () => {
+    const nextVal = !isAutoSyncReported;
+    setIsAutoSyncReported(nextVal);
     setOverrideBreakfast(null);
     setOverrideLunch(null);
     setOverrideDinner(null);
-    await saveCustomStandardConfig(null, null, null);
+    await saveCustomStandardConfig(null, null, null, nextVal);
+    if (nextVal) {
+      showToast(
+        `Đã bật chế độ TỰ ĐỘNG ĐỒNG BỘ ĐỊNH MỨC theo số ngày báo ăn thực tế của GVCN: Sáng ${autoReportedMealDays.autoBreakfast} ngày, Trưa ${autoReportedMealDays.autoLunch} ngày, Tối ${autoReportedMealDays.autoDinner} ngày!`
+      );
+    } else {
+      showToast(
+        `Đã chuyển về định mức MẶC ĐỊNH THEO LỊCH HỌC: Sáng ${defaultStandardBreakfast} ngày, Trưa ${defaultStandardLunch} ngày, Tối ${defaultStandardDinner} ngày!`
+      );
+    }
+  };
+
+  const handleResetStandardConfig = async () => {
+    setIsAutoSyncReported(false);
+    setOverrideBreakfast(null);
+    setOverrideLunch(null);
+    setOverrideDinner(null);
+    await saveCustomStandardConfig(null, null, null, false);
     showToast(
       `Đã reset định mức ngày báo ăn Tháng ${monthNum}/${yearNum} về chuẩn lịch: Sáng ${defaultStandardBreakfast} ngày, Trưa ${defaultStandardLunch} ngày, Tối ${defaultStandardDinner} ngày!`
     );
   };
 
-  const standardBreakfastDays = overrideBreakfast !== null ? overrideBreakfast : defaultStandardBreakfast;
-  const standardLunchDays = overrideLunch !== null ? overrideLunch : defaultStandardLunch;
-  const standardDinnerDays = overrideDinner !== null ? overrideDinner : defaultStandardDinner;
+  // Định mức ngày ăn có hiệu lực (S, T, T)
+  const standardBreakfastDays = useMemo(() => {
+    if (isAutoSyncReported) {
+      return autoReportedMealDays.autoBreakfast;
+    }
+    return overrideBreakfast !== null ? overrideBreakfast : defaultStandardBreakfast;
+  }, [isAutoSyncReported, autoReportedMealDays.autoBreakfast, overrideBreakfast, defaultStandardBreakfast]);
+
+  const standardLunchDays = useMemo(() => {
+    if (isAutoSyncReported) {
+      return autoReportedMealDays.autoLunch;
+    }
+    return overrideLunch !== null ? overrideLunch : defaultStandardLunch;
+  }, [isAutoSyncReported, autoReportedMealDays.autoLunch, overrideLunch, defaultStandardLunch]);
+
+  const standardDinnerDays = useMemo(() => {
+    if (isAutoSyncReported) {
+      return autoReportedMealDays.autoDinner;
+    }
+    return overrideDinner !== null ? overrideDinner : defaultStandardDinner;
+  }, [isAutoSyncReported, autoReportedMealDays.autoDinner, overrideDinner, defaultStandardDinner]);
 
   // --- Cấu hình chữ ký & Địa danh ký (Tự động cập nhật theo ngày) ---
   const [signingLocation, setSigningLocation] = useState<string>(() => {
@@ -1329,8 +1441,10 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
     if (!currentClass) return;
     setIsGeneratingStudents(true);
     try {
+      await StorageService.deleteStudentsByClass(selectedClassId, currentClass.class_name);
       const defaultStds = generateDefaultBoardingStudentsForClass(selectedClassId, currentClass.class_name);
       await StorageService.saveStudents(defaultStds);
+      await StorageService.getStudents();
       showToast(`Đã khởi tạo thành công 35 học sinh bán trú lớp ${currentClass.class_name}!`);
     } catch (e: any) {
       showToast(e?.message || 'Lỗi khi khởi tạo danh sách học sinh!', 'error');
@@ -1440,7 +1554,9 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
             type="button"
             onClick={handleResetStandardConfig}
             className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs active:scale-95 ${
-              overrideBreakfast !== null || overrideLunch !== null || overrideDinner !== null
+              isAutoSyncReported
+                ? 'bg-emerald-100 hover:bg-emerald-200 text-emerald-950 border border-emerald-300'
+                : overrideBreakfast !== null || overrideLunch !== null || overrideDinner !== null
                 ? 'bg-amber-500 hover:bg-amber-600 text-slate-950 font-black ring-2 ring-amber-300 shadow-amber-500/20'
                 : 'bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300'
             }`}
@@ -1448,11 +1564,15 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
           >
             <RotateCcw className="w-3.5 h-3.5 text-amber-800" />
             <span>Reset định mức tháng</span>
-            {overrideBreakfast !== null || overrideLunch !== null || overrideDinner !== null && (
+            {isAutoSyncReported ? (
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-200 text-emerald-950 font-black">
+                Tự động
+              </span>
+            ) : (overrideBreakfast !== null || overrideLunch !== null || overrideDinner !== null) ? (
               <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-200 text-amber-950 font-black">
                 Có đè
               </span>
-            )}
+            ) : null}
           </button>
 
           {/* Dải phân cách */}
@@ -1522,76 +1642,102 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
 
       {/* Custom standard meal days configuration */}
       <div className="bg-gradient-to-r from-amber-50/80 via-amber-50/50 to-orange-50/40 rounded-2xl p-4 border border-amber-200/90 shadow-2xs flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 no-print -mt-2">
-        <div className="flex flex-col gap-1 max-w-2xl">
+        <div className="flex flex-col gap-1.5 max-w-2xl">
           <div className="text-xs font-black text-amber-950 flex flex-wrap items-center gap-2 uppercase tracking-wide">
             <Info className="w-4 h-4 text-amber-600 flex-shrink-0" />
             <span>Định mức ngày báo ăn chuẩn trong tháng {monthNum}/{yearNum}</span>
-            {overrideBreakfast !== null || overrideLunch !== null || overrideDinner !== null ? (
-              <span className="text-[10px] px-2 py-0.5 rounded-full font-black bg-amber-200 text-amber-950 border border-amber-400 flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-600 animate-pulse" />
-                Đang điều chỉnh đè ({standardBreakfastDays}S - {standardLunchDays}T - {standardDinnerDays}T)
+            {isAutoSyncReported ? (
+              <span className="text-[10px] px-2.5 py-0.5 rounded-full font-black bg-emerald-100 text-emerald-900 border border-emerald-400 flex items-center gap-1.5 shadow-2xs">
+                <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse" />
+                🔄 Tự động nhảy đồng bộ theo báo ăn thực tế ({standardBreakfastDays}S - {standardLunchDays}T - {standardDinnerDays}T)
+              </span>
+            ) : overrideBreakfast !== null || overrideLunch !== null || overrideDinner !== null ? (
+              <span className="text-[10px] px-2.5 py-0.5 rounded-full font-black bg-amber-200 text-amber-950 border border-amber-400 flex items-center gap-1.5 shadow-2xs">
+                <span className="w-2 h-2 rounded-full bg-amber-600 animate-pulse" />
+                ✏️ Đang điều chỉnh đè thủ công ({standardBreakfastDays}S - {standardLunchDays}T - {standardDinnerDays}T)
               </span>
             ) : (
-              <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                Mặc định theo lịch ({defaultStandardBreakfast}S - {defaultStandardLunch}T - {defaultStandardDinner}T)
+              <span className="text-[10px] px-2.5 py-0.5 rounded-full font-bold bg-blue-100 text-blue-900 border border-blue-300">
+                📅 Mặc định theo lịch học cả tháng ({defaultStandardBreakfast}S - {defaultStandardLunch}T - {defaultStandardDinner}T)
               </span>
             )}
           </div>
           <p className="text-[11px] text-slate-600 font-medium leading-relaxed">
-            Quy tắc chuẩn kế toán: <strong>Số ngày báo ăn + Số ngày không báo ăn = Định mức báo ăn</strong>. Thầy/Cô có thể nhập số ngày đè nếu có nghỉ thời tiết, nghỉ đột xuất... hoặc bấm <strong>Reset định mức tháng</strong> để khôi phục chuẩn theo lịch học của trường.
+            Quy tắc chuẩn kế toán: <strong>Số ngày báo ăn + Số ngày không báo ăn = Định mức báo ăn</strong>. Thầy/Cô có thể bật <strong>Tự động nhảy theo báo ăn</strong> để hệ thống tự động lấy đúng số ngày lớp có ăn cơm thực tế (khi có nghỉ lễ, hoạt động ngoại khóa...), hoặc nhập số ngày đè thủ công.
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto bg-white/90 p-2 rounded-xl border border-amber-200 shadow-2xs">
+        <div className="flex flex-wrap items-center gap-2.5 w-full lg:w-auto bg-white/95 p-2 rounded-xl border border-amber-200 shadow-2xs">
+          {/* Nút bật/tắt chế độ tự động đồng bộ theo báo ăn thực tế */}
+          <button
+            type="button"
+            onClick={handleToggleAutoSyncReported}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs active:scale-95 ${
+              isAutoSyncReported
+                ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/30 ring-2 ring-emerald-300'
+                : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-300'
+            }`}
+            title={`Chế độ Tự động: Định mức sẽ tự động nhảy đúng bằng số ngày GVCN đã báo ăn thực tế trong tháng (${autoReportedMealDays.autoBreakfast} Sáng - ${autoReportedMealDays.autoLunch} Trưa - ${autoReportedMealDays.autoDinner} Tối)`}
+          >
+            <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+            <span>{isAutoSyncReported ? '✓ Đang tự động theo báo ăn' : '⚡ Tự động theo báo ăn'}</span>
+          </button>
+
           {/* Sáng */}
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs font-bold text-slate-700 whitespace-nowrap">Ăn Sáng (S):</span>
+          <div className="flex items-center gap-1">
+            <span className="text-xs font-bold text-slate-700 whitespace-nowrap">Sáng:</span>
             <input
               type="number"
               min={0}
               max={31}
-              value={overrideBreakfast !== null ? overrideBreakfast : defaultStandardBreakfast}
+              value={standardBreakfastDays}
               onChange={(e) => {
                 const val = e.target.value === '' ? null : Number(e.target.value);
                 updateOverrideBreakfast(val);
               }}
-              className="w-14 bg-white border border-slate-300 rounded-lg px-2 py-1.5 text-xs font-extrabold text-center text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500 shadow-2xs"
+              className={`w-13 border rounded-lg px-1.5 py-1.5 text-xs font-extrabold text-center text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500 shadow-2xs ${
+                isAutoSyncReported ? 'bg-emerald-50/60 border-emerald-300 text-emerald-950' : 'bg-white border-slate-300'
+              }`}
               placeholder={String(defaultStandardBreakfast)}
               title="Định mức số ngày ăn sáng chuẩn trong tháng"
             />
           </div>
 
           {/* Trưa */}
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs font-bold text-slate-700 whitespace-nowrap">Ăn Trưa (T):</span>
+          <div className="flex items-center gap-1">
+            <span className="text-xs font-bold text-slate-700 whitespace-nowrap">Trưa:</span>
             <input
               type="number"
               min={0}
               max={31}
-              value={overrideLunch !== null ? overrideLunch : defaultStandardLunch}
+              value={standardLunchDays}
               onChange={(e) => {
                 const val = e.target.value === '' ? null : Number(e.target.value);
                 updateOverrideLunch(val);
               }}
-              className="w-14 bg-white border border-slate-300 rounded-lg px-2 py-1.5 text-xs font-extrabold text-center text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500 shadow-2xs"
+              className={`w-13 border rounded-lg px-1.5 py-1.5 text-xs font-extrabold text-center text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500 shadow-2xs ${
+                isAutoSyncReported ? 'bg-emerald-50/60 border-emerald-300 text-emerald-950' : 'bg-white border-slate-300'
+              }`}
               placeholder={String(defaultStandardLunch)}
               title="Định mức số ngày ăn trưa chuẩn trong tháng"
             />
           </div>
 
           {/* Tối */}
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs font-bold text-slate-700 whitespace-nowrap">Ăn Tối (T):</span>
+          <div className="flex items-center gap-1">
+            <span className="text-xs font-bold text-slate-700 whitespace-nowrap">Tối:</span>
             <input
               type="number"
               min={0}
               max={31}
-              value={overrideDinner !== null ? overrideDinner : defaultStandardDinner}
+              value={standardDinnerDays}
               onChange={(e) => {
                 const val = e.target.value === '' ? null : Number(e.target.value);
                 updateOverrideDinner(val);
               }}
-              className="w-14 bg-white border border-slate-300 rounded-lg px-2 py-1.5 text-xs font-extrabold text-center text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500 shadow-2xs"
+              className={`w-13 border rounded-lg px-1.5 py-1.5 text-xs font-extrabold text-center text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500 shadow-2xs ${
+                isAutoSyncReported ? 'bg-emerald-50/60 border-emerald-300 text-emerald-950' : 'bg-white border-slate-300'
+              }`}
               placeholder={String(defaultStandardDinner)}
               title="Định mức số ngày ăn tối chuẩn trong tháng"
             />
@@ -1601,15 +1747,15 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
           <button
             type="button"
             onClick={handleResetStandardConfig}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs active:scale-95 ${
-              overrideBreakfast !== null || overrideLunch !== null || overrideDinner !== null
+            className={`px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-all cursor-pointer shadow-xs active:scale-95 ${
+              overrideBreakfast !== null || overrideLunch !== null || overrideDinner !== null || isAutoSyncReported
                 ? 'bg-amber-600 hover:bg-amber-700 text-white shadow-amber-600/30 ring-2 ring-amber-300'
                 : 'bg-white hover:bg-amber-50 text-slate-700 border border-slate-300 hover:border-amber-400'
             }`}
             title={`Khôi phục lại định mức ngày ăn chuẩn theo lịch tháng ${monthNum}/${yearNum} (S: ${defaultStandardBreakfast}, Trưa: ${defaultStandardLunch}, Tối: ${defaultStandardDinner} ngày)`}
           >
             <RotateCcw className="w-3.5 h-3.5" />
-            <span>Reset định mức</span>
+            <span>Reset lịch</span>
           </button>
         </div>
       </div>

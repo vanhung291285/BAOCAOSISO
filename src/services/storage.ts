@@ -880,12 +880,20 @@ export const StorageService = {
     // 1. Load local students first as authoritative source for detailed attributes (gender, student_code, birth_date, ethnicity, notes, etc.)
     const rawLocal = localStorage.getItem(STORAGE_KEYS.STUDENTS);
     const localMap = new Map<string, import('../types').Student>();
+    const localNameClassMap = new Map<string, string>(); // classId_normalized_fullName -> studentId
+
     if (rawLocal) {
       try {
         const parsed = JSON.parse(rawLocal);
         if (Array.isArray(parsed)) {
           parsed.forEach((s) => {
-            if (s && s.id) localMap.set(s.id, s);
+            if (s && s.id && s.full_name) {
+              localMap.set(s.id, s);
+              const key = `${String(s.class_id || '').trim().toLowerCase()}__${String(s.full_name || '').trim().toLowerCase()}`;
+              if (!localNameClassMap.has(key)) {
+                localNameClassMap.set(key, s.id);
+              }
+            }
           });
         }
       } catch {}
@@ -913,12 +921,27 @@ export const StorageService = {
         if (!error && cloudData && cloudData.length > 0) {
           cloudData.forEach((row) => {
             const mapped = mapDBToJSStudent(row);
-            const existing = localMap.get(mapped.id);
+            if (!mapped.full_name) return;
+
+            // Check if exists by exact ID OR by class_id + full_name
+            let targetId = mapped.id;
+            let existing = localMap.get(mapped.id);
+
+            if (!existing) {
+              const classStudentKey = `${String(mapped.class_id || '').trim().toLowerCase()}__${String(mapped.full_name || '').trim().toLowerCase()}`;
+              const matchedLocalId = localNameClassMap.get(classStudentKey);
+              if (matchedLocalId) {
+                targetId = matchedLocalId;
+                existing = localMap.get(matchedLocalId);
+              }
+            }
+
             if (existing) {
               // Merge: keep local detailed attributes or cloud attributes as preferred
-              localMap.set(mapped.id, {
+              localMap.set(targetId, {
                 ...mapped,
                 ...existing,
+                id: targetId,
                 full_name: existing.full_name || mapped.full_name,
                 class_id: existing.class_id || mapped.class_id,
                 gender: resolveStudentGender(existing.gender || mapped.gender, existing.full_name || mapped.full_name),
@@ -930,6 +953,8 @@ export const StorageService = {
               });
             } else {
               localMap.set(mapped.id, mapped);
+              const key = `${String(mapped.class_id || '').trim().toLowerCase()}__${String(mapped.full_name || '').trim().toLowerCase()}`;
+              localNameClassMap.set(key, mapped.id);
             }
           });
         }
@@ -939,23 +964,32 @@ export const StorageService = {
     }
 
     const data = Array.from(localMap.values());
-    localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(data));
 
-    // Auto-deduplicate any duplicate student records by id
-    const seen = new Set<string>();
+    // Auto-deduplicate any duplicate student records by ID and by (class_id + full_name)
+    const seenIds = new Set<string>();
+    const seenClassStudentKeys = new Set<string>();
     const cleaned: import('../types').Student[] = [];
 
     for (const s of data) {
-      if (!s || !s.id) continue;
-      const key = s.id;
-      if (!seen.has(key)) {
-        seen.add(key);
-        cleaned.push(s);
-      }
+      if (!s || !s.id || !s.full_name) continue;
+      const sId = String(s.id).trim();
+      const normClass = String(s.class_id || '').trim().toLowerCase();
+      const normName = String(s.full_name || '').trim().toLowerCase();
+      const classStudentKey = `${normClass}__${normName}`;
+
+      if (seenIds.has(sId)) continue;
+      if (normClass && normName && seenClassStudentKeys.has(classStudentKey)) continue;
+
+      seenIds.add(sId);
+      if (normClass && normName) seenClassStudentKeys.add(classStudentKey);
+      cleaned.push(s);
     }
 
     // Sắp xếp danh sách học sinh theo thứ tự chữ cái của ID (đảm bảo giữ nguyên 100% thứ tự import ban đầu)
     cleaned.sort((a, b) => (a.id || '').localeCompare(b.id || ''));
+
+    // Ghi đè lại dữ liệu đã khử trùng lặp vào localStorage
+    localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(cleaned));
 
     return cleaned;
   },
@@ -1071,7 +1105,26 @@ export const StorageService = {
     const all = await this.getStudents();
     const rawKeys = [classId, className].filter(Boolean) as string[];
     const normKeys = new Set(rawKeys.map((k) => k.trim().toLowerCase()));
-    return all.filter((s) => normKeys.has(String(s.class_id || '').trim().toLowerCase()));
+    const classFiltered = all.filter((s) => normKeys.has(String(s.class_id || '').trim().toLowerCase()));
+
+    const seenIds = new Set<string>();
+    const seenNames = new Set<string>();
+    const unique: import('../types').Student[] = [];
+
+    for (const s of classFiltered) {
+      if (!s || !s.full_name) continue;
+      const sId = String(s.id || '').trim();
+      const normName = String(s.full_name || '').trim().toLowerCase();
+
+      if (sId && seenIds.has(sId)) continue;
+      if (normName && seenNames.has(normName)) continue;
+
+      if (sId) seenIds.add(sId);
+      if (normName) seenNames.add(normName);
+      unique.push(s);
+    }
+
+    return unique;
   },
 
   async saveStudents(students: import('../types').Student[]): Promise<void> {
@@ -1630,6 +1683,13 @@ export const StorageService = {
               lunch: l,
               dinner: d,
             };
+            if (data.notes) {
+              try {
+                const parsed = JSON.parse(data.notes);
+                if (parsed.auto_sync) config.auto_sync = true;
+                if (parsed.mode) config.mode = parsed.mode;
+              } catch {}
+            }
             // Cập nhật bộ nhớ cục bộ đồng bộ với Cloud
             const savedRaw = localStorage.getItem(STORAGE_KEYS.STANDARD_CONFIGS);
             const configs = savedRaw ? JSON.parse(savedRaw) : {};
@@ -1662,7 +1722,7 @@ export const StorageService = {
     ensureInitialized();
     const configKey = `${classId}_${month}`;
 
-    const isReset = !cfg || (cfg.breakfast === undefined && cfg.lunch === undefined && cfg.dinner === undefined);
+    const isReset = !cfg || (cfg.breakfast === undefined && cfg.lunch === undefined && cfg.dinner === undefined && !cfg.auto_sync);
 
     // 1. Cập nhật localStorage ngay lập tức
     try {
@@ -1676,6 +1736,8 @@ export const StorageService = {
           breakfast: cfg.breakfast,
           lunch: cfg.lunch,
           dinner: cfg.dinner,
+          auto_sync: cfg.auto_sync,
+          mode: cfg.mode,
         };
       }
       localStorage.setItem(STORAGE_KEYS.STANDARD_CONFIGS, JSON.stringify(configs));
@@ -1718,6 +1780,8 @@ export const StorageService = {
               delete parsed.standard_breakfast;
               delete parsed.standard_lunch;
               delete parsed.standard_dinner;
+              delete parsed.auto_sync;
+              delete parsed.mode;
               parsed.standard_reset = true;
               notesToSave = JSON.stringify(parsed);
             } else if (!notesToSave || notesToSave === '__STANDARD_RESET__') {
@@ -1729,6 +1793,10 @@ export const StorageService = {
             parsed.standard_breakfast = b;
             parsed.standard_lunch = l;
             parsed.standard_dinner = d;
+            if (cfg.auto_sync) parsed.auto_sync = true;
+            else delete parsed.auto_sync;
+            if (cfg.mode) parsed.mode = cfg.mode;
+            else delete parsed.mode;
             notesToSave = JSON.stringify(parsed);
           }
         } catch {
