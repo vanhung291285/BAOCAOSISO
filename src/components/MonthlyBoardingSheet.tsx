@@ -4,7 +4,7 @@ import { useSchool } from '../contexts/SchoolContext';
 import { useAuth } from '../contexts/AuthContext';
 import { StorageService, subscribeRealtime } from '../services/storage';
 import { getSupabaseClient, isSupabaseConnected } from '../services/supabase';
-import { Student, BoardingDailyReport, BoardingMealRecord, BoardingSignatureConfig, BoardingMonthSignature } from '../types';
+import { Student, BoardingDailyReport, BoardingMealRecord, BoardingSignatureConfig, BoardingMonthSignature, SchoolOffDay } from '../types';
 import { getMealScheduleForDate, buildDefaultMealRecords, generateDefaultBoardingStudentsForClass } from '../utils/boardingRules';
 import { formatDateVN, getTodayDateStr } from '../utils/schoolWeeks';
 import { exportMonthlyBoardingExcel } from '../utils/exportBoardingExcel';
@@ -217,19 +217,39 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
     return { yearNum: y, monthNum: m, daysInMonth: numDays };
   }, [selectedMonth]);
 
-  // Array of days info in the month
+  // School off days (lịch nghỉ lễ, tết, thời tiết) để tính chuẩn xác định mức ngày ăn
+  const [offDays, setOffDays] = useState<SchoolOffDay[]>([]);
+
+  useEffect(() => {
+    StorageService.getOffDays()
+      .then((list) => {
+        if (Array.isArray(list)) setOffDays(list);
+      })
+      .catch((e) => console.warn('Could not load school off days:', e));
+  }, []);
+
+  const offDaysMap = useMemo(() => {
+    const map = new Map<string, string>();
+    offDays.forEach((o) => {
+      if (o && o.date) map.set(o.date, o.name || 'Ngày nghỉ');
+    });
+    return map;
+  }, [offDays]);
+
+  // Array of days info in the month (tự động loại trừ các ngày nghỉ lễ/đột xuất trong lịch trường)
   const monthDays = useMemo(() => {
     const days: Array<{
       dayNum: number;
       dateStr: string;
       dayOfWeekShort: string; // '2', '3', '4', '5', '6', '7', 'CN'
-      isSchoolMealDay: boolean; // T2-T6
+      isSchoolMealDay: boolean; // T2-T6 (trừ ngày nghỉ)
       allowedMeals: { breakfast: boolean; lunch: boolean; dinner: boolean };
+      offName?: string;
     }> = [];
 
     for (let d = 1; d <= daysInMonth; d++) {
       const dateStr = `${yearNum}-${String(monthNum).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-      const schedule = getMealScheduleForDate(dateStr);
+      const schedule = getMealScheduleForDate(dateStr, offDaysMap);
       const dateObj = new Date(yearNum, monthNum - 1, d);
       const dow = dateObj.getDay();
       let dowShort = 'CN';
@@ -250,11 +270,12 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
           lunch: schedule.lunchAllowed,
           dinner: schedule.dinnerAllowed,
         },
+        offName: offDaysMap.get(dateStr),
       });
     }
 
     return days;
-  }, [yearNum, monthNum, daysInMonth]);
+  }, [yearNum, monthNum, daysInMonth, offDaysMap]);
 
   // Matrix of meal data: studentId -> { dateStr -> { breakfast: boolean, lunch: boolean, dinner: boolean } }
   const [mealMatrix, setMealMatrix] = useState<
@@ -436,7 +457,9 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
     setOverrideLunch(null);
     setOverrideDinner(null);
     await saveCustomStandardConfig(null, null, null);
-    showToast('Đã khôi phục định mức ăn mặc định tự động tính theo lịch!');
+    showToast(
+      `Đã reset định mức ngày báo ăn Tháng ${monthNum}/${yearNum} về chuẩn lịch: Sáng ${defaultStandardBreakfast} ngày, Trưa ${defaultStandardLunch} ngày, Tối ${defaultStandardDinner} ngày!`
+    );
   };
 
   const standardBreakfastDays = overrideBreakfast !== null ? overrideBreakfast : defaultStandardBreakfast;
@@ -727,6 +750,13 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
             setOverrideDinner(null);
           }
         });
+      }
+      if (event.table === 'school_off_days') {
+        StorageService.getOffDays()
+          .then((list) => {
+            if (Array.isArray(list)) setOffDays(list);
+          })
+          .catch(console.warn);
       }
     });
 
@@ -1372,51 +1402,63 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
           </div>
         </div>
 
-        {/* Buttons */}
+        {/* Buttons Toolbar */}
         <div className="flex flex-wrap items-center gap-2">
+          {/* Nhóm 1: Thao tác dữ liệu báo ăn */}
+          <button
+            type="button"
+            onClick={handleSyncFromDailyReports}
+            className="px-3 py-2 rounded-xl text-xs font-bold bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
+            title="Đồng bộ tất cả ngày GVCN đã báo ăn (từ phiếu báo ăn ngày hoặc báo cáo sĩ số ngày) vào biểu"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+            <span>Đồng bộ báo ăn ngày</span>
+          </button>
+
           <button
             type="button"
             onClick={handleResetToOnlyReported}
-            className="px-3.5 py-2 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 flex items-center gap-1.5 transition-all cursor-pointer"
+            className="px-3 py-2 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
             title="Làm sạch sổ: Để trống tất cả các ngày chưa báo ăn và ngày tương lai, chỉ giữ lại những ngày GVCN đã báo ăn thực tế"
           >
             <RotateCcw className="w-3.5 h-3.5 text-slate-600" />
             <span>Để trống ngày chưa báo</span>
           </button>
 
-          {autoSaveStatus === 'saving' && (
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-amber-700 bg-amber-50 border border-amber-300 animate-pulse shadow-xs">
-              <div className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />
-              <span>Đang tự động lưu...</span>
-            </div>
-          )}
-          {autoSaveStatus === 'saved' && (
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-emerald-800 bg-emerald-50 border border-emerald-300 shadow-xs">
-              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-              <span>✓ Đã lưu tự động</span>
-            </div>
-          )}
-
           <button
             type="button"
             onClick={handleClearAllMonth}
-            className="px-3 py-2 rounded-xl text-xs font-bold bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 flex items-center gap-1.5 transition-all cursor-pointer"
+            className="px-3 py-2 rounded-xl text-xs font-bold bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
             title="Xóa toàn bộ chấm ăn của tháng này để sổ trống 100%, sẵn sàng cho GVCN chấm từng ngày"
           >
             <Trash2 className="w-3.5 h-3.5 text-rose-600" />
             <span>Xóa sạch chấm lại</span>
           </button>
 
+          {/* Nút Reset ngày báo ăn định mức của tháng */}
           <button
             type="button"
-            onClick={handleSyncFromDailyReports}
-            className="px-3.5 py-2 rounded-xl text-xs font-bold bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 flex items-center gap-1.5 transition-all cursor-pointer"
-            title="Đồng bộ tất cả ngày GVCN đã báo ăn (từ phiếu báo ăn ngày hoặc báo cáo sĩ số ngày) vào biểu"
+            onClick={handleResetStandardConfig}
+            className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs active:scale-95 ${
+              overrideBreakfast !== null || overrideLunch !== null || overrideDinner !== null
+                ? 'bg-amber-500 hover:bg-amber-600 text-slate-950 font-black ring-2 ring-amber-300 shadow-amber-500/20'
+                : 'bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300'
+            }`}
+            title={`Reset ngày báo ăn định mức tháng ${monthNum}/${yearNum} về chuẩn theo lịch học: Sáng ${defaultStandardBreakfast}, Trưa ${defaultStandardLunch}, Tối ${defaultStandardDinner} ngày (Không làm ảnh hưởng đến dữ liệu chấm ăn và học sinh)`}
           >
-            <Sparkles className="w-3.5 h-3.5 text-blue-600" />
-            <span>Đồng bộ từ báo ăn ngày</span>
+            <RotateCcw className="w-3.5 h-3.5 text-amber-800" />
+            <span>Reset định mức tháng</span>
+            {overrideBreakfast !== null || overrideLunch !== null || overrideDinner !== null && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-200 text-amber-950 font-black">
+                Có đè
+              </span>
+            )}
           </button>
 
+          {/* Dải phân cách */}
+          <div className="h-5 w-px bg-slate-300 mx-0.5 hidden sm:block" />
+
+          {/* Nhóm 2: Xuất bản & In ấn */}
           <button
             type="button"
             onClick={() => setIsPreviewOpen(true)}
@@ -1424,17 +1466,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
             title="Xem trước bản in chuẩn khổ giấy A4 ngang và xuất file PDF"
           >
             <Eye className="w-3.5 h-3.5 text-indigo-600" />
-            <span>Xem trước khi in</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setIsPreviewOpen(true)}
-            className="px-3.5 py-2 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white shadow-md shadow-rose-600/20 flex items-center gap-1.5 transition-all cursor-pointer"
-            title="Xuất file PDF hoặc In ra file PDF chuẩn A4"
-          >
-            <FileDown className="w-3.5 h-3.5" />
-            <span>In / Xuất PDF</span>
+            <span>Xem trước & In PDF</span>
           </button>
 
           <button
@@ -1444,33 +1476,38 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
             title="Xuất file Excel chuẩn Bộ GD&ĐT tự động chia 2 trang (Trang 1: Ngày 1-15, Trang 2: Ngày 16-hết) khi in không bị co chữ"
           >
             <Download className="w-3.5 h-3.5" />
-            <span>Xuất Excel (2 Trang chuẩn mẫu)</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => window.print()}
-            className="px-3 py-2 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 flex items-center gap-1.5 transition-all"
-            title="In nhanh trực tiếp qua trình duyệt"
-          >
-            <Printer className="w-3.5 h-3.5" />
-            <span>In sổ A3/A4</span>
+            <span>Xuất Excel (2 Trang)</span>
           </button>
 
           <button
             type="button"
             onClick={() => setIsFullscreen(!isFullscreen)}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm ${
+            className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs ${
               isFullscreen
                 ? 'bg-amber-500 text-slate-950 font-black ring-2 ring-amber-300'
-                : 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300'
             }`}
             title={isFullscreen ? 'Thu nhỏ màn hình' : 'Phóng to toàn màn hình chấm ăn rõ nét'}
           >
             {isFullscreen ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
-            <span>{isFullscreen ? 'Thu nhỏ' : 'Toàn màn hình'}</span>
+            <span className="hidden sm:inline">{isFullscreen ? 'Thu nhỏ' : 'Toàn màn hình'}</span>
           </button>
 
+          {/* Trạng thái tự động lưu */}
+          {autoSaveStatus === 'saving' && (
+            <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold text-amber-700 bg-amber-50 border border-amber-300 animate-pulse shadow-2xs">
+              <div className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />
+              <span>Đang lưu...</span>
+            </div>
+          )}
+          {autoSaveStatus === 'saved' && (
+            <div className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold text-emerald-800 bg-emerald-50 border border-emerald-300 shadow-2xs">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Đã lưu</span>
+            </div>
+          )}
+
+          {/* Nhóm 3: Lưu trữ */}
           <button
             type="button"
             onClick={handleSaveMonth}
@@ -1484,20 +1521,31 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
       </div>
 
       {/* Custom standard meal days configuration */}
-      <div className="bg-amber-50/50 rounded-2xl p-4 border border-amber-200 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4 no-print -mt-2">
-        <div className="flex flex-col gap-1 col-span-2">
-          <div className="text-xs font-black text-amber-900 flex items-center gap-1.5 uppercase tracking-wide">
-            <Info className="w-4 h-4 text-amber-600" />
-            <span>Định mức số ngày ăn chuẩn trong tháng (Mặc định tự động tính theo lịch)</span>
+      <div className="bg-gradient-to-r from-amber-50/80 via-amber-50/50 to-orange-50/40 rounded-2xl p-4 border border-amber-200/90 shadow-2xs flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 no-print -mt-2">
+        <div className="flex flex-col gap-1 max-w-2xl">
+          <div className="text-xs font-black text-amber-950 flex flex-wrap items-center gap-2 uppercase tracking-wide">
+            <Info className="w-4 h-4 text-amber-600 flex-shrink-0" />
+            <span>Định mức ngày báo ăn chuẩn trong tháng {monthNum}/{yearNum}</span>
+            {overrideBreakfast !== null || overrideLunch !== null || overrideDinner !== null ? (
+              <span className="text-[10px] px-2 py-0.5 rounded-full font-black bg-amber-200 text-amber-950 border border-amber-400 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-600 animate-pulse" />
+                Đang điều chỉnh đè ({standardBreakfastDays}S - {standardLunchDays}T - {standardDinnerDays}T)
+              </span>
+            ) : (
+              <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                Mặc định theo lịch ({defaultStandardBreakfast}S - {defaultStandardLunch}T - {defaultStandardDinner}T)
+              </span>
+            )}
           </div>
-          <p className="text-[11px] text-slate-600 font-medium">
-            Quy tắc chuẩn: <strong>Số ngày báo ăn (S, T, T) + Số ngày không báo ăn (S, T, T) = Định mức báo (S, T, T)</strong>. GVCN có thể nhập đè số ngày để điều chỉnh định mức khi có nghỉ lễ, nghỉ thời tiết...
+          <p className="text-[11px] text-slate-600 font-medium leading-relaxed">
+            Quy tắc chuẩn kế toán: <strong>Số ngày báo ăn + Số ngày không báo ăn = Định mức báo ăn</strong>. Thầy/Cô có thể nhập số ngày đè nếu có nghỉ thời tiết, nghỉ đột xuất... hoặc bấm <strong>Reset định mức tháng</strong> để khôi phục chuẩn theo lịch học của trường.
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+
+        <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto bg-white/90 p-2 rounded-xl border border-amber-200 shadow-2xs">
           {/* Sáng */}
           <div className="flex items-center gap-1.5">
-            <span className="text-xs font-bold text-slate-700">Ăn Sáng (S):</span>
+            <span className="text-xs font-bold text-slate-700 whitespace-nowrap">Ăn Sáng (S):</span>
             <input
               type="number"
               min={0}
@@ -1507,14 +1555,15 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
                 const val = e.target.value === '' ? null : Number(e.target.value);
                 updateOverrideBreakfast(val);
               }}
-              className="w-14 bg-white border border-slate-300 rounded-xl px-2 py-1 text-xs font-bold text-center text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500"
+              className="w-14 bg-white border border-slate-300 rounded-lg px-2 py-1.5 text-xs font-extrabold text-center text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500 shadow-2xs"
               placeholder={String(defaultStandardBreakfast)}
+              title="Định mức số ngày ăn sáng chuẩn trong tháng"
             />
           </div>
 
           {/* Trưa */}
           <div className="flex items-center gap-1.5">
-            <span className="text-xs font-bold text-slate-700">Ăn Trưa (T):</span>
+            <span className="text-xs font-bold text-slate-700 whitespace-nowrap">Ăn Trưa (T):</span>
             <input
               type="number"
               min={0}
@@ -1524,14 +1573,15 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
                 const val = e.target.value === '' ? null : Number(e.target.value);
                 updateOverrideLunch(val);
               }}
-              className="w-14 bg-white border border-slate-300 rounded-xl px-2 py-1 text-xs font-bold text-center text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500"
+              className="w-14 bg-white border border-slate-300 rounded-lg px-2 py-1.5 text-xs font-extrabold text-center text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500 shadow-2xs"
               placeholder={String(defaultStandardLunch)}
+              title="Định mức số ngày ăn trưa chuẩn trong tháng"
             />
           </div>
 
           {/* Tối */}
           <div className="flex items-center gap-1.5">
-            <span className="text-xs font-bold text-slate-700">Ăn Tối (T):</span>
+            <span className="text-xs font-bold text-slate-700 whitespace-nowrap">Ăn Tối (T):</span>
             <input
               type="number"
               min={0}
@@ -1541,22 +1591,26 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
                 const val = e.target.value === '' ? null : Number(e.target.value);
                 updateOverrideDinner(val);
               }}
-              className="w-14 bg-white border border-slate-300 rounded-xl px-2 py-1 text-xs font-bold text-center text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500"
+              className="w-14 bg-white border border-slate-300 rounded-lg px-2 py-1.5 text-xs font-extrabold text-center text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500 shadow-2xs"
               placeholder={String(defaultStandardDinner)}
+              title="Định mức số ngày ăn tối chuẩn trong tháng"
             />
           </div>
 
-          {/* Reset button */}
-          {(overrideBreakfast !== null || overrideLunch !== null || overrideDinner !== null) && (
-            <button
-              type="button"
-              onClick={handleResetStandardConfig}
-              className="px-2.5 py-1 rounded-lg text-[10px] font-black bg-rose-100 text-rose-900 hover:bg-rose-200 cursor-pointer"
-              title="Khôi phục lại định mức mặc định tính tự động theo lịch"
-            >
-              Đặt lại
-            </button>
-          )}
+          {/* Nút Reset định mức ngày báo ăn của tháng */}
+          <button
+            type="button"
+            onClick={handleResetStandardConfig}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs active:scale-95 ${
+              overrideBreakfast !== null || overrideLunch !== null || overrideDinner !== null
+                ? 'bg-amber-600 hover:bg-amber-700 text-white shadow-amber-600/30 ring-2 ring-amber-300'
+                : 'bg-white hover:bg-amber-50 text-slate-700 border border-slate-300 hover:border-amber-400'
+            }`}
+            title={`Khôi phục lại định mức ngày ăn chuẩn theo lịch tháng ${monthNum}/${yearNum} (S: ${defaultStandardBreakfast}, Trưa: ${defaultStandardLunch}, Tối: ${defaultStandardDinner} ngày)`}
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            <span>Reset định mức</span>
+          </button>
         </div>
       </div>
 

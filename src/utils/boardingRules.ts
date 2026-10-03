@@ -17,11 +17,61 @@ export interface DayMealSchedule {
  * - Thứ 6: Ăn Sáng, Ăn Trưa. Chiều/Tối thứ 6 học sinh về nhà nên KHÔNG ăn tối.
  * - Thứ 7, Chủ Nhật: Học sinh nghỉ về gia đình, KHÔNG tổ chức ăn bán trú.
  */
-export function getMealScheduleForDate(dateStr: string): DayMealSchedule {
+export function getMealScheduleForDate(
+  dateStr: string,
+  offDaysMap?: Map<string, string> | Set<string> | Array<{ date: string; name?: string }>
+): DayMealSchedule {
+  let offName: string | undefined;
+
+  if (offDaysMap) {
+    if (offDaysMap instanceof Map) {
+      offName = offDaysMap.get(dateStr);
+    } else if (offDaysMap instanceof Set) {
+      if (offDaysMap.has(dateStr)) offName = 'Ngày nghỉ';
+    } else if (Array.isArray(offDaysMap)) {
+      const match = offDaysMap.find((o) => o && o.date === dateStr);
+      if (match) offName = match.name || 'Ngày nghỉ';
+    }
+  } else if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+    try {
+      const raw = localStorage.getItem('sso_school_off_days_v1');
+      if (raw) {
+        const list = JSON.parse(raw);
+        if (Array.isArray(list)) {
+          const match = list.find((o: any) => o && o.date === dateStr);
+          if (match) offName = match.name || 'Ngày nghỉ';
+        }
+      }
+    } catch {}
+  }
+
   // Parse date safely in local time
   const [y, m, d] = dateStr.split('-').map(Number);
   const dateObj = new Date(y, m - 1, d);
   const dayOfWeek = dateObj.getDay();
+
+  if (offName) {
+    const dowNames: Record<number, { dayName: string; shortName: string }> = {
+      0: { dayName: 'Chủ Nhật', shortName: 'CN' },
+      1: { dayName: 'Thứ Hai', shortName: 'T2' },
+      2: { dayName: 'Thứ Ba', shortName: 'T3' },
+      3: { dayName: 'Thứ Tư', shortName: 'T4' },
+      4: { dayName: 'Thứ Năm', shortName: 'T5' },
+      5: { dayName: 'Thứ Sáu', shortName: 'T6' },
+      6: { dayName: 'Thứ Bảy', shortName: 'T7' },
+    };
+    const info = dowNames[dayOfWeek] || { dayName: 'Ngày nghỉ', shortName: 'Nghỉ' };
+    return {
+      dayOfWeek,
+      dayName: info.dayName,
+      shortName: info.shortName,
+      isMealDay: false,
+      breakfastAllowed: false,
+      lunchAllowed: false,
+      dinnerAllowed: false,
+      note: `Nghỉ học / Lễ (${offName}): Học sinh về nhà (Không ăn)`,
+    };
+  }
 
   switch (dayOfWeek) {
     case 1: // Thứ 2
