@@ -4,7 +4,7 @@ import { useSchool } from '../contexts/SchoolContext';
 import { useAuth } from '../contexts/AuthContext';
 import { StorageService, subscribeRealtime } from '../services/storage';
 import { getSupabaseClient, isSupabaseConnected } from '../services/supabase';
-import { Student, BoardingDailyReport, BoardingMealRecord, BoardingSignatureConfig, BoardingMonthSignature, SchoolOffDay } from '../types';
+import { Student, BoardingDailyReport, BoardingMealRecord, BoardingSignatureConfig, BoardingMonthSignature, SchoolOffDay, BoardingStandardMealConfig } from '../types';
 import { getMealScheduleForDate, buildDefaultMealRecords, generateDefaultBoardingStudentsForClass } from '../utils/boardingRules';
 import { formatDateVN, getTodayDateStr } from '../utils/schoolWeeks';
 import { exportMonthlyBoardingExcel } from '../utils/exportBoardingExcel';
@@ -375,12 +375,14 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
     };
   }, [monthDays, classBoardingStudents, mealMatrix]);
 
+  const standardSaveTimerRef = useRef<any>(null);
+
   // Load custom standard days config from localStorage & Supabase Cloud
   useEffect(() => {
     if (!selectedClassId || !selectedMonth) return;
     let isMounted = true;
 
-    // Bước 1: Đọc nhanh từ bộ nhớ cục bộ (nếu có) để giao diện không bị gián đoạn
+    // Bước 1: Đọc nhanh từ bộ nhớ cục bộ (nếu có) để giao diện tức thì, không gián đoạn
     try {
       const savedRaw = localStorage.getItem('sso_boarding_standard_configs_v1');
       if (savedRaw) {
@@ -388,7 +390,8 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
         const configKey = `${selectedClassId}_${selectedMonth}`;
         const savedConfig = configs[configKey];
         if (savedConfig) {
-          if (savedConfig.mode === 'CUSTOM') {
+          const hasManual = savedConfig.breakfast !== undefined || savedConfig.lunch !== undefined || savedConfig.dinner !== undefined;
+          if (savedConfig.mode === 'CUSTOM' || hasManual) {
             setIsAutoSyncReported(false);
             setOverrideBreakfast(savedConfig.breakfast !== undefined ? savedConfig.breakfast : null);
             setOverrideLunch(savedConfig.lunch !== undefined ? savedConfig.lunch : null);
@@ -398,40 +401,25 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
             setOverrideBreakfast(savedConfig.breakfast !== undefined ? savedConfig.breakfast : null);
             setOverrideLunch(savedConfig.lunch !== undefined ? savedConfig.lunch : null);
             setOverrideDinner(savedConfig.dinner !== undefined ? savedConfig.dinner : null);
-          } else {
-            // Mặc định luôn là Tự động theo báo ăn (không dùng số đè cũ)
+          } else if (savedConfig.auto_sync || savedConfig.mode === 'AUTO_REPORTED') {
             setIsAutoSyncReported(true);
             setOverrideBreakfast(null);
             setOverrideLunch(null);
             setOverrideDinner(null);
           }
-        } else {
-          // Chưa có cấu hình riêng -> Mặc định là Tự động theo báo ăn
-          setIsAutoSyncReported(true);
-          setOverrideBreakfast(null);
-          setOverrideLunch(null);
-          setOverrideDinner(null);
         }
-      } else {
-        // Chưa có dữ liệu lưu trữ -> Mặc định là Tự động theo báo ăn
-        setIsAutoSyncReported(true);
-        setOverrideBreakfast(null);
-        setOverrideLunch(null);
-        setOverrideDinner(null);
       }
-    } catch {
-      setIsAutoSyncReported(true);
-      setOverrideBreakfast(null);
-      setOverrideLunch(null);
-      setOverrideDinner(null);
+    } catch (e) {
+      console.warn('Error reading local standard config:', e);
     }
 
-    // Bước 2: Đồng bộ từ Supabase Cloud để dữ liệu luôn chính xác khi mở trên trình duyệt khác hoặc sau khi tải lại trang
+    // Bước 2: Đồng bộ từ Supabase Cloud để dữ liệu luôn chính xác khi mở trên thiết bị khác
     StorageService.getBoardingStandardConfig(selectedClassId, selectedMonth)
       .then((cfg) => {
         if (!isMounted) return;
         if (cfg) {
-          if (cfg.mode === 'CUSTOM') {
+          const hasManual = cfg.breakfast !== undefined || cfg.lunch !== undefined || cfg.dinner !== undefined;
+          if (cfg.mode === 'CUSTOM' || hasManual) {
             setIsAutoSyncReported(false);
             setOverrideBreakfast(cfg.breakfast !== undefined ? cfg.breakfast : null);
             setOverrideLunch(cfg.lunch !== undefined ? cfg.lunch : null);
@@ -441,19 +429,12 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
             setOverrideBreakfast(cfg.breakfast !== undefined ? cfg.breakfast : null);
             setOverrideLunch(cfg.lunch !== undefined ? cfg.lunch : null);
             setOverrideDinner(cfg.dinner !== undefined ? cfg.dinner : null);
-          } else {
-            // Mặc định luôn là Tự động theo báo ăn
+          } else if (cfg.auto_sync || cfg.mode === 'AUTO_REPORTED') {
             setIsAutoSyncReported(true);
             setOverrideBreakfast(null);
             setOverrideLunch(null);
             setOverrideDinner(null);
           }
-        } else {
-          // Chưa có cấu hình trên Cloud -> Mặc định là Tự động theo báo ăn
-          setIsAutoSyncReported(true);
-          setOverrideBreakfast(null);
-          setOverrideLunch(null);
-          setOverrideDinner(null);
         }
       })
       .catch((e) => {
@@ -462,6 +443,9 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
 
     return () => {
       isMounted = false;
+      if (standardSaveTimerRef.current) {
+        clearTimeout(standardSaveTimerRef.current);
+      }
     };
   }, [selectedClassId, selectedMonth]);
 
@@ -476,7 +460,15 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
     const isReset = !autoSync && breakfast === null && lunch === null && dinner === null;
     const configKey = `${selectedClassId}_${selectedMonth}`;
 
-    // 1. Cập nhật localStorage ngay lập tức
+    const configToSave: BoardingStandardMealConfig = {
+      breakfast: breakfast !== null ? breakfast : undefined,
+      lunch: lunch !== null ? lunch : undefined,
+      dinner: dinner !== null ? dinner : undefined,
+      auto_sync: autoSync,
+      mode: autoSync ? 'AUTO_REPORTED' : 'CUSTOM',
+    };
+
+    // 1. Cập nhật localStorage ngay lập tức để UI và cache giữ giá trị 100%
     try {
       const savedRaw = localStorage.getItem('sso_boarding_standard_configs_v1');
       const configs = savedRaw ? JSON.parse(savedRaw) : {};
@@ -484,13 +476,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
       if (isReset) {
         delete configs[configKey];
       } else {
-        configs[configKey] = {
-          breakfast: breakfast !== null ? breakfast : undefined,
-          lunch: lunch !== null ? lunch : undefined,
-          dinner: dinner !== null ? dinner : undefined,
-          auto_sync: autoSync,
-          mode: autoSync ? 'AUTO_REPORTED' : (breakfast !== null || lunch !== null || dinner !== null ? 'CUSTOM' : 'CALENDAR'),
-        };
+        configs[configKey] = configToSave;
       }
       
       localStorage.setItem('sso_boarding_standard_configs_v1', JSON.stringify(configs));
@@ -498,58 +484,75 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
       console.warn('Error saving custom standard config locally:', e);
     }
 
-    // 2. Lưu trực tiếp lên Supabase Cloud
-    try {
-      await StorageService.saveBoardingStandardConfig(
-        selectedClassId,
-        selectedMonth,
-        isReset
-          ? null
-          : {
-              breakfast: breakfast !== null ? breakfast : undefined,
-              lunch: lunch !== null ? lunch : undefined,
-              dinner: dinner !== null ? dinner : undefined,
-              auto_sync: autoSync,
-              mode: autoSync ? 'AUTO_REPORTED' : (breakfast !== null || lunch !== null || dinner !== null ? 'CUSTOM' : 'CALENDAR'),
-            }
-      );
-    } catch (e) {
-      console.warn('Error saving custom standard config to Supabase Cloud:', e);
+    // 2. Debounce lưu trực tiếp lên Supabase Cloud để tránh tranh chấp dữ liệu khi gõ phím
+    if (standardSaveTimerRef.current) {
+      clearTimeout(standardSaveTimerRef.current);
     }
+
+    standardSaveTimerRef.current = setTimeout(async () => {
+      try {
+        await StorageService.saveBoardingStandardConfig(
+          selectedClassId,
+          selectedMonth,
+          isReset ? null : configToSave
+        );
+      } catch (e) {
+        console.warn('Error saving custom standard config to Supabase Cloud:', e);
+      }
+    }, 350);
   };
 
   const updateOverrideBreakfast = (val: number | null) => {
     setIsAutoSyncReported(false);
+    const effL = overrideLunch !== null ? overrideLunch : standardLunchDays;
+    const effD = overrideDinner !== null ? overrideDinner : standardDinnerDays;
     setOverrideBreakfast(val);
-    saveCustomStandardConfig(val, overrideLunch, overrideDinner, false);
+    setOverrideLunch(effL);
+    setOverrideDinner(effD);
+    saveCustomStandardConfig(val, effL, effD, false);
   };
 
   const updateOverrideLunch = (val: number | null) => {
     setIsAutoSyncReported(false);
+    const effB = overrideBreakfast !== null ? overrideBreakfast : standardBreakfastDays;
+    const effD = overrideDinner !== null ? overrideDinner : standardDinnerDays;
+    setOverrideBreakfast(effB);
     setOverrideLunch(val);
-    saveCustomStandardConfig(overrideBreakfast, val, overrideDinner, false);
+    setOverrideDinner(effD);
+    saveCustomStandardConfig(effB, val, effD, false);
   };
 
   const updateOverrideDinner = (val: number | null) => {
     setIsAutoSyncReported(false);
+    const effB = overrideBreakfast !== null ? overrideBreakfast : standardBreakfastDays;
+    const effL = overrideLunch !== null ? overrideLunch : standardLunchDays;
+    setOverrideBreakfast(effB);
+    setOverrideLunch(effL);
     setOverrideDinner(val);
-    saveCustomStandardConfig(overrideBreakfast, overrideLunch, val, false);
+    saveCustomStandardConfig(effB, effL, val, false);
   };
 
   const handleToggleAutoSyncReported = async () => {
     const nextVal = !isAutoSyncReported;
     setIsAutoSyncReported(nextVal);
-    setOverrideBreakfast(null);
-    setOverrideLunch(null);
-    setOverrideDinner(null);
-    await saveCustomStandardConfig(null, null, null, nextVal);
     if (nextVal) {
+      setOverrideBreakfast(null);
+      setOverrideLunch(null);
+      setOverrideDinner(null);
+      await saveCustomStandardConfig(null, null, null, true);
       showToast(
         `Đã bật chế độ TỰ ĐỘNG ĐỒNG BỘ ĐỊNH MỨC theo số ngày báo ăn thực tế của GVCN: Sáng ${autoReportedMealDays.autoBreakfast} ngày, Trưa ${autoReportedMealDays.autoLunch} ngày, Tối ${autoReportedMealDays.autoDinner} ngày!`
       );
     } else {
+      const curB = standardBreakfastDays;
+      const curL = standardLunchDays;
+      const curD = standardDinnerDays;
+      setOverrideBreakfast(curB);
+      setOverrideLunch(curL);
+      setOverrideDinner(curD);
+      await saveCustomStandardConfig(curB, curL, curD, false);
       showToast(
-        `Đã chuyển về định mức MẶC ĐỊNH THEO LỊCH HỌC: Sáng ${defaultStandardBreakfast} ngày, Trưa ${defaultStandardLunch} ngày, Tối ${defaultStandardDinner} ngày!`
+        `Đã chuyển sang cấu hình ĐỊNH MỨC THỦ CÔNG: Sáng ${curB} ngày, Trưa ${curL} ngày, Tối ${curD} ngày! Thầy/Cô có thể chỉnh sửa số ngày theo ý muốn.`
       );
     }
   };
@@ -778,6 +781,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
   };
 
   useEffect(() => {
+    let isMounted = true;
     loadMonthData(false);
 
     // Lắng nghe sự kiện lưu báo ăn từ Tab 1 (Báo cáo sĩ số ngày) để tự động đồng bộ tức thì vào biểu
@@ -791,22 +795,31 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
         }, 400);
       }
       if (event.table === 'boarding_standard_configs' || event.table === 'boarding_month_signatures') {
+        const payloadClassId = event.payload?.classId;
+        const payloadMonth = event.payload?.month;
+        if (payloadClassId && payloadClassId !== selectedClassId) return;
+        if (payloadMonth && payloadMonth !== selectedMonth) return;
+
         StorageService.getBoardingStandardConfig(selectedClassId, selectedMonth).then((cfg) => {
-          if (cfg && cfg.mode === 'CUSTOM') {
-            setOverrideBreakfast(cfg.breakfast !== undefined ? cfg.breakfast : null);
-            setOverrideLunch(cfg.lunch !== undefined ? cfg.lunch : null);
-            setOverrideDinner(cfg.dinner !== undefined ? cfg.dinner : null);
-            setIsAutoSyncReported(false);
-          } else if (cfg && (cfg.mode === 'CALENDAR' || (cfg.mode as string) === 'FIXED_SCHEDULE')) {
-            setOverrideBreakfast(cfg.breakfast !== undefined ? cfg.breakfast : null);
-            setOverrideLunch(cfg.lunch !== undefined ? cfg.lunch : null);
-            setOverrideDinner(cfg.dinner !== undefined ? cfg.dinner : null);
-            setIsAutoSyncReported(false);
-          } else {
-            setOverrideBreakfast(null);
-            setOverrideLunch(null);
-            setOverrideDinner(null);
-            setIsAutoSyncReported(true);
+          if (!isMounted) return;
+          if (cfg) {
+            const hasManual = cfg.breakfast !== undefined || cfg.lunch !== undefined || cfg.dinner !== undefined;
+            if (cfg.mode === 'CUSTOM' || hasManual) {
+              setOverrideBreakfast(cfg.breakfast !== undefined ? cfg.breakfast : null);
+              setOverrideLunch(cfg.lunch !== undefined ? cfg.lunch : null);
+              setOverrideDinner(cfg.dinner !== undefined ? cfg.dinner : null);
+              setIsAutoSyncReported(false);
+            } else if (cfg.mode === 'CALENDAR' || (cfg.mode as string) === 'FIXED_SCHEDULE') {
+              setOverrideBreakfast(cfg.breakfast !== undefined ? cfg.breakfast : null);
+              setOverrideLunch(cfg.lunch !== undefined ? cfg.lunch : null);
+              setOverrideDinner(cfg.dinner !== undefined ? cfg.dinner : null);
+              setIsAutoSyncReported(false);
+            } else if (cfg.auto_sync || cfg.mode === 'AUTO_REPORTED') {
+              setOverrideBreakfast(null);
+              setOverrideLunch(null);
+              setOverrideDinner(null);
+              setIsAutoSyncReported(true);
+            }
           }
         });
       }
@@ -820,6 +833,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
     });
 
     return () => {
+      isMounted = false;
       if (debounceTimer) clearTimeout(debounceTimer);
       unsubscribe();
       // Clear all pending save timers on unmount
@@ -1383,16 +1397,23 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
         await StorageService.saveBoardingReportsBulk(reportsToSave, currentUser || undefined);
       }
       // Lưu đồng bộ định mức ăn đã đặt hoặc đã đặt lại lên Supabase Cloud
+      const stdConfigToSave: BoardingStandardMealConfig = isAutoSyncReported
+        ? {
+            auto_sync: true,
+            mode: 'AUTO_REPORTED',
+          }
+        : {
+            breakfast: overrideBreakfast !== null ? overrideBreakfast : standardBreakfastDays,
+            lunch: overrideLunch !== null ? overrideLunch : standardLunchDays,
+            dinner: overrideDinner !== null ? overrideDinner : standardDinnerDays,
+            auto_sync: false,
+            mode: 'CUSTOM',
+          };
+
       await StorageService.saveBoardingStandardConfig(
         selectedClassId,
         selectedMonth,
-        (overrideBreakfast === null && overrideLunch === null && overrideDinner === null)
-          ? null
-          : {
-              breakfast: overrideBreakfast !== null ? overrideBreakfast : undefined,
-              lunch: overrideLunch !== null ? overrideLunch : undefined,
-              dinner: overrideDinner !== null ? overrideDinner : undefined,
-            }
+        stdConfigToSave
       );
       showToast(`Đã lưu thành công Sổ chấm cơm lớp ${currentClass?.class_name} Tháng ${monthNum}/${yearNum}! (${reportsToSave.length} ngày đã báo ăn, các ngày còn lại để trống)`);
     } catch (e) {
