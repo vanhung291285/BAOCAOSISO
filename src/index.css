@@ -22,9 +22,13 @@
     margin: 5mm 5mm 5mm 5mm;
   }
 
+  html,
   body {
     background-color: #ffffff !important;
     color: #000000 !important;
+    height: auto !important;
+    min-height: auto !important;
+    overflow: visible !important;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
@@ -47,8 +51,8 @@
   }
 
   .print-break-inside-avoid {
-    break-inside: avoid;
-    page-break-inside: avoid;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
   }
 
   .print-page {

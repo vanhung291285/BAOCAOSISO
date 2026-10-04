@@ -196,14 +196,9 @@ export const BoardingPrintPreviewModal: React.FC<BoardingPrintPreviewModalProps>
                 </th>
               ))}
               {showSummary && (
-                <>
-                  <th colSpan={6} className="py-0.5 px-1 border border-black bg-slate-100 font-bold text-[9.5px]">
-                    Số ngày ăn trong tháng
-                  </th>
-                  <th rowSpan={3} className="py-0.5 px-0.5 w-11 border border-black bg-slate-100 font-bold text-[9.5px]">
-                    Ngày thực
-                  </th>
-                </>
+                <th colSpan={6} className="py-0.5 px-1 border border-black bg-slate-100 font-bold text-[9.5px]">
+                  Số ngày ăn trong tháng
+                </th>
               )}
             </tr>
 
@@ -296,7 +291,6 @@ export const BoardingPrintPreviewModal: React.FC<BoardingPrintPreviewModalProps>
                       <td className="py-[1.5px] px-0.5 border border-black font-bold text-[9px]">{sum.missedBreakfast}</td>
                       <td className="py-[1.5px] px-0.5 border border-black font-bold text-[9px]">{sum.missedLunch}</td>
                       <td className="py-[1.5px] px-0.5 border border-black font-bold text-[9px]">{sum.missedDinner}</td>
-                      <td className="py-[1.5px] px-0.5 border border-black font-bold text-[9px]">{sum.actualDays}</td>
                     </>
                   )}
                 </tr>
@@ -334,7 +328,6 @@ export const BoardingPrintPreviewModal: React.FC<BoardingPrintPreviewModalProps>
                   <td className="py-0.5 px-0.5 border border-black font-bold text-[8.5px]">{columnTotals.totalMissedB}</td>
                   <td className="py-0.5 px-0.5 border border-black font-bold text-[8.5px]">{columnTotals.totalMissedL}</td>
                   <td className="py-0.5 px-0.5 border border-black font-bold text-[8.5px]">{columnTotals.totalMissedD}</td>
-                  <td className="py-0.5 px-0.5 border border-black font-bold text-[8.5px]">{columnTotals.totalActualDays}</td>
                 </>
               )}
             </tr>
@@ -390,7 +383,7 @@ export const BoardingPrintPreviewModal: React.FC<BoardingPrintPreviewModalProps>
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-slate-900/90 backdrop-blur-xs text-slate-100 overflow-hidden select-none print:fixed print:inset-0 print:bg-white print:text-black print:overflow-visible print:z-[9999]">
+    <div className="fixed inset-0 z-50 flex flex-col bg-slate-900/90 backdrop-blur-xs text-slate-100 overflow-hidden select-none print:static print:h-auto print:w-full print:block print:bg-white print:text-black print:overflow-visible print:z-0">
       {/* Top Controls Bar */}
       <div className="bg-slate-900 border-b border-slate-800 px-3 sm:px-4 py-2.5 sm:py-3 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2.5 sm:gap-3 shadow-lg shrink-0 no-print">
         {/* Title & Page Switcher */}
@@ -401,6 +394,18 @@ export const BoardingPrintPreviewModal: React.FC<BoardingPrintPreviewModalProps>
           </div>
 
           <div className="flex items-center bg-slate-800 rounded-xl p-0.5 sm:p-1 border border-slate-700 text-[11px] sm:text-xs overflow-x-auto no-scrollbar touch-pan-x">
+            <button
+              type="button"
+              onClick={() => setActiveTab('both')}
+              className={`px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-lg font-black transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+                activeTab === 'both'
+                  ? 'bg-blue-600 text-white shadow-sm ring-2 ring-blue-400/40'
+                  : 'text-amber-300 hover:text-amber-200 hover:bg-slate-700/60'
+              }`}
+              title="Xuất/In đúng quy định: 2 trang A4 ngang (Trang 1: Ngày 1-15, Trang 2: Ngày 16-cuối & Ký tên)"
+            >
+              <span>📄 2 trang A4 (Chuẩn quy định)</span>
+            </button>
             <button
               type="button"
               onClick={() => setActiveTab('page1')}
@@ -425,25 +430,15 @@ export const BoardingPrintPreviewModal: React.FC<BoardingPrintPreviewModalProps>
             </button>
             <button
               type="button"
-              onClick={() => setActiveTab('both')}
-              className={`px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg font-bold transition-all cursor-pointer whitespace-nowrap ${
-                activeTab === 'both'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-slate-300 hover:text-white'
-              }`}
-            >
-              2 trang A4
-            </button>
-            <button
-              type="button"
               onClick={() => setActiveTab('all')}
               className={`px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg font-bold transition-all cursor-pointer whitespace-nowrap ${
                 activeTab === 'all'
                   ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-slate-300 hover:text-white'
+                  : 'text-slate-400 hover:text-slate-200'
               }`}
+              title="Xem bảng thu nhỏ toàn bộ 31 ngày trên 1 trang"
             >
-              Cả tháng
+              Cả tháng (1 trang)
             </button>
           </div>
         </div>
@@ -485,10 +480,10 @@ export const BoardingPrintPreviewModal: React.FC<BoardingPrintPreviewModalProps>
             onClick={handleDownloadPdf}
             disabled={isExportingPdf}
             className="px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl text-[11px] sm:text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white shadow-md shadow-rose-600/30 flex items-center gap-1 sm:gap-1.5 transition-all cursor-pointer disabled:opacity-50"
-            title="Tải về file PDF sắc nét đúng chuẩn khổ A4 ngang"
+            title={activeTab === 'both' ? 'Tải về file PDF 2 trang chuẩn quy định (Trang 1: Ngày 1-15, Trang 2: Ngày 16-hết & Chữ ký)' : 'Tải về file PDF sắc nét đúng chuẩn khổ A4 ngang'}
           >
             <FileDown className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
-            <span>{isExportingPdf ? 'Tạo PDF...' : 'Xuất PDF'}</span>
+            <span>{isExportingPdf ? 'Đang tạo PDF 2 trang...' : activeTab === 'both' ? 'Tải PDF (2 Trang)' : 'Xuất PDF'}</span>
           </button>
 
           {/* Direct Print */}
@@ -496,7 +491,7 @@ export const BoardingPrintPreviewModal: React.FC<BoardingPrintPreviewModalProps>
             type="button"
             onClick={handlePrint}
             className="px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl text-[11px] sm:text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/30 flex items-center gap-1 sm:gap-1.5 transition-all cursor-pointer"
-            title="Mở hộp thoại in trình duyệt (In máy in hoặc Lưu dưới dạng PDF)"
+            title="Mở hộp thoại in trình duyệt (In ra máy in hoặc Lưu dưới dạng PDF 2 trang A4)"
           >
             <Printer className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
             <span>In PDF</span>
@@ -527,11 +522,11 @@ export const BoardingPrintPreviewModal: React.FC<BoardingPrintPreviewModalProps>
       </div>
 
       {/* Main Preview Scroll Area */}
-      <div className="flex-1 overflow-auto p-4 sm:p-8 flex flex-col items-center gap-8 bg-slate-950 print:bg-white print:p-0 print:m-0 print:overflow-visible">
+      <div className="flex-1 overflow-auto p-4 sm:p-8 flex flex-col items-center gap-8 bg-slate-950 print:bg-white print:p-0 print:m-0 print:overflow-visible print:block print:h-auto print:w-full">
         {/* Style applied based on zoom */}
         <div
           style={{ transform: `scale(${zoomLevel / 100})`, transformOrigin: 'top center' }}
-          className="transition-transform duration-150 flex flex-col items-center gap-8 print:transform-none print:m-0 print:p-0 print:gap-0 print:w-full"
+          className="transition-transform duration-150 flex flex-col items-center gap-8 print:transform-none print:m-0 print:p-0 print:gap-0 print:w-full print:block print:h-auto"
         >
           {activeTab === 'page1' && (
             <div

@@ -2425,14 +2425,9 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
                       );
                     })}
                     {showSummaryColumns && (
-                      <>
-                        <th colSpan={6} className="py-1 px-1 sm:px-2 border-r border-b border-slate-400 bg-slate-100 text-slate-900 font-bold sticky top-0 z-30 text-[10px] sm:text-xs">
-                          Số ngày ăn trong tháng
-                        </th>
-                        <th rowSpan={3} className="py-2 px-1 w-12 sm:w-14 bg-slate-100 text-slate-900 font-bold border-b border-slate-400 sticky top-0 z-30 text-[10px] sm:text-xs">
-                          Ngày thực
-                        </th>
-                      </>
+                      <th colSpan={6} className="py-1 px-1 sm:px-2 border-r border-b border-slate-400 bg-slate-100 text-slate-900 font-bold sticky top-0 z-30 text-[10px] sm:text-xs">
+                        Số ngày ăn trong tháng
+                      </th>
                     )}
                   </tr>
 
@@ -2696,11 +2691,6 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
                             <td className={`py-1 px-0.5 font-bold border-r border-b border-slate-300 text-slate-900 text-[10px] sm:text-xs ${isStudentHovered ? 'bg-amber-50' : 'bg-white'}`}>
                               {sum.missedDinner}
                             </td>
-
-                            {/* Actual Days */}
-                            <td className={`py-1 px-0.5 font-bold border-b border-slate-300 text-slate-900 text-[10px] sm:text-xs ${isStudentHovered ? 'bg-amber-100 font-black' : 'bg-white'}`}>
-                              {sum.actualDays}
-                            </td>
                           </>
                         )}
                       </tr>
@@ -2768,7 +2758,6 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
                         <td className="py-1 border-r border-b border-slate-300 bg-white" />
                         <td className="py-1 border-r border-b border-slate-300 bg-white" />
                         <td className="py-1 border-r border-b border-slate-300 bg-white" />
-                        <td className="py-1 border-b border-slate-300 bg-white" />
                       </>
                     )}
                   </tr>
@@ -2816,9 +2805,6 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
                         </td>
                         <td className="py-1 px-0.5 border-r border-slate-400 text-slate-900 font-bold text-[10px]">
                           {columnTotals.totalMissedD}
-                        </td>
-                        <td className="py-1 px-0.5 border-b border-slate-400 text-slate-900 font-bold text-[10px]">
-                          {columnTotals.totalActualDays}
                         </td>
                       </>
                     )}
