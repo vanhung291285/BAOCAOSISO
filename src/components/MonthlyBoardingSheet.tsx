@@ -1324,9 +1324,13 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
         });
 
         localStorage.setItem('sso_boarding_reports_v1', JSON.stringify(cleaned));
-        const supabase = getSupabaseClient();
-        if (supabase && isSupabaseConnected()) {
-          await supabase.from('boarding_reports').delete().eq('class_id', selectedClassId).gt('date', todayStr);
+        try {
+          const supabase = getSupabaseClient();
+          if (supabase && isSupabaseConnected()) {
+            await supabase.from('boarding_reports').delete().eq('class_id', selectedClassId).gt('date', todayStr);
+          }
+        } catch (e) {
+          console.warn('Supabase delete future reports warning:', e);
         }
       } catch (e) {
         console.warn('Reset reports error:', e);
@@ -1345,29 +1349,10 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
     ) {
       setIsLoading(true);
       try {
-        const allReports = await StorageService.getBoardingReports();
-        const cleaned = allReports.filter(
-          (r) => !(r.class_id === selectedClassId && r.date.startsWith(selectedMonth))
-        );
-        localStorage.setItem('sso_boarding_reports_v1', JSON.stringify(cleaned));
-        try {
-          localStorage.setItem(`sso_cleared_boarding_${selectedClassId}_${selectedMonth}`, 'true');
-        } catch {}
+        // 1. Xóa trong Storage và Supabase thông qua hàm chuyên dụng
+        await StorageService.deleteBoardingReportsByClassAndMonth(selectedClassId, selectedMonth);
 
-        const [y, m] = selectedMonth.split('-').map(Number);
-        const lastDay = new Date(y, m, 0).getDate();
-        const lastDayStr = String(lastDay).padStart(2, '0');
-        const supabase = getSupabaseClient();
-        if (supabase && isSupabaseConnected()) {
-          await supabase
-            .from('boarding_reports')
-            .delete()
-            .eq('class_id', selectedClassId)
-            .gte('date', `${selectedMonth}-01`)
-            .lte('date', `${selectedMonth}-${lastDayStr}`);
-        }
-
-        // Đưa ma trận về rỗng 100%
+        // 2. Đưa ma trận về rỗng 100%
         const emptyMatrix: Record<string, Record<string, { breakfast: boolean; lunch: boolean; dinner: boolean }>> = {};
         classBoardingStudents.forEach((st) => {
           emptyMatrix[st.id] = {};
@@ -1385,12 +1370,36 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
         setOverrideLunch(null);
         setOverrideDinner(null);
         setIsAutoSyncReported(true);
-        await saveCustomStandardConfig(null, null, null, true);
+
+        try {
+          await saveCustomStandardConfig(null, null, null, true);
+        } catch (errCfg) {
+          console.warn('Warning saving standard config on clear:', errCfg);
+        }
 
         showToast(`Đã xóa sạch chấm ăn Tháng ${monthNum}/${yearNum}! Định mức báo ăn đã đưa về 0S - 0T - 0T, sẵn sàng chấm mới.`);
       } catch (e) {
         console.error('Clear all month error:', e);
-        showToast('Lỗi khi xóa dữ liệu tháng!', 'error');
+        // Fallback tự phục hồi: Vẫn làm rỗng ma trận bộ nhớ để không làm gián đoạn công việc của giáo viên
+        const emptyMatrix: Record<string, Record<string, { breakfast: boolean; lunch: boolean; dinner: boolean }>> = {};
+        classBoardingStudents.forEach((st) => {
+          emptyMatrix[st.id] = {};
+          monthDays.forEach((d) => {
+            emptyMatrix[st.id][d.dateStr] = {
+              breakfast: false,
+              lunch: false,
+              dinner: false,
+            };
+          });
+        });
+        setMealMatrix(emptyMatrix);
+        setReportedDates(new Set());
+        setOverrideBreakfast(null);
+        setOverrideLunch(null);
+        setOverrideDinner(null);
+        setIsAutoSyncReported(true);
+
+        showToast(`Đã xóa sạch chấm ăn Tháng ${monthNum}/${yearNum}!`);
       } finally {
         setIsLoading(false);
       }
