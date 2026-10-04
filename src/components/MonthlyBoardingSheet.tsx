@@ -2152,7 +2152,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
       )}
 
       {/* Printable Sheet View matching the official photo */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-6 overflow-hidden print:p-0 print:border-none print:shadow-none">
+      <div className={`bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-6 overflow-hidden ${isPreviewOpen ? 'print:hidden' : 'print:p-0 print:border-none print:shadow-none'}`}>
         {/* Print Header */}
         <div className="flex flex-col md:flex-row md:items-start justify-between gap-2 pb-4 mb-4 border-b border-slate-200 print:border-black">
           <div>
@@ -2176,6 +2176,11 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
             {viewMode === 'page2' && (
               <div className="text-xs font-bold text-blue-700 uppercase tracking-wide">
                 (TRANG 2: NỬA CUỐI THÁNG - TỪ NGÀY 16 ĐẾN NGÀY {daysInMonth} & TỔNG HỢP)
+              </div>
+            )}
+            {viewMode === 'all' && (
+              <div className="text-xs font-bold text-blue-700 uppercase tracking-wide">
+                (TOÀN BỘ CÁC NGÀY TRONG THÁNG: TỪ NGÀY 01 ĐẾN NGÀY {daysInMonth})
               </div>
             )}
             <div className="text-[11px] text-slate-500 font-medium">

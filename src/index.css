@@ -19,7 +19,7 @@
 @media print {
   @page {
     size: A4 landscape;
-    margin: 8mm 8mm 8mm 8mm;
+    margin: 5mm 5mm 5mm 5mm;
   }
 
   body {
@@ -27,6 +27,10 @@
     color: #000000 !important;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
+  }
+
+  thead {
+    display: table-row-group !important;
   }
 
   .no-print {
@@ -44,6 +48,24 @@
 
   .print-break-inside-avoid {
     break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .print-page {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 auto !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+    box-sizing: border-box !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  .print-page-break {
+    page-break-after: always !important;
+    break-after: page !important;
   }
 }
 

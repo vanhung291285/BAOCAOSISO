@@ -151,56 +151,56 @@ export const BoardingPrintPreviewModal: React.FC<BoardingPrintPreviewModalProps>
 
   const renderSheetTable = (days: DayInfo[], isPage2OrAll: boolean, showSummary = false) => {
     return (
-      <div className="w-full bg-white text-slate-900 select-none">
+      <div className="w-full bg-white text-slate-900 select-none box-border">
         {/* Paper Top Title */}
-        <div className="flex items-start justify-between pb-2 mb-3 text-left">
+        <div className="flex items-start justify-between pb-1.5 mb-2 text-left">
           <div>
-            <div className="font-extrabold text-[11px] uppercase tracking-tight">
+            <div className="font-extrabold text-[11px] sm:text-[12px] uppercase tracking-tight text-black">
               TRƯỜNG PTDTBT THCS XA DUNG
             </div>
-            <div className="font-bold text-[10px] uppercase text-slate-800">
+            <div className="font-bold text-[10px] sm:text-[11px] uppercase text-black">
               PHÂN HIỆU: {campusName.toUpperCase() || 'SUỐI LƯ'}
             </div>
           </div>
           <div className="text-right">
-            <h2 className="text-[13px] font-black uppercase tracking-tight text-slate-900">
+            <h2 className="text-[13px] sm:text-[14px] font-black uppercase tracking-tight text-black">
               SỔ CHẤM CƠM LỚP: {classNameStr} THÁNG {monthNum}/{yearNum}
             </h2>
             <div className="text-[10px] font-bold text-blue-900 uppercase">
-              {days.length <= 15
-                ? days[0]?.dayNum === 1
-                  ? '(TRANG 1: NỬA ĐẦU THÁNG - TỪ NGÀY 01 ĐẾN NGÀY 15)'
-                  : '(TRANG 2: NỬA CUỐI THÁNG - TỪ NGÀY 16 ĐẾN CUỐI THÁNG)'
-                : '(TOÀN BỘ CÁC NGÀY TRONG THÁNG)'}
+              {days[0]?.dayNum === 1 && days.length <= 15
+                ? '(TRANG 1: NỬA ĐẦU THÁNG - TỪ NGÀY 01 ĐẾN NGÀY 15)'
+                : days[0]?.dayNum > 1
+                ? `(TRANG 2: NỬA CUỐI THÁNG - TỪ NGÀY ${String(days[0]?.dayNum).padStart(2, '0')} ĐẾN NGÀY ${daysInMonth} & TỔNG HỢP)`
+                : `(TOÀN BỘ CÁC NGÀY TRONG THÁNG: TỪ NGÀY 01 ĐẾN NGÀY ${daysInMonth})`}
             </div>
           </div>
         </div>
 
         {/* Table Content */}
-        <table className="w-full text-center border-collapse text-[10px] border border-black border-spacing-0">
+        <table className="w-full text-center border-collapse text-[9.5px] border border-black border-spacing-0">
           <thead>
             {/* Header Row 1: STT, Thứ - Ngày, Day numbers */}
-            <tr className="bg-slate-100 font-bold text-slate-900 h-[26px]">
-              <th rowSpan={3} className="py-0.5 px-1 w-8 border border-black text-center font-bold">
+            <tr className="bg-slate-100 font-bold text-slate-900 h-[22px]">
+              <th rowSpan={3} className="py-0.5 px-0.5 w-7 border border-black text-center font-bold text-[9.5px]">
                 STT
               </th>
-              <th className="py-0.5 px-1.5 min-w-[140px] border border-black font-bold">
-                <div className="flex items-center justify-between px-1 text-[10px] font-bold text-slate-900">
+              <th className="py-0.5 px-1.5 min-w-[130px] border border-black font-bold">
+                <div className="flex items-center justify-between px-1 text-[9.5px] font-bold text-slate-900">
                   <span>Thứ</span>
                   <span>Ngày</span>
                 </div>
               </th>
               {days.map((d) => (
                 <th key={d.dayNum} colSpan={3} className="py-0.5 px-0.5 border border-black font-bold text-center">
-                  <span className="text-[10px] font-bold">{d.dayNum}</span>
+                  <span className="text-[9.5px] font-bold">{d.dayNum}</span>
                 </th>
               ))}
               {showSummary && (
                 <>
-                  <th colSpan={6} className="py-0.5 px-1 border border-black bg-slate-100 font-bold text-[10px]">
+                  <th colSpan={6} className="py-0.5 px-1 border border-black bg-slate-100 font-bold text-[9.5px]">
                     Số ngày ăn trong tháng
                   </th>
-                  <th rowSpan={3} className="py-1 px-1 w-12 border border-black bg-slate-100 font-bold text-[10px]">
+                  <th rowSpan={3} className="py-0.5 px-0.5 w-11 border border-black bg-slate-100 font-bold text-[9.5px]">
                     Ngày thực
                   </th>
                 </>
@@ -208,21 +208,21 @@ export const BoardingPrintPreviewModal: React.FC<BoardingPrintPreviewModalProps>
             </tr>
 
             {/* Header Row 2: Họ và tên, Day of week */}
-            <tr className="bg-slate-100 font-bold text-slate-800 h-[22px]">
-              <th rowSpan={2} className="py-0.5 px-1.5 min-w-[140px] text-center border border-black font-bold text-slate-900">
+            <tr className="bg-slate-100 font-bold text-slate-800 h-[18px]">
+              <th rowSpan={2} className="py-0.5 px-1.5 min-w-[130px] text-center border border-black font-bold text-slate-900 text-[9.5px]">
                 Họ và tên
               </th>
               {days.map((d) => (
                 <th key={d.dayNum} colSpan={3} className="py-0.5 px-0.5 border border-black font-bold text-center">
-                  <span className="text-[10px] font-bold">{d.dayOfWeekShort}</span>
+                  <span className="text-[9.5px] font-bold">{d.dayOfWeekShort}</span>
                 </th>
               ))}
               {showSummary && (
                 <>
-                  <th colSpan={3} className="py-0.5 px-1 border border-black bg-slate-100 font-bold text-[9px]">
+                  <th colSpan={3} className="py-0.5 px-0.5 border border-black bg-slate-100 font-bold text-[8.5px]">
                     Số ngày báo ăn
                   </th>
-                  <th colSpan={3} className="py-0.5 px-1 border border-black bg-slate-100 font-bold text-[9px]">
+                  <th colSpan={3} className="py-0.5 px-0.5 border border-black bg-slate-100 font-bold text-[8.5px]">
                     Số ngày không báo ăn
                   </th>
                 </>
@@ -230,22 +230,22 @@ export const BoardingPrintPreviewModal: React.FC<BoardingPrintPreviewModalProps>
             </tr>
 
             {/* Header Row 3: S, T, T */}
-            <tr className="bg-slate-100 font-bold text-slate-800 h-[20px]">
+            <tr className="bg-slate-100 font-bold text-slate-800 h-[16px]">
               {days.map((d) => (
                 <React.Fragment key={d.dayNum}>
-                  <th className="py-0.5 w-[20px] border border-black font-bold text-[9px]">S</th>
-                  <th className="py-0.5 w-[20px] border border-black font-bold text-[9px]">T</th>
-                  <th className="py-0.5 w-[20px] border border-black font-bold text-[9px]">T</th>
+                  <th className="py-0.5 w-[18px] min-w-[17px] border border-black font-bold text-[8.5px]">S</th>
+                  <th className="py-0.5 w-[18px] min-w-[17px] border border-black font-bold text-[8.5px]">T</th>
+                  <th className="py-0.5 w-[18px] min-w-[17px] border border-black font-bold text-[8.5px]">T</th>
                 </React.Fragment>
               ))}
               {showSummary && (
                 <>
-                  <th className="py-0.5 w-5 border border-black font-bold text-[9px]">S</th>
-                  <th className="py-0.5 w-5 border border-black font-bold text-[9px]">T</th>
-                  <th className="py-0.5 w-5 border border-black font-bold text-[9px]">T</th>
-                  <th className="py-0.5 w-5 border border-black font-bold text-[9px]">S</th>
-                  <th className="py-0.5 w-5 border border-black font-bold text-[9px]">T</th>
-                  <th className="py-0.5 w-5 border border-black font-bold text-[9px]">T</th>
+                  <th className="py-0.5 w-4.5 border border-black font-bold text-[8.5px]">S</th>
+                  <th className="py-0.5 w-4.5 border border-black font-bold text-[8.5px]">T</th>
+                  <th className="py-0.5 w-4.5 border border-black font-bold text-[8.5px]">T</th>
+                  <th className="py-0.5 w-4.5 border border-black font-bold text-[8.5px]">S</th>
+                  <th className="py-0.5 w-4.5 border border-black font-bold text-[8.5px]">T</th>
+                  <th className="py-0.5 w-4.5 border border-black font-bold text-[8.5px]">T</th>
                 </>
               )}
             </tr>
@@ -265,24 +265,24 @@ export const BoardingPrintPreviewModal: React.FC<BoardingPrintPreviewModalProps>
               };
 
               return (
-                <tr key={st.id} className="h-[22px]">
-                  <td className="py-0.5 px-1 border border-black text-center font-medium text-[10px]">
+                <tr key={st.id} className="h-[14px] leading-none">
+                  <td className="py-[1.5px] px-0.5 border border-black text-center font-medium text-[9px]">
                     {idx + 1}
                   </td>
-                  <td className="py-0.5 px-2 border border-black text-left font-medium whitespace-nowrap text-[10px]">
+                  <td className="py-[1.5px] px-1.5 border border-black text-left font-medium whitespace-nowrap text-[9.5px]">
                     {st.full_name}
                   </td>
                   {days.map((d) => {
                     const dMeal = stDays[d.dateStr] || { breakfast: false, lunch: false, dinner: false };
                     return (
                       <React.Fragment key={d.dayNum}>
-                        <td className="py-0.5 w-[20px] border border-black text-center font-black text-[11px]">
+                        <td className="py-[1.5px] w-[18px] min-w-[17px] border border-black text-center font-black text-[10px]">
                           {dMeal.breakfast ? '+' : ''}
                         </td>
-                        <td className="py-0.5 w-[20px] border border-black text-center font-black text-[11px]">
+                        <td className="py-[1.5px] w-[18px] min-w-[17px] border border-black text-center font-black text-[10px]">
                           {dMeal.lunch ? '+' : ''}
                         </td>
-                        <td className="py-0.5 w-[20px] border border-black text-center font-black text-[11px]">
+                        <td className="py-[1.5px] w-[18px] min-w-[17px] border border-black text-center font-black text-[10px]">
                           {dMeal.dinner ? '+' : ''}
                         </td>
                       </React.Fragment>
@@ -290,13 +290,13 @@ export const BoardingPrintPreviewModal: React.FC<BoardingPrintPreviewModalProps>
                   })}
                   {showSummary && (
                     <>
-                      <td className="py-0.5 px-0.5 border border-black font-bold text-[10px]">{sum.eatenBreakfast}</td>
-                      <td className="py-0.5 px-0.5 border border-black font-bold text-[10px]">{sum.eatenLunch}</td>
-                      <td className="py-0.5 px-0.5 border border-black font-bold text-[10px]">{sum.eatenDinner}</td>
-                      <td className="py-0.5 px-0.5 border border-black font-bold text-[10px]">{sum.missedBreakfast}</td>
-                      <td className="py-0.5 px-0.5 border border-black font-bold text-[10px]">{sum.missedLunch}</td>
-                      <td className="py-0.5 px-0.5 border border-black font-bold text-[10px]">{sum.missedDinner}</td>
-                      <td className="py-0.5 px-0.5 border border-black font-bold text-[10px]">{sum.actualDays}</td>
+                      <td className="py-[1.5px] px-0.5 border border-black font-bold text-[9px]">{sum.eatenBreakfast}</td>
+                      <td className="py-[1.5px] px-0.5 border border-black font-bold text-[9px]">{sum.eatenLunch}</td>
+                      <td className="py-[1.5px] px-0.5 border border-black font-bold text-[9px]">{sum.eatenDinner}</td>
+                      <td className="py-[1.5px] px-0.5 border border-black font-bold text-[9px]">{sum.missedBreakfast}</td>
+                      <td className="py-[1.5px] px-0.5 border border-black font-bold text-[9px]">{sum.missedLunch}</td>
+                      <td className="py-[1.5px] px-0.5 border border-black font-bold text-[9px]">{sum.missedDinner}</td>
+                      <td className="py-[1.5px] px-0.5 border border-black font-bold text-[9px]">{sum.actualDays}</td>
                     </>
                   )}
                 </tr>
@@ -306,21 +306,21 @@ export const BoardingPrintPreviewModal: React.FC<BoardingPrintPreviewModalProps>
 
           {/* Footer CỘNG */}
           <tfoot>
-            <tr className="bg-slate-100 font-bold text-slate-900 border-t-2 border-black h-[24px]">
-              <td colSpan={2} className="py-1 px-2 text-center border border-black font-bold uppercase text-[10px]">
+            <tr className="bg-slate-100 font-bold text-slate-900 border-t-2 border-black h-[18px]">
+              <td colSpan={2} className="py-0.5 px-2 text-center border border-black font-bold uppercase text-[9.5px]">
                 CỘNG
               </td>
               {days.map((d) => {
                 const totals = columnTotals.dailyTotals[d.dateStr] || { breakfast: 0, lunch: 0, dinner: 0 };
                 return (
                   <React.Fragment key={d.dayNum}>
-                    <td className="py-0.5 px-0.5 border border-black font-bold text-[9px]">
+                    <td className="py-0.5 px-0.5 border border-black font-bold text-[8.5px]">
                       {totals.breakfast > 0 ? totals.breakfast : ''}
                     </td>
-                    <td className="py-0.5 px-0.5 border border-black font-bold text-[9px]">
+                    <td className="py-0.5 px-0.5 border border-black font-bold text-[8.5px]">
                       {totals.lunch > 0 ? totals.lunch : ''}
                     </td>
-                    <td className="py-0.5 px-0.5 border border-black font-bold text-[9px]">
+                    <td className="py-0.5 px-0.5 border border-black font-bold text-[8.5px]">
                       {totals.dinner > 0 ? totals.dinner : ''}
                     </td>
                   </React.Fragment>
@@ -328,13 +328,13 @@ export const BoardingPrintPreviewModal: React.FC<BoardingPrintPreviewModalProps>
               })}
               {showSummary && (
                 <>
-                  <td className="py-0.5 px-0.5 border border-black font-bold text-[9px]">{columnTotals.totalEatenB}</td>
-                  <td className="py-0.5 px-0.5 border border-black font-bold text-[9px]">{columnTotals.totalEatenL}</td>
-                  <td className="py-0.5 px-0.5 border border-black font-bold text-[9px]">{columnTotals.totalEatenD}</td>
-                  <td className="py-0.5 px-0.5 border border-black font-bold text-[9px]">{columnTotals.totalMissedB}</td>
-                  <td className="py-0.5 px-0.5 border border-black font-bold text-[9px]">{columnTotals.totalMissedL}</td>
-                  <td className="py-0.5 px-0.5 border border-black font-bold text-[9px]">{columnTotals.totalMissedD}</td>
-                  <td className="py-0.5 px-0.5 border border-black font-bold text-[9px]">{columnTotals.totalActualDays}</td>
+                  <td className="py-0.5 px-0.5 border border-black font-bold text-[8.5px]">{columnTotals.totalEatenB}</td>
+                  <td className="py-0.5 px-0.5 border border-black font-bold text-[8.5px]">{columnTotals.totalEatenL}</td>
+                  <td className="py-0.5 px-0.5 border border-black font-bold text-[8.5px]">{columnTotals.totalEatenD}</td>
+                  <td className="py-0.5 px-0.5 border border-black font-bold text-[8.5px]">{columnTotals.totalMissedB}</td>
+                  <td className="py-0.5 px-0.5 border border-black font-bold text-[8.5px]">{columnTotals.totalMissedL}</td>
+                  <td className="py-0.5 px-0.5 border border-black font-bold text-[8.5px]">{columnTotals.totalMissedD}</td>
+                  <td className="py-0.5 px-0.5 border border-black font-bold text-[8.5px]">{columnTotals.totalActualDays}</td>
                 </>
               )}
             </tr>
@@ -343,26 +343,26 @@ export const BoardingPrintPreviewModal: React.FC<BoardingPrintPreviewModalProps>
 
         {/* Signatures for Page 2 or All */}
         {isPage2OrAll && (
-          <div className="mt-4 flex justify-end pr-8">
-            <div className="flex flex-col items-center w-64 text-center">
-              <div className="text-[10px] text-slate-700 italic mb-0.5">
+          <div className="mt-2.5 flex justify-end pr-6 print:pr-10">
+            <div className="flex flex-col items-center w-60 text-center">
+              <div className="text-[9.5px] text-slate-700 italic mb-0.5">
                 {`${sigConfig?.location_name?.trim() || 'Xa Dung'}, ngày ${daysInMonth} tháng ${String(monthNum).padStart(2, '0')} năm ${yearNum}`}
               </div>
-              <div className="text-[11px] font-bold text-slate-900 uppercase">
+              <div className="text-[10.5px] font-bold text-slate-900 uppercase">
                 {sigConfig?.teacher_title || 'GIÁO VIÊN CHỦ NHIỆM'}
               </div>
 
               {/* Digital Signature Image / Badge */}
               {sigConfig?.enable_digital_signature && (monthSig?.is_signed || sigConfig?.signature_image_url || sigConfig?.stamp_image_url) ? (
-                <div className="my-1 py-1 flex flex-col items-center justify-center relative min-h-[44px]">
+                <div className="my-0.5 py-0.5 flex flex-col items-center justify-center relative min-h-[36px]">
                   {sigConfig?.signature_image_url && (
-                    <img src={sigConfig.signature_image_url} alt="Chữ ký" className="h-9 object-contain" />
+                    <img src={sigConfig.signature_image_url} alt="Chữ ký" className="h-8 object-contain" />
                   )}
                   {sigConfig?.stamp_image_url && (
-                    <img src={sigConfig.stamp_image_url} alt="Con dấu" className="h-11 object-contain absolute opacity-85 pointer-events-none" />
+                    <img src={sigConfig.stamp_image_url} alt="Con dấu" className="h-10 object-contain absolute opacity-85 pointer-events-none" />
                   )}
                   {monthSig?.is_signed && (
-                    <div className="border border-emerald-600 bg-emerald-50/90 rounded px-1.5 py-0.5 text-[8px] font-bold text-emerald-800 flex items-center gap-1 shadow-2xs mt-0.5">
+                    <div className="border border-emerald-600 bg-emerald-50/90 rounded px-1.5 py-0.5 text-[7.5px] font-bold text-emerald-800 flex items-center gap-1 shadow-2xs mt-0.5">
                       <span>✓ ĐÃ KÝ ĐIỆN TỬ</span>
                       {monthSig.certificate_hash && (
                         <span className="font-mono text-[7px] text-emerald-700">({monthSig.certificate_hash})</span>
@@ -370,16 +370,16 @@ export const BoardingPrintPreviewModal: React.FC<BoardingPrintPreviewModalProps>
                     </div>
                   )}
                   {!sigConfig?.signature_image_url && !monthSig?.is_signed && (
-                    <div className="text-[9px] text-slate-500 italic py-2">(Chữ ký điện tử)</div>
+                    <div className="text-[8.5px] text-slate-500 italic py-1">(Chữ ký điện tử)</div>
                   )}
                 </div>
               ) : (
-                <div className="text-[10px] text-slate-600 italic mb-12">
+                <div className="text-[9.5px] text-slate-600 italic mb-7">
                   (Ký và ghi rõ họ tên)
                 </div>
               )}
 
-              <div className="text-[11px] font-bold text-slate-900">
+              <div className="text-[10.5px] font-bold text-slate-900">
                 {effectiveTeacherName || sigConfig?.teacher_name || 'Giáo viên chủ nhiệm'}
               </div>
             </div>
@@ -536,7 +536,7 @@ export const BoardingPrintPreviewModal: React.FC<BoardingPrintPreviewModalProps>
           {activeTab === 'page1' && (
             <div
               ref={page1Ref}
-              className="w-[297mm] min-h-[210mm] max-w-[1120px] bg-white p-[10mm] shadow-2xl rounded-sm border border-slate-300 print:shadow-none print:border-none print:m-0 print:p-0 print:w-full print:max-w-none"
+              className="print-page w-[287mm] max-w-[287mm] bg-white p-[5mm] shadow-2xl rounded-sm border border-slate-300 print:shadow-none print:border-none print:m-0 print:p-0 print:w-full print:max-w-none relative box-border overflow-hidden"
             >
               {renderSheetTable(page1Days, false, false)}
             </div>
@@ -545,7 +545,7 @@ export const BoardingPrintPreviewModal: React.FC<BoardingPrintPreviewModalProps>
           {activeTab === 'page2' && (
             <div
               ref={page2Ref}
-              className="w-[297mm] min-h-[210mm] max-w-[1120px] bg-white p-[10mm] shadow-2xl rounded-sm border border-slate-300 print:shadow-none print:border-none print:m-0 print:p-0 print:w-full print:max-w-none"
+              className="print-page w-[287mm] max-w-[287mm] bg-white p-[5mm] shadow-2xl rounded-sm border border-slate-300 print:shadow-none print:border-none print:m-0 print:p-0 print:w-full print:max-w-none relative box-border overflow-hidden"
             >
               {renderSheetTable(page2Days, true, true)}
             </div>
@@ -555,7 +555,7 @@ export const BoardingPrintPreviewModal: React.FC<BoardingPrintPreviewModalProps>
             <>
               <div
                 ref={page1Ref}
-                className="w-[297mm] min-h-[210mm] max-w-[1120px] bg-white p-[10mm] shadow-2xl rounded-sm border border-slate-300 print:shadow-none print:border-none print:m-0 print:p-0 print:w-full print:max-w-none print:break-after-page relative"
+                className="print-page print-page-break w-[287mm] max-w-[287mm] bg-white p-[5mm] shadow-2xl rounded-sm border border-slate-300 print:shadow-none print:border-none print:m-0 print:p-0 print:w-full print:max-w-none relative box-border overflow-hidden"
               >
                 <div className="absolute top-2 right-4 text-[10px] text-slate-400 font-bold uppercase no-print">
                   Trang 1 / 2
@@ -565,7 +565,7 @@ export const BoardingPrintPreviewModal: React.FC<BoardingPrintPreviewModalProps>
 
               <div
                 ref={page2Ref}
-                className="w-[297mm] min-h-[210mm] max-w-[1120px] bg-white p-[10mm] shadow-2xl rounded-sm border border-slate-300 print:shadow-none print:border-none print:m-0 print:p-0 print:w-full print:max-w-none relative"
+                className="print-page w-[287mm] max-w-[287mm] bg-white p-[5mm] shadow-2xl rounded-sm border border-slate-300 print:shadow-none print:border-none print:m-0 print:p-0 print:w-full print:max-w-none relative box-border overflow-hidden"
               >
                 <div className="absolute top-2 right-4 text-[10px] text-slate-400 font-bold uppercase no-print">
                   Trang 2 / 2
@@ -578,7 +578,7 @@ export const BoardingPrintPreviewModal: React.FC<BoardingPrintPreviewModalProps>
           {activeTab === 'all' && (
             <div
               ref={allRef}
-              className="w-[420mm] min-h-[297mm] max-w-[1550px] bg-white p-[10mm] shadow-2xl rounded-sm border border-slate-300 print:shadow-none print:border-none print:m-0 print:p-0 print:w-full print:max-w-none"
+              className="print-page w-[410mm] max-w-[410mm] bg-white p-[5mm] shadow-2xl rounded-sm border border-slate-300 print:shadow-none print:border-none print:m-0 print:p-0 print:w-full print:max-w-none relative box-border overflow-hidden"
             >
               {renderSheetTable(monthDays, true, true)}
             </div>
