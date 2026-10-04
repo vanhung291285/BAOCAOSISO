@@ -105,6 +105,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const hasLoadedOnce = useRef<Record<string, boolean>>({});
   const isInitialLoad = useRef<boolean>(true);
+  const loadSequenceRef = useRef<number>(0);
   const saveTimersRef = useRef<Record<string, any>>({});
   const autoSaveTimeoutRef = useRef<any>(null);
   const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
@@ -723,6 +724,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
   // Load monthly meal data
   const loadMonthData = async (isSilent = false) => {
     if (!selectedClassId || !selectedMonth) return;
+    const reqSeq = ++loadSequenceRef.current;
     const cacheKey = `${selectedClassId}_${selectedMonth}`;
     const alreadyLoaded = Boolean(hasLoadedOnce.current[cacheKey]);
 
@@ -732,10 +734,10 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
       setIsLoading(true);
     }
     try {
-      const todayStr = getTodayDateStr();
-
       // 1. Lấy danh sách báo ăn bán trú đã lưu trong tháng (Supabase + Local)
       const reports = await StorageService.getBoardingReportsByClassAndMonth(selectedClassId, selectedMonth);
+      if (reqSeq !== loadSequenceRef.current) return;
+
       const reportMap = new Map<string, BoardingDailyReport>();
       reports.forEach((r) => {
         if (!r) return;
@@ -818,13 +820,17 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
         });
       });
 
-      setMealMatrix(initialMatrix);
+      if (reqSeq === loadSequenceRef.current) {
+        setMealMatrix(initialMatrix);
+      }
     } catch (e) {
       console.error('Error loading month data:', e);
     } finally {
-      setIsLoading(false);
-      isInitialLoad.current = false;
-      hasLoadedOnce.current[`${selectedClassId}_${selectedMonth}`] = true;
+      if (reqSeq === loadSequenceRef.current) {
+        setIsLoading(false);
+        isInitialLoad.current = false;
+        hasLoadedOnce.current[`${selectedClassId}_${selectedMonth}`] = true;
+      }
     }
   };
 
@@ -837,9 +843,18 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
     let debounceTimer: any = null;
     const unsubscribe = subscribeRealtime((event) => {
       if (event.table === 'daily_reports') {
+        const payloadClassId = event.payload?.classId;
+        const payloadDate = event.payload?.reportDate || event.payload?.date;
+
+        // Bỏ qua các sự kiện của lớp khác hoặc tháng khác để tránh giật lag khi nhiều GVCN cùng báo cáo
+        if (payloadClassId && !validClassIds.has(payloadClassId)) return;
+        if (payloadDate && !payloadDate.startsWith(selectedMonth)) return;
+
         if (debounceTimer) clearTimeout(debounceTimer);
         debounceTimer = setTimeout(() => {
-          loadMonthData(true);
+          if (isMounted) {
+            loadMonthData(true);
+          }
         }, 400);
       }
       if (event.table === 'boarding_standard_configs' || event.table === 'boarding_month_signatures') {
@@ -888,7 +903,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
       Object.values(saveTimersRef.current).forEach((t) => clearTimeout(t));
       if (autoSaveTimeoutRef.current) clearTimeout(autoSaveTimeoutRef.current);
     };
-  }, [selectedClassId, selectedMonth, classBoardingStudents.length]);
+  }, [selectedClassId, selectedMonth, classBoardingStudents.length, validClassIds]);
 
   // Đồng bộ thủ công từ tất cả báo cáo ngày của GVCN
   const handleSyncFromDailyReports = async () => {
