@@ -11,6 +11,7 @@ import { exportMonthlyBoardingExcel } from '../utils/exportBoardingExcel';
 import { DEFAULT_CLASS_TEACHER_MAP } from '../utils/exportAttendanceStandardExcel';
 import { BoardingPrintPreviewModal } from './BoardingPrintPreviewModal';
 import { BoardingDigitalSignatureModal } from './BoardingDigitalSignatureModal';
+import { BoardingBatchMarkModal } from './BoardingBatchMarkModal';
 import {
   Calendar,
   Download,
@@ -36,6 +37,16 @@ import {
   Eye,
   FileDown,
   ShieldCheck,
+  CheckSquare,
+  Sun,
+  Sunrise,
+  Moon,
+  Zap,
+  BookOpen,
+  HelpCircle,
+  ChevronDown,
+  ChevronUp,
+  Calculator,
 } from 'lucide-react';
 
 interface MonthlyBoardingSheetProps {
@@ -175,7 +186,29 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [isPreviewOpen, setIsPreviewOpen] = useState<boolean>(false);
+  const [showBatchModal, setShowBatchModal] = useState<boolean>(false);
+  const [dayMenuAnchor, setDayMenuAnchor] = useState<{
+    x: number;
+    y: number;
+    dateStr: string;
+    dayNum: number;
+    dayOfWeekShort: string;
+  } | null>(null);
+  const [isGuideOpen, setIsGuideOpen] = useState<boolean>(true);
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null);
+
+  // Auto-close active day popover menu on clicking outside or escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setDayMenuAnchor(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
 
   // Class info
   const currentClass = useMemo(() => {
@@ -1063,6 +1096,200 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
     });
   };
 
+  // Batch toggle an entire meal session (breakfast / lunch / dinner) for all students on a given date
+  const handleBatchToggleSession = (
+    dateStr: string,
+    meal: 'breakfast' | 'lunch' | 'dinner',
+    forcedState?: boolean
+  ) => {
+    if (classBoardingStudents.length === 0) return;
+
+    const dayInfo = monthDays.find((d) => d.dateStr === dateStr);
+    const dayNum = dayInfo?.dayNum || dateStr.slice(8);
+    const mealLabel = meal === 'breakfast' ? 'Sáng' : meal === 'lunch' ? 'Trưa' : 'Tối';
+
+    setMealMatrix((prev) => {
+      // Check if all students currently have this meal checked
+      const allChecked = classBoardingStudents.every(
+        (st) => prev[st.id]?.[dateStr]?.[meal] === true
+      );
+      const targetState = forcedState !== undefined ? forcedState : !allChecked;
+
+      const updated = { ...prev };
+      classBoardingStudents.forEach((st) => {
+        const currentStudentDays = updated[st.id] || {};
+        const currentDay = currentStudentDays[dateStr] || {
+          breakfast: false,
+          lunch: false,
+          dinner: false,
+        };
+        updated[st.id] = {
+          ...currentStudentDays,
+          [dateStr]: {
+            ...currentDay,
+            [meal]: targetState,
+          },
+        };
+      });
+
+      setAutoSaveStatus('saving');
+
+      if (saveTimersRef.current[dateStr]) {
+        clearTimeout(saveTimersRef.current[dateStr]);
+      }
+      saveTimersRef.current[dateStr] = setTimeout(async () => {
+        await autoSaveMealDate(dateStr, updated);
+        delete saveTimersRef.current[dateStr];
+        setAutoSaveStatus('saved');
+        if (autoSaveTimeoutRef.current) clearTimeout(autoSaveTimeoutRef.current);
+        autoSaveTimeoutRef.current = setTimeout(() => {
+          setAutoSaveStatus('idle');
+        }, 2500);
+      }, 200);
+
+      showToast(
+        targetState
+          ? `Đã chấm bữa ${mealLabel} ngày ${dayNum}/${monthNum} cho ${classBoardingStudents.length} học sinh!`
+          : `Đã hủy chấm bữa ${mealLabel} ngày ${dayNum}/${monthNum}!`
+      );
+
+      return updated;
+    });
+  };
+
+  // Batch mark or clear entire day (all meals) for all students
+  const handleBatchMarkDay = (dateStr: string, targetState: boolean = true) => {
+    if (classBoardingStudents.length === 0) return;
+
+    const dayInfo = monthDays.find((d) => d.dateStr === dateStr);
+    const dayNum = dayInfo?.dayNum || dateStr.slice(8);
+    const schedule = getMealScheduleForDate(dateStr, offDaysMap);
+
+    setMealMatrix((prev) => {
+      const updated = { ...prev };
+      classBoardingStudents.forEach((st) => {
+        const currentStudentDays = updated[st.id] || {};
+        updated[st.id] = {
+          ...currentStudentDays,
+          [dateStr]: {
+            breakfast: targetState ? schedule.breakfastAllowed : false,
+            lunch: targetState ? schedule.lunchAllowed : false,
+            dinner: targetState ? schedule.dinnerAllowed : false,
+          },
+        };
+      });
+
+      setAutoSaveStatus('saving');
+
+      if (saveTimersRef.current[dateStr]) {
+        clearTimeout(saveTimersRef.current[dateStr]);
+      }
+      saveTimersRef.current[dateStr] = setTimeout(async () => {
+        await autoSaveMealDate(dateStr, updated);
+        delete saveTimersRef.current[dateStr];
+        setAutoSaveStatus('saved');
+        if (autoSaveTimeoutRef.current) clearTimeout(autoSaveTimeoutRef.current);
+        autoSaveTimeoutRef.current = setTimeout(() => {
+          setAutoSaveStatus('idle');
+        }, 200);
+      }, 200);
+
+      showToast(
+        targetState
+          ? `Đã chấm ăn cả ngày ${dayNum}/${monthNum} cho ${classBoardingStudents.length} học sinh!`
+          : `Đã xóa sạch toàn bộ chấm ăn ngày ${dayNum}/${monthNum}!`
+      );
+
+      return updated;
+    });
+  };
+
+  // Apply batch modal execution for multiple dates
+  const handleApplyBatchModal = async (
+    dates: string[],
+    mealOption: 'all_day' | 'breakfast' | 'lunch' | 'dinner' | 'clear',
+    targetStudentIds?: string[]
+  ) => {
+    if (dates.length === 0 || classBoardingStudents.length === 0) return;
+
+    const targetStudents = targetStudentIds
+      ? classBoardingStudents.filter((st) => targetStudentIds.includes(st.id))
+      : classBoardingStudents;
+
+    let updatedMatrix = { ...mealMatrix };
+
+    dates.forEach((dateStr) => {
+      const schedule = getMealScheduleForDate(dateStr, offDaysMap);
+
+      targetStudents.forEach((st) => {
+        const currentStudentDays = updatedMatrix[st.id] || {};
+        const currentDay = currentStudentDays[dateStr] || {
+          breakfast: false,
+          lunch: false,
+          dinner: false,
+        };
+
+        let nextB = currentDay.breakfast;
+        let nextL = currentDay.lunch;
+        let nextD = currentDay.dinner;
+
+        if (mealOption === 'all_day') {
+          nextB = schedule.breakfastAllowed;
+          nextL = schedule.lunchAllowed;
+          nextD = schedule.dinnerAllowed;
+        } else if (mealOption === 'breakfast') {
+          nextB = true;
+        } else if (mealOption === 'lunch') {
+          nextL = true;
+        } else if (mealOption === 'dinner') {
+          nextD = true;
+        } else if (mealOption === 'clear') {
+          nextB = false;
+          nextL = false;
+          nextD = false;
+        }
+
+        updatedMatrix[st.id] = {
+          ...currentStudentDays,
+          [dateStr]: {
+            breakfast: nextB,
+            lunch: nextL,
+            dinner: nextD,
+          },
+        };
+      });
+    });
+
+    setMealMatrix(updatedMatrix);
+    setAutoSaveStatus('saving');
+
+    // Save all affected dates
+    for (const dStr of dates) {
+      await autoSaveMealDate(dStr, updatedMatrix);
+    }
+
+    setAutoSaveStatus('saved');
+    if (autoSaveTimeoutRef.current) clearTimeout(autoSaveTimeoutRef.current);
+    autoSaveTimeoutRef.current = setTimeout(() => {
+      setAutoSaveStatus('idle');
+    }, 2500);
+
+    const actionText =
+      mealOption === 'all_day'
+        ? 'Chấm ăn cả ngày'
+        : mealOption === 'breakfast'
+        ? 'Chấm ăn bữa Sáng'
+        : mealOption === 'lunch'
+        ? 'Chấm ăn bữa Trưa'
+        : mealOption === 'dinner'
+        ? 'Chấm ăn bữa Tối'
+        : 'Xóa chấm ăn';
+
+    showToast(
+      `Đã ${actionText.toLowerCase()} thành công cho ${dates.length} ngày (${targetStudents.length} học sinh)!`
+    );
+  };
+
   // Đặt lại sổ chấm cơm: Xóa sạch các ngày chưa báo ăn, để trống hoàn toàn đúng yêu cầu
   const handleResetToOnlyReported = async () => {
     if (
@@ -1539,6 +1766,16 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
           {/* Nhóm 1: Thao tác dữ liệu báo ăn */}
           <button
             type="button"
+            onClick={() => setShowBatchModal(true)}
+            className="px-3.5 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-600/20 flex items-center gap-1.5 transition-all cursor-pointer"
+            title="Mở bảng chọn chấm ăn nhanh theo ngày, theo buổi sáng/trưa/tối hoặc xóa chấm ăn nhiều ngày"
+          >
+            <CheckSquare className="w-3.5 h-3.5 text-indigo-200" />
+            <span>Chấm theo ngày/buổi</span>
+          </button>
+
+          <button
+            type="button"
             onClick={handleSyncFromDailyReports}
             className="px-3 py-2 rounded-xl text-xs font-bold bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
             title="Đồng bộ tất cả ngày GVCN đã báo ăn (từ phiếu báo ăn ngày hoặc báo cáo sĩ số ngày) vào biểu"
@@ -2001,7 +2238,9 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
           /* Table Sheet Grid */
           <div>
             <div
-              className="relative max-h-[calc(100vh-220px)] min-h-[480px] overflow-auto border border-slate-400 rounded-xl shadow-xs bg-white select-none"
+              className={`relative ${
+                isFullscreen ? 'max-h-[calc(100vh-140px)]' : 'max-h-[72vh] min-h-[420px]'
+              } overflow-auto border border-slate-400 rounded-xl shadow-xs bg-white select-none`}
               onMouseLeave={clearCrosshair}
             >
               <table className="w-full text-center border-collapse text-[11px] border-separate border-spacing-0">
@@ -2024,18 +2263,63 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
                     </th>
                     {displayedMonthDays.map((d) => {
                       const isDateHovered = hoveredDateStr === d.dateStr;
+                      const isMenuOpen = dayMenuAnchor?.dateStr === d.dateStr;
                       return (
                         <th
                           key={d.dayNum}
                           colSpan={3}
                           onMouseEnter={() => updateCrosshair(hoverRef.current.studentId, d.dateStr, hoverRef.current.meal)}
-                          className={`py-0.5 px-0.5 border-r border-b border-slate-400 text-center cursor-pointer sticky top-0 z-30 transition-colors ${
-                            isDateHovered
+                          className={`relative py-0.5 px-0.5 border-r border-b border-slate-400 text-center cursor-pointer sticky top-0 transition-colors group z-30 ${
+                            isMenuOpen
+                              ? 'bg-amber-300 text-slate-950 font-black ring-2 ring-inset ring-amber-500'
+                              : isDateHovered
                               ? 'bg-amber-100 text-slate-950 font-black'
                               : 'bg-slate-100 text-slate-900 font-bold'
                           }`}
                         >
-                          <span className="text-[11px] font-bold">{d.dayNum}</span>
+                          <div className="flex items-center justify-center gap-0.5">
+                            <span className="text-[11px] font-bold">{d.dayNum}</span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (dayMenuAnchor?.dateStr === d.dateStr) {
+                                  setDayMenuAnchor(null);
+                                } else {
+                                  const rect = e.currentTarget.getBoundingClientRect();
+                                  const menuWidth = 280;
+                                  let targetX = rect.left + rect.width / 2;
+                                  if (targetX - menuWidth / 2 < 12) {
+                                    targetX = 12 + menuWidth / 2;
+                                  } else if (targetX + menuWidth / 2 > window.innerWidth - 12) {
+                                    targetX = window.innerWidth - 12 - menuWidth / 2;
+                                  }
+
+                                  const menuHeight = 295;
+                                  let targetY = rect.bottom + 6;
+                                  if (targetY + menuHeight > window.innerHeight - 10) {
+                                    targetY = Math.max(10, rect.top - menuHeight - 6);
+                                  }
+
+                                  setDayMenuAnchor({
+                                    x: targetX,
+                                    y: targetY,
+                                    dateStr: d.dateStr,
+                                    dayNum: d.dayNum,
+                                    dayOfWeekShort: d.dayOfWeekShort,
+                                  });
+                                }
+                              }}
+                              className={`px-1 py-0.5 rounded text-[9px] font-black transition-all cursor-pointer ${
+                                isMenuOpen
+                                  ? 'bg-amber-500 text-slate-950 ring-1 ring-amber-700 shadow-xs'
+                                  : 'text-slate-400 group-hover:text-blue-700 hover:bg-amber-200'
+                              }`}
+                              title={`Bấm để chọn: Chấm cả ngày, Chấm từng buổi (S/T/T) hoặc Xóa chấm ngày ${d.dayNum}/${monthNum}`}
+                            >
+                              ⚡
+                            </button>
+                          </div>
                         </th>
                       );
                     })}
@@ -2097,43 +2381,55 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
                       return (
                         <React.Fragment key={d.dayNum}>
                           <th
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleBatchToggleSession(d.dateStr, 'breakfast');
+                            }}
                             onMouseEnter={() => updateCrosshair(hoverRef.current.studentId, d.dateStr, 'breakfast')}
-                            className={`py-0.5 w-[22px] min-w-[20px] border-r border-b border-slate-400 cursor-pointer sticky top-[52px] z-30 font-bold ${
+                            className={`py-0.5 w-[22px] min-w-[20px] border-r border-b border-slate-400 cursor-pointer sticky top-[52px] z-30 font-bold group/meal transition-colors ${
                               isDateHovered && hoveredMealType === 'breakfast'
-                                ? 'bg-amber-200 text-black font-black'
+                                ? 'bg-amber-200 text-black font-black ring-1 ring-inset ring-amber-500'
                                 : isDateHovered
                                 ? 'bg-amber-100 text-black'
-                                : 'bg-slate-100 text-slate-800'
+                                : 'bg-slate-100 hover:bg-amber-100 hover:text-amber-900 text-slate-800'
                             }`}
-                            title={`Ngày ${d.dayNum} - Bữa Sáng (S)`}
+                            title={`Bấm để chấm/hủy toàn bộ bữa Sáng ngày ${d.dayNum}/${monthNum}`}
                           >
-                            S
+                            <span className="group-hover/meal:underline">S</span>
                           </th>
                           <th
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleBatchToggleSession(d.dateStr, 'lunch');
+                            }}
                             onMouseEnter={() => updateCrosshair(hoverRef.current.studentId, d.dateStr, 'lunch')}
-                            className={`py-0.5 w-[22px] min-w-[20px] border-r border-b border-slate-400 cursor-pointer sticky top-[52px] z-30 font-bold ${
+                            className={`py-0.5 w-[22px] min-w-[20px] border-r border-b border-slate-400 cursor-pointer sticky top-[52px] z-30 font-bold group/meal transition-colors ${
                               isDateHovered && hoveredMealType === 'lunch'
-                                ? 'bg-amber-200 text-black font-black'
+                                ? 'bg-amber-200 text-black font-black ring-1 ring-inset ring-amber-500'
                                 : isDateHovered
                                 ? 'bg-amber-100 text-black'
-                                : 'bg-slate-100 text-slate-800'
+                                : 'bg-slate-100 hover:bg-orange-100 hover:text-orange-900 text-slate-800'
                             }`}
-                            title={`Ngày ${d.dayNum} - Bữa Trưa (T)`}
+                            title={`Bấm để chấm/hủy toàn bộ bữa Trưa ngày ${d.dayNum}/${monthNum}`}
                           >
-                            T
+                            <span className="group-hover/meal:underline">T</span>
                           </th>
                           <th
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleBatchToggleSession(d.dateStr, 'dinner');
+                            }}
                             onMouseEnter={() => updateCrosshair(hoverRef.current.studentId, d.dateStr, 'dinner')}
-                            className={`py-0.5 w-[22px] min-w-[20px] border-r border-b border-slate-400 cursor-pointer sticky top-[52px] z-30 font-bold ${
+                            className={`py-0.5 w-[22px] min-w-[20px] border-r border-b border-slate-400 cursor-pointer sticky top-[52px] z-30 font-bold group/meal transition-colors ${
                               isDateHovered && hoveredMealType === 'dinner'
-                                ? 'bg-amber-200 text-black font-black'
+                                ? 'bg-amber-200 text-black font-black ring-1 ring-inset ring-amber-500'
                                 : isDateHovered
                                 ? 'bg-amber-100 text-black'
-                                : 'bg-slate-100 text-slate-800'
+                                : 'bg-slate-100 hover:bg-indigo-100 hover:text-indigo-900 text-slate-800'
                             }`}
-                            title={`Ngày ${d.dayNum} - Bữa Tối (T)`}
+                            title={`Bấm để chấm/hủy toàn bộ bữa Tối ngày ${d.dayNum}/${monthNum}`}
                           >
-                            T
+                            <span className="group-hover/meal:underline">T</span>
                           </th>
                         </React.Fragment>
                       );
@@ -2483,6 +2779,366 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
           </div>
         )}
       </div>
+
+      {/* CẨM NANG & HƯỚNG DẪN CHI TIẾT SỔ CHẤM CƠM BÁN TRÚ (TINH TẾ - CHUẨN NGHIỆP VỤ) */}
+      <div className="mt-8 no-print select-none">
+        <div className="bg-gradient-to-br from-slate-50 via-white to-blue-50/40 rounded-3xl border border-slate-200/90 shadow-sm overflow-hidden transition-all">
+          {/* Header Bar */}
+          <div className="px-6 py-4.5 bg-gradient-to-r from-slate-900 via-blue-950 to-indigo-950 text-white flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-3.5">
+              <div className="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center backdrop-blur-xs shadow-inner border border-white/15">
+                <BookOpen className="w-5 h-5 text-amber-300" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm sm:text-base font-black tracking-tight text-white">
+                    Cẩm Nang & Hướng Dẫn Nghiệp Vụ Sổ Chấm Cơm Bán Trú
+                  </h3>
+                  <span className="hidden sm:inline-flex px-2 py-0.5 rounded-full text-[10px] font-black bg-blue-500/30 text-blue-200 border border-blue-400/30">
+                    Chuẩn Bộ GD&ĐT
+                  </span>
+                </div>
+                <p className="text-xs text-slate-300 font-medium mt-0.5">
+                  Quy định quản lý hồ sơ bán trú, chấm cơm hằng ngày và thanh quyết toán chế độ học sinh
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setIsGuideOpen(!isGuideOpen)}
+              className="px-3.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer border border-white/15"
+            >
+              <span>{isGuideOpen ? 'Thu gọn' : 'Xem chi tiết'}</span>
+              {isGuideOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            </button>
+          </div>
+
+          {/* Guide Content Body */}
+          {isGuideOpen && (
+            <div className="p-6 space-y-6 animate-fadeIn">
+              {/* 4 Cards Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+                {/* Cột 1: 5 Thao Tác Chấm Ăn Siêu Tốc */}
+                <div className="bg-white rounded-2xl p-4.5 border border-blue-200/80 shadow-2xs flex flex-col justify-between hover:shadow-md transition-all group">
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2.5 pb-2.5 border-b border-blue-100">
+                      <div className="w-8 h-8 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center shrink-0 font-black">
+                        <Sparkles className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-black text-slate-900 uppercase tracking-wide">
+                          1. Chấm Ăn Siêu Tốc
+                        </h4>
+                        <span className="text-[10px] text-blue-600 font-bold">5 thao tác linh hoạt</span>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2 text-xs text-slate-600 leading-relaxed font-normal">
+                      <div className="p-2 rounded-xl bg-blue-50/60 border border-blue-100/80">
+                        <strong className="text-blue-950 font-bold flex items-center gap-1">
+                          ⚡ Chấm Cả Ngày (S+T+T):
+                        </strong>
+                        Bấm biểu tượng <strong>⚡</strong> trên tiêu đề số ngày của bảng, chọn <em>"Chấm Cả Ngày"</em> để tự động tích (+) đủ 3 bữa theo lịch học.
+                      </div>
+                      <div className="p-2 rounded-xl bg-amber-50/60 border border-amber-100/80">
+                        <strong className="text-amber-950 font-bold flex items-center gap-1">
+                          🌅 Chấm riêng từng buổi:
+                        </strong>
+                        Có thể chọn chấm riêng bữa <strong>Sáng (S)</strong>, <strong>Trưa (T)</strong> hoặc <strong>Tối (T)</strong> cho cả lớp.
+                      </div>
+                      <div className="p-2 rounded-xl bg-rose-50/60 border border-rose-100/80">
+                        <strong className="text-rose-950 font-bold flex items-center gap-1">
+                          🗑️ Xóa chấm ngày (Để trống):
+                        </strong>
+                        Chọn <em>"Xóa chấm ngày này"</em> để đưa toàn bộ bữa ăn của ngày về ô trống ban đầu.
+                      </div>
+                      <div className="p-2 rounded-xl bg-indigo-50/60 border border-indigo-100/80">
+                        <strong className="text-indigo-950 font-bold flex items-center gap-1">
+                          📅 Chấm hàng loạt nhiều ngày:
+                        </strong>
+                        Bấm nút <strong>"Chấm theo ngày/buổi"</strong> trên thanh công cụ để chọn nhiều ngày cùng lúc.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Cột 2: Quy Tắc Kế Toán & Định Mức Ăn */}
+                <div className="bg-white rounded-2xl p-4.5 border border-amber-200/80 shadow-2xs flex flex-col justify-between hover:shadow-md transition-all group">
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2.5 pb-2.5 border-b border-amber-100">
+                      <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center shrink-0 font-black">
+                        <Calculator className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-black text-slate-900 uppercase tracking-wide">
+                          2. Định Mức & Kế Toán
+                        </h4>
+                        <span className="text-[10px] text-amber-700 font-bold">Cân đối tài chính chuẩn</span>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2 text-xs text-slate-600 leading-relaxed font-normal">
+                      <div className="p-2 rounded-xl bg-amber-50/70 border border-amber-200/70 text-amber-950 font-medium">
+                        <strong className="font-extrabold text-amber-900 block mb-0.5">📐 Công thức bắt buộc:</strong>
+                        <code className="text-[11px] font-black text-indigo-700 block bg-white px-2 py-1 rounded border border-amber-200 text-center">
+                          Số ngày ăn + Số ngày không ăn = Định mức
+                        </code>
+                      </div>
+                      <div className="p-2 rounded-xl bg-emerald-50/60 border border-emerald-100/80">
+                        <strong className="text-emerald-950 font-bold block mb-0.5">🔄 Chế độ tự động nhảy (Khuyên dùng):</strong>
+                        Định mức ăn tự động khớp theo số ngày thực tế GVCN đã báo ăn (tự động loại trừ các ngày nghỉ, lễ tết, mưa bão).
+                      </div>
+                      <div className="p-2 rounded-xl bg-slate-50 border border-slate-200">
+                        <strong className="text-slate-900 font-bold block mb-0.5">✏️ Cấu hình đè thủ công:</strong>
+                        GVCN gõ số ngày Sáng, Trưa, Tối vào ô định mức. Hệ thống lưu vĩnh viễn trên Supabase Cloud và không bao giờ bị nhảy về mặc định.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Cột 3: Xuất Excel & In Ấn 2 Trang A4 */}
+                <div className="bg-white rounded-2xl p-4.5 border border-emerald-200/80 shadow-2xs flex flex-col justify-between hover:shadow-md transition-all group">
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2.5 pb-2.5 border-b border-emerald-100">
+                      <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0 font-black">
+                        <FileSpreadsheet className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-black text-slate-900 uppercase tracking-wide">
+                          3. Xuất Excel & In Ấn
+                        </h4>
+                        <span className="text-[10px] text-emerald-700 font-bold">Khổ A4 ngang không co chữ</span>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2 text-xs text-slate-600 leading-relaxed font-normal">
+                      <div className="p-2 rounded-xl bg-emerald-50/60 border border-emerald-100/80">
+                        <strong className="text-emerald-950 font-bold block mb-0.5">📄 Trang 1 (Ngày 01 - 15):</strong>
+                        Bao gồm nửa đầu tháng, tự động ẩn chữ ký để dành tối đa diện tích cho các cột ngày, in rõ nét không bị tràn.
+                      </div>
+                      <div className="p-2 rounded-xl bg-blue-50/60 border border-blue-100/80">
+                        <strong className="text-blue-950 font-bold block mb-0.5">📄 Trang 2 (Ngày 16 - Cuối tháng):</strong>
+                        Bao gồm nửa cuối tháng + 6 cột tổng hợp bữa ăn (S, T, T) + Cột ngày thực + Chữ ký GVCN kèm địa danh tự động.
+                      </div>
+                      <div className="p-2 rounded-xl bg-slate-50 border border-slate-200">
+                        <strong className="text-slate-900 font-bold block mb-0.5">🖨️ Xem trước & In PDF:</strong>
+                        Bấm <em>"Xem trước & In PDF"</em> để kiểm tra trước bản in, chọn máy in A4 ngang chuẩn tỉ lệ 100%.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Cột 4: Lưu Trữ & An Toàn Dữ Liệu */}
+                <div className="bg-white rounded-2xl p-4.5 border border-purple-200/80 shadow-2xs flex flex-col justify-between hover:shadow-md transition-all group">
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2.5 pb-2.5 border-b border-purple-100">
+                      <div className="w-8 h-8 rounded-xl bg-purple-100 text-purple-800 flex items-center justify-center shrink-0 font-black">
+                        <ShieldCheck className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-black text-slate-900 uppercase tracking-wide">
+                          4. Lưu Trữ & Đám Mây
+                        </h4>
+                        <span className="text-[10px] text-purple-700 font-bold">Bảo vệ dữ liệu tức thì</span>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2 text-xs text-slate-600 leading-relaxed font-normal">
+                      <div className="p-2 rounded-xl bg-purple-50/60 border border-purple-100/80">
+                        <strong className="text-purple-950 font-bold block mb-0.5">💾 Tự động lưu tức thì (Auto-save):</strong>
+                        Mỗi khi tích ô (+) hoặc thay đổi cấu hình, biểu tượng "Đang lưu... / Đã lưu" sẽ hiện lên góc trên bên phải.
+                      </div>
+                      <div className="p-2 rounded-xl bg-blue-50/60 border border-blue-100/80">
+                        <strong className="text-blue-950 font-bold block mb-0.5">☁️ Lưu Sổ Chấm Cơm (Supabase Cloud):</strong>
+                        Sau khi hoàn thành chấm cả tháng, bấm <strong>"Lưu Sổ Chấm Cơm"</strong> để đồng bộ toàn bộ bảng lên đám mây trường.
+                      </div>
+                      <div className="p-2 rounded-xl bg-amber-50/60 border border-amber-100/80">
+                        <strong className="text-amber-950 font-bold block mb-0.5">🔏 Ký số điện tử:</strong>
+                        Hỗ trợ gắn con dấu đỏ và chữ ký số kèm mã băm chứng thực điện tử bảo vệ tính pháp lý của hồ sơ.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Bảng Tra Cứu Ký Hiệu & Lưu Ý Nghiệp Vụ */}
+              <div className="bg-slate-100/80 rounded-2xl p-4 border border-slate-200 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                <div className="flex flex-wrap items-center gap-4 text-xs font-medium text-slate-700">
+                  <span className="font-black text-slate-900 flex items-center gap-1.5 uppercase">
+                    <Info className="w-4 h-4 text-blue-600" />
+                    Ký hiệu quy ước:
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-5 h-5 rounded bg-emerald-100 text-emerald-800 font-black flex items-center justify-center text-xs border border-emerald-300">
+                      +
+                    </span>
+                    <span>Có ăn bữa đó</span>
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-5 h-5 rounded bg-white text-slate-400 font-normal flex items-center justify-center text-xs border border-slate-300">
+                      &nbsp;
+                    </span>
+                    <span>Ô trống: Nghỉ ăn / Ngày chưa báo</span>
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <strong className="text-slate-900">S:</strong> Sáng
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <strong className="text-slate-900">T:</strong> Trưa
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <strong className="text-slate-900">T:</strong> Tối
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <strong className="text-slate-900">Ngày thực:</strong> Tổng số ngày học sinh có ăn cơm tại trường
+                  </span>
+                </div>
+
+                <div className="text-[11px] text-slate-500 italic shrink-0">
+                  * Hệ thống tuân thủ Nghị định 116/2016/NĐ-CP và hướng dẫn tài chính bán trú Sở GD&ĐT Điện Biên.
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Floating Day Quick Actions Popover (outside table to prevent clipping) */}
+      {dayMenuAnchor && (
+        <div
+          className="fixed inset-0 z-[100] select-none bg-slate-950/20 backdrop-blur-[0.5px]"
+          onClick={() => setDayMenuAnchor(null)}
+        >
+          <div
+            style={{
+              position: 'fixed',
+              left: `${dayMenuAnchor.x}px`,
+              top: `${dayMenuAnchor.y}px`,
+              transform: 'translateX(-50%)',
+              width: '280px',
+            }}
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white border border-slate-300 rounded-2xl shadow-2xl p-3 text-left text-xs font-normal ring-4 ring-blue-500/20 animate-fadeIn"
+          >
+            <div className="px-3 py-2 text-xs font-black uppercase text-slate-800 bg-slate-100 rounded-xl border border-slate-200 mb-2.5 flex items-center justify-between">
+              <span className="flex items-center gap-1.5 text-slate-900">
+                <Calendar className="w-3.5 h-3.5 text-blue-600" />
+                <span>Ngày {dayMenuAnchor.dayNum}/{monthNum}</span>
+              </span>
+              <span className="text-blue-700 font-extrabold text-[11px] bg-blue-50 px-2 py-0.5 rounded-lg border border-blue-200">
+                Thứ {dayMenuAnchor.dayOfWeekShort}
+              </span>
+            </div>
+
+            <div className="space-y-2">
+              {/* Nút Chấm cả ngày nổi bật nhất */}
+              <button
+                type="button"
+                onClick={() => {
+                  const dateStr = dayMenuAnchor.dateStr;
+                  setDayMenuAnchor(null);
+                  handleBatchMarkDay(dateStr, true);
+                }}
+                className="w-full text-left p-2.5 rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 hover:from-blue-700 hover:to-indigo-800 text-white font-bold flex items-start gap-2.5 cursor-pointer transition-all shadow-md group"
+              >
+                <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center shrink-0 mt-0.5 shadow-inner">
+                  <Sparkles className="w-4 h-4 text-amber-300" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs font-black flex items-center justify-between">
+                    <span>Chấm Cả Ngày</span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-white/25 text-white font-extrabold">
+                      S + T + T
+                    </span>
+                  </div>
+                  <div className="text-[10px] text-blue-100 font-medium leading-snug mt-0.5">
+                    Tự động tích (+) cả 3 bữa theo lịch học
+                  </div>
+                </div>
+              </button>
+
+              {/* 3 nút chấm từng buổi: Sáng, Trưa, Tối */}
+              <div className="grid grid-cols-3 gap-1.5 pt-0.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const dateStr = dayMenuAnchor.dateStr;
+                    setDayMenuAnchor(null);
+                    handleBatchToggleSession(dateStr, 'breakfast', true);
+                  }}
+                  className="text-center p-2 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-950 border border-amber-200 font-bold flex flex-col items-center justify-center gap-1 cursor-pointer transition-all shadow-2xs hover:scale-[1.02]"
+                  title="Chấm ăn buổi Sáng cho cả lớp"
+                >
+                  <Sunrise className="w-4 h-4 text-amber-600" />
+                  <span className="text-[11px] font-black">Sáng (S)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const dateStr = dayMenuAnchor.dateStr;
+                    setDayMenuAnchor(null);
+                    handleBatchToggleSession(dateStr, 'lunch', true);
+                  }}
+                  className="text-center p-2 rounded-xl bg-orange-50 hover:bg-orange-100 text-orange-950 border border-orange-200 font-bold flex flex-col items-center justify-center gap-1 cursor-pointer transition-all shadow-2xs hover:scale-[1.02]"
+                  title="Chấm ăn buổi Trưa cho cả lớp"
+                >
+                  <Sun className="w-4 h-4 text-orange-600" />
+                  <span className="text-[11px] font-black">Trưa (T)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const dateStr = dayMenuAnchor.dateStr;
+                    setDayMenuAnchor(null);
+                    handleBatchToggleSession(dateStr, 'dinner', true);
+                  }}
+                  className="text-center p-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-950 border border-indigo-200 font-bold flex flex-col items-center justify-center gap-1 cursor-pointer transition-all shadow-2xs hover:scale-[1.02]"
+                  title="Chấm ăn buổi Tối cho cả lớp"
+                >
+                  <Moon className="w-4 h-4 text-indigo-600" />
+                  <span className="text-[11px] font-black">Tối (T)</span>
+                </button>
+              </div>
+
+              <div className="h-px bg-slate-200 my-1.5" />
+
+              {/* Nút Xóa chấm ngày này */}
+              <button
+                type="button"
+                onClick={() => {
+                  const dateStr = dayMenuAnchor.dateStr;
+                  setDayMenuAnchor(null);
+                  handleBatchMarkDay(dateStr, false);
+                }}
+                className="w-full text-left p-2 rounded-xl hover:bg-rose-50 text-rose-700 font-bold flex items-center gap-2 cursor-pointer transition-all border border-transparent hover:border-rose-200"
+              >
+                <div className="w-7 h-7 rounded-lg bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+                  <Trash2 className="w-3.5 h-3.5" />
+                </div>
+                <div className="flex flex-col min-w-0">
+                  <span className="text-xs font-black text-rose-900">Xóa chấm ngày này</span>
+                  <span className="text-[10px] text-slate-500 font-normal">Để trống các bữa ăn của ngày {dayMenuAnchor.dayNum}</span>
+                </div>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Batch Mark / Quick Meal Selection Modal */}
+      <BoardingBatchMarkModal
+        isOpen={showBatchModal}
+        onClose={() => setShowBatchModal(false)}
+        monthDays={monthDays}
+        students={classBoardingStudents}
+        classNameStr={currentClass?.class_name || ''}
+        monthNum={monthNum}
+        yearNum={yearNum}
+        onApplyBatch={handleApplyBatchModal}
+      />
 
       {/* Print Preview & PDF Modal */}
       <BoardingPrintPreviewModal
