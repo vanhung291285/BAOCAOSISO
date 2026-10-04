@@ -195,6 +195,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
     dayOfWeekShort: string;
   } | null>(null);
   const [isGuideOpen, setIsGuideOpen] = useState<boolean>(true);
+  const [isConfigOpen, setIsConfigOpen] = useState<boolean>(true);
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null);
 
   // Auto-close active day popover menu on clicking outside or escape key
@@ -1722,378 +1723,405 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
         </div>
       )}
 
-      {/* Control Bar */}
-      <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 no-print">
-        <div className="flex flex-wrap items-center gap-3">
-          {/* Month Picker */}
-          <div className="flex items-center gap-2">
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Tháng:</label>
-            <input
-              type="month"
-              value={selectedMonth}
-              onChange={(e) => setSelectedMonth(e.target.value)}
-              className="bg-slate-50 border border-slate-300 rounded-xl px-3 py-1.5 text-xs sm:text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
+      {/* 1. THANH ĐIỀU KHIỂN & TÁC VỤ CHÍNH (KHOA HỌC - CHUẨN MỰC - KHÔNG BỊ RỚT DÒNG) */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm no-print overflow-hidden">
+        {/* Hàng 1: Bộ lọc Tháng/Lớp & Nhóm nút Xuất bản / In ấn / Lưu trữ */}
+        <div className="p-3 sm:p-4 border-b border-slate-100 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 bg-gradient-to-r from-slate-50/70 via-white to-slate-50/40">
+          {/* Cụm Bộ lọc bên trái */}
+          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+            {/* Chọn Tháng */}
+            <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl border border-slate-200 shadow-2xs">
+              <Calendar className="w-4 h-4 text-blue-600 shrink-0" />
+              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Tháng:</label>
+              <input
+                type="month"
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(e.target.value)}
+                className="bg-transparent text-xs sm:text-sm font-bold text-slate-900 focus:outline-none cursor-pointer"
+              />
+            </div>
 
-          {/* Class selector */}
-          <div className="flex items-center gap-2">
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Lớp:</label>
-            {isGVCN && currentUser?.assigned_class_id ? (
-              <span className="bg-blue-50 text-blue-900 font-black text-xs sm:text-sm px-3 py-1.5 rounded-xl border border-blue-200">
-                Lớp {currentClass?.class_name}
-              </span>
-            ) : (
-              <select
-                value={selectedClassId}
-                onChange={(e) => onClassChange?.(e.target.value)}
-                className="bg-slate-50 border border-slate-300 rounded-xl px-3 py-1.5 text-xs sm:text-sm font-bold text-slate-900 focus:outline-none"
-              >
-                {classes
-                  .filter((c) => c.active && !c.is_locked)
-                  .map((cls) => (
-                    <option key={cls.id} value={cls.id}>
-                      Lớp {cls.class_name}
-                    </option>
-                  ))}
-              </select>
+            {/* Chọn Lớp */}
+            <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl border border-slate-200 shadow-2xs">
+              <School className="w-4 h-4 text-indigo-600 shrink-0" />
+              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Lớp:</label>
+              {isGVCN && currentUser?.assigned_class_id ? (
+                <span className="text-blue-900 font-black text-xs sm:text-sm">
+                  Lớp {currentClass?.class_name}
+                </span>
+              ) : (
+                <select
+                  value={selectedClassId}
+                  onChange={(e) => onClassChange?.(e.target.value)}
+                  className="bg-transparent text-xs sm:text-sm font-bold text-slate-900 focus:outline-none cursor-pointer"
+                >
+                  {classes
+                    .filter((c) => c.active && !c.is_locked)
+                    .map((cls) => (
+                      <option key={cls.id} value={cls.id}>
+                        Lớp {cls.class_name}
+                      </option>
+                    ))}
+                </select>
+              )}
+            </div>
+
+            {/* Trạng thái tự động lưu */}
+            {autoSaveStatus === 'saving' && (
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold text-amber-700 bg-amber-50 border border-amber-300 animate-pulse shadow-2xs">
+                <div className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />
+                <span>Đang lưu...</span>
+              </div>
+            )}
+            {autoSaveStatus === 'saved' && (
+              <div className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold text-emerald-800 bg-emerald-50 border border-emerald-300 shadow-2xs">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Đã lưu</span>
+              </div>
             )}
           </div>
-        </div>
 
-        {/* Buttons Toolbar */}
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Nhóm 1: Thao tác dữ liệu báo ăn */}
-          <button
-            type="button"
-            onClick={() => setShowBatchModal(true)}
-            className="px-3.5 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-600/20 flex items-center gap-1.5 transition-all cursor-pointer"
-            title="Mở bảng chọn chấm ăn nhanh theo ngày, theo buổi sáng/trưa/tối hoặc xóa chấm ăn nhiều ngày"
-          >
-            <CheckSquare className="w-3.5 h-3.5 text-indigo-200" />
-            <span>Chấm theo ngày/buổi</span>
-          </button>
+          {/* Cụm Xuất bản & Nút LƯU SỔ CHẤM CƠM bên phải */}
+          <div className="flex flex-wrap items-center gap-2 justify-end">
+            <button
+              type="button"
+              onClick={() => setIsPreviewOpen(true)}
+              className="px-3.5 py-2 rounded-xl text-xs font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
+              title="Xem trước bản in chuẩn khổ giấy A4 ngang và xuất file PDF"
+            >
+              <Eye className="w-3.5 h-3.5 text-indigo-600" />
+              <span>Xem trước & In PDF</span>
+            </button>
 
-          <button
-            type="button"
-            onClick={handleSyncFromDailyReports}
-            className="px-3 py-2 rounded-xl text-xs font-bold bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
-            title="Đồng bộ tất cả ngày GVCN đã báo ăn (từ phiếu báo ăn ngày hoặc báo cáo sĩ số ngày) vào biểu"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-blue-600" />
-            <span>Đồng bộ báo ăn ngày</span>
-          </button>
+            <button
+              type="button"
+              onClick={handleExportExcel}
+              className="px-3.5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm shadow-emerald-600/20 flex items-center gap-1.5 transition-all cursor-pointer"
+              title="Xuất file Excel chuẩn Bộ GD&ĐT tự động chia 2 trang (Trang 1: Ngày 1-15, Trang 2: Ngày 16-hết) khi in không bị co chữ"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Xuất Excel (2 Trang)</span>
+            </button>
 
-          <button
-            type="button"
-            onClick={handleResetToOnlyReported}
-            className="px-3 py-2 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
-            title="Làm sạch sổ: Để trống tất cả các ngày chưa báo ăn và ngày tương lai, chỉ giữ lại những ngày GVCN đã báo ăn thực tế"
-          >
-            <RotateCcw className="w-3.5 h-3.5 text-slate-600" />
-            <span>Để trống ngày chưa báo</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={handleClearAllMonth}
-            className="px-3 py-2 rounded-xl text-xs font-bold bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
-            title="Xóa toàn bộ chấm ăn của tháng này để sổ trống 100%, sẵn sàng cho GVCN chấm từng ngày"
-          >
-            <Trash2 className="w-3.5 h-3.5 text-rose-600" />
-            <span>Xóa sạch chấm lại</span>
-          </button>
-
-          {/* Nút Reset ngày báo ăn định mức của tháng */}
-          <button
-            type="button"
-            onClick={handleResetStandardConfig}
-            className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs active:scale-95 ${
-              isAutoSyncReported
-                ? 'bg-emerald-100 hover:bg-emerald-200 text-emerald-950 border border-emerald-300'
-                : overrideBreakfast !== null || overrideLunch !== null || overrideDinner !== null
-                ? 'bg-amber-500 hover:bg-amber-600 text-slate-950 font-black ring-2 ring-amber-300 shadow-amber-500/20'
-                : 'bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300'
-            }`}
-            title={`Reset ngày báo ăn định mức tháng ${monthNum}/${yearNum} về chuẩn theo lịch học: Sáng ${defaultStandardBreakfast}, Trưa ${defaultStandardLunch}, Tối ${defaultStandardDinner} ngày (Không làm ảnh hưởng đến dữ liệu chấm ăn và học sinh)`}
-          >
-            <RotateCcw className="w-3.5 h-3.5 text-amber-800" />
-            <span>Reset định mức tháng</span>
-            {isAutoSyncReported ? (
-              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-200 text-emerald-950 font-black">
-                Tự động
-              </span>
-            ) : (overrideBreakfast !== null || overrideLunch !== null || overrideDinner !== null) ? (
-              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-200 text-amber-950 font-black">
-                Có đè
-              </span>
-            ) : null}
-          </button>
-
-          {/* Dải phân cách */}
-          <div className="h-5 w-px bg-slate-300 mx-0.5 hidden sm:block" />
-
-          {/* Nhóm 2: Xuất bản & In ấn */}
-          <button
-            type="button"
-            onClick={() => setIsPreviewOpen(true)}
-            className="px-3.5 py-2 rounded-xl text-xs font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
-            title="Xem trước bản in chuẩn khổ giấy A4 ngang và xuất file PDF"
-          >
-            <Eye className="w-3.5 h-3.5 text-indigo-600" />
-            <span>Xem trước & In PDF</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={handleExportExcel}
-            className="px-3.5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/20 flex items-center gap-1.5 transition-all cursor-pointer"
-            title="Xuất file Excel chuẩn Bộ GD&ĐT tự động chia 2 trang (Trang 1: Ngày 1-15, Trang 2: Ngày 16-hết) khi in không bị co chữ"
-          >
-            <Download className="w-3.5 h-3.5" />
-            <span>Xuất Excel (2 Trang)</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setIsFullscreen(!isFullscreen)}
-            className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs ${
-              isFullscreen
-                ? 'bg-amber-500 text-slate-950 font-black ring-2 ring-amber-300'
-                : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300'
-            }`}
-            title={isFullscreen ? 'Thu nhỏ màn hình' : 'Phóng to toàn màn hình chấm ăn rõ nét'}
-          >
-            {isFullscreen ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
-            <span className="hidden sm:inline">{isFullscreen ? 'Thu nhỏ' : 'Toàn màn hình'}</span>
-          </button>
-
-          {/* Trạng thái tự động lưu */}
-          {autoSaveStatus === 'saving' && (
-            <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold text-amber-700 bg-amber-50 border border-amber-300 animate-pulse shadow-2xs">
-              <div className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />
-              <span>Đang lưu...</span>
-            </div>
-          )}
-          {autoSaveStatus === 'saved' && (
-            <div className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold text-emerald-800 bg-emerald-50 border border-emerald-300 shadow-2xs">
-              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Đã lưu</span>
-            </div>
-          )}
-
-          {/* Nhóm 3: Lưu trữ */}
-          <button
-            type="button"
-            onClick={handleSaveMonth}
-            disabled={isSaving}
-            className="px-4 py-2 rounded-xl text-xs font-black bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-600/20 flex items-center gap-1.5 transition-all disabled:opacity-50"
-          >
-            <Save className="w-3.5 h-3.5" />
-            <span>{isSaving ? 'Đang lưu...' : 'Lưu Sổ Chấm Cơm'}</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Custom standard meal days configuration */}
-      <div className="bg-gradient-to-r from-amber-50/80 via-amber-50/50 to-orange-50/40 rounded-2xl p-4 border border-amber-200/90 shadow-2xs flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 no-print -mt-2">
-        <div className="flex flex-col gap-1.5 max-w-2xl">
-          <div className="text-xs font-black text-amber-950 flex flex-wrap items-center gap-2 uppercase tracking-wide">
-            <Info className="w-4 h-4 text-amber-600 flex-shrink-0" />
-            <span>Định mức ngày báo ăn chuẩn trong tháng {monthNum}/{yearNum}</span>
-            {isAutoSyncReported ? (
-              <span className="text-[10px] px-2.5 py-0.5 rounded-full font-black bg-emerald-100 text-emerald-900 border border-emerald-400 flex items-center gap-1.5 shadow-2xs">
-                <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse" />
-                {autoReportedMealDays.hasAnyReported ? (
-                  `🔄 Tự động nhảy đồng bộ theo báo ăn thực tế (${standardBreakfastDays}S - ${standardLunchDays}T - ${standardDinnerDays}T)`
-                ) : (
-                  `🔄 Đang tự động theo báo ăn (${standardBreakfastDays}S - ${standardLunchDays}T - ${standardDinnerDays}T - Chưa có báo ăn)`
-                )}
-              </span>
-            ) : overrideBreakfast !== null || overrideLunch !== null || overrideDinner !== null ? (
-              <span className="text-[10px] px-2.5 py-0.5 rounded-full font-black bg-amber-200 text-amber-950 border border-amber-400 flex items-center gap-1.5 shadow-2xs">
-                <span className="w-2 h-2 rounded-full bg-amber-600 animate-pulse" />
-                ✏️ Đang điều chỉnh đè thủ công ({standardBreakfastDays}S - {standardLunchDays}T - {standardDinnerDays}T)
-              </span>
-            ) : (
-              <span className="text-[10px] px-2.5 py-0.5 rounded-full font-bold bg-blue-100 text-blue-900 border border-blue-300">
-                📅 Mặc định theo lịch học cả tháng ({defaultStandardBreakfast}S - {defaultStandardLunch}T - {defaultStandardDinner}T)
-              </span>
-            )}
-          </div>
-          <p className="text-[11px] text-slate-600 font-medium leading-relaxed">
-            Quy tắc chuẩn kế toán: <strong>Số ngày báo ăn + Số ngày không báo ăn = Định mức báo ăn</strong>. Thầy/Cô có thể bật <strong>Tự động nhảy theo báo ăn</strong> để hệ thống tự động lấy đúng số ngày lớp có ăn cơm thực tế (khi có nghỉ lễ, hoạt động ngoại khóa...), hoặc nhập số ngày đè thủ công.
-          </p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2.5 w-full lg:w-auto bg-white/95 p-2 rounded-xl border border-amber-200 shadow-2xs">
-          {/* Nút bật/tắt chế độ tự động đồng bộ theo báo ăn thực tế */}
-          <button
-            type="button"
-            onClick={handleToggleAutoSyncReported}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs active:scale-95 ${
-              isAutoSyncReported
-                ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/30 ring-2 ring-emerald-300'
-                : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-300'
-            }`}
-            title={`Chế độ Tự động: Định mức sẽ tự động nhảy đúng bằng số ngày GVCN đã báo ăn thực tế trong tháng (${autoReportedMealDays.autoBreakfast} Sáng - ${autoReportedMealDays.autoLunch} Trưa - ${autoReportedMealDays.autoDinner} Tối)`}
-          >
-            <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-            <span>{isAutoSyncReported ? '✓ Đang tự động theo báo ăn' : '⚡ Tự động theo báo ăn'}</span>
-          </button>
-
-          {/* Sáng */}
-          <div className="flex items-center gap-1">
-            <span className="text-xs font-bold text-slate-700 whitespace-nowrap">Sáng:</span>
-            <input
-              type="number"
-              min={0}
-              max={31}
-              value={standardBreakfastDays}
-              onChange={(e) => {
-                const val = e.target.value === '' ? null : Number(e.target.value);
-                updateOverrideBreakfast(val);
-              }}
-              className={`w-13 border rounded-lg px-1.5 py-1.5 text-xs font-extrabold text-center text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500 shadow-2xs ${
-                isAutoSyncReported ? 'bg-emerald-50/60 border-emerald-300 text-emerald-950' : 'bg-white border-slate-300'
+            <button
+              type="button"
+              onClick={() => setIsFullscreen(!isFullscreen)}
+              className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs ${
+                isFullscreen
+                  ? 'bg-amber-500 text-slate-950 font-black ring-2 ring-amber-300'
+                  : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300'
               }`}
-              placeholder={String(defaultStandardBreakfast)}
-              title="Định mức số ngày ăn sáng chuẩn trong tháng"
-            />
-          </div>
+              title={isFullscreen ? 'Thu nhỏ màn hình' : 'Phóng to toàn màn hình chấm ăn rõ nét'}
+            >
+              {isFullscreen ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+              <span className="hidden sm:inline">{isFullscreen ? 'Thu nhỏ' : 'Toàn màn hình'}</span>
+            </button>
 
-          {/* Trưa */}
-          <div className="flex items-center gap-1">
-            <span className="text-xs font-bold text-slate-700 whitespace-nowrap">Trưa:</span>
-            <input
-              type="number"
-              min={0}
-              max={31}
-              value={standardLunchDays}
-              onChange={(e) => {
-                const val = e.target.value === '' ? null : Number(e.target.value);
-                updateOverrideLunch(val);
-              }}
-              className={`w-13 border rounded-lg px-1.5 py-1.5 text-xs font-extrabold text-center text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500 shadow-2xs ${
-                isAutoSyncReported ? 'bg-emerald-50/60 border-emerald-300 text-emerald-950' : 'bg-white border-slate-300'
-              }`}
-              placeholder={String(defaultStandardLunch)}
-              title="Định mức số ngày ăn trưa chuẩn trong tháng"
-            />
+            {/* Nút LƯU SỔ CHẤM CƠM - Nổi bật nhất và không bao giờ bị rơi rụng */}
+            <button
+              type="button"
+              onClick={handleSaveMonth}
+              disabled={isSaving}
+              className="px-4.5 py-2 rounded-xl text-xs font-black bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-600/25 flex items-center gap-1.5 transition-all disabled:opacity-50 cursor-pointer active:scale-95 ml-1"
+            >
+              <Save className="w-3.5 h-3.5" />
+              <span>{isSaving ? 'Đang lưu...' : 'Lưu Sổ Chấm Cơm'}</span>
+            </button>
           </div>
-
-          {/* Tối */}
-          <div className="flex items-center gap-1">
-            <span className="text-xs font-bold text-slate-700 whitespace-nowrap">Tối:</span>
-            <input
-              type="number"
-              min={0}
-              max={31}
-              value={standardDinnerDays}
-              onChange={(e) => {
-                const val = e.target.value === '' ? null : Number(e.target.value);
-                updateOverrideDinner(val);
-              }}
-              className={`w-13 border rounded-lg px-1.5 py-1.5 text-xs font-extrabold text-center text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500 shadow-2xs ${
-                isAutoSyncReported ? 'bg-emerald-50/60 border-emerald-300 text-emerald-950' : 'bg-white border-slate-300'
-              }`}
-              placeholder={String(defaultStandardDinner)}
-              title="Định mức số ngày ăn tối chuẩn trong tháng"
-            />
-          </div>
-
-          {/* Nút Reset định mức ngày báo ăn của tháng */}
-          <button
-            type="button"
-            onClick={handleResetStandardConfig}
-            className={`px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-all cursor-pointer shadow-xs active:scale-95 ${
-              overrideBreakfast !== null || overrideLunch !== null || overrideDinner !== null || isAutoSyncReported
-                ? 'bg-amber-600 hover:bg-amber-700 text-white shadow-amber-600/30 ring-2 ring-amber-300'
-                : 'bg-white hover:bg-amber-50 text-slate-700 border border-slate-300 hover:border-amber-400'
-            }`}
-            title={`Khôi phục lại định mức ngày ăn chuẩn theo lịch tháng ${monthNum}/${yearNum} (S: ${defaultStandardBreakfast}, Trưa: ${defaultStandardLunch}, Tối: ${defaultStandardDinner} ngày)`}
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            <span>Reset lịch</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Cấu hình chữ ký & Địa danh ký */}
-      <div className="bg-blue-50/50 rounded-2xl p-4 border border-blue-200 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4 no-print -mt-2">
-        <div className="flex flex-col gap-1">
-          <div className="text-xs font-black text-blue-900 flex items-center gap-1.5 uppercase tracking-wide">
-            <PenTool className="w-4 h-4 text-blue-600" />
-            <span>Cấu hình chữ ký & Địa danh ký (Tự động cập nhật theo ngày)</span>
-          </div>
-          <p className="text-[11px] text-slate-500">
-            Trang 1 (Ngày 1 - 15): Bỏ chữ ký của cả GVCN và Hiệu trưởng. Trang 2 (Ngày 16 - cuối tháng) & Cả tháng: Chỉ lấy chữ ký của GVCN, bỏ chữ ký Hiệu trưởng. Địa danh và ngày tháng tự động cập nhật theo ngày.
-          </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
-          {/* Địa danh ký */}
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs font-bold text-slate-700 whitespace-nowrap">Địa danh:</span>
-            <input
-              type="text"
-              value={signingLocation}
-              onChange={(e) => {
-                const val = e.target.value;
-                setSigningLocation(val);
-                localStorage.setItem('sso_boarding_signing_location', val);
-              }}
-              className="w-28 bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500 shadow-2xs"
-              placeholder="Xa Dung"
-              title="Địa danh ký (ví dụ: Xa Dung, Điện Biên Đông...)"
-            />
-          </div>
-
-          {/* Họ tên GVCN */}
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs font-bold text-slate-700 whitespace-nowrap">Họ tên GVCN ký:</span>
-            <input
-              type="text"
-              value={customTeacherName}
-              onChange={(e) => {
-                const val = e.target.value;
-                setCustomTeacherName(val);
-                localStorage.setItem(`sso_boarding_teacher_${selectedClassId}`, val);
-              }}
-              className="w-36 bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500 shadow-2xs"
-              placeholder="Họ tên GVCN"
-              title="Họ và tên Giáo viên chủ nhiệm ký"
-            />
-          </div>
-
-          {/* Ngày tháng ký tự động hiển thị */}
-          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-blue-200 rounded-xl text-xs text-blue-900 font-semibold shadow-2xs">
-            <Clock className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-            <span className="truncate">
-              Ngày ký tự động:{' '}
-              <strong className="text-blue-700 font-bold">
-                {viewMode === 'page1'
-                  ? `ngày 15/${String(monthNum).padStart(2, '0')}/${yearNum}`
-                  : `ngày ${daysInMonth}/${String(monthNum).padStart(2, '0')}/${yearNum} (cuối tháng)`}
-              </strong>
+        {/* Hàng 2: Dải công cụ nghiệp vụ chấm cơm bán trú chuyên biệt */}
+        <div className="px-3 sm:px-4 py-2.5 bg-slate-50/90 flex flex-wrap items-center justify-between gap-2.5 border-t border-slate-100">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[11px] font-black uppercase tracking-wider text-slate-500 mr-1 hidden sm:inline">
+              Tác vụ chấm:
             </span>
+
+            {/* Chấm theo ngày/buổi */}
+            <button
+              type="button"
+              onClick={() => setShowBatchModal(true)}
+              className="px-3 py-1.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
+              title="Mở bảng chọn chấm ăn nhanh theo ngày, theo buổi sáng/trưa/tối hoặc xóa chấm ăn nhiều ngày"
+            >
+              <CheckSquare className="w-3.5 h-3.5 text-indigo-200" />
+              <span>Chấm theo ngày/buổi</span>
+            </button>
+
+            {/* Đồng bộ báo ăn ngày */}
+            <button
+              type="button"
+              onClick={handleSyncFromDailyReports}
+              className="px-3 py-1.5 rounded-xl text-xs font-bold bg-white text-blue-700 hover:bg-blue-50 border border-blue-200 flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
+              title="Đồng bộ tất cả ngày GVCN đã báo ăn (từ phiếu báo ăn ngày hoặc báo cáo sĩ số ngày) vào biểu"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+              <span>Đồng bộ báo ăn ngày</span>
+            </button>
+
+            {/* Để trống ngày chưa báo */}
+            <button
+              type="button"
+              onClick={handleResetToOnlyReported}
+              className="px-3 py-1.5 rounded-xl text-xs font-bold bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
+              title="Làm sạch sổ: Để trống tất cả các ngày chưa báo ăn và ngày tương lai, chỉ giữ lại những ngày GVCN đã báo ăn thực tế"
+            >
+              <RotateCcw className="w-3.5 h-3.5 text-slate-600" />
+              <span>Để trống ngày chưa báo</span>
+            </button>
+
+            {/* Xóa sạch chấm lại */}
+            <button
+              type="button"
+              onClick={handleClearAllMonth}
+              className="px-3 py-1.5 rounded-xl text-xs font-bold bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
+              title="Xóa toàn bộ chấm ăn của tháng này để sổ trống 100%, sẵn sàng cho GVCN chấm từng ngày"
+            >
+              <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+              <span>Xóa sạch chấm lại</span>
+            </button>
+
+            {/* Reset định mức tháng */}
+            <button
+              type="button"
+              onClick={handleResetStandardConfig}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs active:scale-95 ${
+                isAutoSyncReported
+                  ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-950 border border-emerald-300'
+                  : overrideBreakfast !== null || overrideLunch !== null || overrideDinner !== null
+                  ? 'bg-amber-500 hover:bg-amber-600 text-slate-950 font-black ring-2 ring-amber-300'
+                  : 'bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300'
+              }`}
+              title={`Reset ngày báo ăn định mức tháng ${monthNum}/${yearNum} về chuẩn theo lịch học: Sáng ${defaultStandardBreakfast}, Trưa ${defaultStandardLunch}, Tối ${defaultStandardDinner} ngày`}
+            >
+              <RotateCcw className="w-3.5 h-3.5 text-amber-800" />
+              <span>Reset định mức tháng</span>
+              {isAutoSyncReported ? (
+                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-200 text-emerald-950 font-black">
+                  Tự động
+                </span>
+              ) : (overrideBreakfast !== null || overrideLunch !== null || overrideDinner !== null) ? (
+                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-200 text-amber-950 font-black">
+                  Có đè
+                </span>
+              ) : null}
+            </button>
           </div>
 
-          {/* Button open Digital Signature Modal */}
+          {/* Nút Ẩn/Hiện bảng cấu hình định mức & chữ ký */}
           <button
             type="button"
-            onClick={() => setShowDigitalSigModal(true)}
-            className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-sm flex items-center gap-1.5 cursor-pointer transition-all"
-            title="Cấu hình chữ ký số điện tử, con dấu đỏ và đồng bộ Supabase Cloud"
+            onClick={() => setIsConfigOpen(!isConfigOpen)}
+            className="px-2.5 py-1.5 rounded-xl text-xs font-bold text-slate-600 hover:text-slate-900 hover:bg-slate-200/70 transition-all flex items-center gap-1 cursor-pointer bg-white border border-slate-200 shadow-2xs"
+            title="Ẩn hoặc hiện bảng cấu hình số ngày định mức ăn và chữ ký"
           >
-            <ShieldCheck className="w-4 h-4 text-blue-200" />
-            <span>Chữ ký số & Supabase</span>
-            {monthSig?.is_signed && (
-              <span className="w-2 h-2 rounded-full bg-emerald-400" />
-            )}
+            <span>{isConfigOpen ? 'Thu gọn cấu hình' : 'Hiện cấu hình định mức & chữ ký'}</span>
+            {isConfigOpen ? <ChevronUp className="w-3.5 h-3.5 text-slate-500" /> : <ChevronDown className="w-3.5 h-3.5 text-slate-500" />}
           </button>
         </div>
       </div>
+
+      {/* 2. BẢNG CẤU HÌNH ĐỊNH MỨC ĂN & CHỮ KÝ (KHOA HỌC - GRID 2 CỘT - KHÔNG BAO GIỜ BỊ GÃY DÒNG) */}
+      {isConfigOpen && (
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-3.5 no-print animate-fadeIn -mt-2">
+          {/* Card Trái: Định Mức Ngày Báo Ăn Chuẩn */}
+          <div className="bg-gradient-to-br from-amber-50/90 via-amber-50/40 to-orange-50/30 rounded-2xl p-4 border border-amber-200/90 shadow-2xs flex flex-col justify-between gap-3">
+            <div>
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
+                <div className="text-xs font-black text-amber-950 flex items-center gap-1.5 uppercase tracking-wide">
+                  <Info className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span>Định mức ngày báo ăn chuẩn trong tháng {monthNum}/{yearNum}</span>
+                </div>
+                {isAutoSyncReported ? (
+                  <span className="text-[10px] px-2.5 py-0.5 rounded-full font-black bg-emerald-100 text-emerald-900 border border-emerald-400 flex items-center gap-1.5 shadow-2xs">
+                    <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse" />
+                    {autoReportedMealDays.hasAnyReported
+                      ? `🔄 Tự động nhảy theo báo ăn (${standardBreakfastDays}S - ${standardLunchDays}T - ${standardDinnerDays}T)`
+                      : `🔄 Tự động theo báo ăn (${standardBreakfastDays}S - ${standardLunchDays}T - ${standardDinnerDays}T - Chưa có)`}
+                  </span>
+                ) : overrideBreakfast !== null || overrideLunch !== null || overrideDinner !== null ? (
+                  <span className="text-[10px] px-2.5 py-0.5 rounded-full font-black bg-amber-200 text-amber-950 border border-amber-400 flex items-center gap-1.5 shadow-2xs">
+                    <span className="w-2 h-2 rounded-full bg-amber-600 animate-pulse" />
+                    ✏️ Đang điều chỉnh đè thủ công ({standardBreakfastDays}S - ${standardLunchDays}T - ${standardDinnerDays}T)
+                  </span>
+                ) : (
+                  <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-blue-100 text-blue-900 border border-blue-300">
+                    📅 Mặc định theo lịch học ({defaultStandardBreakfast}S - ${defaultStandardLunch}T - ${defaultStandardDinner}T)
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-slate-600 font-medium leading-relaxed">
+                Quy tắc chuẩn kế toán: <strong>Số ngày báo ăn + Số ngày không báo ăn = Định mức báo ăn</strong>. Thầy/Cô có thể bật <strong>Tự động nhảy theo báo ăn</strong> hoặc nhập số ngày đè thủ công.
+              </p>
+            </div>
+
+            {/* Dải điều khiển & Nhập liệu Sáng - Trưa - Tối THẲNG HÀNG 100% */}
+            <div className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-2 bg-white/95 p-2 rounded-xl border border-amber-200 shadow-2xs">
+              <button
+                type="button"
+                onClick={handleToggleAutoSyncReported}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs active:scale-95 shrink-0 ${
+                  isAutoSyncReported
+                    ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/30 ring-2 ring-emerald-300'
+                    : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-300'
+                }`}
+                title={`Chế độ Tự động: Định mức tự nhảy đúng bằng số ngày GVCN đã báo ăn thực tế (${autoReportedMealDays.autoBreakfast}S - ${autoReportedMealDays.autoLunch}T - ${autoReportedMealDays.autoDinner}T)`}
+              >
+                <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                <span className="whitespace-nowrap">{isAutoSyncReported ? '✓ Đang tự động theo báo ăn' : '⚡ Tự động theo báo ăn'}</span>
+              </button>
+
+              <div className="flex items-center gap-2.5 justify-center">
+                {/* Sáng */}
+                <div className="flex items-center gap-1">
+                  <span className="text-xs font-bold text-slate-700 whitespace-nowrap">Sáng:</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={31}
+                    value={standardBreakfastDays}
+                    onChange={(e) => {
+                      const val = e.target.value === '' ? null : Number(e.target.value);
+                      updateOverrideBreakfast(val);
+                    }}
+                    className={`w-12.5 border rounded-lg px-1.5 py-1 text-xs font-extrabold text-center text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500 shadow-2xs ${
+                      isAutoSyncReported ? 'bg-emerald-50/60 border-emerald-300 text-emerald-950' : 'bg-white border-slate-300'
+                    }`}
+                    placeholder={String(defaultStandardBreakfast)}
+                    title="Định mức số ngày ăn sáng chuẩn trong tháng"
+                  />
+                </div>
+
+                {/* Trưa */}
+                <div className="flex items-center gap-1">
+                  <span className="text-xs font-bold text-slate-700 whitespace-nowrap">Trưa:</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={31}
+                    value={standardLunchDays}
+                    onChange={(e) => {
+                      const val = e.target.value === '' ? null : Number(e.target.value);
+                      updateOverrideLunch(val);
+                    }}
+                    className={`w-12.5 border rounded-lg px-1.5 py-1 text-xs font-extrabold text-center text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500 shadow-2xs ${
+                      isAutoSyncReported ? 'bg-emerald-50/60 border-emerald-300 text-emerald-950' : 'bg-white border-slate-300'
+                    }`}
+                    placeholder={String(defaultStandardLunch)}
+                    title="Định mức số ngày ăn trưa chuẩn trong tháng"
+                  />
+                </div>
+
+                {/* Tối */}
+                <div className="flex items-center gap-1">
+                  <span className="text-xs font-bold text-slate-700 whitespace-nowrap">Tối:</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={31}
+                    value={standardDinnerDays}
+                    onChange={(e) => {
+                      const val = e.target.value === '' ? null : Number(e.target.value);
+                      updateOverrideDinner(val);
+                    }}
+                    className={`w-12.5 border rounded-lg px-1.5 py-1 text-xs font-extrabold text-center text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500 shadow-2xs ${
+                      isAutoSyncReported ? 'bg-emerald-50/60 border-emerald-300 text-emerald-950' : 'bg-white border-slate-300'
+                    }`}
+                    placeholder={String(defaultStandardDinner)}
+                    title="Định mức số ngày ăn tối chuẩn trong tháng"
+                  />
+                </div>
+              </div>
+
+              {/* Nút Reset lịch */}
+              <button
+                type="button"
+                onClick={handleResetStandardConfig}
+                className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-white hover:bg-amber-50 text-slate-700 border border-slate-300 hover:border-amber-400 flex items-center gap-1 transition-all cursor-pointer shadow-xs active:scale-95 shrink-0"
+                title={`Khôi phục lại định mức ngày ăn chuẩn theo lịch tháng (S: ${defaultStandardBreakfast}, Trưa: ${defaultStandardLunch}, Tối: ${defaultStandardDinner})`}
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span className="whitespace-nowrap">Reset lịch</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Card Phải: Cấu Hình Chữ Ký & Địa Danh Ký */}
+          <div className="bg-gradient-to-br from-blue-50/90 via-blue-50/40 to-indigo-50/30 rounded-2xl p-4 border border-blue-200/90 shadow-2xs flex flex-col justify-between gap-3">
+            <div>
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
+                <div className="text-xs font-black text-blue-900 flex items-center gap-1.5 uppercase tracking-wide">
+                  <PenTool className="w-4 h-4 text-blue-600 shrink-0" />
+                  <span>Cấu hình chữ ký & Địa danh ký (Tự động cập nhật theo ngày)</span>
+                </div>
+                {/* Nút Chữ ký số & Supabase đặt trang trọng ngay góc trên */}
+                <button
+                  type="button"
+                  onClick={() => setShowDigitalSigModal(true)}
+                  className="px-3 py-1 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-2xs flex items-center gap-1.5 cursor-pointer transition-all shrink-0"
+                  title="Cấu hình chữ ký số điện tử, con dấu đỏ và đồng bộ Supabase Cloud"
+                >
+                  <ShieldCheck className="w-3.5 h-3.5 text-blue-200" />
+                  <span>Chữ ký số & Supabase</span>
+                  {monthSig?.is_signed && (
+                    <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                  )}
+                </button>
+              </div>
+              <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
+                Trang 1 (Ngày 1 - 15): Bỏ chữ ký. Trang 2 & Cả tháng: Chỉ lấy chữ ký của GVCN. Địa danh và ngày tháng tự động cập nhật theo ngày.
+              </p>
+            </div>
+
+            {/* Dải nhập liệu Địa danh, Họ tên GVCN và Ngày ký THẲNG HÀNG 100% */}
+            <div className="flex flex-wrap sm:flex-nowrap items-center gap-2.5 bg-white/95 p-2 rounded-xl border border-blue-200 shadow-2xs">
+              {/* Địa danh */}
+              <div className="flex items-center gap-1.5 shrink-0">
+                <span className="text-xs font-bold text-slate-700 whitespace-nowrap">Địa danh:</span>
+                <input
+                  type="text"
+                  value={signingLocation}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setSigningLocation(val);
+                    localStorage.setItem('sso_boarding_signing_location', val);
+                  }}
+                  className="w-24 sm:w-28 bg-white border border-slate-300 rounded-lg px-2 py-1 text-xs font-bold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500 shadow-2xs"
+                  placeholder="Xa Dung"
+                  title="Địa danh ký (ví dụ: Xa Dung, Điện Biên Đông...)"
+                />
+              </div>
+
+              {/* Họ tên GVCN */}
+              <div className="flex items-center gap-1.5 flex-1 min-w-[140px]">
+                <span className="text-xs font-bold text-slate-700 whitespace-nowrap">Họ tên GVCN:</span>
+                <input
+                  type="text"
+                  value={customTeacherName}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setCustomTeacherName(val);
+                    localStorage.setItem(`sso_boarding_teacher_${selectedClassId}`, val);
+                  }}
+                  className="w-full bg-white border border-slate-300 rounded-lg px-2 py-1 text-xs font-bold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500 shadow-2xs"
+                  placeholder="Họ tên GVCN"
+                  title="Họ và tên Giáo viên chủ nhiệm ký"
+                />
+              </div>
+
+              {/* Ngày ký tự động */}
+              <div className="flex items-center gap-1.5 px-2.5 py-1 bg-blue-50 text-blue-900 rounded-lg text-xs font-semibold shrink-0 border border-blue-200 shadow-2xs" title="Ngày ký tự động cập nhật theo cấu hình trang">
+                <Clock className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                <span className="whitespace-nowrap font-bold text-blue-800">
+                  {viewMode === 'page1'
+                    ? `15/${String(monthNum).padStart(2, '0')}/${yearNum}`
+                    : `${daysInMonth}/${String(monthNum).padStart(2, '0')}/${yearNum} (cuối tháng)`}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Printable Sheet View matching the official photo */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-6 overflow-hidden print:p-0 print:border-none print:shadow-none">
