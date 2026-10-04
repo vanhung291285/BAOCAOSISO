@@ -1496,6 +1496,61 @@ export const StorageService = {
     notifyRealtimeChange('boarding_reports', { reportId });
   },
 
+  async deleteBoardingReportsByClassAndMonth(classId: string, monthStr: string): Promise<void> {
+    ensureInitialized();
+    const raw = localStorage.getItem(STORAGE_KEYS.BOARDING_REPORTS);
+    const list: BoardingDailyReport[] = raw ? JSON.parse(raw) : [];
+    const classIdTrimmed = String(classId || '').trim();
+    let classes: any[] = [];
+    try {
+      classes = await this.getClasses();
+    } catch {}
+    const cls = classes.find(
+      (c) =>
+        c.id === classIdTrimmed ||
+        c.class_name === classIdTrimmed ||
+        c.id?.toLowerCase?.() === classIdTrimmed.toLowerCase() ||
+        c.class_name?.toLowerCase?.() === classIdTrimmed.toLowerCase()
+    );
+    const rawIds = [classIdTrimmed, cls?.id, cls?.class_name, cls?.code].filter(Boolean) as string[];
+    const allQueryIds = Array.from(new Set(rawIds.flatMap((id) => [id, id.toLowerCase(), id.toUpperCase()])));
+    const normValidClassIds = new Set(allQueryIds.map((k) => k.toLowerCase()));
+
+    const filtered = list.filter((r) => {
+      const matchClass = normValidClassIds.has(String(r.class_id || '').trim().toLowerCase());
+      const matchMonth = String(r.date || '').startsWith(monthStr);
+      return !(matchClass && matchMonth);
+    });
+
+    localStorage.setItem(STORAGE_KEYS.BOARDING_REPORTS, JSON.stringify(filtered));
+
+    try {
+      localStorage.setItem(`sso_cleared_boarding_${classId}_${monthStr}`, 'true');
+    } catch {}
+
+    const [y, m] = monthStr.split('-').map(Number);
+    const lastDay = new Date(y, m, 0).getDate();
+    const lastDayStr = String(lastDay).padStart(2, '0');
+    const startDate = `${monthStr}-01`;
+    const endDate = `${monthStr}-${lastDayStr}`;
+
+    const supabase = getSupabaseClient();
+    if (supabase && isSupabaseConnected()) {
+      try {
+        await supabase
+          .from('boarding_reports')
+          .delete()
+          .in('class_id', allQueryIds)
+          .gte('date', startDate)
+          .lte('date', endDate);
+      } catch (e) {
+        console.warn('Supabase delete boarding reports by month error:', e);
+      }
+    }
+
+    notifyRealtimeChange('boarding_reports', { classId, monthStr });
+  },
+
   // --- 13. Boarding Digital Signature Configuration & Month Signatures ---
   async getBoardingSignatureConfig(classId?: string): Promise<BoardingSignatureConfig> {
     ensureInitialized();
