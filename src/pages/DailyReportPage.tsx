@@ -206,6 +206,12 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
     let debounceTimer: any = null;
     const unsub = subscribeRealtime((event) => {
       if (event.table === 'daily_reports' || event.table === 'daily_report_values') {
+        const payloadClassId = event.payload?.classId;
+        // If current user is a GVCN viewing their specific class, avoid reloading if event is from another class
+        if (isGVCN && currentUser?.assigned_class_id && payloadClassId && payloadClassId !== currentUser.assigned_class_id) {
+          return;
+        }
+
         if (debounceTimer) clearTimeout(debounceTimer);
         debounceTimer = setTimeout(() => {
           if (reportMode === 'daily') {
@@ -213,7 +219,7 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
           } else {
             loadMonthlyData(false);
           }
-        }, 350);
+        }, 400);
       }
     });
 
