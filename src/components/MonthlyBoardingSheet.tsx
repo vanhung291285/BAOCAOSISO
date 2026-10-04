@@ -197,6 +197,20 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
   const [isGuideOpen, setIsGuideOpen] = useState<boolean>(true);
   const [isConfigOpen, setIsConfigOpen] = useState<boolean>(true);
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null);
+  const tableScrollRef = useRef<HTMLDivElement>(null);
+
+  const handleScrollToDate = (targetDateStr?: string) => {
+    if (!tableScrollRef.current) return;
+    if (!targetDateStr) {
+      tableScrollRef.current.scrollTo({ left: 0, behavior: 'smooth' });
+      return;
+    }
+    const thElement = tableScrollRef.current.querySelector<HTMLElement>(`th[data-date-str="${targetDateStr}"]`);
+    if (thElement) {
+      const leftPos = thElement.offsetLeft - 140;
+      tableScrollRef.current.scrollTo({ left: Math.max(0, leftPos), behavior: 'smooth' });
+    }
+  };
 
   // Auto-close active day popover menu on clicking outside or escape key
   useEffect(() => {
@@ -1723,37 +1737,37 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
         </div>
       )}
 
-      {/* 1. THANH ĐIỀU KHIỂN & TÁC VỤ CHÍNH (KHOA HỌC - CHUẨN MỰC - KHÔNG BỊ RỚT DÒNG) */}
+      {/* 1. THANH ĐIỀU KHIỂN & TÁC VỤ CHÍNH (KHOA HỌC - CHUẨN MỰC - TỐI ƯU ĐIỆN THOẠI) */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm no-print overflow-hidden">
         {/* Hàng 1: Bộ lọc Tháng/Lớp & Nhóm nút Xuất bản / In ấn / Lưu trữ */}
-        <div className="p-3 sm:p-4 border-b border-slate-100 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 bg-gradient-to-r from-slate-50/70 via-white to-slate-50/40">
+        <div className="p-2.5 sm:p-4 border-b border-slate-100 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-2.5 sm:gap-3 bg-gradient-to-r from-slate-50/70 via-white to-slate-50/40">
           {/* Cụm Bộ lọc bên trái */}
-          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+          <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2 sm:gap-2.5 shrink-0">
             {/* Chọn Tháng */}
-            <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl border border-slate-200 shadow-2xs">
-              <Calendar className="w-4 h-4 text-blue-600 shrink-0" />
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Tháng:</label>
+            <div className="flex items-center gap-1.5 sm:gap-2 bg-white px-2.5 sm:px-3 py-1.5 rounded-xl border border-slate-200 shadow-2xs">
+              <Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-600 shrink-0" />
+              <label className="text-[11px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider">Tháng:</label>
               <input
                 type="month"
                 value={selectedMonth}
                 onChange={(e) => setSelectedMonth(e.target.value)}
-                className="bg-transparent text-xs sm:text-sm font-bold text-slate-900 focus:outline-none cursor-pointer"
+                className="bg-transparent text-xs sm:text-sm font-bold text-slate-900 focus:outline-none cursor-pointer w-full"
               />
             </div>
 
             {/* Chọn Lớp */}
-            <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl border border-slate-200 shadow-2xs">
-              <School className="w-4 h-4 text-indigo-600 shrink-0" />
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Lớp:</label>
+            <div className="flex items-center gap-1.5 sm:gap-2 bg-white px-2.5 sm:px-3 py-1.5 rounded-xl border border-slate-200 shadow-2xs">
+              <School className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-indigo-600 shrink-0" />
+              <label className="text-[11px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider">Lớp:</label>
               {isGVCN && currentUser?.assigned_class_id ? (
-                <span className="text-blue-900 font-black text-xs sm:text-sm">
-                  Lớp {currentClass?.class_name}
+                <span className="text-blue-900 font-black text-xs sm:text-sm truncate">
+                  {currentClass?.class_name}
                 </span>
               ) : (
                 <select
                   value={selectedClassId}
                   onChange={(e) => onClassChange?.(e.target.value)}
-                  className="bg-transparent text-xs sm:text-sm font-bold text-slate-900 focus:outline-none cursor-pointer"
+                  className="bg-transparent text-xs sm:text-sm font-bold text-slate-900 focus:outline-none cursor-pointer w-full"
                 >
                   {classes
                     .filter((c) => c.active && !c.is_locked)
@@ -1766,82 +1780,82 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
               )}
             </div>
 
-            {/* Trạng thái tự động lưu */}
+            {/* Trạng thái tự động lưu (Mobile & Desktop) */}
             {autoSaveStatus === 'saving' && (
-              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold text-amber-700 bg-amber-50 border border-amber-300 animate-pulse shadow-2xs">
+              <div className="col-span-2 sm:col-span-1 flex items-center justify-center gap-1.5 px-2 py-1 rounded-lg text-[11px] sm:text-xs font-bold text-amber-700 bg-amber-50 border border-amber-300 animate-pulse shadow-2xs">
                 <div className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />
-                <span>Đang lưu...</span>
+                <span>Đang lưu tự động...</span>
               </div>
             )}
             {autoSaveStatus === 'saved' && (
-              <div className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold text-emerald-800 bg-emerald-50 border border-emerald-300 shadow-2xs">
+              <div className="col-span-2 sm:col-span-1 flex items-center justify-center gap-1 px-2 py-1 rounded-lg text-[11px] sm:text-xs font-bold text-emerald-800 bg-emerald-50 border border-emerald-300 shadow-2xs">
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                <span>Đã lưu</span>
+                <span>Đã lưu đám mây</span>
               </div>
             )}
           </div>
 
           {/* Cụm Xuất bản & Nút LƯU SỔ CHẤM CƠM bên phải */}
-          <div className="flex flex-wrap items-center gap-2 justify-end">
+          <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2 justify-end">
             <button
               type="button"
               onClick={() => setIsPreviewOpen(true)}
-              className="px-3.5 py-2 rounded-xl text-xs font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
+              className="px-2.5 sm:px-3.5 py-2.5 sm:py-2 rounded-xl text-xs font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-2xs active:scale-95"
               title="Xem trước bản in chuẩn khổ giấy A4 ngang và xuất file PDF"
             >
-              <Eye className="w-3.5 h-3.5 text-indigo-600" />
-              <span>Xem trước & In PDF</span>
+              <Eye className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+              <span>In PDF</span>
             </button>
 
             <button
               type="button"
               onClick={handleExportExcel}
-              className="px-3.5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm shadow-emerald-600/20 flex items-center gap-1.5 transition-all cursor-pointer"
+              className="px-2.5 sm:px-3.5 py-2.5 sm:py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm flex items-center justify-center gap-1.5 transition-all cursor-pointer active:scale-95"
               title="Xuất file Excel chuẩn Bộ GD&ĐT tự động chia 2 trang (Trang 1: Ngày 1-15, Trang 2: Ngày 16-hết) khi in không bị co chữ"
             >
-              <Download className="w-3.5 h-3.5" />
-              <span>Xuất Excel (2 Trang)</span>
+              <Download className="w-3.5 h-3.5 shrink-0" />
+              <span>Xuất Excel</span>
             </button>
 
             <button
               type="button"
               onClick={() => setIsFullscreen(!isFullscreen)}
-              className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs ${
+              className={`px-2.5 sm:px-3 py-2.5 sm:py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-2xs active:scale-95 ${
                 isFullscreen
                   ? 'bg-amber-500 text-slate-950 font-black ring-2 ring-amber-300'
                   : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300'
               }`}
               title={isFullscreen ? 'Thu nhỏ màn hình' : 'Phóng to toàn màn hình chấm ăn rõ nét'}
             >
-              {isFullscreen ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
-              <span className="hidden sm:inline">{isFullscreen ? 'Thu nhỏ' : 'Toàn màn hình'}</span>
+              {isFullscreen ? <Minimize2 className="w-3.5 h-3.5 shrink-0" /> : <Maximize2 className="w-3.5 h-3.5 shrink-0" />}
+              <span>{isFullscreen ? 'Thu nhỏ' : 'Toàn màn hình'}</span>
             </button>
 
-            {/* Nút LƯU SỔ CHẤM CƠM - Nổi bật nhất và không bao giờ bị rơi rụng */}
+            {/* Nút LƯU SỔ CHẤM CƠM - Chiếm trọn 2 cột trên điện thoại cực kỳ dễ bấm */}
             <button
               type="button"
               onClick={handleSaveMonth}
               disabled={isSaving}
-              className="px-4.5 py-2 rounded-xl text-xs font-black bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-600/25 flex items-center gap-1.5 transition-all disabled:opacity-50 cursor-pointer active:scale-95 ml-1"
+              className="col-span-2 sm:col-span-1 px-4 sm:px-4.5 py-2.5 sm:py-2 rounded-xl text-xs font-black bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 hover:from-blue-700 hover:to-indigo-800 text-white shadow-md shadow-blue-600/25 flex items-center justify-center gap-2 transition-all disabled:opacity-50 cursor-pointer active:scale-95"
             >
-              <Save className="w-3.5 h-3.5" />
+              <Save className="w-4 h-4 text-amber-300 shrink-0" />
               <span>{isSaving ? 'Đang lưu...' : 'Lưu Sổ Chấm Cơm'}</span>
             </button>
           </div>
         </div>
 
-        {/* Hàng 2: Dải công cụ nghiệp vụ chấm cơm bán trú chuyên biệt */}
-        <div className="px-3 sm:px-4 py-2.5 bg-slate-50/90 flex flex-wrap items-center justify-between gap-2.5 border-t border-slate-100">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[11px] font-black uppercase tracking-wider text-slate-500 mr-1 hidden sm:inline">
-              Tác vụ chấm:
+        {/* Hàng 2: Dải công cụ nghiệp vụ chấm cơm bán trú (Vuốt ngang mượt mà trên điện thoại) */}
+        <div className="px-2.5 sm:px-4 py-2 sm:py-2.5 bg-slate-50/90 flex items-center justify-between gap-2 border-t border-slate-100">
+          <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar scroll-smooth py-0.5 max-w-[calc(100vw-70px)] sm:max-w-none">
+            <span className="text-[11px] font-black uppercase tracking-wider text-slate-500 mr-0.5 hidden md:inline shrink-0">
+              Tác vụ:
             </span>
 
             {/* Chấm theo ngày/buổi */}
             <button
               type="button"
               onClick={() => setShowBatchModal(true)}
-              className="px-3 py-1.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
+              className="px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs flex items-center gap-1.5 transition-all cursor-pointer shrink-0"
               title="Mở bảng chọn chấm ăn nhanh theo ngày, theo buổi sáng/trưa/tối hoặc xóa chấm ăn nhiều ngày"
             >
               <CheckSquare className="w-3.5 h-3.5 text-indigo-200" />
@@ -1852,7 +1866,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
             <button
               type="button"
               onClick={handleSyncFromDailyReports}
-              className="px-3 py-1.5 rounded-xl text-xs font-bold bg-white text-blue-700 hover:bg-blue-50 border border-blue-200 flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
+              className="px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold bg-white text-blue-700 hover:bg-blue-50 border border-blue-200 flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs shrink-0"
               title="Đồng bộ tất cả ngày GVCN đã báo ăn (từ phiếu báo ăn ngày hoặc báo cáo sĩ số ngày) vào biểu"
             >
               <Sparkles className="w-3.5 h-3.5 text-blue-600" />
@@ -1863,7 +1877,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
             <button
               type="button"
               onClick={handleResetToOnlyReported}
-              className="px-3 py-1.5 rounded-xl text-xs font-bold bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
+              className="px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs shrink-0"
               title="Làm sạch sổ: Để trống tất cả các ngày chưa báo ăn và ngày tương lai, chỉ giữ lại những ngày GVCN đã báo ăn thực tế"
             >
               <RotateCcw className="w-3.5 h-3.5 text-slate-600" />
@@ -1874,7 +1888,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
             <button
               type="button"
               onClick={handleClearAllMonth}
-              className="px-3 py-1.5 rounded-xl text-xs font-bold bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
+              className="px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs shrink-0"
               title="Xóa toàn bộ chấm ăn của tháng này để sổ trống 100%, sẵn sàng cho GVCN chấm từng ngày"
             >
               <Trash2 className="w-3.5 h-3.5 text-rose-600" />
@@ -1885,7 +1899,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
             <button
               type="button"
               onClick={handleResetStandardConfig}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs active:scale-95 ${
+              className={`px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs active:scale-95 shrink-0 ${
                 isAutoSyncReported
                   ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-950 border border-emerald-300'
                   : overrideBreakfast !== null || overrideLunch !== null || overrideDinner !== null
@@ -1895,7 +1909,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
               title={`Reset ngày báo ăn định mức tháng ${monthNum}/${yearNum} về chuẩn theo lịch học: Sáng ${defaultStandardBreakfast}, Trưa ${defaultStandardLunch}, Tối ${defaultStandardDinner} ngày`}
             >
               <RotateCcw className="w-3.5 h-3.5 text-amber-800" />
-              <span>Reset định mức tháng</span>
+              <span>Reset định mức</span>
               {isAutoSyncReported ? (
                 <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-200 text-emerald-950 font-black">
                   Tự động
@@ -1912,69 +1926,81 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
           <button
             type="button"
             onClick={() => setIsConfigOpen(!isConfigOpen)}
-            className="px-2.5 py-1.5 rounded-xl text-xs font-bold text-slate-600 hover:text-slate-900 hover:bg-slate-200/70 transition-all flex items-center gap-1 cursor-pointer bg-white border border-slate-200 shadow-2xs"
+            className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl text-xs font-bold text-slate-600 hover:text-slate-900 hover:bg-slate-200/70 transition-all flex items-center gap-1 cursor-pointer bg-white border border-slate-200 shadow-2xs shrink-0"
             title="Ẩn hoặc hiện bảng cấu hình số ngày định mức ăn và chữ ký"
           >
-            <span>{isConfigOpen ? 'Thu gọn cấu hình' : 'Hiện cấu hình định mức & chữ ký'}</span>
-            {isConfigOpen ? <ChevronUp className="w-3.5 h-3.5 text-slate-500" /> : <ChevronDown className="w-3.5 h-3.5 text-slate-500" />}
+            <span className="hidden sm:inline">{isConfigOpen ? 'Thu gọn cấu hình' : 'Hiện cấu hình'}</span>
+            {isConfigOpen ? <ChevronUp className="w-4 h-4 text-slate-500" /> : <ChevronDown className="w-4 h-4 text-slate-500" />}
           </button>
         </div>
       </div>
 
-      {/* 2. BẢNG CẤU HÌNH ĐỊNH MỨC ĂN & CHỮ KÝ (KHOA HỌC - GRID 2 CỘT - KHÔNG BAO GIỜ BỊ GÃY DÒNG) */}
+      {/* 2. BẢNG CẤU HÌNH ĐỊNH MỨC ĂN & CHỮ KÝ (TỐI ƯU MÀN HÌNH ĐIỆN THOẠI & MÁY TÍNH) */}
       {isConfigOpen && (
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-3.5 no-print animate-fadeIn -mt-2">
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-2.5 sm:gap-3.5 no-print animate-fadeIn -mt-1 sm:-mt-2">
           {/* Card Trái: Định Mức Ngày Báo Ăn Chuẩn */}
-          <div className="bg-gradient-to-br from-amber-50/90 via-amber-50/40 to-orange-50/30 rounded-2xl p-4 border border-amber-200/90 shadow-2xs flex flex-col justify-between gap-3">
+          <div className="bg-gradient-to-br from-amber-50/90 via-amber-50/40 to-orange-50/30 rounded-2xl p-3 sm:p-4 border border-amber-200/90 shadow-2xs flex flex-col justify-between gap-2.5 sm:gap-3">
             <div>
-              <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
-                <div className="text-xs font-black text-amber-950 flex items-center gap-1.5 uppercase tracking-wide">
-                  <Info className="w-4 h-4 text-amber-600 shrink-0" />
-                  <span>Định mức ngày báo ăn chuẩn trong tháng {monthNum}/{yearNum}</span>
+              <div className="flex flex-wrap items-center justify-between gap-1.5 sm:gap-2 mb-1">
+                <div className="text-[11px] sm:text-xs font-black text-amber-950 flex items-center gap-1.5 uppercase tracking-wide">
+                  <Info className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-600 shrink-0" />
+                  <span>Định mức ngày ăn tháng {monthNum}/{yearNum}</span>
                 </div>
                 {isAutoSyncReported ? (
-                  <span className="text-[10px] px-2.5 py-0.5 rounded-full font-black bg-emerald-100 text-emerald-900 border border-emerald-400 flex items-center gap-1.5 shadow-2xs">
-                    <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse" />
+                  <span className="text-[10px] px-2 py-0.5 rounded-full font-black bg-emerald-100 text-emerald-900 border border-emerald-400 flex items-center gap-1 shadow-2xs">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
                     {autoReportedMealDays.hasAnyReported
-                      ? `🔄 Tự động nhảy theo báo ăn (${standardBreakfastDays}S - ${standardLunchDays}T - ${standardDinnerDays}T)`
-                      : `🔄 Tự động theo báo ăn (${standardBreakfastDays}S - ${standardLunchDays}T - ${standardDinnerDays}T - Chưa có)`}
+                      ? `Tự động: ${standardBreakfastDays}S - ${standardLunchDays}T - ${standardDinnerDays}T`
+                      : `Tự động (Chưa có)`}
                   </span>
                 ) : overrideBreakfast !== null || overrideLunch !== null || overrideDinner !== null ? (
-                  <span className="text-[10px] px-2.5 py-0.5 rounded-full font-black bg-amber-200 text-amber-950 border border-amber-400 flex items-center gap-1.5 shadow-2xs">
-                    <span className="w-2 h-2 rounded-full bg-amber-600 animate-pulse" />
-                    ✏️ Đang điều chỉnh đè thủ công ({standardBreakfastDays}S - ${standardLunchDays}T - ${standardDinnerDays}T)
+                  <span className="text-[10px] px-2 py-0.5 rounded-full font-black bg-amber-200 text-amber-950 border border-amber-400 flex items-center gap-1 shadow-2xs">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-600 animate-pulse" />
+                    Đè thủ công: {standardBreakfastDays}S - ${standardLunchDays}T - ${standardDinnerDays}T
                   </span>
                 ) : (
                   <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-blue-100 text-blue-900 border border-blue-300">
-                    📅 Mặc định theo lịch học ({defaultStandardBreakfast}S - ${defaultStandardLunch}T - ${defaultStandardDinner}T)
+                    Lịch học: {defaultStandardBreakfast}S - {defaultStandardLunch}T - {defaultStandardDinner}T
                   </span>
                 )}
               </div>
-              <p className="text-[11px] text-slate-600 font-medium leading-relaxed">
-                Quy tắc chuẩn kế toán: <strong>Số ngày báo ăn + Số ngày không báo ăn = Định mức báo ăn</strong>. Thầy/Cô có thể bật <strong>Tự động nhảy theo báo ăn</strong> hoặc nhập số ngày đè thủ công.
+              <p className="text-[10px] sm:text-[11px] text-slate-600 font-medium leading-relaxed">
+                Chuẩn kế toán: <strong>Ngày ăn + Ngày không ăn = Định mức</strong>.
               </p>
             </div>
 
-            {/* Dải điều khiển & Nhập liệu Sáng - Trưa - Tối THẲNG HÀNG 100% */}
-            <div className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-2 bg-white/95 p-2 rounded-xl border border-amber-200 shadow-2xs">
-              <button
-                type="button"
-                onClick={handleToggleAutoSyncReported}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs active:scale-95 shrink-0 ${
-                  isAutoSyncReported
-                    ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/30 ring-2 ring-emerald-300'
-                    : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-300'
-                }`}
-                title={`Chế độ Tự động: Định mức tự nhảy đúng bằng số ngày GVCN đã báo ăn thực tế (${autoReportedMealDays.autoBreakfast}S - ${autoReportedMealDays.autoLunch}T - ${autoReportedMealDays.autoDinner}T)`}
-              >
-                <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                <span className="whitespace-nowrap">{isAutoSyncReported ? '✓ Đang tự động theo báo ăn' : '⚡ Tự động theo báo ăn'}</span>
-              </button>
+            {/* Dải điều khiển & Nhập liệu Sáng - Trưa - Tối (Co giãn linh hoạt trên mobile) */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 bg-white/95 p-2 rounded-xl border border-amber-200 shadow-2xs">
+              <div className="flex items-center justify-between gap-1.5 w-full sm:w-auto">
+                <button
+                  type="button"
+                  onClick={handleToggleAutoSyncReported}
+                  className={`flex-1 sm:flex-initial px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-xs active:scale-95 shrink-0 ${
+                    isAutoSyncReported
+                      ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/30 ring-1 ring-emerald-300'
+                      : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-300'
+                  }`}
+                  title="Tự động tính định mức theo số ngày báo ăn thực tế"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                  <span className="whitespace-nowrap">{isAutoSyncReported ? '✓ Tự động' : '⚡ Bật tự động'}</span>
+                </button>
 
-              <div className="flex items-center gap-2.5 justify-center">
+                <button
+                  type="button"
+                  onClick={handleResetStandardConfig}
+                  className="sm:hidden px-2 py-1.5 rounded-lg text-xs font-bold bg-white hover:bg-amber-50 text-slate-700 border border-slate-300 flex items-center justify-center gap-1 transition-all cursor-pointer shadow-xs shrink-0"
+                  title="Reset theo lịch học"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  <span>Reset</span>
+                </button>
+              </div>
+
+              <div className="grid grid-cols-3 gap-1.5 sm:flex sm:items-center sm:gap-2.5 justify-center w-full sm:w-auto">
                 {/* Sáng */}
-                <div className="flex items-center gap-1">
-                  <span className="text-xs font-bold text-slate-700 whitespace-nowrap">Sáng:</span>
+                <div className="flex items-center justify-center gap-1 bg-amber-50/50 sm:bg-transparent p-1 sm:p-0 rounded-lg border sm:border-0 border-amber-200">
+                  <span className="text-[11px] sm:text-xs font-bold text-slate-700 whitespace-nowrap">Sáng:</span>
                   <input
                     type="number"
                     min={0}
@@ -1984,7 +2010,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
                       const val = e.target.value === '' ? null : Number(e.target.value);
                       updateOverrideBreakfast(val);
                     }}
-                    className={`w-12.5 border rounded-lg px-1.5 py-1 text-xs font-extrabold text-center text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500 shadow-2xs ${
+                    className={`w-10 sm:w-12.5 border rounded-lg px-1 py-1 text-xs sm:text-sm font-extrabold text-center text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500 shadow-2xs ${
                       isAutoSyncReported ? 'bg-emerald-50/60 border-emerald-300 text-emerald-950' : 'bg-white border-slate-300'
                     }`}
                     placeholder={String(defaultStandardBreakfast)}
@@ -1993,8 +2019,8 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
                 </div>
 
                 {/* Trưa */}
-                <div className="flex items-center gap-1">
-                  <span className="text-xs font-bold text-slate-700 whitespace-nowrap">Trưa:</span>
+                <div className="flex items-center justify-center gap-1 bg-amber-50/50 sm:bg-transparent p-1 sm:p-0 rounded-lg border sm:border-0 border-amber-200">
+                  <span className="text-[11px] sm:text-xs font-bold text-slate-700 whitespace-nowrap">Trưa:</span>
                   <input
                     type="number"
                     min={0}
@@ -2004,7 +2030,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
                       const val = e.target.value === '' ? null : Number(e.target.value);
                       updateOverrideLunch(val);
                     }}
-                    className={`w-12.5 border rounded-lg px-1.5 py-1 text-xs font-extrabold text-center text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500 shadow-2xs ${
+                    className={`w-10 sm:w-12.5 border rounded-lg px-1 py-1 text-xs sm:text-sm font-extrabold text-center text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500 shadow-2xs ${
                       isAutoSyncReported ? 'bg-emerald-50/60 border-emerald-300 text-emerald-950' : 'bg-white border-slate-300'
                     }`}
                     placeholder={String(defaultStandardLunch)}
@@ -2013,8 +2039,8 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
                 </div>
 
                 {/* Tối */}
-                <div className="flex items-center gap-1">
-                  <span className="text-xs font-bold text-slate-700 whitespace-nowrap">Tối:</span>
+                <div className="flex items-center justify-center gap-1 bg-amber-50/50 sm:bg-transparent p-1 sm:p-0 rounded-lg border sm:border-0 border-amber-200">
+                  <span className="text-[11px] sm:text-xs font-bold text-slate-700 whitespace-nowrap">Tối:</span>
                   <input
                     type="number"
                     min={0}
@@ -2024,7 +2050,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
                       const val = e.target.value === '' ? null : Number(e.target.value);
                       updateOverrideDinner(val);
                     }}
-                    className={`w-12.5 border rounded-lg px-1.5 py-1 text-xs font-extrabold text-center text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500 shadow-2xs ${
+                    className={`w-10 sm:w-12.5 border rounded-lg px-1 py-1 text-xs sm:text-sm font-extrabold text-center text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500 shadow-2xs ${
                       isAutoSyncReported ? 'bg-emerald-50/60 border-emerald-300 text-emerald-950' : 'bg-white border-slate-300'
                     }`}
                     placeholder={String(defaultStandardDinner)}
@@ -2033,11 +2059,11 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
                 </div>
               </div>
 
-              {/* Nút Reset lịch */}
+              {/* Nút Reset lịch (Desktop) */}
               <button
                 type="button"
                 onClick={handleResetStandardConfig}
-                className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-white hover:bg-amber-50 text-slate-700 border border-slate-300 hover:border-amber-400 flex items-center gap-1 transition-all cursor-pointer shadow-xs active:scale-95 shrink-0"
+                className="hidden sm:flex px-2.5 py-1.5 rounded-lg text-xs font-bold bg-white hover:bg-amber-50 text-slate-700 border border-slate-300 hover:border-amber-400 items-center gap-1 transition-all cursor-pointer shadow-xs active:scale-95 shrink-0"
                 title={`Khôi phục lại định mức ngày ăn chuẩn theo lịch tháng (S: ${defaultStandardBreakfast}, Trưa: ${defaultStandardLunch}, Tối: ${defaultStandardDinner})`}
               >
                 <RotateCcw className="w-3.5 h-3.5" />
@@ -2047,70 +2073,72 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
           </div>
 
           {/* Card Phải: Cấu Hình Chữ Ký & Địa Danh Ký */}
-          <div className="bg-gradient-to-br from-blue-50/90 via-blue-50/40 to-indigo-50/30 rounded-2xl p-4 border border-blue-200/90 shadow-2xs flex flex-col justify-between gap-3">
+          <div className="bg-gradient-to-br from-blue-50/90 via-blue-50/40 to-indigo-50/30 rounded-2xl p-3 sm:p-4 border border-blue-200/90 shadow-2xs flex flex-col justify-between gap-2.5 sm:gap-3">
             <div>
-              <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
-                <div className="text-xs font-black text-blue-900 flex items-center gap-1.5 uppercase tracking-wide">
-                  <PenTool className="w-4 h-4 text-blue-600 shrink-0" />
-                  <span>Cấu hình chữ ký & Địa danh ký (Tự động cập nhật theo ngày)</span>
+              <div className="flex flex-wrap items-center justify-between gap-1.5 sm:gap-2 mb-1">
+                <div className="text-[11px] sm:text-xs font-black text-blue-900 flex items-center gap-1.5 uppercase tracking-wide">
+                  <PenTool className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-600 shrink-0" />
+                  <span>Chữ ký & Địa danh ký</span>
                 </div>
-                {/* Nút Chữ ký số & Supabase đặt trang trọng ngay góc trên */}
+                {/* Nút Chữ ký số & Supabase */}
                 <button
                   type="button"
                   onClick={() => setShowDigitalSigModal(true)}
-                  className="px-3 py-1 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-2xs flex items-center gap-1.5 cursor-pointer transition-all shrink-0"
+                  className="px-2.5 py-1 rounded-xl text-[11px] sm:text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-2xs flex items-center gap-1 cursor-pointer transition-all shrink-0"
                   title="Cấu hình chữ ký số điện tử, con dấu đỏ và đồng bộ Supabase Cloud"
                 >
-                  <ShieldCheck className="w-3.5 h-3.5 text-blue-200" />
-                  <span>Chữ ký số & Supabase</span>
+                  <ShieldCheck className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-blue-200" />
+                  <span>Chữ ký số & Cloud</span>
                   {monthSig?.is_signed && (
-                    <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
                   )}
                 </button>
               </div>
-              <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
-                Trang 1 (Ngày 1 - 15): Bỏ chữ ký. Trang 2 & Cả tháng: Chỉ lấy chữ ký của GVCN. Địa danh và ngày tháng tự động cập nhật theo ngày.
+              <p className="text-[10px] sm:text-[11px] text-slate-500 font-medium leading-relaxed">
+                Trang 1: Ẩn chữ ký. Trang 2 & Cả tháng: Ký GVCN. Ngày ký tự động cập nhật.
               </p>
             </div>
 
-            {/* Dải nhập liệu Địa danh, Họ tên GVCN và Ngày ký THẲNG HÀNG 100% */}
-            <div className="flex flex-wrap sm:flex-nowrap items-center gap-2.5 bg-white/95 p-2 rounded-xl border border-blue-200 shadow-2xs">
-              {/* Địa danh */}
-              <div className="flex items-center gap-1.5 shrink-0">
-                <span className="text-xs font-bold text-slate-700 whitespace-nowrap">Địa danh:</span>
-                <input
-                  type="text"
-                  value={signingLocation}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setSigningLocation(val);
-                    localStorage.setItem('sso_boarding_signing_location', val);
-                  }}
-                  className="w-24 sm:w-28 bg-white border border-slate-300 rounded-lg px-2 py-1 text-xs font-bold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500 shadow-2xs"
-                  placeholder="Xa Dung"
-                  title="Địa danh ký (ví dụ: Xa Dung, Điện Biên Đông...)"
-                />
-              </div>
+            {/* Dải nhập liệu Địa danh, Họ tên GVCN và Ngày ký (Co giãn linh hoạt trên mobile) */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-2.5 bg-white/95 p-2 rounded-xl border border-blue-200 shadow-2xs">
+              <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 flex-1">
+                {/* Địa danh */}
+                <div className="flex items-center gap-1 sm:gap-1.5">
+                  <span className="text-[11px] sm:text-xs font-bold text-slate-700 whitespace-nowrap">Nơi ký:</span>
+                  <input
+                    type="text"
+                    value={signingLocation}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setSigningLocation(val);
+                      localStorage.setItem('sso_boarding_signing_location', val);
+                    }}
+                    className="w-full sm:w-28 bg-white border border-slate-300 rounded-lg px-2 py-1 text-xs font-bold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500 shadow-2xs"
+                    placeholder="Xa Dung"
+                    title="Địa danh ký"
+                  />
+                </div>
 
-              {/* Họ tên GVCN */}
-              <div className="flex items-center gap-1.5 flex-1 min-w-[140px]">
-                <span className="text-xs font-bold text-slate-700 whitespace-nowrap">Họ tên GVCN:</span>
-                <input
-                  type="text"
-                  value={customTeacherName}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setCustomTeacherName(val);
-                    localStorage.setItem(`sso_boarding_teacher_${selectedClassId}`, val);
-                  }}
-                  className="w-full bg-white border border-slate-300 rounded-lg px-2 py-1 text-xs font-bold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500 shadow-2xs"
-                  placeholder="Họ tên GVCN"
-                  title="Họ và tên Giáo viên chủ nhiệm ký"
-                />
+                {/* Họ tên GVCN */}
+                <div className="flex items-center gap-1 sm:gap-1.5">
+                  <span className="text-[11px] sm:text-xs font-bold text-slate-700 whitespace-nowrap">GVCN:</span>
+                  <input
+                    type="text"
+                    value={customTeacherName}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setCustomTeacherName(val);
+                      localStorage.setItem(`sso_boarding_teacher_${selectedClassId}`, val);
+                    }}
+                    className="w-full sm:w-36 bg-white border border-slate-300 rounded-lg px-2 py-1 text-xs font-bold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500 shadow-2xs"
+                    placeholder="Họ tên GVCN"
+                    title="Họ và tên Giáo viên chủ nhiệm ký"
+                  />
+                </div>
               </div>
 
               {/* Ngày ký tự động */}
-              <div className="flex items-center gap-1.5 px-2.5 py-1 bg-blue-50 text-blue-900 rounded-lg text-xs font-semibold shrink-0 border border-blue-200 shadow-2xs" title="Ngày ký tự động cập nhật theo cấu hình trang">
+              <div className="flex items-center justify-center gap-1 px-2.5 py-1 bg-blue-50 text-blue-900 rounded-lg text-[11px] sm:text-xs font-semibold shrink-0 border border-blue-200 shadow-2xs" title="Ngày ký tự động cập nhật theo cấu hình trang">
                 <Clock className="w-3.5 h-3.5 text-blue-600 shrink-0" />
                 <span className="whitespace-nowrap font-bold text-blue-800">
                   {viewMode === 'page1'
@@ -2181,17 +2209,18 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
           </div>
         </div>
 
-        {/* View Mode Toggle (Trang 1 / Trang 2 / Cả tháng) */}
+        {/* View Mode Toggle (Trang 1 / Trang 2 / Cả tháng) & Mobile Scroll Navigation */}
         {classBoardingStudents.length > 0 && !isLoading && (
-          <div className="flex flex-wrap items-center justify-between gap-3 mb-4 no-print">
-            <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-xl border border-slate-200">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-3.5 no-print">
+            {/* View Switcher: Segmented Control */}
+            <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-xl border border-slate-200 overflow-x-auto no-scrollbar touch-pan-x">
               <button
                 type="button"
                 onClick={() => setViewMode('all')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                className={`flex-1 sm:flex-initial px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap text-center ${
                   viewMode === 'all'
-                    ? 'bg-white text-blue-700 shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
                 }`}
               >
                 Cả tháng (1 - {daysInMonth})
@@ -2199,10 +2228,10 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
               <button
                 type="button"
                 onClick={() => setViewMode('page1')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                className={`flex-1 sm:flex-initial px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap text-center ${
                   viewMode === 'page1'
-                    ? 'bg-white text-blue-700 shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
                 }`}
               >
                 Trang 1 (Ngày 01 - 15)
@@ -2210,18 +2239,55 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
               <button
                 type="button"
                 onClick={() => setViewMode('page2')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                className={`flex-1 sm:flex-initial px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap text-center ${
                   viewMode === 'page2'
-                    ? 'bg-white text-blue-700 shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
                 }`}
               >
                 Trang 2 (Ngày 16 - {daysInMonth})
               </button>
             </div>
 
-            <div className="text-[11px] text-slate-500 italic">
-              💡 Bấm <strong>Trang 1</strong> hoặc <strong>Trang 2</strong> để xem và in gọn gàng từng trang A4 không bị co chữ.
+            {/* Mobile Scroll Helpers & Tips */}
+            <div className="flex items-center justify-between sm:justify-end gap-1.5 text-[11px] text-slate-500">
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => handleScrollToDate()}
+                  className="px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold border border-slate-200 transition-all cursor-pointer active:scale-95 text-[10px] sm:text-xs"
+                  title="Cuộn về đầu tháng"
+                >
+                  ⏮ Đầu
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const today = getTodayDateStr();
+                    handleScrollToDate(today);
+                  }}
+                  className="px-2 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold border border-blue-200 transition-all cursor-pointer active:scale-95 text-[10px] sm:text-xs"
+                  title="Cuộn tới hôm nay"
+                >
+                  📅 Hôm nay
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (tableScrollRef.current) {
+                      tableScrollRef.current.scrollTo({ left: 9999, behavior: 'smooth' });
+                    }
+                  }}
+                  className="px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold border border-slate-200 transition-all cursor-pointer active:scale-95 text-[10px] sm:text-xs"
+                  title="Cuộn về cuối tháng"
+                >
+                  ⏭ Cuối
+                </button>
+              </div>
+
+              <div className="text-[10px] text-slate-500 italic hidden md:inline">
+                💡 Bấm <strong>Trang 1</strong> hoặc <strong>Trang 2</strong> để xem và in chuẩn A4 ngang.
+              </div>
             </div>
           </div>
         )}
@@ -2266,9 +2332,10 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
           /* Table Sheet Grid */
           <div>
             <div
+              ref={tableScrollRef}
               className={`relative ${
                 isFullscreen ? 'max-h-[calc(100vh-140px)]' : 'max-h-[72vh] min-h-[420px]'
-              } overflow-auto border border-slate-400 rounded-xl shadow-xs bg-white select-none`}
+              } overflow-auto border border-slate-400 rounded-xl shadow-xs bg-white select-none overscroll-x-contain touch-pan-x`}
               onMouseLeave={clearCrosshair}
             >
               <table className="w-full text-center border-collapse text-[11px] border-separate border-spacing-0">
@@ -2277,14 +2344,14 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
                   <tr className="bg-slate-100 font-bold text-slate-900 sticky top-0 z-30 h-[28px]">
                     <th
                       rowSpan={3}
-                      className="py-1 px-1 w-9 min-w-[36px] border-r border-b border-slate-400 sticky top-0 left-0 z-50 bg-slate-100 text-center font-bold text-slate-900"
+                      className="py-1 px-0.5 sm:px-1 w-8 sm:w-9 min-w-[32px] sm:min-w-[36px] max-w-[32px] sm:max-w-[36px] border-r border-b border-slate-400 sticky top-0 left-0 z-50 bg-slate-100 text-center font-bold text-slate-900"
                     >
                       STT
                     </th>
                     <th
-                      className="py-1 px-2 min-w-[150px] border-r border-b border-slate-400 sticky top-0 left-9 z-50 bg-slate-100 font-bold"
+                      className="py-1 px-1 sm:px-2 w-[115px] sm:w-[150px] min-w-[115px] sm:min-w-[150px] max-w-[115px] sm:max-w-[150px] border-r border-b border-slate-400 sticky top-0 left-[32px] sm:left-9 z-50 bg-slate-100 font-bold text-slate-900"
                     >
-                      <div className="flex items-center justify-between px-2 text-[11px] font-bold text-slate-900">
+                      <div className="flex items-center justify-between px-1 text-[10px] sm:text-[11px] font-bold text-slate-900">
                         <span>Thứ</span>
                         <span>Ngày</span>
                       </div>
@@ -2296,6 +2363,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
                         <th
                           key={d.dayNum}
                           colSpan={3}
+                          data-date-str={d.dateStr}
                           onMouseEnter={() => updateCrosshair(hoverRef.current.studentId, d.dateStr, hoverRef.current.meal)}
                           className={`relative py-0.5 px-0.5 border-r border-b border-slate-400 text-center cursor-pointer sticky top-0 transition-colors group z-30 ${
                             isMenuOpen
@@ -2306,7 +2374,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
                           }`}
                         >
                           <div className="flex items-center justify-center gap-0.5">
-                            <span className="text-[11px] font-bold">{d.dayNum}</span>
+                            <span className="text-[10px] sm:text-[11px] font-bold">{d.dayNum}</span>
                             <button
                               type="button"
                               onClick={(e) => {
@@ -2315,7 +2383,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
                                   setDayMenuAnchor(null);
                                 } else {
                                   const rect = e.currentTarget.getBoundingClientRect();
-                                  const menuWidth = 280;
+                                  const menuWidth = Math.min(280, window.innerWidth - 24);
                                   let targetX = rect.left + rect.width / 2;
                                   if (targetX - menuWidth / 2 < 12) {
                                     targetX = 12 + menuWidth / 2;
@@ -2353,10 +2421,10 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
                     })}
                     {showSummaryColumns && (
                       <>
-                        <th colSpan={6} className="py-1 px-2 border-r border-b border-slate-400 bg-slate-100 text-slate-900 font-bold sticky top-0 z-30">
+                        <th colSpan={6} className="py-1 px-1 sm:px-2 border-r border-b border-slate-400 bg-slate-100 text-slate-900 font-bold sticky top-0 z-30 text-[10px] sm:text-xs">
                           Số ngày ăn trong tháng
                         </th>
-                        <th rowSpan={3} className="py-2 px-1.5 w-14 bg-slate-100 text-slate-900 font-bold border-b border-slate-400 sticky top-0 z-30">
+                        <th rowSpan={3} className="py-2 px-1 w-12 sm:w-14 bg-slate-100 text-slate-900 font-bold border-b border-slate-400 sticky top-0 z-30 text-[10px] sm:text-xs">
                           Ngày thực
                         </th>
                       </>
@@ -2367,7 +2435,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
                   <tr className="bg-slate-100 font-bold text-slate-800 sticky top-[28px] z-30 h-[24px]">
                     <th
                       rowSpan={2}
-                      className="py-1 px-2 min-w-[150px] text-center border-r border-b border-slate-400 sticky top-[28px] left-9 z-50 bg-slate-100 font-bold text-slate-900"
+                      className="py-1 px-1 sm:px-2 w-[115px] sm:w-[150px] min-w-[115px] sm:min-w-[150px] max-w-[115px] sm:max-w-[150px] text-center border-r border-b border-slate-400 sticky top-[28px] left-[32px] sm:left-9 z-50 bg-slate-100 font-bold text-slate-900 text-[10px] sm:text-xs"
                     >
                       Họ và tên
                     </th>
@@ -2384,7 +2452,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
                               : 'bg-slate-100 text-slate-800 font-bold'
                           }`}
                         >
-                          <span className="text-[11px] font-bold">
+                          <span className="text-[10px] sm:text-[11px] font-bold">
                             {d.dayOfWeekShort}
                           </span>
                         </th>
@@ -2392,11 +2460,11 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
                     })}
                     {showSummaryColumns && (
                       <>
-                        <th colSpan={3} className="py-0.5 px-1 border-r border-b border-slate-400 bg-slate-100 text-slate-900 font-bold sticky top-[28px] z-30">
-                          Số ngày báo ăn
+                        <th colSpan={3} className="py-0.5 px-1 border-r border-b border-slate-400 bg-slate-100 text-slate-900 font-bold sticky top-[28px] z-30 text-[10px]">
+                          Báo ăn
                         </th>
-                        <th colSpan={3} className="py-0.5 px-1 border-r border-b border-slate-400 bg-slate-100 text-slate-900 font-bold sticky top-[28px] z-30">
-                          Số ngày không báo ăn
+                        <th colSpan={3} className="py-0.5 px-1 border-r border-b border-slate-400 bg-slate-100 text-slate-900 font-bold sticky top-[28px] z-30 text-[10px]">
+                          Không báo
                         </th>
                       </>
                     )}
@@ -2414,7 +2482,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
                               handleBatchToggleSession(d.dateStr, 'breakfast');
                             }}
                             onMouseEnter={() => updateCrosshair(hoverRef.current.studentId, d.dateStr, 'breakfast')}
-                            className={`py-0.5 w-[22px] min-w-[20px] border-r border-b border-slate-400 cursor-pointer sticky top-[52px] z-30 font-bold group/meal transition-colors ${
+                            className={`py-0.5 w-[21px] sm:w-[22px] min-w-[20px] sm:min-w-[22px] border-r border-b border-slate-400 cursor-pointer sticky top-[52px] z-30 font-bold group/meal transition-colors text-[10px] sm:text-xs ${
                               isDateHovered && hoveredMealType === 'breakfast'
                                 ? 'bg-amber-200 text-black font-black ring-1 ring-inset ring-amber-500'
                                 : isDateHovered
@@ -2431,7 +2499,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
                               handleBatchToggleSession(d.dateStr, 'lunch');
                             }}
                             onMouseEnter={() => updateCrosshair(hoverRef.current.studentId, d.dateStr, 'lunch')}
-                            className={`py-0.5 w-[22px] min-w-[20px] border-r border-b border-slate-400 cursor-pointer sticky top-[52px] z-30 font-bold group/meal transition-colors ${
+                            className={`py-0.5 w-[21px] sm:w-[22px] min-w-[20px] sm:min-w-[22px] border-r border-b border-slate-400 cursor-pointer sticky top-[52px] z-30 font-bold group/meal transition-colors text-[10px] sm:text-xs ${
                               isDateHovered && hoveredMealType === 'lunch'
                                 ? 'bg-amber-200 text-black font-black ring-1 ring-inset ring-amber-500'
                                 : isDateHovered
@@ -2448,7 +2516,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
                               handleBatchToggleSession(d.dateStr, 'dinner');
                             }}
                             onMouseEnter={() => updateCrosshair(hoverRef.current.studentId, d.dateStr, 'dinner')}
-                            className={`py-0.5 w-[22px] min-w-[20px] border-r border-b border-slate-400 cursor-pointer sticky top-[52px] z-30 font-bold group/meal transition-colors ${
+                            className={`py-0.5 w-[21px] sm:w-[22px] min-w-[20px] sm:min-w-[22px] border-r border-b border-slate-400 cursor-pointer sticky top-[52px] z-30 font-bold group/meal transition-colors text-[10px] sm:text-xs ${
                               isDateHovered && hoveredMealType === 'dinner'
                                 ? 'bg-amber-200 text-black font-black ring-1 ring-inset ring-amber-500'
                                 : isDateHovered
@@ -2465,13 +2533,13 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
                     {showSummaryColumns && (
                       <>
                         {/* Summary S,T,T for eaten */}
-                        <th className="py-0.5 w-6 border-r border-b border-slate-400 bg-slate-100 text-slate-800 font-bold sticky top-[52px] z-30">S</th>
-                        <th className="py-0.5 w-6 border-r border-b border-slate-400 bg-slate-100 text-slate-800 font-bold sticky top-[52px] z-30">T</th>
-                        <th className="py-0.5 w-6 border-r border-b border-slate-400 bg-slate-100 text-slate-800 font-bold sticky top-[52px] z-30">T</th>
+                        <th className="py-0.5 w-5 sm:w-6 border-r border-b border-slate-400 bg-slate-100 text-slate-800 font-bold sticky top-[52px] z-30 text-[10px]">S</th>
+                        <th className="py-0.5 w-5 sm:w-6 border-r border-b border-slate-400 bg-slate-100 text-slate-800 font-bold sticky top-[52px] z-30 text-[10px]">T</th>
+                        <th className="py-0.5 w-5 sm:w-6 border-r border-b border-slate-400 bg-slate-100 text-slate-800 font-bold sticky top-[52px] z-30 text-[10px]">T</th>
                         {/* Summary S,T,T for missed */}
-                        <th className="py-0.5 w-6 border-r border-b border-slate-400 bg-slate-100 text-slate-800 font-bold sticky top-[52px] z-30">S</th>
-                        <th className="py-0.5 w-6 border-r border-b border-slate-400 bg-slate-100 text-slate-800 font-bold sticky top-[52px] z-30">T</th>
-                        <th className="py-0.5 w-6 border-r border-b border-slate-400 bg-slate-100 text-slate-800 font-bold sticky top-[52px] z-30">T</th>
+                        <th className="py-0.5 w-5 sm:w-6 border-r border-b border-slate-400 bg-slate-100 text-slate-800 font-bold sticky top-[52px] z-30 text-[10px]">S</th>
+                        <th className="py-0.5 w-5 sm:w-6 border-r border-b border-slate-400 bg-slate-100 text-slate-800 font-bold sticky top-[52px] z-30 text-[10px]">T</th>
+                        <th className="py-0.5 w-5 sm:w-6 border-r border-b border-slate-400 bg-slate-100 text-slate-800 font-bold sticky top-[52px] z-30 text-[10px]">T</th>
                       </>
                     )}
                   </tr>
@@ -2503,7 +2571,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
                         }`}
                       >
                         <td
-                          className={`py-1 px-1 w-9 min-w-[36px] font-medium border-r border-b border-slate-300 text-center sticky left-0 z-20 ${
+                          className={`py-1 px-0.5 sm:px-1 w-8 sm:w-9 min-w-[32px] sm:min-w-[36px] max-w-[32px] sm:max-w-[36px] font-medium border-r border-b border-slate-300 text-center sticky left-0 z-20 ${
                             isStudentHovered
                               ? 'bg-amber-100 text-slate-950 font-bold'
                               : 'bg-white text-slate-800'
@@ -2512,13 +2580,15 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
                           {idx + 1}
                         </td>
                         <td
-                          className={`py-1 px-2 min-w-[150px] text-left font-medium border-r border-b border-slate-300 whitespace-nowrap sticky left-9 z-20 ${
+                          className={`py-1 px-1.5 sm:px-2 w-[115px] sm:w-[150px] min-w-[115px] sm:min-w-[150px] max-w-[115px] sm:max-w-[150px] text-left font-medium border-r border-b border-slate-300 sticky left-[32px] sm:left-9 z-20 ${
                             isStudentHovered
                               ? 'bg-amber-50 text-slate-950 font-bold'
                               : 'bg-white text-slate-900'
                           }`}
                         >
-                          <span className="truncate">{st.full_name}</span>
+                          <span className="truncate block font-semibold text-[11px] sm:text-xs" title={st.full_name}>
+                            {st.full_name}
+                          </span>
                         </td>
 
                         {/* Daily cells: S, T, T */}
@@ -2538,7 +2608,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
                                 data-date-str={d.dateStr}
                                 data-meal="breakfast"
                                 onClick={() => handleToggleCell(st.id, d.dateStr, 'breakfast')}
-                                className={`py-1 w-[22px] min-w-[20px] border-r border-b border-slate-300 select-none text-center font-bold text-xs sm:text-sm cursor-pointer transition-colors ${
+                                className={`py-1.5 px-0.5 w-[21px] sm:w-[22px] min-w-[20px] sm:min-w-[22px] border-r border-b border-slate-300 select-none text-center font-black text-xs sm:text-sm cursor-pointer transition-colors active:bg-amber-300 ${
                                   isColBeam && isRowBeam
                                     ? 'bg-amber-200 text-slate-950 font-black'
                                     : isColBeam
@@ -2559,7 +2629,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
                                 data-date-str={d.dateStr}
                                 data-meal="lunch"
                                 onClick={() => handleToggleCell(st.id, d.dateStr, 'lunch')}
-                                className={`py-1 w-[22px] min-w-[20px] border-r border-b border-slate-300 select-none text-center font-bold text-xs sm:text-sm cursor-pointer transition-colors ${
+                                className={`py-1.5 px-0.5 w-[21px] sm:w-[22px] min-w-[20px] sm:min-w-[22px] border-r border-b border-slate-300 select-none text-center font-black text-xs sm:text-sm cursor-pointer transition-colors active:bg-amber-300 ${
                                   isColBeam && isRowBeam
                                     ? 'bg-amber-200 text-slate-950 font-black'
                                     : isColBeam
@@ -2580,7 +2650,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
                                 data-date-str={d.dateStr}
                                 data-meal="dinner"
                                 onClick={() => handleToggleCell(st.id, d.dateStr, 'dinner')}
-                                className={`py-1 w-[22px] min-w-[20px] border-r border-b border-slate-300 select-none text-center font-bold text-xs sm:text-sm cursor-pointer transition-colors ${
+                                className={`py-1.5 px-0.5 w-[21px] sm:w-[22px] min-w-[20px] sm:min-w-[22px] border-r border-b border-slate-300 select-none text-center font-black text-xs sm:text-sm cursor-pointer transition-colors active:bg-amber-300 ${
                                   isColBeam && isRowBeam
                                     ? 'bg-amber-200 text-slate-950 font-black'
                                     : isColBeam
@@ -2601,29 +2671,29 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
                         {showSummaryColumns && (
                           <>
                             {/* Summary Eaten: S, T, T */}
-                            <td className={`py-1 px-1 font-bold border-r border-b border-slate-300 text-slate-900 ${isStudentHovered ? 'bg-amber-50' : 'bg-white'}`}>
+                            <td className={`py-1 px-0.5 font-bold border-r border-b border-slate-300 text-slate-900 text-[10px] sm:text-xs ${isStudentHovered ? 'bg-amber-50' : 'bg-white'}`}>
                               {sum.eatenBreakfast}
                             </td>
-                            <td className={`py-1 px-1 font-bold border-r border-b border-slate-300 text-slate-900 ${isStudentHovered ? 'bg-amber-50' : 'bg-white'}`}>
+                            <td className={`py-1 px-0.5 font-bold border-r border-b border-slate-300 text-slate-900 text-[10px] sm:text-xs ${isStudentHovered ? 'bg-amber-50' : 'bg-white'}`}>
                               {sum.eatenLunch}
                             </td>
-                            <td className={`py-1 px-1 font-bold border-r border-b border-slate-300 text-slate-900 ${isStudentHovered ? 'bg-amber-50' : 'bg-white'}`}>
+                            <td className={`py-1 px-0.5 font-bold border-r border-b border-slate-300 text-slate-900 text-[10px] sm:text-xs ${isStudentHovered ? 'bg-amber-50' : 'bg-white'}`}>
                               {sum.eatenDinner}
                             </td>
 
                             {/* Summary Missed: S, T, T */}
-                            <td className={`py-1 px-1 font-bold border-r border-b border-slate-300 text-slate-900 ${isStudentHovered ? 'bg-amber-50' : 'bg-white'}`}>
+                            <td className={`py-1 px-0.5 font-bold border-r border-b border-slate-300 text-slate-900 text-[10px] sm:text-xs ${isStudentHovered ? 'bg-amber-50' : 'bg-white'}`}>
                               {sum.missedBreakfast}
                             </td>
-                            <td className={`py-1 px-1 font-bold border-r border-b border-slate-300 text-slate-900 ${isStudentHovered ? 'bg-amber-50' : 'bg-white'}`}>
+                            <td className={`py-1 px-0.5 font-bold border-r border-b border-slate-300 text-slate-900 text-[10px] sm:text-xs ${isStudentHovered ? 'bg-amber-50' : 'bg-white'}`}>
                               {sum.missedLunch}
                             </td>
-                            <td className={`py-1 px-1 font-bold border-r border-b border-slate-300 text-slate-900 ${isStudentHovered ? 'bg-amber-50' : 'bg-white'}`}>
+                            <td className={`py-1 px-0.5 font-bold border-r border-b border-slate-300 text-slate-900 text-[10px] sm:text-xs ${isStudentHovered ? 'bg-amber-50' : 'bg-white'}`}>
                               {sum.missedDinner}
                             </td>
 
                             {/* Actual Days */}
-                            <td className={`py-1 px-1 font-bold border-b border-slate-300 text-slate-900 ${isStudentHovered ? 'bg-amber-100 font-black' : 'bg-white'}`}>
+                            <td className={`py-1 px-0.5 font-bold border-b border-slate-300 text-slate-900 text-[10px] sm:text-xs ${isStudentHovered ? 'bg-amber-100 font-black' : 'bg-white'}`}>
                               {sum.actualDays}
                             </td>
                           </>
@@ -2634,10 +2704,10 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
 
                   {/* Row: + Thêm học sinh mới... as in Image 1 */}
                   <tr className="bg-white hover:bg-slate-50/80">
-                    <td className="py-1.5 px-1 w-9 min-w-[36px] font-black text-emerald-700 border-r border-b border-slate-300 text-center sticky left-0 z-20 bg-white">
+                    <td className="py-1.5 px-0.5 sm:px-1 w-8 sm:w-9 min-w-[32px] sm:min-w-[36px] max-w-[32px] sm:max-w-[36px] font-black text-emerald-700 border-r border-b border-slate-300 text-center sticky left-0 z-20 bg-white">
                       +
                     </td>
-                    <td className="py-1.5 px-2 min-w-[150px] text-left border-r border-b border-slate-300 sticky left-9 z-20 bg-white">
+                    <td className="py-1.5 px-1.5 sm:px-2 w-[115px] sm:w-[150px] min-w-[115px] sm:min-w-[150px] max-w-[115px] sm:max-w-[150px] text-left border-r border-b border-slate-300 sticky left-[32px] sm:left-9 z-20 bg-white">
                       {isAddingStudent ? (
                         <div className="flex items-center gap-1.5">
                           <input
@@ -2680,9 +2750,9 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
                     </td>
                     {displayedMonthDays.map((d) => (
                       <React.Fragment key={d.dayNum}>
-                        <td className="py-1 w-[22px] min-w-[20px] border-r border-b border-slate-300 bg-white" />
-                        <td className="py-1 w-[22px] min-w-[20px] border-r border-b border-slate-300 bg-white" />
-                        <td className="py-1 w-[22px] min-w-[20px] border-r border-b border-slate-300 bg-white" />
+                        <td className="py-1 w-[21px] sm:w-[22px] min-w-[20px] sm:min-w-[22px] border-r border-b border-slate-300 bg-white" />
+                        <td className="py-1 w-[21px] sm:w-[22px] min-w-[20px] sm:min-w-[22px] border-r border-b border-slate-300 bg-white" />
+                        <td className="py-1 w-[21px] sm:w-[22px] min-w-[20px] sm:min-w-[22px] border-r border-b border-slate-300 bg-white" />
                       </React.Fragment>
                     ))}
                     {showSummaryColumns && (
@@ -2702,7 +2772,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
                 {/* Table Footer: CỘNG */}
                 <tfoot>
                   <tr className="bg-slate-100 font-bold text-slate-900 border-t-2 border-slate-400">
-                    <td colSpan={2} className="py-1.5 px-2 text-center border-r border-b border-slate-400 sticky left-0 bg-slate-100 z-10 font-bold">
+                    <td colSpan={2} className="py-1.5 px-1 sm:px-2 text-center border-r border-b border-slate-400 sticky left-0 bg-slate-100 z-10 font-bold text-[10px] sm:text-xs">
                       CỘNG
                     </td>
                     {displayedMonthDays.map((d) => {
@@ -2710,13 +2780,13 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
                       const isDateHovered = hoveredDateStr === d.dateStr;
                       return (
                         <React.Fragment key={d.dayNum}>
-                          <td className={`py-1 px-0.5 border-r border-b border-slate-400 font-bold ${isDateHovered ? 'bg-amber-100 text-slate-950 font-black' : 'text-slate-900'}`}>
+                          <td className={`py-1 px-0.5 border-r border-b border-slate-400 font-bold text-[10px] sm:text-xs ${isDateHovered ? 'bg-amber-100 text-slate-950 font-black' : 'text-slate-900'}`}>
                             {totals.breakfast > 0 ? totals.breakfast : ''}
                           </td>
-                          <td className={`py-1 px-0.5 border-r border-b border-slate-400 font-bold ${isDateHovered ? 'bg-amber-100 text-slate-950 font-black' : 'text-slate-900'}`}>
+                          <td className={`py-1 px-0.5 border-r border-b border-slate-400 font-bold text-[10px] sm:text-xs ${isDateHovered ? 'bg-amber-100 text-slate-950 font-black' : 'text-slate-900'}`}>
                             {totals.lunch > 0 ? totals.lunch : ''}
                           </td>
-                          <td className={`py-1 px-0.5 border-r border-b border-slate-400 font-bold ${isDateHovered ? 'bg-amber-100 text-slate-950 font-black' : 'text-slate-900'}`}>
+                          <td className={`py-1 px-0.5 border-r border-b border-slate-400 font-bold text-[10px] sm:text-xs ${isDateHovered ? 'bg-amber-100 text-slate-950 font-black' : 'text-slate-900'}`}>
                             {totals.dinner > 0 ? totals.dinner : ''}
                           </td>
                         </React.Fragment>
@@ -2724,25 +2794,25 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
                     })}
                     {showSummaryColumns && (
                       <>
-                        <td className="py-1 px-1 border-r border-b border-slate-400 text-slate-900 font-bold">
+                        <td className="py-1 px-0.5 border-r border-b border-slate-400 text-slate-900 font-bold text-[10px]">
                           {columnTotals.totalEatenB}
                         </td>
-                        <td className="py-1 px-1 border-r border-b border-slate-400 text-slate-900 font-bold">
+                        <td className="py-1 px-0.5 border-r border-b border-slate-400 text-slate-900 font-bold text-[10px]">
                           {columnTotals.totalEatenL}
                         </td>
-                        <td className="py-1 px-1 border-r border-b border-slate-400 text-slate-900 font-bold">
+                        <td className="py-1 px-0.5 border-r border-b border-slate-400 text-slate-900 font-bold text-[10px]">
                           {columnTotals.totalEatenD}
                         </td>
-                        <td className="py-1 px-1 border-r border-b border-slate-400 text-slate-900 font-bold">
+                        <td className="py-1 px-0.5 border-r border-b border-slate-400 text-slate-900 font-bold text-[10px]">
                           {columnTotals.totalMissedB}
                         </td>
-                        <td className="py-1 px-1 border-r border-b border-slate-400 text-slate-900 font-bold">
+                        <td className="py-1 px-0.5 border-r border-b border-slate-400 text-slate-900 font-bold text-[10px]">
                           {columnTotals.totalMissedL}
                         </td>
-                        <td className="py-1 px-1 border-r border-slate-400 text-slate-900 font-bold">
+                        <td className="py-1 px-0.5 border-r border-slate-400 text-slate-900 font-bold text-[10px]">
                           {columnTotals.totalMissedD}
                         </td>
-                        <td className="py-1 px-1 border-b border-slate-400 text-slate-900 font-bold">
+                        <td className="py-1 px-0.5 border-b border-slate-400 text-slate-900 font-bold text-[10px]">
                           {columnTotals.totalActualDays}
                         </td>
                       </>
@@ -3035,16 +3105,17 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
       {/* Floating Day Quick Actions Popover (outside table to prevent clipping) */}
       {dayMenuAnchor && (
         <div
-          className="fixed inset-0 z-[100] select-none bg-slate-950/20 backdrop-blur-[0.5px]"
+          className="fixed inset-0 z-[100] select-none bg-slate-950/40 backdrop-blur-[1px] flex items-center justify-center p-3"
           onClick={() => setDayMenuAnchor(null)}
         >
           <div
             style={{
               position: 'fixed',
-              left: `${dayMenuAnchor.x}px`,
+              left: `${Math.max(145, Math.min(dayMenuAnchor.x, typeof window !== 'undefined' ? window.innerWidth - 145 : dayMenuAnchor.x))}px`,
               top: `${dayMenuAnchor.y}px`,
               transform: 'translateX(-50%)',
-              width: '280px',
+              width: `${Math.min(285, typeof window !== 'undefined' ? window.innerWidth - 24 : 285)}px`,
+              maxWidth: 'calc(100vw - 24px)',
             }}
             onClick={(e) => e.stopPropagation()}
             className="bg-white border border-slate-300 rounded-2xl shadow-2xl p-3 text-left text-xs font-normal ring-4 ring-blue-500/20 animate-fadeIn"
