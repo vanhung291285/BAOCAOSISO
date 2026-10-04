@@ -392,90 +392,90 @@ export const BoardingPrintPreviewModal: React.FC<BoardingPrintPreviewModalProps>
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-slate-900/90 backdrop-blur-xs text-slate-100 overflow-hidden select-none print:fixed print:inset-0 print:bg-white print:text-black print:overflow-visible print:z-[9999]">
       {/* Top Controls Bar */}
-      <div className="bg-slate-900 border-b border-slate-800 px-4 py-3 flex flex-wrap items-center justify-between gap-3 shadow-lg shrink-0 no-print">
+      <div className="bg-slate-900 border-b border-slate-800 px-3 sm:px-4 py-2.5 sm:py-3 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2.5 sm:gap-3 shadow-lg shrink-0 no-print">
         {/* Title & Page Switcher */}
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2 text-white font-bold text-sm sm:text-base">
-            <Eye className="w-5 h-5 text-blue-400" />
-            <span>Xem trước bản in (Print Preview)</span>
+        <div className="flex flex-wrap items-center justify-between md:justify-start gap-2 sm:gap-3">
+          <div className="flex items-center gap-2 text-white font-bold text-xs sm:text-base">
+            <Eye className="w-4 h-4 sm:w-5 sm:h-5 text-blue-400 shrink-0" />
+            <span className="truncate">Xem trước bản in (Print Preview)</span>
           </div>
 
-          <div className="flex items-center bg-slate-800 rounded-xl p-1 border border-slate-700 text-xs">
+          <div className="flex items-center bg-slate-800 rounded-xl p-0.5 sm:p-1 border border-slate-700 text-[11px] sm:text-xs overflow-x-auto no-scrollbar touch-pan-x">
             <button
               type="button"
               onClick={() => setActiveTab('page1')}
-              className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+              className={`px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg font-bold transition-all cursor-pointer whitespace-nowrap ${
                 activeTab === 'page1'
                   ? 'bg-blue-600 text-white shadow-sm'
                   : 'text-slate-300 hover:text-white'
               }`}
             >
-              Trang 1 (Ngày 1-15)
+              Trang 1 (1-15)
             </button>
             <button
               type="button"
               onClick={() => setActiveTab('page2')}
-              className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+              className={`px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg font-bold transition-all cursor-pointer whitespace-nowrap ${
                 activeTab === 'page2'
                   ? 'bg-blue-600 text-white shadow-sm'
                   : 'text-slate-300 hover:text-white'
               }`}
             >
-              Trang 2 (Ngày 16-{daysInMonth})
+              Trang 2 (16-{daysInMonth})
             </button>
             <button
               type="button"
               onClick={() => setActiveTab('both')}
-              className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+              className={`px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg font-bold transition-all cursor-pointer whitespace-nowrap ${
                 activeTab === 'both'
                   ? 'bg-blue-600 text-white shadow-sm'
                   : 'text-slate-300 hover:text-white'
               }`}
             >
-              Cả 2 trang (Chuẩn A4)
+              2 trang A4
             </button>
             <button
               type="button"
               onClick={() => setActiveTab('all')}
-              className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+              className={`px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg font-bold transition-all cursor-pointer whitespace-nowrap ${
                 activeTab === 'all'
                   ? 'bg-blue-600 text-white shadow-sm'
                   : 'text-slate-300 hover:text-white'
               }`}
             >
-              Cả tháng (A3)
+              Cả tháng
             </button>
           </div>
         </div>
 
         {/* Action Buttons */}
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-1.5 sm:gap-2">
           {/* Zoom controls */}
-          <div className="flex items-center bg-slate-800 rounded-xl p-1 border border-slate-700 text-xs mr-2">
+          <div className="flex items-center bg-slate-800 rounded-xl p-0.5 sm:p-1 border border-slate-700 text-xs">
             <button
               type="button"
-              onClick={() => setZoomLevel((z) => Math.max(50, z - 10))}
-              className="p-1.5 hover:bg-slate-700 rounded-lg text-slate-300 hover:text-white cursor-pointer"
+              onClick={() => setZoomLevel((z) => Math.max(40, z - 10))}
+              className="p-1 sm:p-1.5 hover:bg-slate-700 rounded-lg text-slate-300 hover:text-white cursor-pointer"
               title="Thu nhỏ"
             >
-              <ZoomOut className="w-4 h-4" />
+              <ZoomOut className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </button>
-            <span className="px-2 text-xs font-mono font-bold text-slate-200">{zoomLevel}%</span>
+            <span className="px-1.5 sm:px-2 text-[11px] sm:text-xs font-mono font-bold text-slate-200">{zoomLevel}%</span>
             <button
               type="button"
               onClick={() => setZoomLevel((z) => Math.min(150, z + 10))}
-              className="p-1.5 hover:bg-slate-700 rounded-lg text-slate-300 hover:text-white cursor-pointer"
+              className="p-1 sm:p-1.5 hover:bg-slate-700 rounded-lg text-slate-300 hover:text-white cursor-pointer"
               title="Phóng to"
             >
-              <ZoomIn className="w-4 h-4" />
+              <ZoomIn className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </button>
             <button
               type="button"
-              onClick={() => setZoomLevel(90)}
-              className="p-1.5 hover:bg-slate-700 rounded-lg text-slate-300 hover:text-white cursor-pointer ml-1"
+              onClick={() => setZoomLevel(typeof window !== 'undefined' && window.innerWidth < 640 ? 55 : 90)}
+              className="p-1 sm:p-1.5 hover:bg-slate-700 rounded-lg text-slate-300 hover:text-white cursor-pointer"
               title="Vừa màn hình"
             >
-              <Maximize className="w-3.5 h-3.5" />
+              <Maximize className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
             </button>
           </div>
 
@@ -484,33 +484,33 @@ export const BoardingPrintPreviewModal: React.FC<BoardingPrintPreviewModalProps>
             type="button"
             onClick={handleDownloadPdf}
             disabled={isExportingPdf}
-            className="px-3.5 py-2 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white shadow-md shadow-rose-600/30 flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+            className="px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl text-[11px] sm:text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white shadow-md shadow-rose-600/30 flex items-center gap-1 sm:gap-1.5 transition-all cursor-pointer disabled:opacity-50"
             title="Tải về file PDF sắc nét đúng chuẩn khổ A4 ngang"
           >
-            <FileDown className="w-4 h-4" />
-            <span>{isExportingPdf ? 'Đang tạo file PDF...' : 'Xuất File PDF (.pdf)'}</span>
+            <FileDown className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+            <span>{isExportingPdf ? 'Tạo PDF...' : 'Xuất PDF'}</span>
           </button>
 
           {/* Direct Print */}
           <button
             type="button"
             onClick={handlePrint}
-            className="px-3.5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/30 flex items-center gap-1.5 transition-all cursor-pointer"
+            className="px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl text-[11px] sm:text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/30 flex items-center gap-1 sm:gap-1.5 transition-all cursor-pointer"
             title="Mở hộp thoại in trình duyệt (In máy in hoặc Lưu dưới dạng PDF)"
           >
-            <Printer className="w-4 h-4" />
-            <span>In / Lưu PDF (Ctrl+P)</span>
+            <Printer className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+            <span>In PDF</span>
           </button>
 
           {onExportExcel && (
             <button
               type="button"
               onClick={onExportExcel}
-              className="px-3.5 py-2 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-emerald-500/30 flex items-center gap-1.5 transition-all cursor-pointer"
+              className="hidden sm:flex px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-emerald-500/30 items-center gap-1.5 transition-all cursor-pointer"
               title="Xuất file Excel chuẩn"
             >
-              <FileSpreadsheet className="w-4 h-4" />
-              <span>Xuất Excel</span>
+              <FileSpreadsheet className="w-3.5 h-3.5 shrink-0" />
+              <span>Excel</span>
             </button>
           )}
 
@@ -518,10 +518,10 @@ export const BoardingPrintPreviewModal: React.FC<BoardingPrintPreviewModalProps>
           <button
             type="button"
             onClick={onClose}
-            className="p-2 hover:bg-slate-800 rounded-xl text-slate-400 hover:text-white transition-all cursor-pointer ml-1"
-            title="Đóng (Esc)"
+            className="px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl text-[11px] sm:text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 cursor-pointer transition-all flex items-center gap-1"
           >
-            <X className="w-5 h-5" />
+            <X className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            <span>Đóng</span>
           </button>
         </div>
       </div>
