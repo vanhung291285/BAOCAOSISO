@@ -130,9 +130,14 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
     return unique;
   }, [students, validClassIds, selectedClassId]);
 
-  // Boarding students belonging to selected class (or all if not filtered)
+  // Boarding students belonging to selected class (strictly isBoarding !== false)
   const classBoardingStudents = useMemo(() => {
-    return classStudents;
+    return classStudents.filter((s) => s.isBoarding !== false);
+  }, [classStudents]);
+
+  // Day students belonging to selected class (ngoại trú isBoarding === false)
+  const classDayStudents = useMemo(() => {
+    return classStudents.filter((s) => s.isBoarding === false);
   }, [classStudents]);
 
   // Day Meal Schedule
@@ -169,6 +174,7 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
   const [showImportModal, setShowImportModal] = useState<boolean>(false);
   const [importPreviewData, setImportPreviewData] = useState<Array<Omit<Student, 'id' | 'created_at'>>>([]);
   const [importFileName, setImportFileName] = useState<string>('');
+  const [previewFilter, setPreviewFilter] = useState<'ALL' | 'BOARDING' | 'DAY'>('ALL');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Modal State for Quick Paste Text
@@ -201,6 +207,7 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
   // Filter & Search in Students List
   const [studentSearchText, setStudentSearchText] = useState<string>('');
   const [studentGenderFilter, setStudentGenderFilter] = useState<string>('ALL');
+  const [studentBoardingFilter, setStudentBoardingFilter] = useState<'ALL' | 'BOARDING' | 'DAY'>('ALL');
 
   // Load Boarding Report for Selected Class & Date
   const loadMealAttendance = async () => {
@@ -550,12 +557,17 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
         studentGenderFilter === 'ALL' ||
         st.gender === studentGenderFilter;
 
-      return matchSearch && matchGender;
+      const matchBoarding =
+        studentBoardingFilter === 'ALL' ||
+        (studentBoardingFilter === 'BOARDING' && st.isBoarding !== false) ||
+        (studentBoardingFilter === 'DAY' && st.isBoarding === false);
+
+      return matchSearch && matchGender && matchBoarding;
     });
 
     // Giữ nguyên 100% thứ tự danh sách học sinh theo file Excel gốc của lớp (không xáo trộn)
     return list;
-  }, [classStudents, studentSearchText, studentGenderFilter]);
+  }, [classStudents, studentSearchText, studentGenderFilter, studentBoardingFilter]);
 
   // Open Add Student Modal
   const handleOpenAddStudent = () => {
@@ -712,6 +724,8 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
         let colIndexBirth = -1;
         let colIndexEthnicity = -1;
         let colIndexBoarding = -1;
+        let colIndexDayStudent = -1;
+        let colIndexNotes = -1;
         let colIndexSTT = -1;
 
         for (let r = 0; r < Math.min(15, rawData.length); r++) {
@@ -728,6 +742,8 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
           let tempBirth = -1;
           let tempEthnicity = -1;
           let tempBoarding = -1;
+          let tempDayStudent = -1;
+          let tempNotes = -1;
           let tempSTT = -1;
 
           row.forEach((cell, idx) => {
@@ -794,9 +810,38 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
               tempEthnicity = idx;
               headerScore += 2;
             }
-            if (val.includes('bán trú') || val.includes('diện ở') || val.includes('ở nội trú') || val.includes('bt')) {
+            if (
+              val.includes('bán trú') ||
+              val.includes('diện ở') ||
+              val.includes('ở nội trú') ||
+              val.includes('ở bán trú') ||
+              val.includes('ăn bán trú') ||
+              val.includes('hs bán trú') ||
+              val.includes('diện bt') ||
+              val === 'bt' ||
+              val === 'diện' ||
+              val === 'chế độ' ||
+              val === 'đối tượng' ||
+              val.includes('hình thức') ||
+              val.includes('loại hs') ||
+              val.includes('bán trú (x)')
+            ) {
               tempBoarding = idx;
+              headerScore += 3;
+            }
+            if (
+              val.includes('ngoại trú') ||
+              val.includes('ở ngoại trú') ||
+              val.includes('không bán trú') ||
+              val.includes('đi về') ||
+              val.includes('ở nhà')
+            ) {
+              tempDayStudent = idx;
               headerScore += 2;
+            }
+            if (val.includes('ghi chú') || val.includes('notes') || val.includes('lưu ý')) {
+              tempNotes = idx;
+              headerScore += 1;
             }
           });
 
@@ -812,6 +857,8 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
             colIndexBirth = tempBirth;
             colIndexEthnicity = tempEthnicity;
             colIndexBoarding = tempBoarding;
+            colIndexDayStudent = tempDayStudent;
+            colIndexNotes = tempNotes;
             colIndexSTT = tempSTT;
             break;
           }
@@ -836,6 +883,58 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
           }
         }
 
+        // Pass 1: Quét trước toàn bộ file để phân tích cột Bán trú
+        // Nếu cột Bán trú có dòng đánh dấu ('x', 'có', 'bt') và có dòng để trống, thì đây là cột Checkbox:
+        // Ai có đánh dấu thì Bán trú, ai để trống hoặc ghi Không thì là Ngoại trú!
+        let hasExplicitBoardingMarks = false;
+        let explicitBoardingCount = 0;
+        let explicitDayCount = 0;
+        let blankBoardingCellCount = 0;
+
+        for (let i = startRow; i < rawData.length; i++) {
+          const row = rawData[i];
+          if (!row || !Array.isArray(row) || row.length === 0) continue;
+
+          let fName = '';
+          if (colIndexName !== -1 && row[colIndexName] !== undefined && row[colIndexName] !== null) {
+            fName = String(row[colIndexName]).trim();
+          } else if (colIndexHoDem !== -1 && colIndexTen !== -1) {
+            fName = `${String(row[colIndexHoDem] || '').trim()} ${String(row[colIndexTen] || '').trim()}`.trim();
+          }
+          if (!fName || fName.toLowerCase() === 'stt' || fName.toLowerCase().includes('họ và tên') || fName.toLowerCase().includes('tổng số') || fName.toLowerCase().includes('tổng cộng')) {
+            continue;
+          }
+
+          if (colIndexBoarding !== -1) {
+            const bCellVal = String(row[colIndexBoarding] || '').trim().toLowerCase();
+            const isPos =
+              bCellVal === 'x' || bCellVal === '✓' || bCellVal === '✔' || bCellVal === '1' ||
+              bCellVal === 'có' || bCellVal === 'co' || bCellVal === 'c' || bCellVal === 'bt' ||
+              bCellVal === 'bán trú' || bCellVal === 'ban tru' || bCellVal === 'b.trú' ||
+              bCellVal === 'nội trú' || bCellVal === 'noi tru' || bCellVal === 'true' || bCellVal === 'v' ||
+              bCellVal === 'yes' || bCellVal === 'y' || bCellVal.includes('bán trú') || bCellVal.includes('nội trú') ||
+              bCellVal.includes('dân nuôi') || bCellVal.includes('116');
+
+            const isNeg =
+              bCellVal === 'không' || bCellVal === 'khong' || bCellVal === 'k' || bCellVal === 'k0' ||
+              bCellVal === '0' || bCellVal === 'ngoại trú' || bCellVal === 'ngoai tru' || bCellVal === 'false' ||
+              bCellVal === 'no' || bCellVal === '-' || bCellVal.includes('ngoại trú') || bCellVal.includes('không') ||
+              bCellVal.includes('ở nhà') || bCellVal.includes('đi về');
+
+            if (isPos) {
+              explicitBoardingCount++;
+              hasExplicitBoardingMarks = true;
+            } else if (isNeg) {
+              explicitDayCount++;
+            } else if (!bCellVal) {
+              blankBoardingCellCount++;
+            }
+          }
+        }
+
+        const isCheckboxBoardingColumn = hasExplicitBoardingMarks && (blankBoardingCellCount > 0 || explicitDayCount > 0);
+
+        // Pass 2: Trích xuất học sinh và phân loại chuẩn xác Bán trú / Ngoại trú
         const parsedList: Array<Omit<Student, 'id' | 'created_at'>> = [];
         for (let i = startRow; i < rawData.length; i++) {
           const row = rawData[i];
@@ -923,7 +1022,52 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
             ethnicity = String(row[colIndexEthnicity]).trim();
           }
 
+          // Xác định diện Bán trú / Ngoại trú theo file Excel
           let isBoarding = true;
+
+          if (colIndexBoarding !== -1 && row[colIndexBoarding] !== undefined) {
+            const bVal = String(row[colIndexBoarding] || '').trim().toLowerCase();
+            const isPos =
+              bVal === 'x' || bVal === '✓' || bVal === '✔' || bVal === '1' ||
+              bVal === 'có' || bVal === 'co' || bVal === 'c' || bVal === 'bt' ||
+              bVal === 'bán trú' || bVal === 'ban tru' || bVal === 'b.trú' ||
+              bVal === 'nội trú' || bVal === 'noi tru' || bVal === 'true' || bVal === 'v' ||
+              bVal === 'yes' || bVal === 'y' || bVal.includes('bán trú') || bVal.includes('nội trú') ||
+              bVal.includes('dân nuôi') || bVal.includes('116');
+
+            const isNeg =
+              bVal === 'không' || bVal === 'khong' || bVal === 'k' || bVal === 'k0' ||
+              bVal === '0' || bVal === 'ngoại trú' || bVal === 'ngoai tru' || bVal === 'false' ||
+              bVal === 'no' || bVal === '-' || bVal.includes('ngoại trú') || bVal.includes('không') ||
+              bVal.includes('ở nhà') || bVal.includes('đi về');
+
+            if (isPos) {
+              isBoarding = true;
+            } else if (isNeg) {
+              isBoarding = false;
+            } else if (isCheckboxBoardingColumn) {
+              // Cột đánh dấu bán trú (chỉ em có 'x' mới bán trú, để trống là ngoại trú)
+              isBoarding = false;
+            }
+          }
+
+          // Kiểm tra thêm cột ngoại trú riêng (nếu file có cột Ngoại trú)
+          if (colIndexDayStudent !== -1 && row[colIndexDayStudent] !== undefined) {
+            const dVal = String(row[colIndexDayStudent] || '').trim().toLowerCase();
+            if (dVal === 'x' || dVal === '✓' || dVal === '✔' || dVal === '1' || dVal === 'có' || dVal === 'v' || dVal.includes('ngoại')) {
+              isBoarding = false;
+            }
+          }
+
+          // Kiểm tra thêm cột ghi chú nếu chưa có cột Bán trú riêng
+          if (colIndexNotes !== -1 && row[colIndexNotes] !== undefined && colIndexBoarding === -1) {
+            const nVal = String(row[colIndexNotes] || '').trim().toLowerCase();
+            if (nVal.includes('ngoại trú') || nVal.includes('ở nhà') || nVal.includes('không bán trú')) {
+              isBoarding = false;
+            } else if (nVal.includes('bán trú') || nVal.includes('nội trú')) {
+              isBoarding = true;
+            }
+          }
 
           parsedList.push({
             class_id: selectedClassId,
@@ -945,6 +1089,7 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
         }
 
         setImportPreviewData(parsedList);
+        setPreviewFilter('ALL');
         setShowImportModal(true);
       } catch (err) {
         console.error(err);
@@ -955,6 +1100,24 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
+  // Toggle boarding for student inside Preview modal
+  const handleTogglePreviewBoarding = (index: number) => {
+    setImportPreviewData((prev) => {
+      const updated = [...prev];
+      if (updated[index]) {
+        updated[index] = {
+          ...updated[index],
+          isBoarding: updated[index].isBoarding === false ? true : false,
+        };
+      }
+      return updated;
+    });
+  };
+
+  const handleSetAllPreviewBoarding = (val: boolean) => {
+    setImportPreviewData((prev) => prev.map((s) => ({ ...s, isBoarding: val })));
+  };
+
   // Confirm Import
   const handleConfirmImport = async () => {
     if (importPreviewData.length === 0) return;
@@ -963,7 +1126,11 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
         await deleteStudentsByClass(selectedClassId, selectedClass?.class_name);
       }
       await importStudents(importPreviewData, selectedClassId, selectedClass?.class_name);
-      showToast(`Đã nhập thành công ${importPreviewData.length} học sinh vào lớp ${selectedClass?.class_name}! Giữ nguyên 100% thứ tự file Excel.`);
+      const bCount = importPreviewData.filter((s) => s.isBoarding !== false).length;
+      const dCount = importPreviewData.filter((s) => s.isBoarding === false).length;
+      showToast(
+        `Đã nhập thành công ${importPreviewData.length} học sinh (${bCount} Bán trú, ${dCount} Ngoại trú) vào lớp ${selectedClass?.class_name}! Giữ nguyên 100% thứ tự file Excel.`
+      );
       setShowImportModal(false);
       setImportPreviewData([]);
       await loadMealAttendance();
@@ -2037,6 +2204,17 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
                 <option value="Nam">Nam</option>
                 <option value="Nữ">Nữ</option>
               </select>
+
+              {/* Boarding / Day Student Filter */}
+              <select
+                value={studentBoardingFilter}
+                onChange={(e) => setStudentBoardingFilter(e.target.value as any)}
+                className="bg-slate-50 border border-slate-200 text-slate-700 font-bold text-xs rounded-xl px-3 py-1.5 focus:outline-none"
+              >
+                <option value="ALL">Tất cả diện ({classStudents.length})</option>
+                <option value="BOARDING">Chỉ Bán trú ({classBoardingStudents.length})</option>
+                <option value="DAY">Chỉ Ngoại trú ({classDayStudents.length})</option>
+              </select>
             </div>
 
             {/* Buttons: Import Excel, Quick Paste, Add Single, Export */}
@@ -2115,9 +2293,19 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
           {/* Students Roster Table */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
             <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
-              <span className="font-extrabold text-xs text-slate-700 uppercase tracking-wider">
-                Danh sách học sinh lớp {selectedClass?.class_name} ({filteredStudents.length} học sinh)
-              </span>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-extrabold text-xs text-slate-700 uppercase tracking-wider">
+                  Danh sách học sinh lớp {selectedClass?.class_name} ({filteredStudents.length}/{classStudents.length} học sinh)
+                </span>
+                <span className="text-slate-300">|</span>
+                <span className="text-xs text-slate-600 font-medium">
+                  🍽️ Bán trú: <strong className="text-emerald-700 font-bold">{classBoardingStudents.length}</strong> em
+                </span>
+                <span className="text-slate-300">•</span>
+                <span className="text-xs text-slate-600 font-medium">
+                  🏠 Ngoại trú: <strong className="text-amber-700 font-bold">{classDayStudents.length}</strong> em
+                </span>
+              </div>
               <div className="flex items-center gap-3">
                 <span className="text-xs text-slate-500 font-medium">
                   Bán trú: <strong className="text-blue-700 font-bold">{classBoardingStudents.length}</strong> / {classStudents.length} em
@@ -2200,14 +2388,24 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
                           <button
                             type="button"
                             onClick={() => handleToggleStudentBoarding(st)}
-                            className={`px-2.5 py-1 rounded-xl text-xs font-extrabold transition-all ${
+                            className={`px-2.5 py-1 rounded-xl text-xs font-extrabold transition-all cursor-pointer flex items-center justify-center gap-1 mx-auto ${
                               st.isBoarding !== false
-                                ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
-                                : 'bg-slate-100 text-slate-400 hover:bg-slate-200'
+                                ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200 border border-emerald-300 shadow-2xs'
+                                : 'bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-300 shadow-2xs'
                             }`}
-                            title="Bấm để bật/tắt diện bán trú"
+                            title="Bấm để chuyển đổi giữa Bán trú (chấm ăn) và Ngoại trú (không chấm ăn)"
                           >
-                            {st.isBoarding !== false ? '✓ Bán trú' : 'Ngoại trú'}
+                            {st.isBoarding !== false ? (
+                              <>
+                                <Utensils className="w-3.5 h-3.5 text-emerald-600" />
+                                <span>Bán trú</span>
+                              </>
+                            ) : (
+                              <>
+                                <Home className="w-3.5 h-3.5 text-amber-600" />
+                                <span>Ngoại trú</span>
+                              </>
+                            )}
                           </button>
                         </td>
                         <td className="py-2.5 px-3 text-center">
@@ -2540,39 +2738,144 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
               </button>
             </div>
 
-            <p className="text-xs text-slate-600">
-              Đã đọc được <strong className="text-blue-600 font-bold">{importPreviewData.length}</strong> học sinh.
-              Vui lòng xem lại trước khi nhập vào lớp <strong>{selectedClass?.class_name}</strong>:
-            </p>
+            {/* Summary statistics bar */}
+            <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-slate-50 rounded-xl border border-slate-200">
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <span className="font-bold text-slate-700">
+                  Tổng số: <strong className="text-blue-700 font-extrabold">{importPreviewData.length}</strong> học sinh
+                </span>
+                <span className="text-slate-300">•</span>
+                <span className="font-extrabold text-emerald-700 flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                  Bán trú: {importPreviewData.filter((s) => s.isBoarding !== false).length} em
+                </span>
+                <span className="text-slate-300">•</span>
+                <span className="font-extrabold text-amber-700 flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-amber-500" />
+                  Ngoại trú: {importPreviewData.filter((s) => s.isBoarding === false).length} em
+                </span>
+              </div>
 
-            <div className="flex-1 overflow-y-auto border border-slate-200 rounded-xl divide-y divide-slate-100 max-h-64">
-              {importPreviewData.map((st, idx) => (
-                <div key={idx} className="p-2.5 flex items-center justify-between text-xs hover:bg-slate-50">
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-slate-400 w-6">{idx + 1}.</span>
-                    <span className="font-extrabold text-slate-900">{st.full_name}</span>
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">{st.gender}</span>
-                  </div>
-                  <div className="text-slate-500">{st.village || 'Chưa rõ thôn'}</div>
-                </div>
-              ))}
+              {/* Fast bulk setters */}
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => handleSetAllPreviewBoarding(true)}
+                  className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 transition-all cursor-pointer"
+                  title="Chọn tất cả là Bán trú"
+                >
+                  Tất cả Bán trú
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSetAllPreviewBoarding(false)}
+                  className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 transition-all cursor-pointer"
+                  title="Chọn tất cả là Ngoại trú"
+                >
+                  Tất cả Ngoại trú
+                </button>
+              </div>
             </div>
 
-            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-200">
+            {/* Filter tabs */}
+            <div className="flex items-center gap-1 border-b border-slate-200 pb-2">
               <button
                 type="button"
-                onClick={() => setShowImportModal(false)}
-                className="px-4 py-2 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700"
+                onClick={() => setPreviewFilter('ALL')}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  previewFilter === 'ALL'
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:bg-slate-100'
+                }`}
               >
-                Hủy bỏ
+                Tất cả ({importPreviewData.length})
               </button>
               <button
                 type="button"
-                onClick={handleConfirmImport}
-                className="px-5 py-2 rounded-xl text-xs font-black bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-600/20"
+                onClick={() => setPreviewFilter('BOARDING')}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  previewFilter === 'BOARDING'
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:bg-slate-100'
+                }`}
               >
-                Xác nhận Import ({importPreviewData.length} HS)
+                Bán trú ({importPreviewData.filter((s) => s.isBoarding !== false).length})
               </button>
+              <button
+                type="button"
+                onClick={() => setPreviewFilter('DAY')}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  previewFilter === 'DAY'
+                    ? 'bg-amber-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                Ngoại trú ({importPreviewData.filter((s) => s.isBoarding === false).length})
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto border border-slate-200 rounded-xl divide-y divide-slate-100 max-h-64">
+              {importPreviewData.map((st, idx) => {
+                if (previewFilter === 'BOARDING' && st.isBoarding === false) return null;
+                if (previewFilter === 'DAY' && st.isBoarding !== false) return null;
+                const isBoarding = st.isBoarding !== false;
+                return (
+                  <div key={idx} className="p-2.5 flex items-center justify-between text-xs hover:bg-slate-50 transition-colors">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-slate-400 w-6 text-center">{idx + 1}.</span>
+                      <span className="font-extrabold text-slate-900">{st.full_name}</span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 font-semibold">{st.gender}</span>
+                      <span className="text-slate-500 text-[11px] hidden sm:inline">{st.village || 'Chưa rõ thôn'}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleTogglePreviewBoarding(idx)}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                          isBoarding
+                            ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200 border border-emerald-300'
+                            : 'bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-300'
+                        }`}
+                        title="Bấm để chuyển đổi giữa Bán trú và Ngoại trú"
+                      >
+                        {isBoarding ? (
+                          <>
+                            <Utensils className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>Bán trú</span>
+                          </>
+                        ) : (
+                          <>
+                            <Home className="w-3.5 h-3.5 text-amber-600" />
+                            <span>Ngoại trú</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="flex items-center justify-between gap-3 pt-3 border-t border-slate-200">
+              <span className="text-xs text-slate-500 hidden sm:inline">
+                * Bấm vào nút <strong>Bán trú / Ngoại trú</strong> của từng em để thay đổi nếu cần.
+              </span>
+              <div className="flex items-center gap-2 ml-auto">
+                <button
+                  type="button"
+                  onClick={() => setShowImportModal(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer"
+                >
+                  Hủy bỏ
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmImport}
+                  className="px-5 py-2 rounded-xl text-xs font-black bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-600/20 cursor-pointer"
+                >
+                  Xác nhận Import ({importPreviewData.length} HS • {importPreviewData.filter((s) => s.isBoarding !== false).length} Bán trú)
+                </button>
+              </div>
             </div>
           </div>
         </div>
