@@ -104,10 +104,22 @@ export const ClassesManagementPage: React.FC = () => {
         address = parts.slice(1).join(' - ');
       }
       
+      let isBoarding = true;
+      const lowerCleaned = cleaned.toLowerCase();
+      if (
+        lowerCleaned.includes('ngoại trú') ||
+        lowerCleaned.includes('ngoai tru') ||
+        lowerCleaned.includes('không bán trú') ||
+        lowerCleaned.includes('ở nhà')
+      ) {
+        isBoarding = false;
+      }
+
       parsedStudents.push({
         class_id: rosterClassId,
         full_name: name,
         address: address,
+        isBoarding,
       });
     });
     
@@ -1328,9 +1340,14 @@ export const ClassesManagementPage: React.FC = () => {
               {/* Roster list */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">
-                    Danh Sách Học Sinh Của Lớp ({rosterStudents.length})
-                  </h4>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">
+                      Danh Sách Học Sinh Của Lớp ({rosterStudents.length})
+                    </h4>
+                    <span className="text-[11px] text-slate-500 font-medium">
+                      (Bán trú: <strong className="text-emerald-700 font-bold">{rosterStudents.filter((s) => s.isBoarding !== false).length}</strong> • Ngoại trú: <strong className="text-amber-700 font-bold">{rosterStudents.filter((s) => s.isBoarding === false).length}</strong>)
+                    </span>
+                  </div>
                   {rosterStudents.length > 0 && (
                     <button
                       type="button"
@@ -1371,6 +1388,7 @@ export const ClassesManagementPage: React.FC = () => {
                           <th className="py-2.5 px-4 w-12 text-center">STT</th>
                           <th className="py-2.5 px-4">Họ và tên</th>
                           <th className="py-2.5 px-4">Địa chỉ / Bản thôn</th>
+                          <th className="py-2.5 px-3 w-28 text-center">Diện ở</th>
                           <th className="py-2.5 px-4 w-24 text-center">Hành động</th>
                         </tr>
                       </thead>
@@ -1404,6 +1422,25 @@ export const ClassesManagementPage: React.FC = () => {
                                 ) : (
                                   student.address || <em className="text-slate-400">Không có</em>
                                 )}
+                              </td>
+                              <td className="py-2 px-3 text-center">
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    const nextVal = student.isBoarding === false ? true : false;
+                                    await updateStudent(student.id, { isBoarding: nextVal });
+                                    setSuccessToast(`Đã chuyển ${student.full_name} sang diện: ${nextVal ? 'Bán trú' : 'Ngoại trú'}`);
+                                    setTimeout(() => setSuccessToast(''), 2500);
+                                  }}
+                                  className={`px-2.5 py-0.5 rounded-lg text-[11px] font-extrabold transition-all cursor-pointer ${
+                                    student.isBoarding !== false
+                                      ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200'
+                                      : 'bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200'
+                                  }`}
+                                  title="Bấm để chuyển đổi giữa Bán trú (chấm ăn) và Ngoại trú (không chấm ăn)"
+                                >
+                                  {student.isBoarding !== false ? '✓ Bán trú' : '🏠 Ngoại trú'}
+                                </button>
                               </td>
                               <td className="py-2 px-4 text-center">
                                 {isEditing ? (
