@@ -244,7 +244,18 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
     ].filter(Boolean) as string[]);
   }, [selectedClassId, currentClass]);
 
-  // Boarding students
+  // Class student statistics (Total vs Boarding vs Day students)
+  const totalClassStudents = useMemo(() => {
+    if (!selectedClassId) return [];
+    return students.filter((s) => validClassIds.has(s.class_id));
+  }, [students, validClassIds, selectedClassId]);
+
+  const classDayStudentsCount = useMemo(() => {
+    return totalClassStudents.filter((s) => s.isBoarding === false).length;
+  }, [totalClassStudents]);
+
+  // Boarding students: STRICTLY filter only boarding students (isBoarding !== false)
+  // Học sinh ngoại trú (isBoarding === false) tuyệt đối không xuất hiện trên sổ chấm cơm!
   const classBoardingStudents = useMemo(() => {
     if (!selectedClassId) return [];
     const rawSts = students.filter((s) => validClassIds.has(s.class_id));
@@ -253,6 +264,9 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
     const classSts: Student[] = [];
     for (const s of rawSts) {
       if (!s || !s.full_name) continue;
+      // Lọc chuẩn xác: Loại bỏ học sinh ngoại trú (isBoarding === false)
+      if (s.isBoarding === false) continue;
+
       const sId = String(s.id || '').trim();
       const normName = String(s.full_name || '').trim().toLowerCase();
 
@@ -2208,7 +2222,12 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
               </div>
             )}
             <div className="text-[11px] text-slate-500 font-medium">
-              Sĩ số bán trú: <strong className="text-slate-900">{classBoardingStudents.length} học sinh</strong>
+              Sĩ số ăn bán trú: <strong className="text-slate-900 font-bold">{classBoardingStudents.length} học sinh</strong>
+              {classDayStudentsCount > 0 && (
+                <span className="text-slate-500 ml-1.5 font-normal">
+                  (Tổng sĩ số lớp: {totalClassStudents.length} HS • {classDayStudentsCount} HS ngoại trú không chấm ăn)
+                </span>
+              )}
             </div>
           </div>
         </div>
