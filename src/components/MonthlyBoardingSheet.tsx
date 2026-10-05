@@ -47,6 +47,10 @@ import {
   ChevronDown,
   ChevronUp,
   Calculator,
+  Utensils,
+  Home,
+  Users,
+  X,
 } from 'lucide-react';
 
 interface MonthlyBoardingSheetProps {
@@ -58,8 +62,12 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
   selectedClassId,
   onClassChange,
 }) => {
-  const { classes, campuses, students, settings, addStudent } = useSchool();
+  const { classes, campuses, students, settings, addStudent, updateStudent } = useSchool();
   const { currentUser, isGVCN, isAdmin, isBGH } = useAuth();
+
+  // Class Boarding & Day Students Roster Modal State
+  const [showClassRosterModal, setShowClassRosterModal] = useState<boolean>(false);
+  const [rosterFilter, setRosterFilter] = useState<'ALL' | 'BOARDING' | 'DAY'>('ALL');
 
   // Quick inline add student
   const [isAddingStudent, setIsAddingStudent] = useState<boolean>(false);
@@ -2221,13 +2229,24 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
                 (TOÀN BỘ CÁC NGÀY TRONG THÁNG: TỪ NGÀY 01 ĐẾN NGÀY {daysInMonth})
               </div>
             )}
-            <div className="text-[11px] text-slate-500 font-medium">
-              Sĩ số ăn bán trú: <strong className="text-slate-900 font-bold">{classBoardingStudents.length} học sinh</strong>
+            <div className="text-[11px] text-slate-500 font-medium flex flex-wrap items-center justify-center md:justify-end gap-1.5 mt-0.5">
+              <span>
+                Sĩ số ăn bán trú: <strong className="text-emerald-700 font-black">{classBoardingStudents.length} học sinh</strong>
+              </span>
               {classDayStudentsCount > 0 && (
-                <span className="text-slate-500 ml-1.5 font-normal">
-                  (Tổng sĩ số lớp: {totalClassStudents.length} HS • {classDayStudentsCount} HS ngoại trú không chấm ăn)
+                <span className="text-slate-500 font-normal">
+                  (Tổng sĩ số lớp: {totalClassStudents.length} HS • <strong className="text-amber-700 font-bold">{classDayStudentsCount}</strong> HS ngoại trú)
                 </span>
               )}
+              <button
+                type="button"
+                onClick={() => setShowClassRosterModal(true)}
+                className="px-2 py-0.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-[10px] font-bold cursor-pointer inline-flex items-center gap-1 transition-all ml-1 shadow-2xs"
+                title="Xem toàn bộ danh sách lớp và quản lý phân loại Bán trú / Ngoại trú"
+              >
+                <Users className="w-3 h-3 text-blue-600" />
+                <span>Quản lý Bán trú / Ngoại trú ({totalClassStudents.length})</span>
+              </button>
             </div>
           </div>
         </div>
@@ -3317,6 +3336,171 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
           setMonthSig(updatedSig);
         }}
       />
+
+      {/* Class Roster Management Modal (Boarding vs Day Students) */}
+      {showClassRosterModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full p-5 sm:p-6 space-y-4 max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center">
+                  <Users className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-black text-base text-slate-900">
+                    Danh Sách Học Sinh Lớp {currentClass?.class_name}
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    Phân loại Bán trú (hiển thị trên sổ chấm cơm) & Ngoại trú (không chấm ăn)
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowClassRosterModal(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Statistics Banner */}
+            <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-bold text-slate-700">
+                  Tổng số: <strong className="text-blue-700 font-extrabold">{totalClassStudents.length}</strong> học sinh
+                </span>
+                <span className="text-slate-300">•</span>
+                <span className="font-extrabold text-emerald-700 flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                  Bán trú: {totalClassStudents.filter((s) => s.isBoarding !== false).length} em (chấm ăn)
+                </span>
+                <span className="text-slate-300">•</span>
+                <span className="font-extrabold text-amber-700 flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-amber-500" />
+                  Ngoại trú: {totalClassStudents.filter((s) => s.isBoarding === false).length} em
+                </span>
+              </div>
+            </div>
+
+            {/* Filter Tabs */}
+            <div className="flex items-center gap-1 border-b border-slate-200 pb-2">
+              <button
+                type="button"
+                onClick={() => setRosterFilter('ALL')}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  rosterFilter === 'ALL'
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                Tất cả ({totalClassStudents.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setRosterFilter('BOARDING')}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  rosterFilter === 'BOARDING'
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                Bán trú ({totalClassStudents.filter((s) => s.isBoarding !== false).length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setRosterFilter('DAY')}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  rosterFilter === 'DAY'
+                    ? 'bg-amber-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                Ngoại trú ({totalClassStudents.filter((s) => s.isBoarding === false).length})
+              </button>
+            </div>
+
+            {/* Student List Table */}
+            <div className="flex-1 overflow-y-auto border border-slate-200 rounded-xl divide-y divide-slate-100 max-h-72">
+              {totalClassStudents
+                .filter((st) => {
+                  if (rosterFilter === 'BOARDING' && st.isBoarding === false) return false;
+                  if (rosterFilter === 'DAY' && st.isBoarding !== false) return false;
+                  return true;
+                })
+                .map((st, idx) => {
+                  const isBoarding = st.isBoarding !== false;
+                  return (
+                    <div
+                      key={st.id}
+                      className="p-2.5 flex items-center justify-between text-xs hover:bg-slate-50 transition-colors"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-slate-400 w-6 text-center">{idx + 1}.</span>
+                        <span className="font-extrabold text-slate-900">{st.full_name}</span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 font-semibold">
+                          {st.gender}
+                        </span>
+                        <span className="text-slate-500 text-[11px] hidden sm:inline">
+                          {st.village || st.address || 'Chưa rõ thôn'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            try {
+                              const nextVal = st.isBoarding === false ? true : false;
+                              await updateStudent(st.id, { isBoarding: nextVal });
+                              showToast(
+                                `Đã chuyển ${st.full_name} sang diện: ${nextVal ? 'Bán trú' : 'Ngoại trú'}`
+                              );
+                            } catch (e) {
+                              console.error(e);
+                              showToast('Lỗi khi cập nhật diện ở của học sinh!', 'error');
+                            }
+                          }}
+                          className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                            isBoarding
+                              ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200 border border-emerald-300'
+                              : 'bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-300'
+                          }`}
+                          title="Bấm để chuyển đổi giữa Bán trú (chấm ăn) và Ngoại trú (không chấm ăn)"
+                        >
+                          {isBoarding ? (
+                            <>
+                              <Utensils className="w-3.5 h-3.5 text-emerald-600" />
+                              <span>Bán trú</span>
+                            </>
+                          ) : (
+                            <>
+                              <Home className="w-3.5 h-3.5 text-amber-600" />
+                              <span>Ngoại trú</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-between gap-3 pt-3 border-t border-slate-200">
+              <span className="text-[11px] text-slate-500 italic">
+                * Học sinh Bán trú xuất hiện trên sổ chấm cơm. Học sinh Ngoại trú không chấm ăn.
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowClassRosterModal(false)}
+                className="px-4 py-2 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white cursor-pointer"
+              >
+                Đóng
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

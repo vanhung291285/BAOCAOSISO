@@ -19,6 +19,11 @@ import {
 } from '../utils/boardingRules';
 import { resolveStudentGender, inferGenderFromName } from '../utils/studentUtils';
 import {
+  parseStudentExcelData,
+  recomputeStudentsWithBoardingColumn,
+  ParseExcelRosterResult,
+} from '../utils/studentExcelParser';
+import {
   Utensils,
   Users,
   Calendar,
@@ -53,6 +58,8 @@ import {
   UserX,
   School,
   FileUp,
+  SlidersHorizontal,
+  RefreshCw,
 } from 'lucide-react';
 
 interface BoardingManagementPageProps {
@@ -172,9 +179,12 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
 
   // Modal State for Import Excel
   const [showImportModal, setShowImportModal] = useState<boolean>(false);
-  const [importPreviewData, setImportPreviewData] = useState<Array<Omit<Student, 'id' | 'created_at'>>>([]);
+  const [importPreviewData, setImportPreviewData] = useState<Array<Omit<Student, 'id' | 'created_at'> & { rawBoardingCellVal?: string }>>([]);
   const [importFileName, setImportFileName] = useState<string>('');
   const [previewFilter, setPreviewFilter] = useState<'ALL' | 'BOARDING' | 'DAY'>('ALL');
+  const [importParsedResult, setImportParsedResult] = useState<ParseExcelRosterResult | null>(null);
+  const [importRawSheetData, setImportRawSheetData] = useState<any[][]>([]);
+  const [selectedBoardingCol, setSelectedBoardingCol] = useState<number>(-1);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Modal State for Quick Paste Text
@@ -713,384 +723,25 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
           return;
         }
 
-        // Parse header and find columns
-        let detectedHeaderRowIndex = -1;
-        let colIndexName = -1;
-        let colIndexHoDem = -1;
-        let colIndexTen = -1;
-        let colIndexGender = -1;
-        let colIndexVillage = -1;
-        let colIndexCode = -1;
-        let colIndexBirth = -1;
-        let colIndexEthnicity = -1;
-        let colIndexBoarding = -1;
-        let colIndexDayStudent = -1;
-        let colIndexNotes = -1;
-        let colIndexSTT = -1;
+        const parsedResult = parseStudentExcelData(rawData, selectedClassId);
 
-        for (let r = 0; r < Math.min(15, rawData.length); r++) {
-          const row = rawData[r];
-          if (!row || !Array.isArray(row)) continue;
-
-          let headerScore = 0;
-          let tempName = -1;
-          let tempHoDem = -1;
-          let tempTen = -1;
-          let tempGender = -1;
-          let tempVillage = -1;
-          let tempCode = -1;
-          let tempBirth = -1;
-          let tempEthnicity = -1;
-          let tempBoarding = -1;
-          let tempDayStudent = -1;
-          let tempNotes = -1;
-          let tempSTT = -1;
-
-          row.forEach((cell, idx) => {
-            const rawVal = String(cell || '').trim();
-            const val = rawVal.toLowerCase();
-            if (!val) return;
-
-            if (val === 'stt' || val === 'số tt' || val === 'tt' || val === 'no.') {
-              tempSTT = idx;
-              headerScore += 2;
-            }
-
-            if (
-              val === 'họ và tên' ||
-              val === 'họ tên' ||
-              val === 'họ và tên học sinh' ||
-              val === 'họ tên học sinh' ||
-              val === 'họ và tên hs' ||
-              val === 'tên học sinh' ||
-              val.includes('họ và tên') ||
-              val.includes('họ tên')
-            ) {
-              tempName = idx;
-              headerScore += 5;
-            } else if (val === 'họ đệm' || val === 'họ lót' || val === 'họ và tên đệm' || val === 'họ') {
-              tempHoDem = idx;
-              headerScore += 3;
-            } else if (val === 'tên' || val === 'tên hs') {
-              tempTen = idx;
-              headerScore += 3;
-            }
-
-            if (val.includes('giới tính') || val === 'nam/nữ' || val === 'nữ' || val === 'nam' || val === 'phái') {
-              tempGender = idx;
-              headerScore += 2;
-            }
-            if (
-              val.includes('thôn') ||
-              val.includes('bản') ||
-              val.includes('địa chỉ') ||
-              val.includes('nơi ở') ||
-              val.includes('quê quán') ||
-              val.includes('hộ khẩu') ||
-              val.includes('nơi cư trú')
-            ) {
-              tempVillage = idx;
-              headerScore += 2;
-            }
-            if (
-              val.includes('mã hs') ||
-              val.includes('mã học sinh') ||
-              val.includes('mã định danh') ||
-              val.includes('mã số') ||
-              val === 'mã'
-            ) {
-              tempCode = idx;
-              headerScore += 2;
-            }
-            if (val.includes('ngày sinh') || val.includes('năm sinh') || val === 'ns' || val === 'd.o.b') {
-              tempBirth = idx;
-              headerScore += 2;
-            }
-            if (val.includes('dân tộc') || val === 'dt') {
-              tempEthnicity = idx;
-              headerScore += 2;
-            }
-            if (
-              val.includes('bán trú') ||
-              val.includes('diện ở') ||
-              val.includes('ở nội trú') ||
-              val.includes('ở bán trú') ||
-              val.includes('ăn bán trú') ||
-              val.includes('hs bán trú') ||
-              val.includes('diện bt') ||
-              val === 'bt' ||
-              val === 'diện' ||
-              val === 'chế độ' ||
-              val === 'đối tượng' ||
-              val.includes('hình thức') ||
-              val.includes('loại hs') ||
-              val.includes('bán trú (x)')
-            ) {
-              tempBoarding = idx;
-              headerScore += 3;
-            }
-            if (
-              val.includes('ngoại trú') ||
-              val.includes('ở ngoại trú') ||
-              val.includes('không bán trú') ||
-              val.includes('đi về') ||
-              val.includes('ở nhà')
-            ) {
-              tempDayStudent = idx;
-              headerScore += 2;
-            }
-            if (val.includes('ghi chú') || val.includes('notes') || val.includes('lưu ý')) {
-              tempNotes = idx;
-              headerScore += 1;
-            }
-          });
-
-          // Check if this row is a genuine header row
-          if (headerScore >= 3 || tempName !== -1 || (tempHoDem !== -1 && tempTen !== -1)) {
-            detectedHeaderRowIndex = r;
-            colIndexName = tempName;
-            colIndexHoDem = tempHoDem;
-            colIndexTen = tempTen;
-            colIndexGender = tempGender;
-            colIndexVillage = tempVillage;
-            colIndexCode = tempCode;
-            colIndexBirth = tempBirth;
-            colIndexEthnicity = tempEthnicity;
-            colIndexBoarding = tempBoarding;
-            colIndexDayStudent = tempDayStudent;
-            colIndexNotes = tempNotes;
-            colIndexSTT = tempSTT;
-            break;
-          }
-        }
-
-        let startRow = 0;
-        if (detectedHeaderRowIndex !== -1) {
-          startRow = detectedHeaderRowIndex + 1;
-        } else {
-          // If no header found, check if row 0 has STT + Name pattern
-          startRow = 0;
-          const firstRow = rawData[0] || [];
-          if (firstRow.length > 1 && !isNaN(Number(firstRow[0])) && isNaN(Number(firstRow[1]))) {
-            colIndexSTT = 0;
-            colIndexName = 1;
-            if (firstRow.length > 2) colIndexGender = 2;
-            if (firstRow.length > 3) colIndexVillage = 3;
-            if (firstRow.length > 4) colIndexEthnicity = 4;
-            if (firstRow.length > 5) colIndexBirth = 5;
-          } else {
-            colIndexName = firstRow.length > 1 ? 1 : 0;
-          }
-        }
-
-        // Pass 1: Quét trước toàn bộ file để phân tích cột Bán trú
-        // Nếu cột Bán trú có dòng đánh dấu ('x', 'có', 'bt') và có dòng để trống, thì đây là cột Checkbox:
-        // Ai có đánh dấu thì Bán trú, ai để trống hoặc ghi Không thì là Ngoại trú!
-        let hasExplicitBoardingMarks = false;
-        let explicitBoardingCount = 0;
-        let explicitDayCount = 0;
-        let blankBoardingCellCount = 0;
-
-        for (let i = startRow; i < rawData.length; i++) {
-          const row = rawData[i];
-          if (!row || !Array.isArray(row) || row.length === 0) continue;
-
-          let fName = '';
-          if (colIndexName !== -1 && row[colIndexName] !== undefined && row[colIndexName] !== null) {
-            fName = String(row[colIndexName]).trim();
-          } else if (colIndexHoDem !== -1 && colIndexTen !== -1) {
-            fName = `${String(row[colIndexHoDem] || '').trim()} ${String(row[colIndexTen] || '').trim()}`.trim();
-          }
-          if (!fName || fName.toLowerCase() === 'stt' || fName.toLowerCase().includes('họ và tên') || fName.toLowerCase().includes('tổng số') || fName.toLowerCase().includes('tổng cộng')) {
-            continue;
-          }
-
-          if (colIndexBoarding !== -1) {
-            const bCellVal = String(row[colIndexBoarding] || '').trim().toLowerCase();
-            const isPos =
-              bCellVal === 'x' || bCellVal === '✓' || bCellVal === '✔' || bCellVal === '1' ||
-              bCellVal === 'có' || bCellVal === 'co' || bCellVal === 'c' || bCellVal === 'bt' ||
-              bCellVal === 'bán trú' || bCellVal === 'ban tru' || bCellVal === 'b.trú' ||
-              bCellVal === 'nội trú' || bCellVal === 'noi tru' || bCellVal === 'true' || bCellVal === 'v' ||
-              bCellVal === 'yes' || bCellVal === 'y' || bCellVal.includes('bán trú') || bCellVal.includes('nội trú') ||
-              bCellVal.includes('dân nuôi') || bCellVal.includes('116');
-
-            const isNeg =
-              bCellVal === 'không' || bCellVal === 'khong' || bCellVal === 'k' || bCellVal === 'k0' ||
-              bCellVal === '0' || bCellVal === 'ngoại trú' || bCellVal === 'ngoai tru' || bCellVal === 'false' ||
-              bCellVal === 'no' || bCellVal === '-' || bCellVal.includes('ngoại trú') || bCellVal.includes('không') ||
-              bCellVal.includes('ở nhà') || bCellVal.includes('đi về');
-
-            if (isPos) {
-              explicitBoardingCount++;
-              hasExplicitBoardingMarks = true;
-            } else if (isNeg) {
-              explicitDayCount++;
-            } else if (!bCellVal) {
-              blankBoardingCellCount++;
-            }
-          }
-        }
-
-        const isCheckboxBoardingColumn = hasExplicitBoardingMarks && (blankBoardingCellCount > 0 || explicitDayCount > 0);
-
-        // Pass 2: Trích xuất học sinh và phân loại chuẩn xác Bán trú / Ngoại trú
-        const parsedList: Array<Omit<Student, 'id' | 'created_at'>> = [];
-        for (let i = startRow; i < rawData.length; i++) {
-          const row = rawData[i];
-          if (!row || !Array.isArray(row) || row.length === 0) continue;
-
-          let fullName = '';
-          if (colIndexName !== -1 && row[colIndexName] !== undefined && row[colIndexName] !== null) {
-            fullName = String(row[colIndexName]).trim();
-          } else if (colIndexHoDem !== -1 && colIndexTen !== -1) {
-            const ho = String(row[colIndexHoDem] || '').trim();
-            const ten = String(row[colIndexTen] || '').trim();
-            fullName = `${ho} ${ten}`.trim();
-          } else {
-            for (let c = 0; c < row.length; c++) {
-              const cellStr = String(row[c] || '').trim();
-              if (cellStr.length > 2 && isNaN(Number(cellStr))) {
-                fullName = cellStr;
-                break;
-              }
-            }
-          }
-
-          if (!fullName) continue;
-
-          // Strip leading number in case name cell contains "1. Nguyễn Văn A"
-          fullName = fullName.replace(/^[\d]+[\.\/\)\-\:\s]+/, '').trim();
-          if (!fullName) continue;
-
-          const lowerName = fullName.toLowerCase();
-          if (
-            lowerName === 'stt' ||
-            lowerName.includes('họ và tên') ||
-            lowerName.includes('họ tên') ||
-            lowerName.includes('tổng số') ||
-            lowerName.includes('tổng cộng') ||
-            lowerName.includes('người lập') ||
-            lowerName.includes('hiệu trưởng') ||
-            lowerName.includes('danh sách học sinh') ||
-            lowerName.includes('ban giám hiệu') ||
-            lowerName.includes('giáo viên chủ nhiệm')
-          ) {
-            continue;
-          }
-
-          let gender = resolveStudentGender('', fullName);
-          if (colIndexGender !== -1 && row[colIndexGender] !== undefined) {
-            const gVal = String(row[colIndexGender]).trim().toLowerCase();
-            if (gVal === 'nữ' || gVal === 'nu' || gVal === 'f' || gVal === 'female' || gVal === 'x' || gVal === '1') {
-              gender = 'Nữ';
-            } else if (gVal === 'nam' || gVal === 'm' || gVal === 'male' || gVal === '0') {
-              gender = 'Nam';
-            }
-          }
-
-          let village = '';
-          if (colIndexVillage !== -1 && row[colIndexVillage] !== undefined) {
-            village = String(row[colIndexVillage]).trim();
-          }
-
-          let studentCode = '';
-          if (colIndexCode !== -1 && row[colIndexCode] !== undefined) {
-            studentCode = String(row[colIndexCode]).trim();
-          }
-
-          let birthDate = '';
-          if (colIndexBirth !== -1 && row[colIndexBirth] !== undefined) {
-            const rawBirth = row[colIndexBirth];
-            if (typeof rawBirth === 'number') {
-              try {
-                const d = new Date(Math.round((rawBirth - 25569) * 86400 * 1000));
-                const day = String(d.getDate()).padStart(2, '0');
-                const month = String(d.getMonth() + 1).padStart(2, '0');
-                const year = d.getFullYear();
-                birthDate = `${day}/${month}/${year}`;
-              } catch {
-                birthDate = String(rawBirth);
-              }
-            } else {
-              birthDate = String(rawBirth).trim();
-            }
-          }
-
-          let ethnicity = 'Mông';
-          if (colIndexEthnicity !== -1 && row[colIndexEthnicity] !== undefined) {
-            ethnicity = String(row[colIndexEthnicity]).trim();
-          }
-
-          // Xác định diện Bán trú / Ngoại trú theo file Excel
-          let isBoarding = true;
-
-          if (colIndexBoarding !== -1 && row[colIndexBoarding] !== undefined) {
-            const bVal = String(row[colIndexBoarding] || '').trim().toLowerCase();
-            const isPos =
-              bVal === 'x' || bVal === '✓' || bVal === '✔' || bVal === '1' ||
-              bVal === 'có' || bVal === 'co' || bVal === 'c' || bVal === 'bt' ||
-              bVal === 'bán trú' || bVal === 'ban tru' || bVal === 'b.trú' ||
-              bVal === 'nội trú' || bVal === 'noi tru' || bVal === 'true' || bVal === 'v' ||
-              bVal === 'yes' || bVal === 'y' || bVal.includes('bán trú') || bVal.includes('nội trú') ||
-              bVal.includes('dân nuôi') || bVal.includes('116');
-
-            const isNeg =
-              bVal === 'không' || bVal === 'khong' || bVal === 'k' || bVal === 'k0' ||
-              bVal === '0' || bVal === 'ngoại trú' || bVal === 'ngoai tru' || bVal === 'false' ||
-              bVal === 'no' || bVal === '-' || bVal.includes('ngoại trú') || bVal.includes('không') ||
-              bVal.includes('ở nhà') || bVal.includes('đi về');
-
-            if (isPos) {
-              isBoarding = true;
-            } else if (isNeg) {
-              isBoarding = false;
-            } else if (isCheckboxBoardingColumn) {
-              // Cột đánh dấu bán trú (chỉ em có 'x' mới bán trú, để trống là ngoại trú)
-              isBoarding = false;
-            }
-          }
-
-          // Kiểm tra thêm cột ngoại trú riêng (nếu file có cột Ngoại trú)
-          if (colIndexDayStudent !== -1 && row[colIndexDayStudent] !== undefined) {
-            const dVal = String(row[colIndexDayStudent] || '').trim().toLowerCase();
-            if (dVal === 'x' || dVal === '✓' || dVal === '✔' || dVal === '1' || dVal === 'có' || dVal === 'v' || dVal.includes('ngoại')) {
-              isBoarding = false;
-            }
-          }
-
-          // Kiểm tra thêm cột ghi chú nếu chưa có cột Bán trú riêng
-          if (colIndexNotes !== -1 && row[colIndexNotes] !== undefined && colIndexBoarding === -1) {
-            const nVal = String(row[colIndexNotes] || '').trim().toLowerCase();
-            if (nVal.includes('ngoại trú') || nVal.includes('ở nhà') || nVal.includes('không bán trú')) {
-              isBoarding = false;
-            } else if (nVal.includes('bán trú') || nVal.includes('nội trú')) {
-              isBoarding = true;
-            }
-          }
-
-          parsedList.push({
-            class_id: selectedClassId,
-            full_name: fullName,
-            student_code: studentCode || undefined,
-            gender,
-            village: village || undefined,
-            address: village || undefined,
-            birth_date: birthDate || undefined,
-            ethnicity: ethnicity || undefined,
-            isBoarding,
-            notes: '',
-          });
-        }
-
-        if (parsedList.length === 0) {
+        if (parsedResult.students.length === 0) {
           showToast('Không tìm thấy học sinh hợp lệ nào trong file!', 'error');
           return;
         }
 
-        setImportPreviewData(parsedList);
+        setImportRawSheetData(rawData);
+        setImportParsedResult(parsedResult);
+        setImportPreviewData(parsedResult.students);
+        setSelectedBoardingCol(parsedResult.detectedBoardingColIndex);
         setPreviewFilter('ALL');
         setShowImportModal(true);
+
+        const bCount = parsedResult.boardingCount;
+        const dCount = parsedResult.dayCount;
+        showToast(
+          `Đã đọc ${parsedResult.totalStudents} học sinh (${bCount} Bán trú, ${dCount} Ngoại trú). Vui lòng kiểm tra và xác nhận!`
+        );
       } catch (err) {
         console.error(err);
         showToast('Lỗi khi đọc file Excel! Vui lòng kiểm tra định dạng file.', 'error');
@@ -1098,6 +749,34 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
     };
     reader.readAsBinaryString(file);
     if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  // Change Boarding column selector inside preview modal
+  const handleSelectBoardingCol = (newColIdx: number) => {
+    setSelectedBoardingCol(newColIdx);
+    if (newColIdx === -1) {
+      if (importParsedResult) {
+        setImportPreviewData(importParsedResult.students);
+      }
+      return;
+    }
+    const recomputed = recomputeStudentsWithBoardingColumn(
+      importRawSheetData,
+      importPreviewData as any,
+      newColIdx,
+      selectedClassId
+    );
+    setImportPreviewData(recomputed);
+  };
+
+  // Invert selection (Bán trú <-> Ngoại trú)
+  const handleInvertPreviewBoarding = () => {
+    setImportPreviewData((prev) =>
+      prev.map((s) => ({
+        ...s,
+        isBoarding: s.isBoarding === false ? true : false,
+      }))
+    );
   };
 
   // Toggle boarding for student inside Preview modal
@@ -2774,8 +2453,50 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
                 >
                   Tất cả Ngoại trú
                 </button>
+                <button
+                  type="button"
+                  onClick={handleInvertPreviewBoarding}
+                  className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 transition-all cursor-pointer flex items-center gap-1"
+                  title="Đảo ngược lựa chọn: Bán trú thành Ngoại trú và ngược lại"
+                >
+                  <RefreshCw className="w-3 h-3" />
+                  <span>Đảo trạng thái</span>
+                </button>
               </div>
             </div>
+
+            {/* Smart Column Selector Banner */}
+            {importParsedResult && importParsedResult.columns.length > 0 && (
+              <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 bg-blue-50/80 border border-blue-200 rounded-xl text-xs">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-extrabold text-blue-900 flex items-center gap-1.5">
+                    <SlidersHorizontal className="w-3.5 h-3.5 text-blue-600" />
+                    Cột phân loại Bán trú:
+                  </span>
+                  <select
+                    value={selectedBoardingCol}
+                    onChange={(e) => handleSelectBoardingCol(Number(e.target.value))}
+                    className="bg-white border border-blue-300 rounded-lg px-2.5 py-1 text-xs font-bold text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                  >
+                    <option value={-1}>-- Tự động nhận diện thông minh toàn file --</option>
+                    {importParsedResult.columns.map((col) => (
+                      <option key={col.index} value={col.index}>
+                        {col.name} {col.positiveBoardingMarks > 0 ? `(Dấu BT: ${col.positiveBoardingMarks} em, Trống: ${col.emptyCells})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="text-[11px] text-blue-700 font-medium">
+                  {selectedBoardingCol !== -1 && importParsedResult.columns[selectedBoardingCol] ? (
+                    <span>
+                      Đang nhận diện theo cột: <strong>{importParsedResult.columns[selectedBoardingCol].name}</strong>
+                    </span>
+                  ) : (
+                    <span>Đã tự động khớp dấu Bán trú / Ngoại trú</span>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Filter tabs */}
             <div className="flex items-center gap-1 border-b border-slate-200 pb-2">
@@ -2826,6 +2547,11 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
                       <span className="font-extrabold text-slate-900">{st.full_name}</span>
                       <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 font-semibold">{st.gender}</span>
                       <span className="text-slate-500 text-[11px] hidden sm:inline">{st.village || 'Chưa rõ thôn'}</span>
+                      {st.rawBoardingCellVal && (
+                        <span className="text-[10px] px-1.5 py-0.2 rounded bg-slate-100 font-mono text-slate-500" title={`Giá trị ô trong file Excel: ${st.rawBoardingCellVal}`}>
+                          Excel: "{st.rawBoardingCellVal}"
+                        </span>
+                      )}
                     </div>
                     <div className="flex items-center gap-2">
                       <button

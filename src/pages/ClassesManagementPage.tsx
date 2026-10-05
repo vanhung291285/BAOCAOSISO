@@ -1,8 +1,10 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
+import * as XLSX from 'xlsx';
 import { useSchool } from '../contexts/SchoolContext';
 import { useAuth } from '../contexts/AuthContext';
 import { ClassItem, Profile, Student } from '../types';
 import { generateDefaultBoardingStudentsForClass } from '../utils/boardingRules';
+import { parseStudentExcelData, removeVietnameseAccents } from '../utils/studentExcelParser';
 import {
   Layers,
   Plus,
@@ -28,6 +30,8 @@ import {
   Mail,
   Users,
   User,
+  FileSpreadsheet,
+  Upload,
 } from 'lucide-react';
 
 export const ClassesManagementPage: React.FC = () => {
@@ -53,6 +57,7 @@ export const ClassesManagementPage: React.FC = () => {
   const [bulkStudentText, setBulkStudentText] = useState<string>('');
   const [showBulkImport, setShowBulkImport] = useState<boolean>(false);
   const [successToast, setSuccessToast] = useState<string>('');
+  const rosterFileInputRef = useRef<HTMLInputElement>(null);
 
   const rosterClass = useMemo(() => {
     return classes.find((c) => c.id === rosterClassId);
@@ -86,6 +91,45 @@ export const ClassesManagementPage: React.FC = () => {
     setTimeout(() => setSuccessToast(''), 3000);
   };
 
+  // Upload Excel file directly into class roster
+  const handleRosterExcelUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !rosterClassId) return;
+
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      try {
+        const bstr = evt.target?.result;
+        const wb = XLSX.read(bstr, { type: 'binary' });
+        const wsname = wb.SheetNames[0];
+        const ws = wb.Sheets[wsname];
+        const rawData: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1 });
+
+        if (rawData.length === 0) {
+          alert('File Excel không có dữ liệu!');
+          return;
+        }
+
+        const parsedResult = parseStudentExcelData(rawData, rosterClassId);
+        if (parsedResult.students.length === 0) {
+          alert('Không tìm thấy học sinh nào trong file!');
+          return;
+        }
+
+        await importStudents(parsedResult.students, rosterClassId, rosterClass?.class_name);
+        setSuccessToast(
+          `Đã nhập thành công ${parsedResult.totalStudents} học sinh (${parsedResult.boardingCount} Bán trú, ${parsedResult.dayCount} Ngoại trú) vào lớp ${rosterClass?.class_name}!`
+        );
+        setTimeout(() => setSuccessToast(''), 3500);
+      } catch (err) {
+        console.error(err);
+        alert('Lỗi khi đọc file Excel! Vui lòng kiểm tra định dạng.');
+      }
+    };
+    reader.readAsBinaryString(file);
+    if (rosterFileInputRef.current) rosterFileInputRef.current.value = '';
+  };
+
   const handleBulkImportStudents = async () => {
     if (!bulkStudentText.trim() || !rosterClassId) return;
     const lines = bulkStudentText.split('\n').map((l) => l.trim()).filter(Boolean);
@@ -105,12 +149,14 @@ export const ClassesManagementPage: React.FC = () => {
       }
       
       let isBoarding = true;
-      const lowerCleaned = cleaned.toLowerCase();
+      const noAcc = removeVietnameseAccents(cleaned);
       if (
-        lowerCleaned.includes('ngoại trú') ||
-        lowerCleaned.includes('ngoai tru') ||
-        lowerCleaned.includes('không bán trú') ||
-        lowerCleaned.includes('ở nhà')
+        noAcc.includes('ngoai tru') ||
+        noAcc.includes('khong ban tru') ||
+        noAcc.includes('o nha') ||
+        noAcc.includes('di ve') ||
+        noAcc.includes('tu tuc') ||
+        noAcc.includes('khong an')
       ) {
         isBoarding = false;
       }
@@ -127,7 +173,9 @@ export const ClassesManagementPage: React.FC = () => {
       await importStudents(parsedStudents, rosterClassId, rosterClass?.class_name);
       setBulkStudentText('');
       setShowBulkImport(false);
-      setSuccessToast(`Đã thêm ${parsedStudents.length} học sinh thành công!`);
+      const bCount = parsedStudents.filter((s) => s.isBoarding !== false).length;
+      const dCount = parsedStudents.filter((s) => s.isBoarding === false).length;
+      setSuccessToast(`Đã thêm ${parsedStudents.length} học sinh (${bCount} Bán trú, ${dCount} Ngoại trú) thành công!`);
       setTimeout(() => setSuccessToast(''), 3000);
     }
   };
@@ -1234,11 +1282,11 @@ export const ClassesManagementPage: React.FC = () => {
               )}
 
               {/* Tabs / Switcher for Bulk vs Single */}
-              <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
+              <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 pb-2">
                 <button
                   type="button"
                   onClick={() => setShowBulkImport(false)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                     !showBulkImport
                       ? 'bg-blue-600 text-white shadow-xs'
                       : 'text-slate-600 hover:bg-slate-100'
@@ -1249,13 +1297,30 @@ export const ClassesManagementPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setShowBulkImport(true)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                     showBulkImport
                       ? 'bg-blue-600 text-white shadow-xs'
                       : 'text-slate-600 hover:bg-slate-100'
                   }`}
                 >
-                  Nhập danh sách hàng loạt (Bulk)
+                  Dán danh sách (Text/Word)
+                </button>
+
+                <input
+                  type="file"
+                  ref={rosterFileInputRef}
+                  accept=".xlsx,.xls,.csv"
+                  onChange={handleRosterExcelUpload}
+                  className="hidden"
+                />
+                <button
+                  type="button"
+                  onClick={() => rosterFileInputRef.current?.click()}
+                  className="px-3 py-1.5 rounded-lg text-xs font-bold transition-all text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 flex items-center gap-1.5 cursor-pointer ml-auto"
+                  title="Tải lên file Excel danh sách học sinh (.xlsx) - Tự động nhận diện diện Bán trú / Ngoại trú chuẩn xác"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Tải lên Excel (.xlsx)</span>
                 </button>
               </div>
 
