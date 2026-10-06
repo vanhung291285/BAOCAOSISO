@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useSchool } from '../contexts/SchoolContext';
 import { useNotifications } from '../contexts/NotificationContext';
@@ -32,6 +32,8 @@ import {
   Code2,
   ChevronDown,
   CheckCircle2,
+  MapPin,
+  Building2,
 } from 'lucide-react';
 import { SchoolYear } from '../types';
 import { PWAInstallButton } from '../components/PWAInstallButton';
@@ -430,11 +432,198 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
     }
   };
 
+  // Color themes for different campuses
+  const CAMPUS_COLOR_THEMES = useMemo(() => [
+    {
+      id: 'blue',
+      activeTab: 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-500/20 border-blue-600 ring-2 ring-blue-400/30',
+      inactiveTab: 'bg-blue-50/80 text-blue-800 border-blue-200/90 hover:bg-blue-100/90 hover:border-blue-300',
+      cardBorder: 'border-blue-200/90 hover:border-blue-400 hover:bg-blue-50/30',
+      cardSelected: 'bg-gradient-to-br from-blue-50/95 to-indigo-50/60 border-blue-600 ring-2 ring-blue-500/30 shadow-xs',
+      cardTitleSelected: 'text-blue-800',
+      badge: 'bg-blue-100 text-blue-800 border-blue-200',
+      dot: 'bg-blue-500',
+      avatarBg: 'bg-gradient-to-tr from-blue-600 to-indigo-600 text-white ring-blue-200',
+    },
+    {
+      id: 'emerald',
+      activeTab: 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md shadow-emerald-500/20 border-emerald-600 ring-2 ring-emerald-400/30',
+      inactiveTab: 'bg-emerald-50/80 text-emerald-800 border-emerald-200/90 hover:bg-emerald-100/90 hover:border-emerald-300',
+      cardBorder: 'border-emerald-200/90 hover:border-emerald-400 hover:bg-emerald-50/30',
+      cardSelected: 'bg-gradient-to-br from-emerald-50/95 to-teal-50/60 border-emerald-600 ring-2 ring-emerald-500/30 shadow-xs',
+      cardTitleSelected: 'text-emerald-800',
+      badge: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+      dot: 'bg-emerald-500',
+      avatarBg: 'bg-gradient-to-tr from-emerald-600 to-teal-600 text-white ring-emerald-200',
+    },
+    {
+      id: 'amber',
+      activeTab: 'bg-gradient-to-r from-amber-600 to-orange-600 text-white shadow-md shadow-amber-500/20 border-amber-600 ring-2 ring-amber-400/30',
+      inactiveTab: 'bg-amber-50/80 text-amber-900 border-amber-200/90 hover:bg-amber-100/90 hover:border-amber-300',
+      cardBorder: 'border-amber-200/90 hover:border-amber-400 hover:bg-amber-50/30',
+      cardSelected: 'bg-gradient-to-br from-amber-50/95 to-orange-50/60 border-amber-600 ring-2 ring-amber-500/30 shadow-xs',
+      cardTitleSelected: 'text-amber-900',
+      badge: 'bg-amber-100 text-amber-900 border-amber-200',
+      dot: 'bg-amber-500',
+      avatarBg: 'bg-gradient-to-tr from-amber-600 to-orange-600 text-white ring-amber-200',
+    },
+    {
+      id: 'purple',
+      activeTab: 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-md shadow-purple-500/20 border-purple-600 ring-2 ring-purple-400/30',
+      inactiveTab: 'bg-purple-50/80 text-purple-800 border-purple-200/90 hover:bg-purple-100/90 hover:border-purple-300',
+      cardBorder: 'border-purple-200/90 hover:border-purple-400 hover:bg-purple-50/30',
+      cardSelected: 'bg-gradient-to-br from-purple-50/95 to-pink-50/60 border-purple-600 ring-2 ring-purple-500/30 shadow-xs',
+      cardTitleSelected: 'text-purple-800',
+      badge: 'bg-purple-100 text-purple-800 border-purple-200',
+      dot: 'bg-purple-500',
+      avatarBg: 'bg-gradient-to-tr from-purple-600 to-pink-600 text-white ring-purple-200',
+    },
+    {
+      id: 'rose',
+      activeTab: 'bg-gradient-to-r from-rose-600 to-red-600 text-white shadow-md shadow-rose-500/20 border-rose-600 ring-2 ring-rose-400/30',
+      inactiveTab: 'bg-rose-50/80 text-rose-800 border-rose-200/90 hover:bg-rose-100/90 hover:border-rose-300',
+      cardBorder: 'border-rose-200/90 hover:border-rose-400 hover:bg-rose-50/30',
+      cardSelected: 'bg-gradient-to-br from-rose-50/95 to-red-50/60 border-rose-600 ring-2 ring-rose-500/30 shadow-xs',
+      cardTitleSelected: 'text-rose-800',
+      badge: 'bg-rose-100 text-rose-800 border-rose-200',
+      dot: 'bg-rose-500',
+      avatarBg: 'bg-gradient-to-tr from-rose-600 to-red-600 text-white ring-rose-200',
+    },
+    {
+      id: 'cyan',
+      activeTab: 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-md shadow-cyan-500/20 border-cyan-600 ring-2 ring-cyan-400/30',
+      inactiveTab: 'bg-cyan-50/80 text-cyan-800 border-cyan-200/90 hover:bg-cyan-100/90 hover:border-cyan-300',
+      cardBorder: 'border-cyan-200/90 hover:border-cyan-400 hover:bg-cyan-50/30',
+      cardSelected: 'bg-gradient-to-br from-cyan-50/95 to-blue-50/60 border-cyan-600 ring-2 ring-cyan-500/30 shadow-xs',
+      cardTitleSelected: 'text-cyan-800',
+      badge: 'bg-cyan-100 text-cyan-800 border-cyan-200',
+      dot: 'bg-cyan-500',
+      avatarBg: 'bg-gradient-to-tr from-cyan-600 to-blue-600 text-white ring-cyan-200',
+    },
+  ], []);
+
+  // Helper to get campus theme
+  const getCampusTheme = (campusId?: string) => {
+    if (!campusId || campusId === 'main' || campusId === 'MAIN' || campusId === 'default') {
+      return CAMPUS_COLOR_THEMES[0];
+    }
+    const idx = campuses.findIndex((c) => c.id === campusId);
+    if (idx !== -1) {
+      return CAMPUS_COLOR_THEMES[((idx) % (CAMPUS_COLOR_THEMES.length - 1)) + 1];
+    }
+    return CAMPUS_COLOR_THEMES[1];
+  };
+
+  // State for GVCN Campus & Grade filter & search
+  const [selectedCampusTab, setSelectedCampusTab] = useState<string>('ALL');
+  const [gvcnGradeFilter, setGvcnGradeFilter] = useState<number | 'ALL'>('ALL');
+  const [classSearchText, setClassSearchText] = useState<string>('');
+
+  // Computed campus tabs with counts & theme indices
+  const campusTabs = useMemo(() => {
+    const list: Array<{ id: string; name: string; count: number; theme: typeof CAMPUS_COLOR_THEMES[0] }> = [];
+
+    // All campuses tab
+    list.push({
+      id: 'ALL',
+      name: 'Tất cả phân hiệu',
+      count: classes.length,
+      theme: {
+        id: 'all',
+        activeTab: 'bg-gradient-to-r from-slate-800 to-slate-900 text-white shadow-md shadow-slate-900/20 border-slate-900 ring-2 ring-slate-600/30',
+        inactiveTab: 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200 hover:border-slate-300',
+        cardBorder: 'border-slate-200 hover:border-slate-400 hover:bg-slate-50/40',
+        cardSelected: 'bg-slate-50 border-slate-800 ring-2 ring-slate-700/30 shadow-xs',
+        cardTitleSelected: 'text-slate-900',
+        badge: 'bg-slate-100 text-slate-800 border-slate-200',
+        dot: 'bg-slate-500',
+        avatarBg: 'bg-slate-800 text-white ring-slate-200',
+      },
+    });
+
+    const definedCampuses = campuses.filter((c) => c.active !== false);
+
+    if (definedCampuses.length > 0) {
+      definedCampuses.forEach((camp, idx) => {
+        const cCount = classes.filter((c) => c.campus_id === camp.id).length;
+        const theme = CAMPUS_COLOR_THEMES[(idx % (CAMPUS_COLOR_THEMES.length - 1)) + 1];
+        list.push({
+          id: camp.id,
+          name: camp.name,
+          count: cCount,
+          theme,
+        });
+      });
+
+      // Check if there are classes without campus_id
+      const mainClasses = classes.filter((c) => !c.campus_id || c.campus_id === 'main' || c.campus_id === 'default');
+      if (mainClasses.length > 0 && !definedCampuses.some((c) => c.id === 'main' || c.name.toLowerCase().includes('chính'))) {
+        list.splice(1, 0, {
+          id: 'MAIN',
+          name: 'Điểm chính (Trung tâm)',
+          count: mainClasses.length,
+          theme: CAMPUS_COLOR_THEMES[0],
+        });
+      }
+    } else {
+      // If no campuses defined yet in DB, check if classes have distinct campus_ids
+      const distinctCampusIds = Array.from(new Set(classes.map((c) => c.campus_id).filter(Boolean)));
+      if (distinctCampusIds.length > 0) {
+        distinctCampusIds.forEach((cid, idx) => {
+          const cCount = classes.filter((c) => c.campus_id === cid).length;
+          const theme = CAMPUS_COLOR_THEMES[(idx % (CAMPUS_COLOR_THEMES.length - 1)) + 1];
+          list.push({
+            id: cid as string,
+            name: `Phân hiệu ${cid}`,
+            count: cCount,
+            theme,
+          });
+        });
+      } else {
+        list.push({
+          id: 'MAIN',
+          name: 'Phân hiệu chính',
+          count: classes.length,
+          theme: CAMPUS_COLOR_THEMES[0],
+        });
+      }
+    }
+
+    return list;
+  }, [classes, campuses, CAMPUS_COLOR_THEMES]);
+
   // Group classes by grade
   const grade6Classes = classes.filter((c) => c.grade === 6);
   const grade7Classes = classes.filter((c) => c.grade === 7);
   const grade8Classes = classes.filter((c) => c.grade === 8);
   const grade9Classes = classes.filter((c) => c.grade === 9);
+
+  // Filtered classes for quick selection
+  const visibleClasses = useMemo(() => {
+    return classes.filter((c) => {
+      // Campus tab filter
+      if (selectedCampusTab !== 'ALL') {
+        if (selectedCampusTab === 'MAIN') {
+          if (c.campus_id && c.campus_id !== 'main' && c.campus_id !== 'default') return false;
+        } else if (c.campus_id !== selectedCampusTab) {
+          return false;
+        }
+      }
+
+      // Grade filter
+      if (gvcnGradeFilter !== 'ALL' && c.grade !== gvcnGradeFilter) return false;
+
+      // Search text
+      if (classSearchText.trim()) {
+        const q = classSearchText.toLowerCase().trim();
+        const teacher = allUsers.find((u) => u.id === c.homeroom_teacher_id);
+        const matchName = c.class_name.toLowerCase().includes(q);
+        const matchTeacher = teacher ? teacher.full_name.toLowerCase().includes(q) : false;
+        if (!matchName && !matchTeacher) return false;
+      }
+      return true;
+    });
+  }, [classes, selectedCampusTab, gvcnGradeFilter, classSearchText, allUsers]);
 
   // List of all GVCN users
   const gvcnUsers = allUsers.filter((u) => u.role === 'GVCN');
@@ -718,142 +907,263 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
               </div>
             )}
 
-            {/* TAB 1: GVCN - CHỈ CẦN THÔNG TIN LỚP & TÊN GVCN */}
+            {/* TAB 1: GVCN - ĐĂNG NHẬP THEO PHÂN HIỆU CÓ MÀU ĐẶC TRƯNG */}
             {activeTab === 'GVCN' && (
               <div className="space-y-4">
-                {/* Info box */}
-                <div className="bg-blue-50/70 border border-blue-100/90 rounded-xl sm:rounded-2xl p-3 sm:p-3.5 text-xs text-blue-900 flex items-start gap-2.5 leading-relaxed shadow-2xs">
-                  <Sparkles className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
-                  <div>
-                    <span className="font-extrabold text-blue-950">Đăng nhập nhanh dành cho GVCN:</span> Chọn lớp và tên của bạn để vào báo cáo sĩ số, không cần mật khẩu.
-                  </div>
-                </div>
-
-                {/* 1. Chọn Lớp học */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider mb-1.5">
-                    1. CHỌN LỚP HỌC <span className="text-red-500 font-bold">*</span>
-                  </label>
-                  <div className="relative">
-                    <select
-                      value={selectedClassId}
-                      onChange={(e) => setSelectedClassId(e.target.value)}
-                      className="w-full h-11 sm:h-12 pl-3.5 pr-9 py-2.5 rounded-xl border border-slate-200 bg-slate-50/50 hover:bg-white hover:border-slate-300 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 text-xs sm:text-sm font-bold text-slate-900 transition-all shadow-2xs cursor-pointer appearance-none"
-                    >
-                      <option value="" disabled>-- Vui lòng chọn lớp học --</option>
-                      {grade6Classes.length > 0 && (
-                        <optgroup label="Khối 6">
-                          {grade6Classes.map((cls) => (
-                            <option key={cls.id} value={cls.id}>
-                              Lớp {cls.class_name} ({getCampusName(cls.campus_id)})
-                            </option>
-                          ))}
-                        </optgroup>
-                      )}
-                      {grade7Classes.length > 0 && (
-                        <optgroup label="Khối 7">
-                          {grade7Classes.map((cls) => (
-                            <option key={cls.id} value={cls.id}>
-                              Lớp {cls.class_name} ({getCampusName(cls.campus_id)})
-                            </option>
-                          ))}
-                        </optgroup>
-                      )}
-                      {grade8Classes.length > 0 && (
-                        <optgroup label="Khối 8">
-                          {grade8Classes.map((cls) => (
-                            <option key={cls.id} value={cls.id}>
-                              Lớp {cls.class_name} ({getCampusName(cls.campus_id)})
-                            </option>
-                          ))}
-                        </optgroup>
-                      )}
-                      {grade9Classes.length > 0 && (
-                        <optgroup label="Khối 9">
-                          {grade9Classes.map((cls) => (
-                            <option key={cls.id} value={cls.id}>
-                              Lớp {cls.class_name} ({getCampusName(cls.campus_id)})
-                            </option>
-                          ))}
-                        </optgroup>
-                      )}
-                    </select>
-                    <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-3.5 sm:top-4 pointer-events-none" />
-                  </div>
-                </div>
-
-                {/* 2. Tên Giáo viên chủ nhiệm */}
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider">
-                      2. TÊN GIÁO VIÊN CHỦ NHIỆM <span className="text-red-500 font-bold">*</span>
+                {/* 1. TABS PHÂN HIỆU / ĐIỂM TRƯỜNG CÓ MÀU SẮC PHÂN BIỆT */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                      <Building2 className="w-3.5 h-3.5 text-blue-600" />
+                      <span>1. PHÂN HIỆU / ĐIỂM TRƯỜNG</span>
+                      <span className="text-red-500 font-bold">*</span>
                     </label>
-                    <span className="text-[10px] text-blue-700 bg-blue-50/90 border border-blue-200/80 px-2.5 py-0.5 rounded-full font-bold flex items-center gap-1 shadow-2xs">
-                      <Sparkles className="w-2.5 h-2.5 text-blue-600" />
+                    <span className="text-[10px] text-slate-500 font-bold">
+                      {campusTabs.length - 1 > 0 ? `${campusTabs.length - 1} phân hiệu` : '1 điểm trường'}
+                    </span>
+                  </div>
+
+                  {/* Campus Colored Tab Buttons */}
+                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+                    {campusTabs.map((tab) => {
+                      const isActive = selectedCampusTab === tab.id;
+                      return (
+                        <button
+                          key={tab.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedCampusTab(tab.id);
+                          }}
+                          className={`px-3 py-2 rounded-xl text-xs font-black transition-all shrink-0 cursor-pointer flex items-center gap-1.5 border ${
+                            isActive
+                              ? tab.theme.activeTab
+                              : tab.theme.inactiveTab
+                          }`}
+                        >
+                          <MapPin className={`w-3.5 h-3.5 ${isActive ? 'text-white' : ''}`} />
+                          <span>{tab.name}</span>
+                          <span
+                            className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                              isActive
+                                ? 'bg-white/25 text-white'
+                                : 'bg-black/5 text-slate-700'
+                            }`}
+                          >
+                            {tab.count}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 2. KHỐI LỚP & LƯỚI CHỌN LỚP THEO MÀU PHÂN HIỆU */}
+                <div className="space-y-2 pt-1 border-t border-slate-100">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                      <GraduationCap className="w-3.5 h-3.5 text-indigo-600" />
+                      <span>2. CHỌN LỚP HỌC</span>
+                      <span className="text-red-500 font-bold">*</span>
+                    </label>
+                    <span className="text-[11px] font-bold text-slate-500">
+                      Hiển thị {visibleClasses.length} lớp
+                    </span>
+                  </div>
+
+                  {/* Grade filter pills */}
+                  <div className="flex items-center gap-1 overflow-x-auto pb-1 scrollbar-none">
+                    <button
+                      type="button"
+                      onClick={() => setGvcnGradeFilter('ALL')}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all shrink-0 cursor-pointer ${
+                        gvcnGradeFilter === 'ALL'
+                          ? 'bg-slate-800 text-white shadow-xs'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      Tất cả khối
+                    </button>
+                    {[6, 7, 8, 9].map((g) => {
+                      const count = classes.filter((c) => {
+                        if (selectedCampusTab !== 'ALL') {
+                          if (selectedCampusTab === 'MAIN') {
+                            if (c.campus_id && c.campus_id !== 'main' && c.campus_id !== 'default') return false;
+                          } else if (c.campus_id !== selectedCampusTab) {
+                            return false;
+                          }
+                        }
+                        return c.grade === g;
+                      }).length;
+
+                      if (count === 0) return null;
+                      return (
+                        <button
+                          key={g}
+                          type="button"
+                          onClick={() => setGvcnGradeFilter(g)}
+                          className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all shrink-0 cursor-pointer ${
+                            gvcnGradeFilter === g
+                              ? 'bg-slate-800 text-white shadow-xs'
+                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                          }`}
+                        >
+                          Khối {g} ({count})
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Class selection cards grid */}
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-52 overflow-y-auto p-1.5 border border-slate-200/90 rounded-2xl bg-slate-50/50">
+                    {visibleClasses.length > 0 ? (
+                      visibleClasses.map((cls) => {
+                        const isSelected = selectedClassId === cls.id;
+                        const teacher = allUsers.find((u) => u.id === cls.homeroom_teacher_id);
+                        const campusName = getCampusName(cls.campus_id);
+                        const campusTheme = getCampusTheme(cls.campus_id);
+
+                        return (
+                          <button
+                            key={cls.id}
+                            type="button"
+                            onClick={() => setSelectedClassId(cls.id)}
+                            className={`p-2.5 rounded-xl border text-left transition-all relative flex flex-col justify-between cursor-pointer ${
+                              isSelected
+                                ? campusTheme.cardSelected
+                                : `bg-white ${campusTheme.cardBorder}`
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-1">
+                              <span
+                                className={`text-sm font-black tracking-tight ${
+                                  isSelected ? campusTheme.cardTitleSelected : 'text-slate-900'
+                                }`}
+                              >
+                                Lớp {cls.class_name}
+                              </span>
+                              {isSelected ? (
+                                <span className={`w-4 h-4 rounded-full ${campusTheme.dot} text-white flex items-center justify-center shrink-0 shadow-xs`}>
+                                  <Check className="w-2.5 h-2.5 stroke-[3]" />
+                                </span>
+                              ) : (
+                                <span className="text-[10px] font-bold text-slate-400">
+                                  K{cls.grade}
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="mt-1.5 space-y-1">
+                              <div className="text-[11px] font-medium text-slate-600 truncate" title={teacher?.full_name || 'Chưa phân công'}>
+                                {teacher ? teacher.full_name : 'Chưa phân công'}
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded-md border truncate max-w-full ${campusTheme.badge}`}>
+                                  {campusName}
+                                </span>
+                              </div>
+                            </div>
+                          </button>
+                        );
+                      })
+                    ) : (
+                      <div className="col-span-full py-6 text-center text-xs text-slate-400 font-medium">
+                        Không tìm thấy lớp học trong phân hiệu hoặc khối này
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* 3. GIÁO VIÊN CHỦ NHIỆM & XÁC NHẬN */}
+                <div className="space-y-2 pt-1 border-t border-slate-100">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-black text-slate-800 uppercase tracking-wider">
+                      3. GIÁO VIÊN CHỦ NHIỆM <span className="text-red-500 font-bold">*</span>
+                    </label>
+                    <span className="text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full font-bold flex items-center gap-1">
+                      <Sparkles className="w-2.5 h-2.5 text-emerald-600" />
                       Tự nhận diện
                     </span>
                   </div>
-                  <div className="relative">
-                    <select
-                      value={selectedTeacherId}
-                      onChange={(e) => setSelectedTeacherId(e.target.value)}
-                      className="w-full h-11 sm:h-12 pl-3.5 pr-9 py-2.5 rounded-xl border border-slate-200 bg-slate-50/50 hover:bg-white hover:border-slate-300 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 text-xs sm:text-sm font-semibold text-slate-900 transition-all shadow-2xs cursor-pointer appearance-none"
-                    >
-                      <option value="" disabled>-- Vui lòng chọn giáo viên chủ nhiệm --</option>
-                      {gvcnUsers.map((teacher) => {
-                        const teacherClass = classes.find((c) => c.id === teacher.assigned_class_id);
-                        return (
-                          <option key={teacher.id} value={teacher.id}>
-                            {teacher.full_name} {teacherClass ? `(Lớp ${teacherClass.class_name})` : ''}
-                          </option>
-                        );
-                      })}
-                    </select>
-                    <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-3.5 sm:top-4 pointer-events-none" />
-                  </div>
 
-                  {/* Teacher Info Preview Card */}
-                  {currentTeacher && (
-                    <div className="mt-3 p-3 sm:p-3.5 rounded-xl sm:rounded-2xl bg-slate-50/80 border border-slate-200/90 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+                  {/* Teacher card preview & selector */}
+                  {currentTeacher ? (
+                    <div className="p-3 rounded-2xl bg-gradient-to-r from-blue-50/80 via-indigo-50/50 to-white border border-blue-200/80 flex items-center justify-between gap-3 shadow-xs">
                       <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 text-white flex items-center justify-center font-black text-sm shrink-0 shadow-xs ring-2 ring-white">
+                        <div className={`w-10 h-10 rounded-xl font-black text-sm flex items-center justify-center shrink-0 shadow-xs ring-2 ${getCampusTheme(currentClass?.campus_id).avatarBg}`}>
                           {currentTeacher.full_name.charAt(0)}
                         </div>
                         <div className="min-w-0">
-                          <div className="text-xs sm:text-sm font-black text-slate-900 truncate">
+                          <div className="text-sm font-black text-slate-900 truncate">
                             {currentTeacher.full_name}
                           </div>
                           <div className="text-[11px] text-blue-700 font-bold flex items-center gap-1.5 mt-0.5 flex-wrap">
-                            <span>GVCN {currentClass ? `Lớp ${currentClass.class_name}` : ''}</span>
+                            <span>GVCN Lớp {currentClass?.class_name || '...'}</span>
                             <span className="text-slate-300">•</span>
-                            <span className="text-slate-500 font-medium">Năm học {activeYear?.name || '2026-2027'}</span>
+                            <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded-md border ${getCampusTheme(currentClass?.campus_id).badge}`}>
+                              {getCampusName(currentClass?.campus_id)}
+                            </span>
                           </div>
                         </div>
                       </div>
-                      <div className="shrink-0 self-start sm:self-auto">
-                        <span className="inline-flex items-center gap-1 text-[10px] sm:text-[11px] font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs">
-                          <Check className="w-3 h-3 text-emerald-600 stroke-[2.5]" />
-                          Sẵn sàng
-                        </span>
+
+                      <div className="shrink-0">
+                        <div className="relative">
+                          <select
+                            value={selectedTeacherId}
+                            onChange={(e) => setSelectedTeacherId(e.target.value)}
+                            className="text-xs font-bold text-blue-700 bg-white border border-blue-200 hover:border-blue-300 px-2.5 py-1.5 rounded-xl shadow-2xs cursor-pointer appearance-none pr-7"
+                            title="Đổi giáo viên khác nếu dạy thay"
+                          >
+                            {gvcnUsers.map((teacher) => (
+                              <option key={teacher.id} value={teacher.id}>
+                                {teacher.full_name}
+                              </option>
+                            ))}
+                          </select>
+                          <ChevronDown className="w-3.5 h-3.5 text-blue-500 absolute right-2 top-2.5 pointer-events-none" />
+                        </div>
                       </div>
+                    </div>
+                  ) : (
+                    <div className="relative">
+                      <select
+                        value={selectedTeacherId}
+                        onChange={(e) => setSelectedTeacherId(e.target.value)}
+                        className="w-full h-11 pl-3.5 pr-9 py-2 rounded-xl border border-slate-200 bg-slate-50 hover:bg-white focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 text-xs sm:text-sm font-semibold text-slate-900 transition-all cursor-pointer appearance-none"
+                      >
+                        <option value="" disabled>-- Vui lòng chọn giáo viên chủ nhiệm --</option>
+                        {gvcnUsers.map((teacher) => (
+                          <option key={teacher.id} value={teacher.id}>
+                            {teacher.full_name}
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-3.5 pointer-events-none" />
                     </div>
                   )}
                 </div>
 
-                {/* Big Action Button: Vào báo cáo sĩ số ngay */}
+                {/* 4. NÚT ĐĂNG NHẬP VÀO ĐIỂM DANH */}
                 <div className="pt-2">
                   <button
                     type="button"
                     onClick={handleGVCNLogin}
-                    disabled={isSubmitting || !selectedTeacherId}
-                    className="w-full flex justify-center items-center gap-2.5 h-12 sm:h-13 px-5 rounded-xl sm:rounded-2xl shadow-md shadow-blue-600/20 hover:shadow-lg hover:shadow-blue-600/30 text-sm sm:text-base font-bold text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 active:scale-[0.99] focus:outline-hidden focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer group"
+                    disabled={isSubmitting || !selectedTeacherId || !selectedClassId}
+                    className="w-full flex justify-center items-center gap-2.5 h-12 sm:h-13 px-5 rounded-2xl shadow-lg shadow-blue-600/25 hover:shadow-xl hover:shadow-blue-600/35 text-sm sm:text-base font-black text-white bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 hover:from-blue-700 hover:to-indigo-800 active:scale-[0.99] focus:outline-hidden focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer group"
                   >
                     <span>VÀO BÁO CÁO SĨ SỐ NGAY</span>
                     <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 transition-transform group-hover:translate-x-1" />
                   </button>
-                  <p className="text-center text-[11px] sm:text-xs text-slate-500 mt-2.5 font-medium leading-relaxed">
-                    Hệ thống sẽ chuyển trực tiếp vào màn hình nhập sĩ số của lớp {currentClass?.class_name || ''}
-                  </p>
+
+                  <div className="flex items-center justify-between text-[11px] text-slate-500 mt-2.5 px-1 font-medium">
+                    <span className="flex items-center gap-1 text-slate-600">
+                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                      Không cần mật khẩu
+                    </span>
+                    <span className="text-blue-700 font-bold">
+                      {currentClass ? `Lớp ${currentClass.class_name} (${getCampusName(currentClass.campus_id)})` : 'Chưa chọn lớp'}
+                    </span>
+                  </div>
                 </div>
               </div>
             )}
