@@ -17,7 +17,7 @@ import {
   buildDefaultMealRecords,
   generateDefaultBoardingStudentsForClass,
 } from '../utils/boardingRules';
-import { resolveStudentGender, inferGenderFromName } from '../utils/studentUtils';
+import { resolveStudentGender, inferGenderFromName, cleanStudentAddress } from '../utils/studentUtils';
 import {
   parseStudentExcelData,
   recomputeStudentsWithBoardingColumn,
@@ -2061,7 +2061,7 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
                             {resolveStudentGender(st.gender, st.full_name)}
                           </span>
                         </td>
-                        <td className="py-2.5 px-3 text-slate-600">{st.village || st.address || '—'}</td>
+                        <td className="py-2.5 px-3 text-slate-600">{cleanStudentAddress(st.village || st.address) || '—'}</td>
                         <td className="py-2.5 px-3 text-slate-500 hidden md:table-cell">{st.ethnicity || 'Mông'}</td>
                         <td className="py-2.5 px-3 text-center">
                           <button

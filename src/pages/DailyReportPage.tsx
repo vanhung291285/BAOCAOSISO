@@ -15,6 +15,7 @@ import {
   resolveTeacherName,
 } from '../utils/exportAttendanceStandardExcel';
 import { DEFAULT_BOARDING_STUDENTS_SEED } from '../utils/boardingRules';
+import { isValidStudentAddress, cleanStudentAddress } from '../utils/studentUtils';
 import {
   Printer,
   Download,
@@ -442,25 +443,27 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
   const getResolvedAddress = (s: any, classId: string): string => {
     if (s.id) {
       const match = students.find((std) => std.id === s.id);
-      if (match && (match.address || match.village)) return (match.address || match.village)!.trim();
+      if (match && isValidStudentAddress(match.address || match.village)) {
+        return cleanStudentAddress(match.address || match.village);
+      }
     }
     if (s.full_name) {
       const trimmed = s.full_name.trim().toLowerCase();
       const matchInClass = students.find(
         (std) => (std.class_id === classId || std.class_id === selectedClassFilter) && std.full_name.trim().toLowerCase() === trimmed
       );
-      if (matchInClass && (matchInClass.address || matchInClass.village)) {
-        return (matchInClass.address || matchInClass.village)!.trim();
+      if (matchInClass && isValidStudentAddress(matchInClass.address || matchInClass.village)) {
+        return cleanStudentAddress(matchInClass.address || matchInClass.village);
       }
       const matchAny = students.find((std) => std.full_name.trim().toLowerCase() === trimmed);
-      if (matchAny && (matchAny.address || matchAny.village)) {
-        return (matchAny.address || matchAny.village)!.trim();
+      if (matchAny && isValidStudentAddress(matchAny.address || matchAny.village)) {
+        return cleanStudentAddress(matchAny.address || matchAny.village);
       }
       const seed = DEFAULT_BOARDING_STUDENTS_SEED.find((sd) => sd.name.toLowerCase() === trimmed);
       if (seed) return seed.village;
     }
-    const direct = s.address || s.village || '';
-    return direct && direct !== '-' ? direct.trim() : '';
+    const direct = cleanStudentAddress(s.address || s.village);
+    return direct;
   };
 
   const getAbsentStudentText = (row: ClassReportRow): string => {

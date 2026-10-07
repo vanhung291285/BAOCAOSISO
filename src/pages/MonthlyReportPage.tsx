@@ -31,6 +31,7 @@ import {
 } from 'lucide-react';
 import { exportMonthlyBoardingExcel } from '../utils/exportBoardingExcel';
 import { DEFAULT_BOARDING_STUDENTS_SEED } from '../utils/boardingRules';
+import { isValidStudentAddress, cleanStudentAddress } from '../utils/studentUtils';
 
 interface MonthlyReportPageProps {
   onNavigate?: (path: string) => void;
@@ -330,8 +331,8 @@ export const MonthlyReportPage: React.FC<MonthlyReportPageProps> = ({ onNavigate
   // Helper hiển thị địa chỉ của học sinh vắng trong hàng báo cáo
   const getRowDisplayAddress = useCallback((r: MonthlyDayRowData, classId?: string) => {
     if (!r.isReported) return '';
-    if (r.studentAddresses && r.studentAddresses.trim() !== '' && r.studentAddresses !== '-') {
-      return r.studentAddresses;
+    if (r.studentAddresses && isValidStudentAddress(r.studentAddresses)) {
+      return cleanStudentAddress(r.studentAddresses);
     }
     if (r.absentAll > 0 && r.studentNames && r.studentNames !== 'Ngày nghỉ') {
       const lines = r.studentNames.split('\n').filter((l) => !l.startsWith('-') && !l.startsWith('Thứ 6'));
@@ -341,11 +342,12 @@ export const MonthlyReportPage: React.FC<MonthlyReportPageProps> = ({ onNavigate
         if (!cName) return;
         const m = students.find((std) => (classId ? std.class_id === classId : true) && std.full_name.trim().toLowerCase() === cName)
                || students.find((std) => std.full_name.trim().toLowerCase() === cName);
-        if (m && (m.address || m.village)) {
-          addrs.push((m.address || m.village)!.trim());
+        if (m && isValidStudentAddress(m.address || m.village)) {
+          addrs.push(cleanStudentAddress(m.address || m.village));
         } else {
           const seed = DEFAULT_BOARDING_STUDENTS_SEED.find((sd) => sd.name.toLowerCase() === cName);
-          addrs.push(seed ? seed.village : '-');
+          if (seed) addrs.push(seed.village);
+          else addrs.push('-');
         }
       });
       if (addrs.length > 0 && addrs.some((a) => a !== '-')) {

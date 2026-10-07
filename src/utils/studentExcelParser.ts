@@ -1,6 +1,6 @@
 import * as XLSX from 'xlsx';
 import { Student } from '../types/index';
-import { resolveStudentGender } from './studentUtils';
+import { resolveStudentGender, isValidStudentAddress, cleanStudentAddress } from './studentUtils';
 
 /**
  * Chuẩn hóa chuỗi tiếng Việt để so sánh dung sai cao:
@@ -247,7 +247,7 @@ export function parseStudentExcelData(
 
       if (
         noAcc.includes('thon') ||
-        noAcc.includes('ban') ||
+        (noAcc.includes('ban') && !noAcc.includes('ban tru') && !noAcc.includes('bt') && !noAcc.includes('hsbt') && !noAcc.includes('an ban')) ||
         noAcc.includes('dia chi') ||
         noAcc.includes('noi o') ||
         noAcc.includes('que quan') ||
@@ -514,7 +514,7 @@ export function parseStudentExcelData(
 
     let village = '';
     if (colIndexVillage !== -1 && row[colIndexVillage] !== undefined) {
-      village = cleanCellText(row[colIndexVillage]);
+      village = cleanStudentAddress(cleanCellText(row[colIndexVillage]));
     }
 
     let studentCode = '';

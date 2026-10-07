@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { ClassItem, Profile, Student } from '../types';
 import { generateDefaultBoardingStudentsForClass } from '../utils/boardingRules';
 import { parseStudentExcelData, removeVietnameseAccents } from '../utils/studentExcelParser';
+import { isValidStudentAddress, cleanStudentAddress } from '../utils/studentUtils';
 import {
   Layers,
   Plus,
@@ -191,14 +192,14 @@ export const ClassesManagementPage: React.FC = () => {
   const handleStartEditStudent = (s: Student) => {
     setEditingStudentId(s.id);
     setEditingStudentName(s.full_name);
-    setEditingStudentAddress(s.address || '');
+    setEditingStudentAddress(cleanStudentAddress(s.address || s.village));
   };
 
   const handleSaveEditStudent = async () => {
     if (!editingStudentId || !editingStudentName.trim()) return;
     await updateStudent(editingStudentId, {
       full_name: editingStudentName.trim(),
-      address: editingStudentAddress.trim(),
+      address: cleanStudentAddress(editingStudentAddress.trim()),
     });
     setEditingStudentId(null);
     setSuccessToast(`Đã cập nhật thông tin học sinh!`);
@@ -1485,7 +1486,7 @@ export const ClassesManagementPage: React.FC = () => {
                                     className="w-full px-2 py-1 text-xs border border-slate-300 rounded-lg focus:outline-hidden focus:ring-1 focus:ring-blue-500"
                                   />
                                 ) : (
-                                  student.address || <em className="text-slate-400">Không có</em>
+                                  cleanStudentAddress(student.address || student.village) || <em className="text-slate-400">Không có</em>
                                 )}
                               </td>
                               <td className="py-2 px-3 text-center">

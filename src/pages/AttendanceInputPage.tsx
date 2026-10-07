@@ -7,6 +7,7 @@ import { AbsentStudent, DailyReport, DailyReportValue, Student, BoardingDailyRep
 import { DateNavigator } from '../components/DateNavigator';
 import { getTodayDateStr, formatDateVN } from '../utils/schoolWeeks';
 import { buildDefaultMealRecords } from '../utils/boardingRules';
+import { isValidStudentAddress, cleanStudentAddress } from '../utils/studentUtils';
 import {
   CheckCircle2,
   RotateCcw,
@@ -193,14 +194,14 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
         setInheritedReport(null);
         setNotes(report.notes || '');
         const loadedAbsent = (report.absent_students || []).map((st) => {
-          let addr = st.address?.trim() || '';
-          if (!addr || addr === '-') {
+          let addr = cleanStudentAddress(st.address);
+          if (!addr) {
             const m = st.id
               ? classStudents.find((cs) => cs.id === st.id) || students.find((s) => s.id === st.id)
               : classStudents.find((cs) => cs.full_name.trim().toLowerCase() === st.full_name.trim().toLowerCase())
                 || students.find((s) => s.full_name.trim().toLowerCase() === st.full_name.trim().toLowerCase());
-            if (m && (m.address || m.village)) {
-              addr = (m.address || m.village)!.trim();
+            if (m && isValidStudentAddress(m.address || m.village)) {
+              addr = cleanStudentAddress(m.address || m.village);
             }
           }
           return { ...st, address: addr };
@@ -747,9 +748,11 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
           (s) => s.full_name.trim().toLowerCase() === trimmedName.toLowerCase()
         );
     const finalId = studentId || studentMatch?.id || undefined;
-    const finalAddress = (address.trim() && address.trim() !== '-')
-      ? address.trim()
-      : (studentMatch?.address || studentMatch?.village || '');
+    const finalAddress = cleanStudentAddress(
+      (address.trim() && address.trim() !== '-')
+        ? address.trim()
+        : (studentMatch?.address || studentMatch?.village || '')
+    );
     const finalBoarding = isBoarding !== undefined ? isBoarding : !!studentMatch?.isBoarding;
 
     setAbsentStudents((prev) => {
@@ -812,8 +815,8 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
       if (partial.id) {
         const match = classStudents.find((s) => s.id === partial.id);
         if (match) {
-          const matchedAddr = match.address || match.village || '';
-          if (matchedAddr && (!nextList[index].address || nextList[index].address === '-' || !nextList[index].address.trim())) {
+          const matchedAddr = cleanStudentAddress(match.address || match.village);
+          if (matchedAddr && (!nextList[index].address || !cleanStudentAddress(nextList[index].address))) {
             extra.address = matchedAddr;
           }
           if (partial.isBoarding === undefined) {
@@ -829,8 +832,8 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
         if (matches.length >= 1) {
           const match = matches[0];
           if (!partial.id) extra.id = match.id;
-          const matchedAddr = match.address || match.village || '';
-          if (matchedAddr && (!nextList[index].address || nextList[index].address === '-' || !nextList[index].address.trim())) {
+          const matchedAddr = cleanStudentAddress(match.address || match.village);
+          if (matchedAddr && (!nextList[index].address || !cleanStudentAddress(nextList[index].address))) {
             extra.address = matchedAddr;
           }
           if (partial.isBoarding === undefined) {
@@ -1054,14 +1057,14 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
       });
 
       const resolvedAbsentStudents = absentStudents.map((st) => {
-        let addr = st.address?.trim() || '';
-        if (!addr || addr === '-') {
+        let addr = cleanStudentAddress(st.address);
+        if (!addr) {
           const match = st.id
             ? classStudents.find((s) => s.id === st.id) || students.find((s) => s.id === st.id)
             : classStudents.find((s) => s.full_name.trim().toLowerCase() === st.full_name.trim().toLowerCase())
               || students.find((s) => s.full_name.trim().toLowerCase() === st.full_name.trim().toLowerCase());
-          if (match && (match.address || match.village)) {
-            addr = (match.address || match.village)!.trim();
+          if (match && isValidStudentAddress(match.address || match.village)) {
+            addr = cleanStudentAddress(match.address || match.village);
           }
         }
         return {
@@ -2160,7 +2163,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                     <datalist id={`students-list-${index}`}>
                       {classStudents.map((cs) => (
                         <option key={cs.id} value={cs.full_name}>
-                          {cs.isBoarding ? 'Học sinh Bán trú' : 'Học sinh Ngoại trú'} {cs.address ? `- ${cs.address}` : ''}
+                          {cs.isBoarding ? 'Học sinh Bán trú' : 'Học sinh Ngoại trú'} {cleanStudentAddress(cs.address || cs.village) ? `- ${cleanStudentAddress(cs.address || cs.village)}` : ''}
                         </option>
                       ))}
                     </datalist>
@@ -2176,7 +2179,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                   <input
                     type="text"
                     disabled={isLocked}
-                    value={st.address || ''}
+                    value={cleanStudentAddress(st.address)}
                     placeholder="Ví dụ: Bản Tào La- Tia Dình, Bản Pú Nhi..."
                     onChange={(e) => handleUpdateAbsentStudent(index, { address: e.target.value })}
                     className="w-full bg-slate-50/70 focus:bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs sm:text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all placeholder:text-slate-400 shadow-inner"
@@ -2498,9 +2501,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                       (s) => s.full_name.trim().toLowerCase() === val.trim().toLowerCase()
                     );
                     if (match) {
-                      if (match.address || match.village) {
-                        setNewAbsentAddress(match.address || match.village || '');
-                      }
+                      setNewAbsentAddress(cleanStudentAddress(match.address || match.village));
                       if (match.isBoarding !== undefined) {
                         setNewAbsentIsBoarding(!!match.isBoarding);
                       }
@@ -2517,7 +2518,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                 <input
                   type="text"
                   placeholder="Ví dụ: Bản Nà Sản A"
-                  value={newAbsentAddress}
+                  value={cleanStudentAddress(newAbsentAddress)}
                   onChange={(e) => setNewAbsentAddress(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-base sm:text-sm text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />

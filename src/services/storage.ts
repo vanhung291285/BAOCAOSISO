@@ -42,7 +42,7 @@ import {
   formatDateVN,
 } from '../utils/schoolWeeks';
 import { resolveTeacherName, DEFAULT_CLASS_TEACHER_MAP } from '../utils/exportAttendanceStandardExcel';
-import { resolveStudentGender, inferGenderFromName } from '../utils/studentUtils';
+import { resolveStudentGender, inferGenderFromName, isValidStudentAddress, cleanStudentAddress } from '../utils/studentUtils';
 import { DEFAULT_BOARDING_STUDENTS_SEED } from '../utils/boardingRules';
 
 const STORAGE_KEYS = {
@@ -909,8 +909,8 @@ export const StorageService = {
       gender: resolveStudentGender(s.gender, s.full_name),
       birth_date: s.birth_date || '',
       class_id: s.class_id,
-      village: s.address || '',
-      address: s.address || '',
+      village: cleanStudentAddress(s.address),
+      address: cleanStudentAddress(s.address),
       ethnicity: s.ethnicity || '',
       isBoarding: s.is_boarding !== undefined ? s.is_boarding : false,
       notes: s.notes || '',
@@ -949,8 +949,8 @@ export const StorageService = {
                 birth_date: existing.birth_date || mapped.birth_date,
                 student_code: existing.student_code || mapped.student_code,
                 ethnicity: existing.ethnicity || mapped.ethnicity,
-                address: existing.address || existing.village || mapped.address || mapped.village || '',
-                village: existing.village || existing.address || mapped.village || mapped.address || '',
+                address: cleanStudentAddress(existing.address || existing.village || mapped.address || mapped.village),
+                village: cleanStudentAddress(existing.village || existing.address || mapped.village || mapped.address),
                 notes: existing.notes || mapped.notes,
                 isBoarding: existing.isBoarding !== undefined ? existing.isBoarding : mapped.isBoarding,
               });
@@ -985,7 +985,11 @@ export const StorageService = {
 
       seenIds.add(sId);
       if (normClass && normName) seenClassStudentKeys.add(classStudentKey);
-      cleaned.push(s);
+      cleaned.push({
+        ...s,
+        address: cleanStudentAddress(s.address || s.village),
+        village: cleanStudentAddress(s.village || s.address),
+      });
     }
 
     // Sắp xếp danh sách học sinh theo thứ tự chữ cái của ID (đảm bảo giữ nguyên 100% thứ tự import ban đầu)
@@ -2372,14 +2376,14 @@ export const StorageService = {
         const rawStudents = localStorage.getItem(STORAGE_KEYS.STUDENTS);
         const storedStudents: Student[] = rawStudents ? JSON.parse(rawStudents) : [];
         enrichedAbsentStudents = enrichedAbsentStudents.map((st) => {
-          let addr = st.address?.trim() || '';
-          if (!addr || addr === '-') {
+          let addr = cleanStudentAddress(st.address);
+          if (!addr) {
             const m = st.id
               ? storedStudents.find((s) => s.id === st.id)
               : storedStudents.find((s) => s.class_id === classId && s.full_name.trim().toLowerCase() === st.full_name.trim().toLowerCase())
                 || storedStudents.find((s) => s.full_name.trim().toLowerCase() === st.full_name.trim().toLowerCase());
-            if (m && (m.address || m.village)) {
-              addr = (m.address || m.village)!.trim();
+            if (m && isValidStudentAddress(m.address || m.village)) {
+              addr = cleanStudentAddress(m.address || m.village);
             } else {
               const seed = DEFAULT_BOARDING_STUDENTS_SEED.find((sd) => sd.name.toLowerCase() === st.full_name.trim().toLowerCase());
               if (seed) addr = seed.village;
@@ -3216,18 +3220,18 @@ export const StorageService = {
     const resolveAddr = (s: any): string => {
       if (s.id) {
         const m = classStudents.find((std) => std.id === s.id) || students.find((std) => std.id === s.id);
-        if (m && (m.address || m.village)) return (m.address || m.village)!.trim();
+        if (m && isValidStudentAddress(m.address || m.village)) return cleanStudentAddress(m.address || m.village);
       }
       if (s.full_name || s.name) {
         const queryName = (s.full_name || s.name || '').trim().toLowerCase();
         const m = classStudents.find((std) => std.full_name.trim().toLowerCase() === queryName)
                || students.find((std) => std.full_name.trim().toLowerCase() === queryName);
-        if (m && (m.address || m.village)) return (m.address || m.village)!.trim();
+        if (m && isValidStudentAddress(m.address || m.village)) return cleanStudentAddress(m.address || m.village);
         const seed = DEFAULT_BOARDING_STUDENTS_SEED.find((sd) => sd.name.toLowerCase() === queryName);
         if (seed) return seed.village;
       }
-      const raw = s.address || s.village || '';
-      return (raw && raw !== '-') ? raw.trim() : '-';
+      const raw = cleanStudentAddress(s.address || s.village);
+      return raw || '-';
     };
 
     // Helper resolve student address string from absent names text
@@ -3241,8 +3245,8 @@ export const StorageService = {
         const norm = cleanedName.toLowerCase();
         const m = classStudents.find((std) => std.full_name.trim().toLowerCase() === norm)
                || students.find((std) => std.full_name.trim().toLowerCase() === norm);
-        if (m && (m.address || m.village)) {
-          addrs.push((m.address || m.village)!.trim());
+        if (m && isValidStudentAddress(m.address || m.village)) {
+          addrs.push(cleanStudentAddress(m.address || m.village));
         } else {
           const seedMatch = DEFAULT_BOARDING_STUDENTS_SEED.find((sd) => sd.name.toLowerCase() === norm);
           if (seedMatch) {

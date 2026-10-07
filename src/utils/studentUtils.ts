@@ -77,3 +77,37 @@ export function resolveStudentGender(gender?: string, fullName?: string): 'Nam' 
   }
   return 'Nam';
 }
+
+/**
+ * Kiểm tra xem chuỗi địa chỉ / bản thôn có hợp lệ hay không.
+ * Tự động loại bỏ các giá trị nhầm lẫn từ cột Bán trú hoặc đánh dấu như "Có", "Không", "x", "1", "-" v.v.
+ */
+export function isValidStudentAddress(addr?: string | null): boolean {
+  if (!addr) return false;
+  const trimmed = addr.trim();
+  if (!trimmed || trimmed === '-' || trimmed === '—') return false;
+
+  const noAcc = trimmed
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+
+  const invalidTokens = new Set([
+    'co', 'khong', 'x', 'k', 'true', 'false', '1', '0', 'dung', 'sai',
+    'cophep', 'khongphep', 'bantru', 'ngoaitru', 'bt', 'hsbt', 'yes', 'no'
+  ]);
+
+  if (invalidTokens.has(noAcc)) return false;
+  return true;
+}
+
+/**
+ * Chuẩn hóa địa chỉ học sinh:
+ * Nếu là giá trị rác như "Có", "Không", "x" -> trả về rỗng '' để ô mặc định để trống cho GVCN gõ địa chỉ.
+ */
+export function cleanStudentAddress(addr?: string | null): string {
+  if (!isValidStudentAddress(addr)) return '';
+  return addr!.trim();
+}
+
