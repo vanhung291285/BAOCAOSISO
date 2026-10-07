@@ -192,7 +192,20 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
       if (report) {
         setInheritedReport(null);
         setNotes(report.notes || '');
-        setAbsentStudents(report.absent_students || []);
+        const loadedAbsent = (report.absent_students || []).map((st) => {
+          let addr = st.address?.trim() || '';
+          if (!addr || addr === '-') {
+            const m = st.id
+              ? classStudents.find((cs) => cs.id === st.id) || students.find((s) => s.id === st.id)
+              : classStudents.find((cs) => cs.full_name.trim().toLowerCase() === st.full_name.trim().toLowerCase())
+                || students.find((s) => s.full_name.trim().toLowerCase() === st.full_name.trim().toLowerCase());
+            if (m && (m.address || m.village)) {
+              addr = (m.address || m.village)!.trim();
+            }
+          }
+          return { ...st, address: addr };
+        });
+        setAbsentStudents(loadedAbsent);
 
         const newVals: Record<string, { total: number | ''; present: number | ''; absent: number | '' }> = {};
         values.forEach((v) => {
@@ -734,7 +747,9 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
           (s) => s.full_name.trim().toLowerCase() === trimmedName.toLowerCase()
         );
     const finalId = studentId || studentMatch?.id || undefined;
-    const finalAddress = address.trim() || studentMatch?.address || studentMatch?.village || '';
+    const finalAddress = (address.trim() && address.trim() !== '-')
+      ? address.trim()
+      : (studentMatch?.address || studentMatch?.village || '');
     const finalBoarding = isBoarding !== undefined ? isBoarding : !!studentMatch?.isBoarding;
 
     setAbsentStudents((prev) => {
@@ -794,16 +809,29 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
       const nextList = [...prev];
 
       let extra: Partial<AbsentStudent> = {};
+      if (partial.id) {
+        const match = classStudents.find((s) => s.id === partial.id);
+        if (match) {
+          const matchedAddr = match.address || match.village || '';
+          if (matchedAddr && (!nextList[index].address || nextList[index].address === '-' || !nextList[index].address.trim())) {
+            extra.address = matchedAddr;
+          }
+          if (partial.isBoarding === undefined) {
+            extra.isBoarding = !!match.isBoarding;
+          }
+        }
+      }
       if (partial.full_name !== undefined) {
         const trimmed = partial.full_name.trim();
         const matches = classStudents.filter(
           (s) => s.full_name.trim().toLowerCase() === trimmed.toLowerCase()
         );
-        if (matches.length === 1 && !partial.id) {
+        if (matches.length >= 1) {
           const match = matches[0];
-          extra.id = match.id;
-          if (!nextList[index].address && match.address) {
-            extra.address = match.address || match.village || '';
+          if (!partial.id) extra.id = match.id;
+          const matchedAddr = match.address || match.village || '';
+          if (matchedAddr && (!nextList[index].address || nextList[index].address === '-' || !nextList[index].address.trim())) {
+            extra.address = matchedAddr;
           }
           if (partial.isBoarding === undefined) {
             extra.isBoarding = !!match.isBoarding;
@@ -1025,13 +1053,30 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
         };
       });
 
+      const resolvedAbsentStudents = absentStudents.map((st) => {
+        let addr = st.address?.trim() || '';
+        if (!addr || addr === '-') {
+          const match = st.id
+            ? classStudents.find((s) => s.id === st.id) || students.find((s) => s.id === st.id)
+            : classStudents.find((s) => s.full_name.trim().toLowerCase() === st.full_name.trim().toLowerCase())
+              || students.find((s) => s.full_name.trim().toLowerCase() === st.full_name.trim().toLowerCase());
+          if (match && (match.address || match.village)) {
+            addr = (match.address || match.village)!.trim();
+          }
+        }
+        return {
+          ...st,
+          address: addr,
+        };
+      });
+
       await StorageService.saveDailyReport(
         selectedClassId,
         selectedDate,
         currentUser,
         cleanedValues,
         notes,
-        absentStudents
+        resolvedAbsentStudents
       );
 
       // Tự động đồng bộ báo ăn sang Sổ chấm cơm bán trú (biểu xử lý) ngay lập tức
@@ -2446,7 +2491,21 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                   autoFocus
                   placeholder="Ví dụ: Vàng A Sinh"
                   value={newAbsentName}
-                  onChange={(e) => setNewAbsentName(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setNewAbsentName(val);
+                    const match = classStudents.find(
+                      (s) => s.full_name.trim().toLowerCase() === val.trim().toLowerCase()
+                    );
+                    if (match) {
+                      if (match.address || match.village) {
+                        setNewAbsentAddress(match.address || match.village || '');
+                      }
+                      if (match.isBoarding !== undefined) {
+                        setNewAbsentIsBoarding(!!match.isBoarding);
+                      }
+                    }
+                  }}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-base sm:text-sm text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>

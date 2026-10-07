@@ -14,6 +14,7 @@ import {
   MonthlyDayRowData,
   resolveTeacherName,
 } from '../utils/exportAttendanceStandardExcel';
+import { DEFAULT_BOARDING_STUDENTS_SEED } from '../utils/boardingRules';
 import {
   Printer,
   Download,
@@ -441,15 +442,25 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
   const getResolvedAddress = (s: any, classId: string): string => {
     if (s.id) {
       const match = students.find((std) => std.id === s.id);
-      if (match && match.address) return match.address;
+      if (match && (match.address || match.village)) return (match.address || match.village)!.trim();
     }
     if (s.full_name) {
-      const match = students.find(
-        (std) => std.class_id === classId && std.full_name.trim().toLowerCase() === s.full_name.trim().toLowerCase()
+      const trimmed = s.full_name.trim().toLowerCase();
+      const matchInClass = students.find(
+        (std) => (std.class_id === classId || std.class_id === selectedClassFilter) && std.full_name.trim().toLowerCase() === trimmed
       );
-      if (match && match.address) return match.address;
+      if (matchInClass && (matchInClass.address || matchInClass.village)) {
+        return (matchInClass.address || matchInClass.village)!.trim();
+      }
+      const matchAny = students.find((std) => std.full_name.trim().toLowerCase() === trimmed);
+      if (matchAny && (matchAny.address || matchAny.village)) {
+        return (matchAny.address || matchAny.village)!.trim();
+      }
+      const seed = DEFAULT_BOARDING_STUDENTS_SEED.find((sd) => sd.name.toLowerCase() === trimmed);
+      if (seed) return seed.village;
     }
-    return s.address || '';
+    const direct = s.address || s.village || '';
+    return direct && direct !== '-' ? direct.trim() : '';
   };
 
   const getAbsentStudentText = (row: ClassReportRow): string => {
@@ -467,12 +478,30 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
 
   const getAbsentStudentAddresses = (row: ClassReportRow): string => {
     if (row.report?.absent_students && row.report.absent_students.length > 0) {
-      return row.report.absent_students
+      const addrs = row.report.absent_students
         .map((s) => {
           const addr = getResolvedAddress(s, row.classItem.id);
           return addr && addr.trim() !== '' ? addr : '-';
-        })
-        .join('\n');
+        });
+      return addrs.join('\n');
+    }
+    if (row.report?.notes && row.report.notes.trim()) {
+      const lines = row.report.notes.split('\n').filter((l) => !l.startsWith('-'));
+      const foundAddrs: string[] = [];
+      lines.forEach((line) => {
+        const cleaned = line.replace(/\s*\(.*?\)/g, '').trim();
+        if (!cleaned) return;
+        const norm = cleaned.toLowerCase();
+        const m = students.find((std) => std.class_id === row.classItem.id && std.full_name.trim().toLowerCase() === norm)
+               || students.find((std) => std.full_name.trim().toLowerCase() === norm);
+        if (m && (m.address || m.village)) {
+          foundAddrs.push((m.address || m.village)!.trim());
+        } else {
+          const seed = DEFAULT_BOARDING_STUDENTS_SEED.find((sd) => sd.name.toLowerCase() === norm);
+          if (seed) foundAddrs.push(seed.village);
+        }
+      });
+      if (foundAddrs.length > 0) return foundAddrs.join('\n');
     }
     return '-';
   };
@@ -1300,7 +1329,22 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
 
                       {/* 11. Địa chỉ */}
                       <td className="border border-black py-1.5 px-2.5 text-left text-[11px] text-black whitespace-pre">
-                        {r.isReported ? (r.studentAddresses && r.studentAddresses !== '-' ? r.studentAddresses : '') : ''}
+                        {r.isReported
+                          ? ((r.studentAddresses && r.studentAddresses !== '-')
+                              ? r.studentAddresses
+                              : (r.absentAll > 0 && r.studentNames
+                                  ? r.studentNames.split('\n')
+                                      .filter(l => !l.startsWith('-') && !l.startsWith('Thứ 6'))
+                                      .map(l => {
+                                        const cName = l.replace(/\s*\(.*?\)/g, '').trim().toLowerCase();
+                                        const m = students.find(std => (std.class_id === monthlyClassId) && std.full_name.trim().toLowerCase() === cName)
+                                               || students.find(std => std.full_name.trim().toLowerCase() === cName);
+                                        if (m && (m.address || m.village)) return (m.address || m.village)!.trim();
+                                        const seed = DEFAULT_BOARDING_STUDENTS_SEED.find(sd => sd.name.toLowerCase() === cName);
+                                        return seed ? seed.village : '-';
+                                      }).join('\n')
+                                  : ''))
+                          : ''}
                       </td>
 
                       {/* 12. % Vắng */}

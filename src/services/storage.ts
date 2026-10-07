@@ -43,6 +43,7 @@ import {
 } from '../utils/schoolWeeks';
 import { resolveTeacherName, DEFAULT_CLASS_TEACHER_MAP } from '../utils/exportAttendanceStandardExcel';
 import { resolveStudentGender, inferGenderFromName } from '../utils/studentUtils';
+import { DEFAULT_BOARDING_STUDENTS_SEED } from '../utils/boardingRules';
 
 const STORAGE_KEYS = {
   SETTINGS: 'sso_school_settings_v1',
@@ -948,6 +949,8 @@ export const StorageService = {
                 birth_date: existing.birth_date || mapped.birth_date,
                 student_code: existing.student_code || mapped.student_code,
                 ethnicity: existing.ethnicity || mapped.ethnicity,
+                address: existing.address || existing.village || mapped.address || mapped.village || '',
+                village: existing.village || existing.address || mapped.village || mapped.address || '',
                 notes: existing.notes || mapped.notes,
                 isBoarding: existing.isBoarding !== undefined ? existing.isBoarding : mapped.isBoarding,
               });
@@ -2362,6 +2365,34 @@ export const StorageService = {
       ? reports[existingIndex].reported_time
       : currentTimeStr;
 
+    // Tự động bổ sung địa chỉ cho các học sinh báo nghỉ nếu chưa có
+    let enrichedAbsentStudents = absent_students ?? (existingIndex >= 0 ? reports[existingIndex].absent_students : undefined);
+    if (enrichedAbsentStudents && enrichedAbsentStudents.length > 0) {
+      try {
+        const rawStudents = localStorage.getItem(STORAGE_KEYS.STUDENTS);
+        const storedStudents: Student[] = rawStudents ? JSON.parse(rawStudents) : [];
+        enrichedAbsentStudents = enrichedAbsentStudents.map((st) => {
+          let addr = st.address?.trim() || '';
+          if (!addr || addr === '-') {
+            const m = st.id
+              ? storedStudents.find((s) => s.id === st.id)
+              : storedStudents.find((s) => s.class_id === classId && s.full_name.trim().toLowerCase() === st.full_name.trim().toLowerCase())
+                || storedStudents.find((s) => s.full_name.trim().toLowerCase() === st.full_name.trim().toLowerCase());
+            if (m && (m.address || m.village)) {
+              addr = (m.address || m.village)!.trim();
+            } else {
+              const seed = DEFAULT_BOARDING_STUDENTS_SEED.find((sd) => sd.name.toLowerCase() === st.full_name.trim().toLowerCase());
+              if (seed) addr = seed.village;
+            }
+          }
+          return {
+            ...st,
+            address: addr,
+          };
+        });
+      } catch {}
+    }
+
     const report: DailyReport = {
       id: reportId,
       class_id: classId,
@@ -2369,7 +2400,7 @@ export const StorageService = {
       created_by: user.id,
       status: 'SUBMITTED',
       notes: notes ?? (existingIndex >= 0 ? reports[existingIndex].notes : ''),
-      absent_students: absent_students ?? (existingIndex >= 0 ? reports[existingIndex].absent_students : undefined),
+      absent_students: enrichedAbsentStudents,
       reported_time: initialReportedTime,
       created_at: existingIndex >= 0 ? reports[existingIndex].created_at : now.toISOString(),
       updated_at: now.toISOString(),
@@ -3181,6 +3212,49 @@ export const StorageService = {
     const defaultClassTotal = classStudents.length > 0 ? classStudents.length : 35;
     const defaultClassBoarding = classStudents.filter((s) => s.isBoarding !== false).length || Math.min(25, defaultClassTotal);
 
+    // Helper resolve student address from object or matched student
+    const resolveAddr = (s: any): string => {
+      if (s.id) {
+        const m = classStudents.find((std) => std.id === s.id) || students.find((std) => std.id === s.id);
+        if (m && (m.address || m.village)) return (m.address || m.village)!.trim();
+      }
+      if (s.full_name || s.name) {
+        const queryName = (s.full_name || s.name || '').trim().toLowerCase();
+        const m = classStudents.find((std) => std.full_name.trim().toLowerCase() === queryName)
+               || students.find((std) => std.full_name.trim().toLowerCase() === queryName);
+        if (m && (m.address || m.village)) return (m.address || m.village)!.trim();
+        const seed = DEFAULT_BOARDING_STUDENTS_SEED.find((sd) => sd.name.toLowerCase() === queryName);
+        if (seed) return seed.village;
+      }
+      const raw = s.address || s.village || '';
+      return (raw && raw !== '-') ? raw.trim() : '-';
+    };
+
+    // Helper resolve student address string from absent names text
+    const resolveAddressesFromNames = (namesText: string): string => {
+      if (!namesText || namesText === 'Ngày nghỉ') return '-';
+      const lines = namesText.split('\n').filter((l) => !l.startsWith('-') && !l.startsWith('Thứ 6'));
+      const addrs: string[] = [];
+      lines.forEach((line) => {
+        const cleanedName = line.replace(/\s*\(.*?\)/g, '').trim();
+        if (!cleanedName) return;
+        const norm = cleanedName.toLowerCase();
+        const m = classStudents.find((std) => std.full_name.trim().toLowerCase() === norm)
+               || students.find((std) => std.full_name.trim().toLowerCase() === norm);
+        if (m && (m.address || m.village)) {
+          addrs.push((m.address || m.village)!.trim());
+        } else {
+          const seedMatch = DEFAULT_BOARDING_STUDENTS_SEED.find((sd) => sd.name.toLowerCase() === norm);
+          if (seedMatch) {
+            addrs.push(seedMatch.village);
+          } else {
+            addrs.push('-');
+          }
+        }
+      });
+      return addrs.length > 0 ? addrs.join('\n') : '-';
+    };
+
     const supabase = getSupabaseClient();
 
     // Thử gọi qua Supabase RPC chuyên dụng nếu database đã cập nhật schema mới
@@ -3226,7 +3300,7 @@ export const StorageService = {
               totalNgoaiTru: isRep ? Number(r.total_ngoai_tru ?? Math.max(0, defaultClassTotal - defaultClassBoarding)) : 0,
               absentNgoaiTru: isRep ? Number(r.absent_ngoai_tru ?? 0) : 0,
               studentNames: finalNames,
-              studentAddresses: isRep ? '-' : '',
+              studentAddresses: isRep && r.absent_students_names ? resolveAddressesFromNames(r.absent_students_names) : (isRep ? '-' : ''),
               absentRate: isRep ? Number(r.absent_rate ?? 0) : 0,
               presentRate: isRep ? Number(r.present_rate ?? 100) : 0,
               isReported: isRep,
@@ -3323,19 +3397,6 @@ export const StorageService = {
     const rawValues = localStorage.getItem(STORAGE_KEYS.VALUES);
     const allValues: DailyReportValue[] = rawValues ? JSON.parse(rawValues) : [];
 
-    // Helper resolve address
-    const resolveAddr = (s: any): string => {
-      if (s.id) {
-        const m = classStudents.find((std) => std.id === s.id);
-        if (m && m.address) return m.address;
-      }
-      if (s.full_name) {
-        const m = classStudents.find((std) => std.full_name.trim().toLowerCase() === s.full_name.trim().toLowerCase());
-        if (m && m.address) return m.address;
-      }
-      return s.address || '-';
-    };
-
     const rows: {
       date: string;
       dayLabel: string;
@@ -3413,8 +3474,12 @@ export const StorageService = {
             namesStr += `\n- Ghi chú: ${rep.notes}`;
           }
           addrsStr = absentStudentsList.map(resolveAddr).join('\n');
+          if ((!addrsStr || addrsStr === '-' || addrsStr.trim() === '') && namesStr) {
+            addrsStr = resolveAddressesFromNames(namesStr);
+          }
         } else if (rep.notes) {
           namesStr = rep.notes;
+          addrsStr = resolveAddressesFromNames(rep.notes);
         }
 
         const parts_loc = dateStr.split('-');

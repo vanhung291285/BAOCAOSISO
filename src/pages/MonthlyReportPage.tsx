@@ -30,6 +30,7 @@ import {
   Check,
 } from 'lucide-react';
 import { exportMonthlyBoardingExcel } from '../utils/exportBoardingExcel';
+import { DEFAULT_BOARDING_STUDENTS_SEED } from '../utils/boardingRules';
 
 interface MonthlyReportPageProps {
   onNavigate?: (path: string) => void;
@@ -326,6 +327,34 @@ export const MonthlyReportPage: React.FC<MonthlyReportPageProps> = ({ onNavigate
     return monthlyClassData.rows.filter((r) => r.isReported);
   }, [monthlyClassData, onlyReportedDays]);
 
+  // Helper hiển thị địa chỉ của học sinh vắng trong hàng báo cáo
+  const getRowDisplayAddress = useCallback((r: MonthlyDayRowData, classId?: string) => {
+    if (!r.isReported) return '';
+    if (r.studentAddresses && r.studentAddresses.trim() !== '' && r.studentAddresses !== '-') {
+      return r.studentAddresses;
+    }
+    if (r.absentAll > 0 && r.studentNames && r.studentNames !== 'Ngày nghỉ') {
+      const lines = r.studentNames.split('\n').filter((l) => !l.startsWith('-') && !l.startsWith('Thứ 6'));
+      const addrs: string[] = [];
+      lines.forEach((l) => {
+        const cName = l.replace(/\s*\(.*?\)/g, '').trim().toLowerCase();
+        if (!cName) return;
+        const m = students.find((std) => (classId ? std.class_id === classId : true) && std.full_name.trim().toLowerCase() === cName)
+               || students.find((std) => std.full_name.trim().toLowerCase() === cName);
+        if (m && (m.address || m.village)) {
+          addrs.push((m.address || m.village)!.trim());
+        } else {
+          const seed = DEFAULT_BOARDING_STUDENTS_SEED.find((sd) => sd.name.toLowerCase() === cName);
+          addrs.push(seed ? seed.village : '-');
+        }
+      });
+      if (addrs.length > 0 && addrs.some((a) => a !== '-')) {
+        return addrs.join('\n');
+      }
+    }
+    return '';
+  }, [students]);
+
   // In ấn biểu mẫu chuẩn
   const handlePrint = () => {
     window.print();
@@ -346,13 +375,17 @@ export const MonthlyReportPage: React.FC<MonthlyReportPageProps> = ({ onNavigate
         }
 
         const classData = monthlyClassData || (await StorageService.getClassMonthlyAttendance(targetClass.id, selectedMonth));
+        const enrichedExportRows = classData.rows.map((row) => ({
+          ...row,
+          studentAddresses: getRowDisplayAddress(row, targetClass.id) || row.studentAddresses,
+        }));
         await exportAttendanceMonthlyClassExcel({
           settings,
           campusName,
           yearMonth: selectedMonth,
           classItem: targetClass,
           teacherName: resolveTeacherName(targetClass.class_name, classData.teacher?.full_name),
-          rows: classData.rows,
+          rows: enrichedExportRows,
           signatureSettings,
         });
 
@@ -364,12 +397,20 @@ export const MonthlyReportPage: React.FC<MonthlyReportPageProps> = ({ onNavigate
           return;
         }
 
+        const enrichedClassesDayRows = allClassesData.classesDayRows.map((cGroup) => ({
+          ...cGroup,
+          rows: cGroup.rows.map((row) => ({
+            ...row,
+            studentAddresses: getRowDisplayAddress(row, cGroup.classItem.id) || row.studentAddresses,
+          })),
+        }));
+
         await exportAttendanceMonthlyAllClassesExcel({
           settings,
           campusName,
           yearMonth: selectedMonth,
           summaryRows: allClassesData.summaryRows,
-          classesDayRows: allClassesData.classesDayRows,
+          classesDayRows: enrichedClassesDayRows,
           signatureSettings,
         });
 
@@ -866,7 +907,7 @@ export const MonthlyReportPage: React.FC<MonthlyReportPageProps> = ({ onNavigate
 
                           {/* 11. Địa chỉ */}
                           <td className="border border-black py-1.5 px-2.5 text-left text-[11px] text-black whitespace-pre">
-                            {r.isReported ? (r.studentAddresses && r.studentAddresses !== '-' ? r.studentAddresses : '') : ''}
+                            {getRowDisplayAddress(r, monthlyClassData?.classItem?.id)}
                           </td>
 
                           {/* 12. % Vắng */}
