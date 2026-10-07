@@ -2942,7 +2942,7 @@ export const StorageService = {
   },
 
   // --- 9. Monthly Aggregate ---
-  async getMonthlyAggregate(yearMonth: string, campusId?: string): Promise<{
+  async getMonthlyAggregate(yearMonth: string, campusId?: string, classId?: string): Promise<{
     yearMonth: string;
     totalDaysReported: number;
     totalAbsentAccumulated: number;
@@ -3006,6 +3006,9 @@ export const StorageService = {
     if (campusId && campusId !== 'all') {
       activeClasses = activeClasses.filter((c) => c.campus_id === campusId);
     }
+    if (classId && classId !== 'all') {
+      activeClasses = activeClasses.filter((c) => c.id === classId || c.class_name === classId);
+    }
     const activeClassIds = new Set(activeClasses.map((c) => c.id));
 
     const mainIndicator = indicators.find((i) => i.code === 'ALL') || indicators[0];
@@ -3038,7 +3041,13 @@ export const StorageService = {
       let dayAbsent = 0;
 
       repList.forEach((r) => {
-        const val = allValues.find((v) => v.report_id === r.id && v.indicator_group_id === mainIndicator?.id);
+        const val = allValues.find((v) => 
+          v.report_id === r.id && (
+            v.indicator_group_id === mainIndicator?.id ||
+            v.indicator_group_id === 'ig_all' ||
+            indicators.find(i => i.id === v.indicator_group_id)?.code === 'ALL'
+          )
+        );
         if (val) {
           dayTotal += val.total_count;
           dayAbsent += val.absent_count;
@@ -3353,7 +3362,7 @@ export const StorageService = {
       const dayLabel = `Ngày ${dayStr}/${mStr}`;
 
       const rep = monthReports.find((r) => r.report_date === dateStr);
-      if (rep && (rep.status === 'SUBMITTED' || rep.status === 'LOCKED' || rep.status === 'DRAFT')) {
+      if (rep && (rep.status === 'SUBMITTED' || rep.status === 'LOCKED' || rep.status === 'DRAFT' || rep.status === 'REPORTED' || rep.status !== 'NOT_REPORTED')) {
         const repVals = allValues.filter((v) => v.report_id === rep.id);
         const allVal = repVals.find((v) => 
           v.indicator_group_id === allIndicator?.id || 
