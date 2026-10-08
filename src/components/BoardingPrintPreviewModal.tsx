@@ -67,6 +67,7 @@ interface BoardingPrintPreviewModalProps {
   sigConfig?: BoardingSignatureConfig;
   monthSig?: BoardingMonthSignature | null;
   onExportExcel?: () => void;
+  sheetTitle?: string;
 }
 
 export const BoardingPrintPreviewModal: React.FC<BoardingPrintPreviewModalProps> = ({
@@ -88,6 +89,7 @@ export const BoardingPrintPreviewModal: React.FC<BoardingPrintPreviewModalProps>
   sigConfig,
   monthSig,
   onExportExcel,
+  sheetTitle,
 }) => {
   const [activeTab, setActiveTab] = useState<'page1' | 'page2' | 'both' | 'all'>('both');
   const [zoomLevel, setZoomLevel] = useState<number>(90);
@@ -164,7 +166,7 @@ export const BoardingPrintPreviewModal: React.FC<BoardingPrintPreviewModalProps>
           </div>
           <div className="text-right">
             <h2 className="text-[13px] sm:text-[14px] font-black uppercase tracking-tight text-black">
-              SỔ CHẤM CƠM LỚP: {classNameStr} THÁNG {monthNum}/{yearNum}
+              {(sheetTitle || 'SỔ CHẤM CƠM').toUpperCase()} LỚP: {classNameStr} THÁNG {monthNum}/{yearNum}
             </h2>
             <div className="text-[10px] font-bold text-blue-900 uppercase">
               {days[0]?.dayNum === 1 && days.length <= 15

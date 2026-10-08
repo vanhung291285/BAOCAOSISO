@@ -28,6 +28,12 @@ import {
   Settings,
   Sparkles,
   Trophy,
+  Utensils,
+  Coffee,
+  Sun,
+  Moon,
+  FileSpreadsheet,
+  Calculator,
 } from 'lucide-react';
 
 export const SettingsSchoolPage: React.FC = () => {
@@ -191,15 +197,26 @@ export const SettingsSchoolPage: React.FC = () => {
           </p>
         </div>
 
-        {savedSuccess && (
-          <div className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-100 text-emerald-800 text-xs font-bold animate-in fade-in">
-            <CheckCircle className="w-4 h-4 text-emerald-600" />
-            <span>Đã lưu cấu hình thành công!</span>
-          </div>
-        )}
+        <div className="flex flex-wrap items-center gap-3">
+          {savedSuccess && (
+            <div className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-100 text-emerald-800 text-xs font-bold animate-in fade-in">
+              <CheckCircle className="w-4 h-4 text-emerald-600" />
+              <span>Đã lưu & đồng bộ thành công!</span>
+            </div>
+          )}
+          <button
+            type="submit"
+            form="school-settings-form"
+            disabled={isSaving}
+            className="px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-black text-xs flex items-center justify-center gap-2 shadow-sm transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
+          >
+            <Save className="w-4 h-4" />
+            <span>{isSaving ? 'Đang lưu...' : 'LƯU TOÀN BỘ CẤU HÌNH'}</span>
+          </button>
+        </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form id="school-settings-form" onSubmit={handleSubmit} className="space-y-6">
         {/* CARD 1: THÔNG TIN CHUNG TRƯỜNG HỌC */}
         <div className="bg-white rounded-2xl p-6 border border-slate-200/90 shadow-xs space-y-5">
           <div className="pb-3 border-b border-slate-100">
@@ -528,6 +545,290 @@ export const SettingsSchoolPage: React.FC = () => {
           </div>
         </div>
 
+        {/* CARD: CẤU HÌNH CHẤM ĂN THỨ 6, THỨ 7 & TÊN SỔ CHẤM BÁN TRÚ */}
+        <div className="bg-white rounded-2xl p-6 border border-slate-200/90 shadow-xs space-y-5">
+          <div className="pb-3 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <h2 className="text-sm font-black text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                <Utensils className="w-4 h-4 text-orange-600" />
+                <span>CẤU HÌNH CHẤM ĂN THỨ 6, THỨ 7 & TÊN SỔ CHẤM BÁN TRÚ</span>
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Thiết lập các bữa ăn bán trú (Sáng, Trưa, Tối) ngày Thứ 6, Thứ 7; cho phép tài khoản GVCN báo sĩ số và đồng bộ tự động sang sổ chấm ăn
+              </p>
+            </div>
+            <span className="text-[11px] font-bold text-blue-700 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200 shrink-0 self-start sm:self-auto">
+              Đồng bộ Supabase Cloud
+            </span>
+          </div>
+
+          {/* Section 1: Cấu hình Thứ 6 */}
+          <div className="p-4 rounded-2xl bg-slate-50/80 border border-slate-200/90 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={formData.allow_gvcn_report_friday ?? true}
+                  onChange={(e) => setFormData({ ...formData, allow_gvcn_report_friday: e.target.checked })}
+                  className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300"
+                />
+                <span className="text-xs font-black text-slate-900 uppercase tracking-wide">
+                  Cho phép GVCN báo sĩ số & chấm ăn cả ngày Thứ 6
+                </span>
+              </label>
+              <span className="text-[11px] text-slate-500 font-medium">
+                (Mặc định: Bật)
+              </span>
+            </div>
+
+            <p className="text-[11px] text-slate-500">
+              Chọn các bữa ăn bán trú phục vụ vào Thứ 6. Tích chọn để cho phép GVCN chấm ăn bữa đó:
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+              {/* Thứ 6 - Sáng */}
+              <label className={`p-3 rounded-xl border-2 cursor-pointer transition-all flex items-center gap-2.5 ${
+                formData.friday_breakfast ?? true
+                  ? 'border-blue-600 bg-blue-50/60 text-blue-900'
+                  : 'border-slate-200 bg-white text-slate-500'
+              }`}>
+                <input
+                  type="checkbox"
+                  checked={formData.friday_breakfast ?? true}
+                  onChange={(e) => setFormData({ ...formData, friday_breakfast: e.target.checked })}
+                  className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500"
+                />
+                <div>
+                  <div className="text-xs font-bold flex items-center gap-1.5">
+                    <Coffee className="w-3.5 h-3.5 text-blue-600" />
+                    <span>Thứ 6: Bữa Sáng</span>
+                  </div>
+                  <div className="text-[10px] text-slate-500 mt-0.5">Ăn sáng tại trường</div>
+                </div>
+              </label>
+
+              {/* Thứ 6 - Trưa */}
+              <label className={`p-3 rounded-xl border-2 cursor-pointer transition-all flex items-center gap-2.5 ${
+                formData.friday_lunch ?? true
+                  ? 'border-amber-600 bg-amber-50/60 text-amber-900'
+                  : 'border-slate-200 bg-white text-slate-500'
+              }`}>
+                <input
+                  type="checkbox"
+                  checked={formData.friday_lunch ?? true}
+                  onChange={(e) => setFormData({ ...formData, friday_lunch: e.target.checked })}
+                  className="w-4 h-4 rounded text-amber-600 focus:ring-amber-500"
+                />
+                <div>
+                  <div className="text-xs font-bold flex items-center gap-1.5">
+                    <Sun className="w-3.5 h-3.5 text-amber-600" />
+                    <span>Thứ 6: Bữa Trưa</span>
+                  </div>
+                  <div className="text-[10px] text-slate-500 mt-0.5">Ăn trưa tại trường</div>
+                </div>
+              </label>
+
+              {/* Thứ 6 - Tối */}
+              <label className={`p-3 rounded-xl border-2 cursor-pointer transition-all flex items-center gap-2.5 ${
+                formData.friday_dinner ?? false
+                  ? 'border-purple-600 bg-purple-50/60 text-purple-900'
+                  : 'border-slate-200 bg-white text-slate-500'
+              }`}>
+                <input
+                  type="checkbox"
+                  checked={formData.friday_dinner ?? false}
+                  onChange={(e) => setFormData({ ...formData, friday_dinner: e.target.checked })}
+                  className="w-4 h-4 rounded text-purple-600 focus:ring-purple-500"
+                />
+                <div>
+                  <div className="text-xs font-bold flex items-center gap-1.5">
+                    <Moon className="w-3.5 h-3.5 text-purple-600" />
+                    <span>Thứ 6: Bữa Tối</span>
+                  </div>
+                  <div className="text-[10px] text-slate-500 mt-0.5">
+                    {formData.friday_dinner ? 'Đã bật ăn tối Thứ 6' : 'Mặc định HS về nhà'}
+                  </div>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          {/* Section 2: Cấu hình Thứ 7 */}
+          <div className="p-4 rounded-2xl bg-slate-50/80 border border-slate-200/90 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={formData.allow_gvcn_report_saturday || Boolean(formData.saturday_breakfast || formData.saturday_lunch || formData.saturday_dinner)}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setFormData({
+                      ...formData,
+                      allow_gvcn_report_saturday: checked,
+                      school_days_per_week: checked ? 6 : (formData.school_days_per_week || 5),
+                      saturday_lunch: checked ? (formData.saturday_lunch ?? true) : false,
+                      saturday_breakfast: checked ? (formData.saturday_breakfast ?? false) : false,
+                      saturday_dinner: checked ? (formData.saturday_dinner ?? false) : false,
+                    });
+                  }}
+                  className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 border-slate-300"
+                />
+                <span className="text-xs font-black text-slate-900 uppercase tracking-wide">
+                  Cho phép GVCN báo sĩ số & chấm ăn cả ngày Thứ 7
+                </span>
+              </label>
+              <span className={`text-[11px] font-bold px-2 py-0.5 rounded-md ${
+                formData.allow_gvcn_report_saturday || formData.saturday_breakfast || formData.saturday_lunch || formData.saturday_dinner
+                  ? 'bg-emerald-100 text-emerald-800'
+                  : 'bg-slate-200 text-slate-600'
+              }`}>
+                {formData.allow_gvcn_report_saturday || formData.saturday_breakfast || formData.saturday_lunch || formData.saturday_dinner
+                  ? 'ĐÃ BẬT THỨ 7'
+                  : 'ĐANG TẮT (HS NGHỈ)'}
+              </span>
+            </div>
+
+            <p className="text-[11px] text-slate-500">
+              Khi quản trị tích chọn các nút dưới đây, các tài khoản của GVCN được phép báo sĩ số cả ngày Thứ 7 và tự động đồng bộ sang sổ chấm ăn:
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+              {/* Thứ 7 - Sáng */}
+              <label className={`p-3 rounded-xl border-2 cursor-pointer transition-all flex items-center gap-2.5 ${
+                formData.saturday_breakfast
+                  ? 'border-emerald-600 bg-emerald-50/60 text-emerald-900'
+                  : 'border-slate-200 bg-white text-slate-500'
+              }`}>
+                <input
+                  type="checkbox"
+                  checked={Boolean(formData.saturday_breakfast)}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setFormData({
+                      ...formData,
+                      saturday_breakfast: checked,
+                      allow_gvcn_report_saturday: checked || Boolean(formData.saturday_lunch || formData.saturday_dinner),
+                      school_days_per_week: (checked || Boolean(formData.saturday_lunch || formData.saturday_dinner)) ? 6 : (formData.school_days_per_week || 5),
+                    });
+                  }}
+                  className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500"
+                />
+                <div>
+                  <div className="text-xs font-bold flex items-center gap-1.5">
+                    <Coffee className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Thứ 7: Bữa Sáng</span>
+                  </div>
+                  <div className="text-[10px] text-slate-500 mt-0.5">Chấm ăn sáng Thứ 7</div>
+                </div>
+              </label>
+
+              {/* Thứ 7 - Trưa */}
+              <label className={`p-3 rounded-xl border-2 cursor-pointer transition-all flex items-center gap-2.5 ${
+                formData.saturday_lunch
+                  ? 'border-emerald-600 bg-emerald-50/60 text-emerald-900'
+                  : 'border-slate-200 bg-white text-slate-500'
+              }`}>
+                <input
+                  type="checkbox"
+                  checked={Boolean(formData.saturday_lunch)}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setFormData({
+                      ...formData,
+                      saturday_lunch: checked,
+                      allow_gvcn_report_saturday: checked || Boolean(formData.saturday_breakfast || formData.saturday_dinner),
+                      school_days_per_week: (checked || Boolean(formData.saturday_breakfast || formData.saturday_dinner)) ? 6 : (formData.school_days_per_week || 5),
+                    });
+                  }}
+                  className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500"
+                />
+                <div>
+                  <div className="text-xs font-bold flex items-center gap-1.5">
+                    <Sun className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Thứ 7: Bữa Trưa</span>
+                  </div>
+                  <div className="text-[10px] text-slate-500 mt-0.5">Chấm ăn trưa Thứ 7</div>
+                </div>
+              </label>
+
+              {/* Thứ 7 - Tối */}
+              <label className={`p-3 rounded-xl border-2 cursor-pointer transition-all flex items-center gap-2.5 ${
+                formData.saturday_dinner
+                  ? 'border-emerald-600 bg-emerald-50/60 text-emerald-900'
+                  : 'border-slate-200 bg-white text-slate-500'
+              }`}>
+                <input
+                  type="checkbox"
+                  checked={Boolean(formData.saturday_dinner)}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setFormData({
+                      ...formData,
+                      saturday_dinner: checked,
+                      allow_gvcn_report_saturday: checked || Boolean(formData.saturday_breakfast || formData.saturday_lunch),
+                      school_days_per_week: (checked || Boolean(formData.saturday_breakfast || formData.saturday_lunch)) ? 6 : (formData.school_days_per_week || 5),
+                    });
+                  }}
+                  className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500"
+                />
+                <div>
+                  <div className="text-xs font-bold flex items-center gap-1.5">
+                    <Moon className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Thứ 7: Bữa Tối</span>
+                  </div>
+                  <div className="text-[10px] text-slate-500 mt-0.5">Chấm ăn tối Thứ 7</div>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          {/* Section 3: Cấu hình Tên sổ chấm ăn */}
+          <div className="p-4 rounded-2xl bg-blue-50/50 border border-blue-200 space-y-2">
+            <label className="block text-xs font-black text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+              <FileSpreadsheet className="w-4 h-4 text-blue-600" />
+              <span>Cấu hình Tên sổ chấm (Hiển thị tiêu đề sổ, bản in & file Excel)</span>
+            </label>
+            <input
+              type="text"
+              value={formData.boarding_sheet_title || 'SỔ CHẤM ĂN HỌC SINH BÁN TRÚ'}
+              onChange={(e) => setFormData({ ...formData, boarding_sheet_title: e.target.value })}
+              placeholder="Ví dụ: SỔ CHẤM ĂN HỌC SINH BÁN TRÚ hoặc SỔ THEO DÕI ĂN BÁN TRÚ"
+              className="w-full px-3.5 py-2.5 rounded-xl border border-blue-300 text-sm font-bold text-slate-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white shadow-2xs"
+            />
+            <p className="text-[11px] text-slate-500">
+              Tên sổ này sẽ tự động xuất hiện trên đầu bảng chấm cơm, tiêu đề xuất file Excel 2 trang chuẩn Bộ GD&ĐT và tiêu đề in ấn PDF.
+            </p>
+          </div>
+
+          {/* Action button inside card */}
+          <div className="pt-3 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 bg-slate-50/60 -mx-6 -mb-6 p-4 rounded-b-2xl">
+            <span className="text-[11px] text-slate-600 font-medium">
+              * Tích chọn các bữa trên và bấm nút này để lưu & đồng bộ tức thì sang tài khoản của tất cả GVCN.
+            </span>
+            <button
+              type="button"
+              disabled={isSaving}
+              onClick={async (e) => {
+                e.preventDefault();
+                setIsSaving(true);
+                try {
+                  await updateSchoolSettings(formData);
+                  setSavedSuccess(true);
+                  setTimeout(() => setSavedSuccess(false), 4000);
+                } catch (err) {
+                  console.error('Lỗi khi lưu cấu hình chấm ăn:', err);
+                } finally {
+                  setIsSaving(false);
+                }
+              }}
+              className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 text-white font-black text-xs flex items-center justify-center gap-2 shadow-sm transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
+            >
+              <Save className="w-4 h-4" />
+              <span>{isSaving ? 'Đang lưu đồng bộ...' : 'LƯU & ĐỒNG BỘ CẤU HÌNH NÀY TỚI GVCN'}</span>
+            </button>
+          </div>
+        </div>
+
         {/* CARD 3: CẤU HÌNH BÁO CÁO & GIỜ GIỚI HẠN */}
         <div className="bg-white rounded-2xl p-6 border border-slate-200/90 shadow-xs space-y-5">
           <div className="pb-3 border-b border-slate-100">
@@ -587,12 +888,116 @@ export const SettingsSchoolPage: React.FC = () => {
           </div>
         </div>
 
-        {/* CARD 4: CẤU HÌNH HIỂN THỊ & GIAO DIỆN */}
+        {/* CARD 4: CƠ CHẾ TÍNH TOÁN & CÔNG THỨC NHẬP SĨ SỐ (DÀNH CHO GVCN) */}
+        <div className="bg-white rounded-2xl p-6 border border-slate-200/90 shadow-xs space-y-4">
+          <div className="pb-3 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <h2 className="text-sm font-black text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                <Calculator className="w-4 h-4 text-blue-600" />
+                <span>4. CƠ CHẾ TÍNH TOÁN KHI GVCN NHẬP SĨ SỐ</span>
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Quy định công thức tự động tính số học sinh vắng hoặc có mặt trên màn hình điểm danh của GVCN
+              </p>
+            </div>
+            <span className="text-[11px] font-bold text-blue-700 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200 self-start sm:self-auto">
+              Đồng bộ tới GVCN
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
+            <label
+              className={`p-3.5 rounded-xl border-2 cursor-pointer transition-all flex flex-col justify-between gap-2 ${
+                (formData.input_mode || 'MODE_1_TOTAL_PRESENT') === 'MODE_1_TOTAL_PRESENT'
+                  ? 'border-blue-600 bg-blue-50/70 shadow-xs'
+                  : 'border-slate-200 bg-white hover:border-slate-300'
+              }`}
+            >
+              <div className="flex items-start gap-2.5">
+                <input
+                  type="radio"
+                  name="school_input_mode"
+                  value="MODE_1_TOTAL_PRESENT"
+                  checked={(formData.input_mode || 'MODE_1_TOTAL_PRESENT') === 'MODE_1_TOTAL_PRESENT'}
+                  onChange={() => setFormData({ ...formData, input_mode: 'MODE_1_TOTAL_PRESENT' })}
+                  className="mt-0.5 text-blue-600 focus:ring-blue-500"
+                />
+                <div>
+                  <div className="font-black text-xs text-slate-900">Chế độ 1: Tổng số + Có mặt</div>
+                  <div className="text-[11px] text-slate-600 mt-1 leading-snug">
+                    GVCN nhập <strong>Tổng số</strong> và <strong>Có mặt</strong>, hệ thống tự động tính <span className="font-bold text-rose-600">Vắng = Tổng - Có mặt</span>.
+                  </div>
+                </div>
+              </div>
+              <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-blue-100 text-blue-800 self-start">
+                Khuyên dùng
+              </span>
+            </label>
+
+            <label
+              className={`p-3.5 rounded-xl border-2 cursor-pointer transition-all flex flex-col justify-between gap-2 ${
+                formData.input_mode === 'MODE_2_TOTAL_ABSENT'
+                  ? 'border-blue-600 bg-blue-50/70 shadow-xs'
+                  : 'border-slate-200 bg-white hover:border-slate-300'
+              }`}
+            >
+              <div className="flex items-start gap-2.5">
+                <input
+                  type="radio"
+                  name="school_input_mode"
+                  value="MODE_2_TOTAL_ABSENT"
+                  checked={formData.input_mode === 'MODE_2_TOTAL_ABSENT'}
+                  onChange={() => setFormData({ ...formData, input_mode: 'MODE_2_TOTAL_ABSENT' })}
+                  className="mt-0.5 text-blue-600 focus:ring-blue-500"
+                />
+                <div>
+                  <div className="font-black text-xs text-slate-900">Chế độ 2: Tổng số + Vắng</div>
+                  <div className="text-[11px] text-slate-600 mt-1 leading-snug">
+                    GVCN nhập <strong>Tổng số</strong> và <strong>Vắng</strong>, hệ thống tự động tính <span className="font-bold text-emerald-700">Có mặt = Tổng - Vắng</span>.
+                  </div>
+                </div>
+              </div>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-600 self-start">
+                Nhanh gọn
+              </span>
+            </label>
+
+            <label
+              className={`p-3.5 rounded-xl border-2 cursor-pointer transition-all flex flex-col justify-between gap-2 ${
+                formData.input_mode === 'MODE_3_ALL_THREE'
+                  ? 'border-blue-600 bg-blue-50/70 shadow-xs'
+                  : 'border-slate-200 bg-white hover:border-slate-300'
+              }`}
+            >
+              <div className="flex items-start gap-2.5">
+                <input
+                  type="radio"
+                  name="school_input_mode"
+                  value="MODE_3_ALL_THREE"
+                  checked={formData.input_mode === 'MODE_3_ALL_THREE'}
+                  onChange={() => setFormData({ ...formData, input_mode: 'MODE_3_ALL_THREE' })}
+                  className="mt-0.5 text-blue-600 focus:ring-blue-500"
+                />
+                <div>
+                  <div className="font-black text-xs text-slate-900">Chế độ 3: Nhập tự do cả 3</div>
+                  <div className="text-[11px] text-slate-600 mt-1 leading-snug">
+                    Cho phép GVCN nhập tự do cả 3 chỉ số Tổng, Có mặt và Vắng, có cảnh báo nếu tổng không khớp.
+                  </div>
+                </div>
+              </div>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-600 self-start">
+                Tự do
+              </span>
+            </label>
+          </div>
+        </div>
+
+        {/* CARD 5: CẤU HÌNH HIỂN THỊ & GIAO DIỆN */}
         <div className="bg-white rounded-2xl p-6 border border-slate-200/90 shadow-xs space-y-5">
           <div className="pb-3 border-b border-slate-100">
             <h2 className="text-sm font-black text-slate-900 uppercase tracking-wider flex items-center gap-2">
               <Palette className="w-4 h-4 text-emerald-600" />
-              <span>4. CẤU HÌNH HIỂN THỊ & GIAO DIỆN</span>
+              <span>5. CẤU HÌNH HIỂN THỊ & GIAO DIỆN</span>
             </h2>
             <p className="text-xs text-slate-500 mt-0.5">
               Tùy chỉnh màu sắc thương hiệu, logo nhà trường và tiêu đề báo cáo

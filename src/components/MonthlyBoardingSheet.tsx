@@ -353,7 +353,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
 
     for (let d = 1; d <= daysInMonth; d++) {
       const dateStr = `${yearNum}-${String(monthNum).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-      const schedule = getMealScheduleForDate(dateStr, offDaysMap);
+      const schedule = getMealScheduleForDate(dateStr, offDaysMap, settings);
       const dateObj = new Date(yearNum, monthNum - 1, d);
       const dow = dateObj.getDay();
       let dowShort = 'CN';
@@ -379,7 +379,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
     }
 
     return days;
-  }, [yearNum, monthNum, daysInMonth, offDaysMap]);
+  }, [yearNum, monthNum, daysInMonth, offDaysMap, settings]);
 
   // Matrix of meal data: studentId -> { dateStr -> { breakfast: boolean, lunch: boolean, dinner: boolean } }
   const [mealMatrix, setMealMatrix] = useState<
@@ -807,7 +807,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
 
       // 2. Tự động tổng hợp số liệu từ các ngày đã nộp Báo cáo sĩ số (daily_reports)
       // Đảm bảo Sổ chấm cơm tháng tự động hiển thị đầy đủ số liệu chính xác ngay cả khi GVCN chưa lưu thủ công ở tab chấm ăn
-      let targetStudents = classBoardingStudents;
+      let targetStudents = effectiveBoardingStudents.length > 0 ? effectiveBoardingStudents : classBoardingStudents;
       if (targetStudents.length === 0 && asyncBoardingStudents.length > 0) {
         targetStudents = asyncBoardingStudents;
       }
@@ -846,7 +846,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
               });
             }
 
-            const synthRecords = buildDefaultMealRecords(targetStudents, cleanDate, selectedClassId, absentMap);
+            const synthRecords = buildDefaultMealRecords(targetStudents, cleanDate, selectedClassId, absentMap, settings);
             let bCount = 0;
             let lCount = 0;
             let dCount = 0;
@@ -1143,7 +1143,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
     if (!selectedClassId || !selectedMonth) return;
 
     try {
-      const schedule = getMealScheduleForDate(dateStr);
+      const schedule = getMealScheduleForDate(dateStr, offDaysMap, settings);
       let bCount = 0;
       let lCount = 0;
       let dCount = 0;
@@ -1337,7 +1337,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
 
     const dayInfo = monthDays.find((d) => d.dateStr === dateStr);
     const dayNum = dayInfo?.dayNum || dateStr.slice(8);
-    const schedule = getMealScheduleForDate(dateStr, offDaysMap);
+    const schedule = getMealScheduleForDate(dateStr, offDaysMap, settings);
 
     setMealMatrix((prev) => {
       const updated = { ...prev };
@@ -1393,7 +1393,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
     let updatedMatrix = { ...mealMatrix };
 
     dates.forEach((dateStr) => {
-      const schedule = getMealScheduleForDate(dateStr, offDaysMap);
+      const schedule = getMealScheduleForDate(dateStr, offDaysMap, settings);
 
       targetStudents.forEach((st) => {
         const currentStudentDays = updatedMatrix[st.id] || {};
@@ -1731,7 +1731,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
           return;
         }
 
-        const schedule = getMealScheduleForDate(day.dateStr);
+        const schedule = getMealScheduleForDate(day.dateStr, offDaysMap, settings);
         let bCount = 0;
         let lCount = 0;
         let dCount = 0;
@@ -1856,6 +1856,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
         standardDinnerDays,
         sigConfig,
         monthSig,
+        sheetTitle: settings?.boarding_sheet_title || 'SỔ CHẤM ĂN HỌC SINH BÁN TRÚ',
       });
       showToast('Đã xuất file Excel Sổ Chấm Cơm chuẩn biểu mẫu thành công!');
     } catch (e: any) {
@@ -2335,7 +2336,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
 
           <div className="text-center md:text-right">
             <h2 className="text-base sm:text-xl font-black text-slate-900 uppercase tracking-tight">
-              SỔ CHẤM CƠM LỚP: {currentClass?.class_name || ''} THÁNG {monthNum}/{yearNum}
+              {(settings?.boarding_sheet_title || 'SỔ CHẤM ĂN HỌC SINH BÁN TRÚ').toUpperCase()} - LỚP: {currentClass?.class_name || ''} THÁNG {monthNum}/{yearNum}
             </h2>
             {viewMode === 'page1' && (
               <div className="text-xs font-bold text-blue-700 uppercase tracking-wide">
@@ -3435,6 +3436,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
         sigConfig={sigConfig}
         monthSig={monthSig}
         onExportExcel={handleExportExcel}
+        sheetTitle={settings?.boarding_sheet_title || 'SỔ CHẤM ĂN HỌC SINH BÁN TRÚ'}
       />
 
       {/* Digital Signature & Supabase Config Modal */}

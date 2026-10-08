@@ -43,7 +43,7 @@ import {
 } from '../utils/schoolWeeks';
 import { resolveTeacherName, DEFAULT_CLASS_TEACHER_MAP } from '../utils/exportAttendanceStandardExcel';
 import { resolveStudentGender, inferGenderFromName, isValidStudentAddress, cleanStudentAddress } from '../utils/studentUtils';
-import { DEFAULT_BOARDING_STUDENTS_SEED } from '../utils/boardingRules';
+import { DEFAULT_BOARDING_STUDENTS_SEED, getMealScheduleForDate } from '../utils/boardingRules';
 
 const STORAGE_KEYS = {
   SETTINGS: 'sso_school_settings_v1',
@@ -73,6 +73,34 @@ export interface TableSyncStatus {
   error?: string;
 }
 
+// Ext settings comment tag regex for persisting new school settings even if database table lacks columns
+const EXT_SETTINGS_REGEX = /<!--\s*SSO_EXT_SETTINGS:\s*(\{.*?\})\s*-->/s;
+
+export function extractExtSettingsFromFooter(footerText?: string): Partial<SchoolSettings> | null {
+  if (!footerText) return null;
+  const match = footerText.match(EXT_SETTINGS_REGEX);
+  if (!match) return null;
+  try {
+    return JSON.parse(match[1]);
+  } catch {
+    return null;
+  }
+}
+
+export function cleanFooterText(footerText?: string): string {
+  if (!footerText) return '';
+  return footerText.replace(EXT_SETTINGS_REGEX, '').trim();
+}
+
+export function packExtSettingsIntoFooter(cleanFooter: string | undefined, settings: Partial<SchoolSettings>): string {
+  const base = cleanFooterText(cleanFooter || settings.footer_text || '');
+  const ext: Partial<SchoolSettings> = {
+    ...settings,
+    footer_text: base,
+  };
+  return `${base}\n<!-- SSO_EXT_SETTINGS:${JSON.stringify(ext)} -->`.trim();
+}
+
 // Cross-tab and in-tab realtime notification channel
 const realtimeChannel =
   typeof window !== 'undefined' && 'BroadcastChannel' in window
@@ -90,9 +118,19 @@ export function subscribeRealtime(callback: (event: { table: string; payload?: a
   if (typeof window === 'undefined') return () => {};
 
   const handleCustom = (e: any) => {
+    if ((e.detail?.table === 'school_settings' || e.detail?.table === 'settings') && e.detail?.payload) {
+      try {
+        localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(e.detail.payload));
+      } catch {}
+    }
     callback(e.detail);
   };
   const handleBroadcast = (e: MessageEvent) => {
+    if ((e.data?.table === 'school_settings' || e.data?.table === 'settings') && e.data?.payload) {
+      try {
+        localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(e.data.payload));
+      } catch {}
+    }
     callback(e.data);
   };
 
@@ -198,7 +236,48 @@ export function subscribeRealtime(callback: (event: { table: string; payload?: a
           callback({ table: 'boarding_month_signatures', payload });
         })
         .on('postgres_changes', { event: '*', schema: 'public', table: 'school_settings' }, (payload) => {
+          try {
+            if (payload.new) {
+              let newS = payload.new as SchoolSettings;
+              const ext = extractExtSettingsFromFooter(newS.footer_text);
+              if (ext) {
+                newS = { ...newS, ...ext };
+              }
+              newS.footer_text = cleanFooterText(newS.footer_text);
+              localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(newS));
+            }
+          } catch (e) {
+            console.warn('Error merging realtime school_settings:', e);
+          }
           callback({ table: 'school_settings', payload });
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, (payload) => {
+          try {
+            if (payload.new && (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE')) {
+              const newP = payload.new as Profile;
+              const raw = localStorage.getItem(STORAGE_KEYS.PROFILES);
+              let profs: Profile[] = raw ? JSON.parse(raw) : [];
+              const idx = profs.findIndex((p) => p.id === newP.id);
+              if (idx >= 0) profs[idx] = newP;
+              else profs.push(newP);
+              localStorage.setItem(STORAGE_KEYS.PROFILES, JSON.stringify(profs));
+            } else if (payload.old && payload.eventType === 'DELETE') {
+              const oldId = (payload.old as any).id;
+              const raw = localStorage.getItem(STORAGE_KEYS.PROFILES);
+              let profs: Profile[] = raw ? JSON.parse(raw) : [];
+              profs = profs.filter((p) => p.id !== oldId);
+              localStorage.setItem(STORAGE_KEYS.PROFILES, JSON.stringify(profs));
+            }
+          } catch (e) {
+            console.warn('Error merging realtime profiles:', e);
+          }
+          callback({ table: 'profiles', payload });
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'campuses' }, (payload) => {
+          callback({ table: 'campuses', payload });
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'school_off_days' }, (payload) => {
+          callback({ table: 'school_off_days', payload });
         })
         .on('postgres_changes', { event: '*', schema: 'public', table: 'school_years' }, (payload) => {
           callback({ table: 'school_years', payload });
@@ -287,6 +366,15 @@ export function getInitialData() {
     enable_auto_reminder: true,
     auto_reminder_time: '07:30',
     reminder_message_template: 'Lớp {class_name} chưa nộp báo cáo sĩ số ngày hôm nay ({date}). Thầy/Cô vui lòng cập nhật sớm trước 07h30 để BGH tổng hợp toàn trường và không bị trừ điểm thi đua!',
+    friday_breakfast: true,
+    friday_lunch: true,
+    friday_dinner: false,
+    saturday_breakfast: false,
+    saturday_lunch: false,
+    saturday_dinner: false,
+    allow_gvcn_report_friday: true,
+    allow_gvcn_report_saturday: false,
+    boarding_sheet_title: 'SỔ CHẤM ĂN HỌC SINH BÁN TRÚ',
     created_at: now,
     updated_at: now,
   };
@@ -402,18 +490,61 @@ export const StorageService = {
     const supabase = getSupabaseClient();
     if (supabase && isSupabaseConnected()) {
       try {
-        const { data, error } = await supabase.from('school_settings').select('*').limit(1).maybeSingle();
+        const { data, error } = await supabase
+          .from('school_settings')
+          .select('*')
+          .order('updated_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
         if (!error && data) {
           s = data;
+          // 1. Phục hồi cấu hình mở rộng (Thứ 6, Thứ 7, Tên sổ, Chế độ tính toán...) từ footer_text nếu bảng chưa có cột
+          const ext = extractExtSettingsFromFooter(s.footer_text);
+          if (ext) {
+            s = { ...s, ...ext };
+          }
+          s.footer_text = cleanFooterText(s.footer_text);
         }
       } catch (err) {
         console.warn('Supabase fetch settings fallback to local', err);
       }
+
+      // 2. Tra cứu nhật ký cấu hình mới nhất trong system_logs nếu thiếu thông tin
+      try {
+        const { data: logRow } = await supabase
+          .from('system_logs')
+          .select('new_data')
+          .eq('action', 'SETTINGS_CHANGE')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (logRow && logRow.new_data && typeof logRow.new_data === 'object') {
+          const logS = logRow.new_data as Partial<SchoolSettings>;
+          if (logS) {
+            s = { ...(s || {}), ...logS } as SchoolSettings;
+          }
+        }
+      } catch {}
     }
     
+    // 3. Fallback lấy từ bộ nhớ cục bộ nếu cloud thiếu thông tin
+    const raw = localStorage.getItem(STORAGE_KEYS.SETTINGS);
+    const localSaved = raw ? JSON.parse(raw) : null;
+
     if (!s) {
-      const raw = localStorage.getItem(STORAGE_KEYS.SETTINGS);
-      s = raw ? JSON.parse(raw) : getInitialData().settings;
+      s = localSaved || getInitialData().settings;
+    } else if (localSaved) {
+      if (s.friday_breakfast === undefined && localSaved.friday_breakfast !== undefined) {
+        s.friday_breakfast = localSaved.friday_breakfast;
+        s.friday_lunch = localSaved.friday_lunch;
+        s.friday_dinner = localSaved.friday_dinner;
+        s.saturday_breakfast = localSaved.saturday_breakfast;
+        s.saturday_lunch = localSaved.saturday_lunch;
+        s.saturday_dinner = localSaved.saturday_dinner;
+        s.allow_gvcn_report_friday = localSaved.allow_gvcn_report_friday;
+        s.allow_gvcn_report_saturday = localSaved.allow_gvcn_report_saturday;
+        s.boarding_sheet_title = localSaved.boarding_sheet_title || s.boarding_sheet_title;
+      }
     }
 
     let needsSave = false;
@@ -455,12 +586,26 @@ export const StorageService = {
       s.reminder_message_template = 'Lớp {class_name} chưa nộp báo cáo sĩ số ngày hôm nay ({date}). Thầy/Cô vui lòng cập nhật sớm để BGH tổng hợp toàn trường!';
       needsSave = true;
     }
+    if (s && s.friday_breakfast === undefined) {
+      s.friday_breakfast = true;
+      s.friday_lunch = true;
+      s.friday_dinner = false;
+      s.saturday_breakfast = false;
+      s.saturday_lunch = false;
+      s.saturday_dinner = false;
+      s.allow_gvcn_report_friday = true;
+      s.allow_gvcn_report_saturday = false;
+      s.boarding_sheet_title = 'SỔ CHẤM ĂN HỌC SINH BÁN TRÚ';
+      needsSave = true;
+    }
 
     if (s) {
+      s.footer_text = cleanFooterText(s.footer_text);
       localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(s));
       if (needsSave && supabase && isSupabaseConnected()) {
         try {
-          await supabase.from('school_settings').upsert(s);
+          const cloudFooter = packExtSettingsIntoFooter(s.footer_text, s);
+          await supabase.from('school_settings').upsert({ ...s, footer_text: cloudFooter });
         } catch (e) {
           console.error(e);
         }
@@ -476,9 +621,12 @@ export const StorageService = {
   async updateSettings(settings: Partial<SchoolSettings>, updatedBy?: Profile): Promise<SchoolSettings> {
     ensureInitialized();
     const current = await this.getSettings();
+    const cleanFooter = cleanFooterText(settings.footer_text !== undefined ? settings.footer_text : current.footer_text);
+    
     const updated: SchoolSettings = {
       ...current,
       ...settings,
+      footer_text: cleanFooter,
       updated_at: new Date().toISOString(),
     };
     localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(updated));
@@ -486,10 +634,63 @@ export const StorageService = {
     const supabase = getSupabaseClient();
     if (supabase && isSupabaseConnected()) {
       try {
-        const { error } = await supabase.from('school_settings').upsert(updated);
-        if (error) console.error('Supabase update school_settings error:', error);
+        const cloudFooterWithExt = packExtSettingsIntoFooter(cleanFooter, updated);
+        const cloudPayload: any = {
+          ...updated,
+          footer_text: cloudFooterWithExt,
+        };
+
+        let curPayload: any = { ...cloudPayload };
+        for (let attempt = 0; attempt < 8; attempt++) {
+          const { error } = await supabase.from('school_settings').upsert(curPayload);
+          if (!error) break;
+
+          console.warn(`Supabase update school_settings attempt ${attempt + 1} warning:`, error.message);
+          const colMatch =
+            error.message?.match(/column "?([a-zA-Z0-9_]+)"? of relation/i) ||
+            error.message?.match(/find the '?([a-zA-Z0-9_]+)'? column/i) ||
+            error.message?.match(/column "?([a-zA-Z0-9_]+)"? does not exist/i);
+          if (colMatch && colMatch[1] && colMatch[1] in curPayload && colMatch[1] !== 'id' && colMatch[1] !== 'footer_text') {
+            delete curPayload[colMatch[1]];
+            continue;
+          }
+
+          // Fallback to core columns + footer_text (which packs the entire configuration JSON)
+          curPayload = {
+            id: updated.id || 'school_01',
+            school_name: updated.school_name || '',
+            short_name: updated.short_name || '',
+            principal_name: updated.principal_name || '',
+            principal_title: updated.principal_title || '',
+            report_title: updated.report_title || '',
+            footer_text: cloudFooterWithExt,
+            primary_color: updated.primary_color || '#1e40af',
+            updated_at: updated.updated_at,
+          };
+          const { error: fallbackErr } = await supabase.from('school_settings').upsert(curPayload);
+          if (fallbackErr) {
+            console.error('Supabase update school_settings core fallback error:', fallbackErr);
+          }
+          break;
+        }
       } catch (e) {
         console.error('Supabase update settings error:', e);
+      }
+
+      // Lưu snapshot cấu hình vào system_logs để luôn đồng bộ ngay cả khi bảng thiếu cột
+      try {
+        await supabase.from('system_logs').insert({
+          id: `log_settings_${Date.now()}`,
+          user_id: updatedBy?.id || 'admin',
+          user_name: updatedBy?.full_name || 'Quản trị viên',
+          user_role: updatedBy?.role || 'ADMIN',
+          action: 'SETTINGS_CHANGE',
+          old_data: current,
+          new_data: updated,
+          created_at: new Date().toISOString(),
+        });
+      } catch (logErr) {
+        console.warn('Supabase system_logs insert warning:', logErr);
       }
     }
 
@@ -505,6 +706,7 @@ export const StorageService = {
     }
 
     notifyRealtimeChange('school_settings', updated);
+    notifyRealtimeChange('settings', updated);
     return updated;
   },
 
@@ -2358,9 +2560,18 @@ export const StorageService = {
 
     const rawReports = localStorage.getItem(STORAGE_KEYS.REPORTS);
     const reports: DailyReport[] = rawReports ? JSON.parse(rawReports) : [];
-    const existingIndex = reports.findIndex((r) => r.class_id === classId && r.report_date === reportDate);
+    const normCls = (id: any) => String(id || '').trim().toLowerCase().replace(/^c_/, '').replace(/^lớp\s*/i, '');
+    const cleanDate = (d: any) => String(d || '').split('T')[0].trim();
+    const cleanReportDate = cleanDate(reportDate);
 
-    const reportId = existingIndex >= 0 ? reports[existingIndex].id : `rep_${reportDate}_${classId}_${Date.now()}`;
+    const existingIndex = reports.findIndex(
+      (r) =>
+        (normCls(r.class_id) === normCls(classId) || String(r.class_id).toLowerCase() === String(classId).toLowerCase()) &&
+        cleanDate(r.report_date) === cleanReportDate
+    );
+
+    const prevReportId = existingIndex >= 0 ? reports[existingIndex].id : null;
+    const reportId = prevReportId || `rep_${cleanReportDate}_${classId}_${Date.now()}`;
     const oldReport = existingIndex >= 0 ? { ...reports[existingIndex] } : null;
 
     const now = new Date();
@@ -2400,7 +2611,7 @@ export const StorageService = {
     const report: DailyReport = {
       id: reportId,
       class_id: classId,
-      report_date: reportDate,
+      report_date: cleanReportDate,
       created_by: user.id,
       status: 'SUBMITTED',
       notes: notes ?? (existingIndex >= 0 ? reports[existingIndex].notes : ''),
@@ -2417,10 +2628,10 @@ export const StorageService = {
     }
     localStorage.setItem(STORAGE_KEYS.REPORTS, JSON.stringify(reports));
 
-    // Update values
+    // Update values (xóa sạch mọi giá trị cũ của báo cáo này để tránh rác / lệch số liệu)
     const rawValues = localStorage.getItem(STORAGE_KEYS.VALUES);
     let allValues: DailyReportValue[] = rawValues ? JSON.parse(rawValues) : [];
-    allValues = allValues.filter((v) => v.report_id !== reportId);
+    allValues = allValues.filter((v) => v.report_id !== reportId && (!prevReportId || v.report_id !== prevReportId));
 
     const newValues: DailyReportValue[] = [];
     Object.entries(valuesByGroup).forEach(([groupId, vals]) => {
@@ -2441,6 +2652,7 @@ export const StorageService = {
     localStorage.setItem(STORAGE_KEYS.VALUES, JSON.stringify(allValues));
 
     // PERSIST DIRECTLY TO SUPABASE (Awaited with timeout to ensure cloud persistence before realtime broadcast)
+    let effectiveReportId = reportId;
     const supabase = getSupabaseClient();
     if (supabase && isSupabaseConnected()) {
       try {
@@ -2455,7 +2667,6 @@ export const StorageService = {
           }
 
           // 2. Tìm ID báo cáo thực tế trên Cloud nếu đã tồn tại cho (class_id, report_date)
-          let effectiveReportId = reportId;
           try {
             const { data: cloudRep } = await supabase
               .from('daily_reports')
@@ -2552,6 +2763,37 @@ export const StorageService = {
       }
     }
 
+    // Đảm bảo cập nhật report.id đồng nhất giữa cloud và local
+    if (effectiveReportId !== reportId) {
+      report.id = effectiveReportId;
+      const curRepsRaw = localStorage.getItem(STORAGE_KEYS.REPORTS);
+      if (curRepsRaw) {
+        const curReps: DailyReport[] = JSON.parse(curRepsRaw);
+        const rIdx = curReps.findIndex(
+          (r) =>
+            r.id === reportId ||
+            (normCls(r.class_id) === normCls(classId) && cleanDate(r.report_date) === cleanReportDate)
+        );
+        if (rIdx >= 0) {
+          curReps[rIdx].id = effectiveReportId;
+          localStorage.setItem(STORAGE_KEYS.REPORTS, JSON.stringify(curReps));
+        }
+      }
+      const curValsRaw = localStorage.getItem(STORAGE_KEYS.VALUES);
+      if (curValsRaw) {
+        const curVals: DailyReportValue[] = JSON.parse(curValsRaw);
+        curVals.forEach((v) => {
+          if (v.report_id === reportId) {
+            v.report_id = effectiveReportId;
+          }
+        });
+        localStorage.setItem(STORAGE_KEYS.VALUES, JSON.stringify(curVals));
+      }
+      newValues.forEach((v) => {
+        v.report_id = effectiveReportId;
+      });
+    }
+
     // Add audit log
     // Read from localStorage synchronously to prevent blocking the UI
     const rawClasses = localStorage.getItem('classes') || localStorage.getItem(STORAGE_KEYS.CLASSES);
@@ -2576,7 +2818,8 @@ export const StorageService = {
     // Auto-resolve any pending attendance reminders for this class and date
     this.resolveAttendanceReminders(classId, reportDate, user, cls?.class_name || classId).catch(console.error);
 
-    notifyRealtimeChange('daily_reports', { reportId, classId, reportDate });
+    notifyRealtimeChange('daily_reports', { reportId: effectiveReportId, classId, reportDate });
+    notifyRealtimeChange('daily_report_values', { reportId: effectiveReportId, classId, reportDate });
     return { report, values: newValues };
   },
 
@@ -3024,10 +3267,18 @@ export const StorageService = {
                     String(r.report_date).split('T')[0] === cleanDate)
               );
               if (idx >= 0) {
+                const oldLocalId = reports[idx].id;
                 const localTs = new Date(reports[idx].updated_at || reports[idx].created_at || 0).getTime();
                 const cloudTs = new Date(cRep.updated_at || cRep.created_at || 0).getTime();
                 if (cloudTs >= localTs) {
                   reports[idx] = repObj;
+                }
+                if (oldLocalId && oldLocalId !== cRep.id) {
+                  allValues.forEach((v) => {
+                    if (v.report_id === oldLocalId) {
+                      v.report_id = cRep.id;
+                    }
+                  });
                 }
               } else {
                 reports.push(repObj);
@@ -3130,16 +3381,43 @@ export const StorageService = {
       let dayAbsent = 0;
 
       repList.forEach((r) => {
-        const val = allValues.find((v) => 
+        let val = allValues.find((v) => 
           v.report_id === r.id && (
             v.indicator_group_id === mainIndicator?.id ||
             v.indicator_group_id === 'ig_all' ||
             indicators.find(i => i.id === v.indicator_group_id)?.code === 'ALL'
           )
         );
-        if (val) {
-          dayTotal += val.total_count;
-          dayAbsent += val.absent_count;
+        if (!val) {
+          const normCls = (id: any) => String(id || '').trim().toLowerCase().replace(/^c_/, '').replace(/^lớp\s*/i, '');
+          const cleanDate = (d: any) => String(d || '').split('T')[0].trim();
+          const altReps = reports.filter(alt => normCls(alt.class_id) === normCls(r.class_id) && cleanDate(alt.report_date) === cleanDate(r.report_date));
+          const altIds = new Set(altReps.map(alt => alt.id));
+          val = allValues.find(v => altIds.has(v.report_id) && (
+            v.indicator_group_id === mainIndicator?.id ||
+            v.indicator_group_id === 'ig_all' ||
+            indicators.find(i => i.id === v.indicator_group_id)?.code === 'ALL'
+          ));
+        }
+
+        let curTotal = val ? Number(val.total_count) || 0 : 0;
+        let curAbsent = val ? Number(val.absent_count) || 0 : 0;
+
+        // Fallback: Nếu không tìm thấy dòng giá trị nhưng báo cáo đã nộp
+        if (curTotal <= 0 && r && (r.status as string) !== 'NOT_REPORTED') {
+          let abList: any[] = [];
+          if (typeof r.absent_students === 'string') {
+            try { abList = JSON.parse(r.absent_students); } catch {}
+          } else if (Array.isArray(r.absent_students)) {
+            abList = r.absent_students;
+          }
+          curAbsent = abList.length;
+          curTotal = 35;
+        }
+
+        if (curTotal > 0) {
+          dayTotal += curTotal;
+          dayAbsent += curAbsent;
 
           let cStat = classStats.get(r.class_id);
           if (!cStat) {
@@ -3157,8 +3435,8 @@ export const StorageService = {
             }
           }
           if (cStat) {
-            cStat.total += val.total_count;
-            cStat.absent += val.absent_count;
+            cStat.total += curTotal;
+            cStat.absent += curAbsent;
           }
         }
       });
@@ -3244,11 +3522,12 @@ export const StorageService = {
   }> {
     ensureInitialized();
 
-    const [classes, profiles, indicators, students] = await Promise.all([
+    const [classes, profiles, indicators, students, schoolSettings] = await Promise.all([
       this.getClasses(),
       this.getProfiles(),
       this.getIndicatorGroups(),
       this.getStudents(),
+      this.getSettings(),
     ]);
 
     const classItem = classes.find((c) => c.id === classId || c.class_name.toLowerCase() === classId.toLowerCase()) || null;
@@ -3348,7 +3627,20 @@ export const StorageService = {
 
     // Đồng bộ nhanh từ Supabase bảng daily_reports & daily_report_values nếu có kết nối
     const rawTargetIds = [classId, classItem?.id, classItem?.class_name, (classItem as any)?.code].filter(Boolean) as string[];
-    const targetQueryIds = Array.from(new Set(rawTargetIds.flatMap((k) => [String(k), String(k).toLowerCase(), String(k).toUpperCase()])));
+    const targetQueryIds = Array.from(new Set(rawTargetIds.flatMap((k) => {
+      const s = String(k).trim();
+      const sClean = s.replace(/^c_/i, '').replace(/^lớp\s*/i, '').trim();
+      return [
+        s,
+        s.toLowerCase(),
+        s.toUpperCase(),
+        sClean,
+        sClean.toLowerCase(),
+        sClean.toUpperCase(),
+        `c_${sClean}`.toLowerCase(),
+        `c_${sClean}`.toUpperCase(),
+      ];
+    })));
 
     const supabase = getSupabaseClient();
     if (supabase && isSupabaseConnected()) {
@@ -3363,6 +3655,9 @@ export const StorageService = {
         if (!cErr && cloudReports && cloudReports.length > 0) {
           const rawReports = localStorage.getItem(STORAGE_KEYS.REPORTS);
           let reports: DailyReport[] = rawReports ? JSON.parse(rawReports) : [];
+          const rawValues = localStorage.getItem(STORAGE_KEYS.VALUES);
+          let allValues: DailyReportValue[] = rawValues ? JSON.parse(rawValues) : [];
+
           cloudReports.forEach((cRep) => {
             const cleanDate = String(cRep.report_date).split('T')[0].trim();
             const repObj = { ...cRep, report_date: cleanDate };
@@ -3373,10 +3668,18 @@ export const StorageService = {
                   String(r.report_date).split('T')[0] === cleanDate)
             );
             if (idx >= 0) {
+              const oldLocalId = reports[idx].id;
               const localTs = new Date(reports[idx].updated_at || reports[idx].created_at || 0).getTime();
               const cloudTs = new Date(cRep.updated_at || cRep.created_at || 0).getTime();
               if (cloudTs >= localTs) {
                 reports[idx] = repObj;
+              }
+              if (oldLocalId && oldLocalId !== cRep.id) {
+                allValues.forEach((v) => {
+                  if (v.report_id === oldLocalId) {
+                    v.report_id = cRep.id;
+                  }
+                });
               }
             } else {
               reports.push(repObj);
@@ -3392,8 +3695,6 @@ export const StorageService = {
               .in('report_id', repIds);
 
             if (cloudValues && cloudValues.length > 0) {
-              const rawValues = localStorage.getItem(STORAGE_KEYS.VALUES);
-              let allValues: DailyReportValue[] = rawValues ? JSON.parse(rawValues) : [];
               cloudValues.forEach((cVal) => {
                 const vIdx = allValues.findIndex(
                   (v) =>
@@ -3401,11 +3702,7 @@ export const StorageService = {
                     (v.report_id === cVal.report_id && v.indicator_group_id === cVal.indicator_group_id)
                 );
                 if (vIdx >= 0) {
-                  const localVTs = new Date(allValues[vIdx].updated_at || allValues[vIdx].created_at || 0).getTime();
-                  const cloudVTs = new Date(cVal.updated_at || cVal.created_at || 0).getTime();
-                  if (cloudVTs >= localVTs) {
-                    allValues[vIdx] = cVal;
-                  }
+                  allValues[vIdx] = cVal;
                 } else {
                   allValues.push(cVal);
                 }
@@ -3477,7 +3774,18 @@ export const StorageService = {
 
       const rep = monthReports.find((r) => String(r.report_date).split('T')[0].trim() === dateStr);
       if (rep && (rep.status as string) !== 'NOT_REPORTED') {
-        const repVals = allValues.filter((v) => v.report_id === rep.id);
+        let repVals = allValues.filter((v) => v.report_id === rep.id);
+        if (repVals.length === 0) {
+          const normCls = (id: any) => String(id || '').trim().toLowerCase().replace(/^c_/, '').replace(/^lớp\s*/i, '');
+          const matchingReps = reports.filter(
+            (r) =>
+              (normCls(r.class_id) === normCls(classId) || normValidClassIds.has(String(r.class_id).toLowerCase())) &&
+              String(r.report_date).split('T')[0].trim() === dateStr
+          );
+          const repIds = new Set(matchingReps.map((r) => r.id));
+          repVals = allValues.filter((v) => repIds.has(v.report_id));
+        }
+
         const allVal = repVals.find((v) => 
           v.indicator_group_id === allIndicator?.id || 
           v.indicator_group_id === 'ig_all' ||
@@ -3503,14 +3811,27 @@ export const StorageService = {
         }
 
         const totalAll = Number(allVal?.total_count) > 0 ? Number(allVal!.total_count) : defaultClassTotal;
-        const absentAll = Math.max(Number(allVal?.absent_count) || 0, absentStudentsList.length);
+        const absentAll = Number(allVal?.absent_count) !== undefined && allVal
+          ? Math.max(Number(allVal.absent_count) || 0, absentStudentsList.length)
+          : absentStudentsList.length;
         const presentAll = Number(allVal?.present_count) !== undefined && Number(allVal?.present_count) > 0
           ? Number(allVal!.present_count)
           : Math.max(0, totalAll - absentAll);
 
-        const listBoardingAbsent = absentStudentsList.filter((s) => s.isBoarding === true || s.is_boarding === true || s.isBoarding !== false).length;
+        const listBoardingAbsent = absentStudentsList.filter((s) => {
+          if (s.isBoarding === true || s.is_boarding === true) return true;
+          if (s.isBoarding === false || s.is_boarding === false) return false;
+          const found = classStudents.find(
+            (std) =>
+              std.id === s.id ||
+              std.full_name.trim().toLowerCase() === String(s.full_name || s.name || '').trim().toLowerCase()
+          );
+          return found ? found.isBoarding !== false : true;
+        }).length;
         const totalBoarding = Number(boardingVal?.total_count) > 0 ? Number(boardingVal!.total_count) : defaultClassBoarding;
-        const absentBoarding = Math.max(Number(boardingVal?.absent_count) || 0, listBoardingAbsent);
+        const absentBoarding = Number(boardingVal?.absent_count) !== undefined && boardingVal
+          ? Math.max(Number(boardingVal.absent_count) || 0, listBoardingAbsent)
+          : listBoardingAbsent;
         const baoAnBoarding = Math.max(0, totalBoarding - absentBoarding);
 
         const totalNgoaiTru = Math.max(0, totalAll - totalBoarding);
@@ -3544,13 +3865,26 @@ export const StorageService = {
         const dayOfWeek_loc = new Date(y_loc, m_loc, d_loc).getDay();
 
         let finalNames_loc = namesStr || '';
-        if (dayOfWeek_loc === 6 || dayOfWeek_loc === 0) {
+        const dayMealSched = getMealScheduleForDate(dateStr, undefined, schoolSettings);
+        if (dayOfWeek_loc === 6) {
+          if (dayMealSched.isMealDay || schoolSettings?.allow_gvcn_report_saturday) {
+            if (finalNames_loc) {
+              finalNames_loc += dayMealSched.note ? `\n- ${dayMealSched.note}` : '\n- Thứ 7 có chấm ăn bán trú';
+            } else {
+              finalNames_loc = dayMealSched.note || 'Thứ 7 có chấm ăn bán trú';
+            }
+          } else {
+            finalNames_loc = 'Ngày nghỉ';
+          }
+        } else if (dayOfWeek_loc === 0) {
           finalNames_loc = 'Ngày nghỉ';
         } else if (dayOfWeek_loc === 5) {
-          if (finalNames_loc) {
-            finalNames_loc += '\n- Thứ 6 chỉ ăn sáng và ăn trưa';
-          } else {
-            finalNames_loc = 'Thứ 6 chỉ ăn sáng và ăn trưa';
+          if (dayMealSched.note) {
+            if (finalNames_loc) {
+              finalNames_loc += `\n- ${dayMealSched.note}`;
+            } else {
+              finalNames_loc = dayMealSched.note;
+            }
           }
         }
 
@@ -3582,10 +3916,17 @@ export const StorageService = {
         const dayOfWeek_loc = new Date(y_loc, m_loc, d_loc).getDay();
 
         let finalNames_unrep = '';
-        if (dayOfWeek_loc === 6 || dayOfWeek_loc === 0) {
+        const dayMealSchedUnrep = getMealScheduleForDate(dateStr, undefined, schoolSettings);
+        if (dayOfWeek_loc === 6) {
+          if (dayMealSchedUnrep.isMealDay || schoolSettings?.allow_gvcn_report_saturday) {
+            finalNames_unrep = dayMealSchedUnrep.note || 'Thứ 7 có chấm ăn bán trú (Chưa nộp)';
+          } else {
+            finalNames_unrep = 'Ngày nghỉ';
+          }
+        } else if (dayOfWeek_loc === 0) {
           finalNames_unrep = 'Ngày nghỉ';
         } else if (dayOfWeek_loc === 5) {
-          finalNames_unrep = 'Thứ 6 chỉ ăn sáng và ăn trưa';
+          finalNames_unrep = dayMealSchedUnrep.note || 'Thứ 6';
         }
 
         rows.push({
@@ -4598,7 +4939,27 @@ export const StorageService = {
         details.system_logs = { count: 0 };
       }
 
-      // 13. boarding_month_signatures (Bao gồm định mức ăn chuẩn S, T, T và chữ ký duyệt tháng)
+      // 13. boarding_reports (Sổ chấm ăn bán trú ngày)
+      const rawBoardingReports = localStorage.getItem(STORAGE_KEYS.BOARDING_REPORTS);
+      const boardingReportsList: BoardingDailyReport[] = rawBoardingReports ? JSON.parse(rawBoardingReports) : [];
+      if (boardingReportsList.length > 0) {
+        const { error: brErr } = await supabase.from('boarding_reports').upsert(boardingReportsList, { onConflict: 'class_id,date' });
+        details.boarding_reports = { count: boardingReportsList.length, error: brErr?.message };
+      } else {
+        details.boarding_reports = { count: 0 };
+      }
+
+      // 14. boarding_signature_configs (Cấu hình chữ ký số bán trú)
+      const rawSigConfigs = localStorage.getItem(STORAGE_KEYS.SIGNATURE_CONFIGS);
+      const sigConfigsList: BoardingSignatureConfig[] = rawSigConfigs ? JSON.parse(rawSigConfigs) : [];
+      if (sigConfigsList.length > 0) {
+        const { error: scErr } = await supabase.from('boarding_signature_configs').upsert(sigConfigsList);
+        details.boarding_signature_configs = { count: sigConfigsList.length, error: scErr?.message };
+      } else {
+        details.boarding_signature_configs = { count: 0 };
+      }
+
+      // 15. boarding_month_signatures (Bao gồm định mức ăn chuẩn S, T, T và chữ ký duyệt tháng)
       const rawMonthSigs = localStorage.getItem(STORAGE_KEYS.MONTH_SIGNATURES);
       const rawStandards = localStorage.getItem(STORAGE_KEYS.STANDARD_CONFIGS);
       const monthSigsList: BoardingMonthSignature[] = rawMonthSigs ? JSON.parse(rawMonthSigs) : [];
@@ -5063,6 +5424,36 @@ export const StorageService = {
         return { success: true, message: `Đã đẩy ${logs.length} dòng nhật ký lên Supabase!`, count: logs.length };
       }
 
+      if (tableKey === 'boarding_reports') {
+        const raw = localStorage.getItem(STORAGE_KEYS.BOARDING_REPORTS);
+        const list: BoardingDailyReport[] = raw ? JSON.parse(raw) : [];
+        if (list.length > 0) {
+          const { error } = await supabase.from('boarding_reports').upsert(list, { onConflict: 'class_id,date' });
+          if (error) throw new Error(error.message);
+        }
+        return { success: true, message: `Đã đẩy ${list.length} báo cáo chấm ăn bán trú lên Supabase!`, count: list.length };
+      }
+
+      if (tableKey === 'boarding_signature_configs') {
+        const raw = localStorage.getItem(STORAGE_KEYS.SIGNATURE_CONFIGS);
+        const list: BoardingSignatureConfig[] = raw ? JSON.parse(raw) : [];
+        if (list.length > 0) {
+          const { error } = await supabase.from('boarding_signature_configs').upsert(list);
+          if (error) throw new Error(error.message);
+        }
+        return { success: true, message: `Đã đẩy ${list.length} cấu hình chữ ký số bán trú lên Supabase!`, count: list.length };
+      }
+
+      if (tableKey === 'boarding_month_signatures') {
+        const raw = localStorage.getItem(STORAGE_KEYS.MONTH_SIGNATURES);
+        const list: BoardingMonthSignature[] = raw ? JSON.parse(raw) : [];
+        if (list.length > 0) {
+          const { error } = await supabase.from('boarding_month_signatures').upsert(list, { onConflict: 'class_id,month' });
+          if (error) throw new Error(error.message);
+        }
+        return { success: true, message: `Đã đẩy ${list.length} nhật ký ký duyệt tháng lên Supabase!`, count: list.length };
+      }
+
       return { success: false, message: `Bảng "${tableKey}" không hợp lệ.`, count: 0 };
     } catch (err: any) {
       return { success: false, message: `Lỗi đẩy bảng ${tableKey}: ${err?.message || err}`, count: 0 };
@@ -5146,6 +5537,9 @@ export const StorageService = {
         school_off_days: STORAGE_KEYS.OFF_DAYS,
         notifications: STORAGE_KEYS.NOTIFICATIONS,
         system_logs: STORAGE_KEYS.LOGS,
+        boarding_reports: STORAGE_KEYS.BOARDING_REPORTS,
+        boarding_signature_configs: STORAGE_KEYS.SIGNATURE_CONFIGS,
+        boarding_month_signatures: STORAGE_KEYS.MONTH_SIGNATURES,
       };
 
       const storageKey = storageMap[tableKey];
@@ -5226,6 +5620,8 @@ export const StorageService = {
         offDays,
         notifications,
         logs,
+        boardingReports,
+        sigConfigs,
         monthSigs,
       ] = await Promise.all([
         supabase.from('school_settings').select('*').limit(1).maybeSingle(),
@@ -5240,6 +5636,8 @@ export const StorageService = {
         this.fetchAllRowsFromCloud('school_off_days'),
         this.fetchAllRowsFromCloud('notifications'),
         this.fetchAllRowsFromCloud('system_logs'),
+        this.fetchAllRowsFromCloud('boarding_reports'),
+        this.fetchAllRowsFromCloud('boarding_signature_configs'),
         this.fetchAllRowsFromCloud('boarding_month_signatures'),
       ]);
 
@@ -5276,6 +5674,8 @@ export const StorageService = {
       if (offDays && offDays.length > 0) counts.school_off_days = updateMergedList(STORAGE_KEYS.OFF_DAYS, offDays);
       if (notifications && notifications.length > 0) counts.notifications = updateMergedList(STORAGE_KEYS.NOTIFICATIONS, notifications);
       if (logs && logs.length > 0) counts.system_logs = updateMergedList(STORAGE_KEYS.LOGS, logs);
+      if (boardingReports && boardingReports.length > 0) counts.boarding_reports = updateMergedList(STORAGE_KEYS.BOARDING_REPORTS, boardingReports);
+      if (sigConfigs && sigConfigs.length > 0) counts.boarding_signature_configs = updateMergedList(STORAGE_KEYS.SIGNATURE_CONFIGS, sigConfigs);
 
       if (monthSigs && monthSigs.length > 0) {
         counts.boarding_month_signatures = updateMergedList(STORAGE_KEYS.MONTH_SIGNATURES, monthSigs);
@@ -5347,6 +5747,8 @@ export const StorageService = {
       { key: 'school_off_days', label: 'Lịch nghỉ học sinh (school_off_days)', storageKey: STORAGE_KEYS.OFF_DAYS },
       { key: 'notifications', label: 'Thông báo hệ thống & Nhắc nhở (notifications)', storageKey: STORAGE_KEYS.NOTIFICATIONS },
       { key: 'system_logs', label: 'Nhật ký thao tác & kiểm toán (system_logs)', storageKey: STORAGE_KEYS.LOGS },
+      { key: 'boarding_reports', label: 'Sổ chấm ăn bán trú ngày (boarding_reports)', storageKey: STORAGE_KEYS.BOARDING_REPORTS },
+      { key: 'boarding_signature_configs', label: 'Cấu hình chữ ký số bán trú (boarding_signature_configs)', storageKey: STORAGE_KEYS.SIGNATURE_CONFIGS },
       { key: 'boarding_month_signatures', label: 'Ký số & Định mức ăn tháng (boarding_month_signatures)', storageKey: STORAGE_KEYS.MONTH_SIGNATURES },
     ];
 

@@ -7,6 +7,7 @@ import { FileSpreadsheet, Save, CheckCircle, Calculator, Sliders, Code2 } from '
 export const SettingsReportTemplatePage: React.FC = () => {
   const { settings, updateSchoolSettings } = useSchool();
   const [reportTitle, setReportTitle] = useState(settings?.report_title || 'BÁO CÁO SĨ SỐ HỌC SINH');
+  const [boardingSheetTitle, setBoardingSheetTitle] = useState(settings?.boarding_sheet_title || 'SỔ CHẤM ĂN HỌC SINH BÁN TRÚ');
   const [inputMode, setInputMode] = useState<InputCalculationMode>(settings?.input_mode || 'MODE_1_TOTAL_PRESENT');
   const [footerText, setFooterText] = useState(settings?.footer_text || 'Số liệu được tổng hợp tự động từ phần mềm báo cáo sĩ số hàng ngày.');
   const [developerName, setDeveloperName] = useState(settings?.developer_name || 'Vũ Văn Hùng');
@@ -16,6 +17,7 @@ export const SettingsReportTemplatePage: React.FC = () => {
   useEffect(() => {
     if (settings) {
       setReportTitle(settings.report_title || 'BÁO CÁO SĨ SỐ HỌC SINH');
+      setBoardingSheetTitle(settings.boarding_sheet_title || 'SỔ CHẤM ĂN HỌC SINH BÁN TRÚ');
       setInputMode(settings.input_mode || 'MODE_1_TOTAL_PRESENT');
       setFooterText(settings.footer_text || 'Số liệu được tổng hợp tự động từ phần mềm báo cáo sĩ số hàng ngày.');
       setDeveloperName(settings.developer_name || 'Vũ Văn Hùng');
@@ -27,6 +29,7 @@ export const SettingsReportTemplatePage: React.FC = () => {
     e.preventDefault();
     await updateSchoolSettings({
       report_title: reportTitle,
+      boarding_sheet_title: boardingSheetTitle,
       input_mode: inputMode,
       footer_text: footerText,
       developer_name: developerName,
@@ -152,7 +155,7 @@ export const SettingsReportTemplatePage: React.FC = () => {
           <div className="space-y-4">
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                Tiêu đề chính trên báo cáo (Viết hoa)
+                Tiêu đề chính trên báo cáo sĩ số (Viết hoa)
               </label>
               <input
                 type="text"
@@ -163,6 +166,22 @@ export const SettingsReportTemplatePage: React.FC = () => {
               />
               <p className="text-[11px] text-slate-400 mt-1">
                 Ví dụ: "BÁO CÁO SĨ SỐ HỌC SINH" hoặc "BÁO CÁO THEO DÕI CHUYÊN CẦN HẰNG NGÀY"
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                Tên sổ chấm ăn học sinh bán trú (Viết hoa - Dùng cho Sổ chấm cơm, In ấn & Xuất Excel)
+              </label>
+              <input
+                type="text"
+                required
+                value={boardingSheetTitle}
+                onChange={(e) => setBoardingSheetTitle(e.target.value)}
+                className="w-full px-3 py-2 text-sm font-bold border border-blue-300 rounded-xl focus:ring-2 focus:ring-blue-500 bg-blue-50/30"
+              />
+              <p className="text-[11px] text-slate-400 mt-1">
+                Ví dụ: "SỔ CHẤM ĂN HỌC SINH BÁN TRÚ" hoặc "SỔ THEO DÕI ĂN BÁN TRÚ"
               </p>
             </div>
 

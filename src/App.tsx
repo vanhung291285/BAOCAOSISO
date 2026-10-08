@@ -80,7 +80,33 @@ const AppContent: React.FC = () => {
   };
 
   // Find user's assigned class name if GVCN
-  const assignedClass = classes.find((c) => c.id === currentUser?.assigned_class_id);
+  const assignedClass = classes.find(
+    (c) => (currentUser?.assigned_class_id && c.id === currentUser.assigned_class_id) || (currentUser?.id && c.homeroom_teacher_id === currentUser.id)
+  );
+
+  // Listen to hash changes and app_navigate custom events for sub-settings tabs navigation
+  useEffect(() => {
+    const handleHash = () => {
+      const hash = window.location.hash.replace(/^#/, '');
+      if (hash && hash.startsWith('/')) {
+        handleNavigate(hash);
+      }
+    };
+    const handleCustomNav = (e: any) => {
+      if (e.detail?.path) {
+        handleNavigate(e.detail.path);
+      }
+    };
+
+    handleHash();
+    window.addEventListener('hashchange', handleHash);
+    window.addEventListener('app_navigate', handleCustomNav);
+
+    return () => {
+      window.removeEventListener('hashchange', handleHash);
+      window.removeEventListener('app_navigate', handleCustomNav);
+    };
+  }, []);
 
   // Default routing for GVCN on app load
   useEffect(() => {

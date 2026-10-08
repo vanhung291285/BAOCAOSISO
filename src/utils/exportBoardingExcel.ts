@@ -22,6 +22,7 @@ export interface ExportBoardingExcelParams {
   standardDinnerDays?: number;
   sigConfig?: BoardingSignatureConfig;
   monthSig?: BoardingMonthSignature | null;
+  sheetTitle?: string;
 }
 
 // Convert 0-indexed column index to Excel column letter (0 -> A, 1 -> B, ...)
@@ -132,6 +133,7 @@ function buildBoardingWorksheet(
     principalName: string;
     sigConfig?: BoardingSignatureConfig;
     monthSig?: BoardingMonthSignature | null;
+    sheetTitle?: string;
   }
 ) {
   const {
@@ -160,6 +162,7 @@ function buildBoardingWorksheet(
     principalName,
     sigConfig,
     monthSig,
+    sheetTitle,
   } = context;
 
   // Filter days for this sheet
@@ -260,7 +263,8 @@ function buildBoardingWorksheet(
   const titleRange = `A4:${getColLetter(totalColsCount - 1)}4`;
   ws.mergeCells(titleRange);
   const titleCell = ws.getCell('A4');
-  titleCell.value = `SỔ CHẤM CƠM LỚP: ${className.toUpperCase()} THÁNG ${monthNum}/${yearNum}`;
+  const mainSheetTitle = (sheetTitle || 'SỔ CHẤM CƠM').toUpperCase();
+  titleCell.value = `${mainSheetTitle} LỚP: ${className.toUpperCase()} THÁNG ${monthNum}/${yearNum}`;
   titleCell.font = { name: 'Times New Roman', size: 14, bold: true };
   titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
   ws.getRow(4).height = 24;
@@ -981,6 +985,7 @@ export async function exportMonthlyBoardingExcel(params: ExportBoardingExcelPara
     principalName,
     sigConfig,
     monthSig,
+    sheetTitle: params.sheetTitle,
   };
 
   const loc = params.locationName?.trim() || 'Xa Dung';

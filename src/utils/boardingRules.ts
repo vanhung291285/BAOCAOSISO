@@ -1,4 +1,4 @@
-import { BoardingMealRecord, Student } from '../types';
+import { BoardingMealRecord, Student, SchoolSettings } from '../types';
 
 export interface DayMealSchedule {
   dayOfWeek: number; // 0 = Chủ nhật, 1 = Thứ 2, ..., 6 = Thứ 7
@@ -12,14 +12,15 @@ export interface DayMealSchedule {
 }
 
 /**
- * Quy định ăn bán trú trường PTDTBT THCS Xa Dung:
+ * Lấy cấu hình chấm ăn học sinh bán trú (đặc biệt là Thứ 6 và Thứ 7 theo cấu hình của Ban Giám Hiệu/Quản trị):
  * - Thứ 2, 3, 4, 5: Ăn Sáng, Ăn Trưa, Ăn Tối (3 bữa)
- * - Thứ 6: Ăn Sáng, Ăn Trưa. Chiều/Tối thứ 6 học sinh về nhà nên KHÔNG ăn tối.
- * - Thứ 7, Chủ Nhật: Học sinh nghỉ về gia đình, KHÔNG tổ chức ăn bán trú.
+ * - Thứ 6: Mặc định Ăn Sáng, Ăn Trưa. Bữa Tối bật/tắt theo cấu hình quản trị.
+ * - Thứ 7: Mặc định nghỉ, nhưng nếu Quản trị tích chọn (Sáng, Trưa, Tối) thì được phép tổ chức chấm ăn và đồng bộ sang sổ.
  */
 export function getMealScheduleForDate(
   dateStr: string,
-  offDaysMap?: Map<string, string> | Set<string> | Array<{ date: string; name?: string }>
+  offDaysMap?: Map<string, string> | Set<string> | Array<{ date: string; name?: string }>,
+  customSettings?: Partial<SchoolSettings>
 ): DayMealSchedule {
   let offName: string | undefined;
 
@@ -41,6 +42,17 @@ export function getMealScheduleForDate(
           const match = list.find((o: any) => o && o.date === dateStr);
           if (match) offName = match.name || 'Ngày nghỉ';
         }
+      }
+    } catch {}
+  }
+
+  // Đọc cấu hình trường từ storage nếu không truyền customSettings
+  let schoolSettings: Partial<SchoolSettings> = customSettings || {};
+  if (!customSettings && typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+    try {
+      const rawSettings = localStorage.getItem('sso_school_settings_v1') || localStorage.getItem('sso_school_settings');
+      if (rawSettings) {
+        schoolSettings = JSON.parse(rawSettings);
       }
     } catch {}
   }
@@ -118,28 +130,66 @@ export function getMealScheduleForDate(
         dinnerAllowed: true,
         note: 'Ăn 3 bữa: Sáng, Trưa, Tối',
       };
-    case 5: // Thứ 6
+    case 5: { // Thứ 6: Đọc cấu hình sáng, trưa, tối
+      const fb = schoolSettings.friday_breakfast !== undefined ? Boolean(schoolSettings.friday_breakfast) : true;
+      const fl = schoolSettings.friday_lunch !== undefined ? Boolean(schoolSettings.friday_lunch) : true;
+      const fd = schoolSettings.friday_dinner !== undefined ? Boolean(schoolSettings.friday_dinner) : false;
+      const isMeal = fb || fl || fd;
+      
+      let noteStr = '';
+      if (fb && fl && fd) {
+        noteStr = 'Ăn 3 bữa: Sáng, Trưa, Tối (Đã bật ăn tối Thứ 6 theo cấu hình)';
+      } else if (fb && fl && !fd) {
+        noteStr = 'Ăn 2 bữa: Sáng, Trưa (Chiều thứ 6 học sinh về nhà, không ăn tối)';
+      } else if (isMeal) {
+        const parts: string[] = [];
+        if (fb) parts.push('Sáng');
+        if (fl) parts.push('Trưa');
+        if (fd) parts.push('Tối');
+        noteStr = `Ăn các bữa: ${parts.join(', ')}`;
+      } else {
+        noteStr = 'Thứ 6 không tổ chức ăn bán trú theo cấu hình';
+      }
+
       return {
         dayOfWeek: 5,
         dayName: 'Thứ Sáu',
         shortName: 'T6',
-        isMealDay: true,
-        breakfastAllowed: true,
-        lunchAllowed: true,
-        dinnerAllowed: false,
-        note: 'Ăn 2 bữa: Sáng, Trưa (Chiều thứ 6 học sinh về nhà, không ăn tối)',
+        isMealDay: isMeal,
+        breakfastAllowed: fb,
+        lunchAllowed: fl,
+        dinnerAllowed: fd,
+        note: noteStr,
       };
-    case 6: // Thứ 7
+    }
+    case 6: { // Thứ 7: Đọc cấu hình sáng, trưa, tối
+      const sb = Boolean(schoolSettings.saturday_breakfast);
+      const sl = Boolean(schoolSettings.saturday_lunch);
+      const sd = Boolean(schoolSettings.saturday_dinner);
+      const isMeal = sb || sl || sd;
+
+      let noteStr = '';
+      if (isMeal) {
+        const parts: string[] = [];
+        if (sb) parts.push('Sáng');
+        if (sl) parts.push('Trưa');
+        if (sd) parts.push('Tối');
+        noteStr = `Thứ 7 có tổ chức chấm ăn (${parts.join(', ')}) theo cấu hình nhà trường`;
+      } else {
+        noteStr = 'Cuối tuần: Học sinh về gia đình (Không ăn)';
+      }
+
       return {
         dayOfWeek: 6,
         dayName: 'Thứ Bảy',
         shortName: 'T7',
-        isMealDay: false,
-        breakfastAllowed: false,
-        lunchAllowed: false,
-        dinnerAllowed: false,
-        note: 'Cuối tuần: Học sinh về gia đình (Không ăn)',
+        isMealDay: isMeal,
+        breakfastAllowed: sb,
+        lunchAllowed: sl,
+        dinnerAllowed: sd,
+        note: noteStr,
       };
+    }
     case 0: // Chủ nhật
     default:
       return {
@@ -165,9 +215,10 @@ export function buildDefaultMealRecords(
   boardingStudents: Student[],
   dateStr: string,
   classId: string,
-  absentStudentsMap?: Map<string, { reason?: string }>
+  absentStudentsMap?: Map<string, { reason?: string }>,
+  customSettings?: Partial<SchoolSettings>
 ): BoardingMealRecord[] {
-  const schedule = getMealScheduleForDate(dateStr);
+  const schedule = getMealScheduleForDate(dateStr, undefined, customSettings);
 
   return boardingStudents.map((st) => {
     // Check if student is marked absent in daily report

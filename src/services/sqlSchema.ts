@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS public.school_settings (
     phone TEXT DEFAULT '',
     email TEXT DEFAULT '',
     website TEXT DEFAULT '',
+    student_results_url TEXT DEFAULT '',
     logo_url TEXT DEFAULT '',
     principal_name TEXT DEFAULT '',
     principal_title TEXT DEFAULT 'Hiệu trưởng',
@@ -60,6 +61,15 @@ CREATE TABLE IF NOT EXISTS public.school_settings (
     enable_auto_reminder BOOLEAN DEFAULT true,
     auto_reminder_time TEXT DEFAULT '07:30',
     reminder_message_template TEXT DEFAULT 'Lớp {class_name} chưa nộp báo cáo sĩ số ngày hôm nay ({date}). Thầy/Cô vui lòng cập nhật sớm trước 07h30 để BGH tổng hợp toàn trường và không bị trừ điểm thi đua!',
+    friday_breakfast BOOLEAN DEFAULT true,
+    friday_lunch BOOLEAN DEFAULT true,
+    friday_dinner BOOLEAN DEFAULT false,
+    saturday_breakfast BOOLEAN DEFAULT false,
+    saturday_lunch BOOLEAN DEFAULT false,
+    saturday_dinner BOOLEAN DEFAULT false,
+    allow_gvcn_report_friday BOOLEAN DEFAULT true,
+    allow_gvcn_report_saturday BOOLEAN DEFAULT false,
+    boarding_sheet_title TEXT DEFAULT 'SỔ CHẤM ĂN HỌC SINH BÁN TRÚ',
     created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
 );
@@ -165,6 +175,7 @@ CREATE TABLE IF NOT EXISTS public.students (
     class_id TEXT NOT NULL REFERENCES public.classes(id) ON DELETE CASCADE,
     full_name TEXT NOT NULL,
     address TEXT,
+    village TEXT,
     gender TEXT,
     student_code TEXT,
     birth_date TEXT,
@@ -271,6 +282,10 @@ CREATE TABLE IF NOT EXISTS public.boarding_month_signatures (
 DO $$
 BEGIN
     BEGIN
+        ALTER TABLE public.school_settings ADD COLUMN student_results_url TEXT DEFAULT '';
+    EXCEPTION WHEN duplicate_column THEN END;
+
+    BEGIN
         ALTER TABLE public.school_settings ADD COLUMN input_mode TEXT DEFAULT 'MODE_1_TOTAL_PRESENT' CHECK (input_mode IN ('MODE_1_TOTAL_PRESENT', 'MODE_2_TOTAL_ABSENT', 'MODE_3_ALL_THREE'));
     EXCEPTION WHEN duplicate_column THEN END;
 
@@ -339,6 +354,42 @@ BEGIN
     EXCEPTION WHEN duplicate_column THEN END;
 
     BEGIN
+        ALTER TABLE public.school_settings ADD COLUMN friday_breakfast BOOLEAN DEFAULT true;
+    EXCEPTION WHEN duplicate_column THEN END;
+
+    BEGIN
+        ALTER TABLE public.school_settings ADD COLUMN friday_lunch BOOLEAN DEFAULT true;
+    EXCEPTION WHEN duplicate_column THEN END;
+
+    BEGIN
+        ALTER TABLE public.school_settings ADD COLUMN friday_dinner BOOLEAN DEFAULT false;
+    EXCEPTION WHEN duplicate_column THEN END;
+
+    BEGIN
+        ALTER TABLE public.school_settings ADD COLUMN saturday_breakfast BOOLEAN DEFAULT false;
+    EXCEPTION WHEN duplicate_column THEN END;
+
+    BEGIN
+        ALTER TABLE public.school_settings ADD COLUMN saturday_lunch BOOLEAN DEFAULT false;
+    EXCEPTION WHEN duplicate_column THEN END;
+
+    BEGIN
+        ALTER TABLE public.school_settings ADD COLUMN saturday_dinner BOOLEAN DEFAULT false;
+    EXCEPTION WHEN duplicate_column THEN END;
+
+    BEGIN
+        ALTER TABLE public.school_settings ADD COLUMN allow_gvcn_report_friday BOOLEAN DEFAULT true;
+    EXCEPTION WHEN duplicate_column THEN END;
+
+    BEGIN
+        ALTER TABLE public.school_settings ADD COLUMN allow_gvcn_report_saturday BOOLEAN DEFAULT false;
+    EXCEPTION WHEN duplicate_column THEN END;
+
+    BEGIN
+        ALTER TABLE public.school_settings ADD COLUMN boarding_sheet_title TEXT DEFAULT 'SỔ CHẤM ĂN HỌC SINH BÁN TRÚ';
+    EXCEPTION WHEN duplicate_column THEN END;
+
+    BEGIN
         ALTER TABLE public.classes ADD COLUMN campus_id TEXT REFERENCES public.campuses(id) ON DELETE SET NULL;
     EXCEPTION WHEN duplicate_column THEN END;
 
@@ -383,6 +434,10 @@ BEGIN
     EXCEPTION WHEN duplicate_column THEN END;
 
     -- Migrations for public.students
+    BEGIN
+        ALTER TABLE public.students ADD COLUMN village TEXT;
+    EXCEPTION WHEN duplicate_column THEN END;
+
     BEGIN
         ALTER TABLE public.students ADD COLUMN gender TEXT;
     EXCEPTION WHEN duplicate_column THEN END;
@@ -514,6 +569,7 @@ DECLARE
         'public.school_settings', 
         'public.school_years', 
         'public.campuses', 
+        'public.profiles',
         'public.classes', 
         'public.indicator_groups', 
         'public.daily_reports', 
@@ -521,6 +577,7 @@ DECLARE
         'public.students',
         'public.school_off_days',
         'public.notifications',
+        'public.system_logs',
         'public.boarding_reports',
         'public.boarding_signature_configs',
         'public.boarding_month_signatures'
@@ -819,24 +876,36 @@ export const generateFullDatabaseSqlScript = (): string => {
       sql += `-- 1. DỮ LIỆU CẤU HÌNH TRƯỜNG\n`;
       sql += `INSERT INTO public.school_settings (
     id, school_name, short_name, department_name, sub_department_name,
-    address, commune, province, phone, email, website, logo_url,
+    address, commune, province, phone, email, website, student_results_url, logo_url,
     principal_name, principal_title, reporter_name, reporter_title,
     report_title, footer_text, developer_name, developer_contact,
     primary_color, input_mode, enable_campuses, week1_start_date,
     school_days_per_week, ranking_threshold_excellent, ranking_threshold_good,
     ranking_threshold_fair, enable_early_report_bonus, early_report_deadline,
     early_report_bonus_points, early_report_max_bonus, enable_auto_reminder,
-    auto_reminder_time, reminder_message_template
+    auto_reminder_time, reminder_message_template,
+    friday_breakfast, friday_lunch, friday_dinner,
+    saturday_breakfast, saturday_lunch, saturday_dinner,
+    allow_gvcn_report_friday, allow_gvcn_report_saturday, boarding_sheet_title
 ) VALUES (
     ${escapeSql(s.id || 'school_01')}, ${escapeSql(s.school_name)}, ${escapeSql(s.short_name)}, ${escapeSql(s.department_name)}, ${escapeSql(s.sub_department_name)},
-    ${escapeSql(s.address)}, ${escapeSql(s.commune)}, ${escapeSql(s.province)}, ${escapeSql(s.phone)}, ${escapeSql(s.email)}, ${escapeSql(s.website)}, ${escapeSql(s.logo_url)},
+    ${escapeSql(s.address)}, ${escapeSql(s.commune)}, ${escapeSql(s.province)}, ${escapeSql(s.phone)}, ${escapeSql(s.email)}, ${escapeSql(s.website)}, ${escapeSql(s.student_results_url || '')}, ${escapeSql(s.logo_url)},
     ${escapeSql(s.principal_name)}, ${escapeSql(s.principal_title || 'Hiệu trưởng')}, ${escapeSql(s.reporter_name)}, ${escapeSql(s.reporter_title || 'Người lập biểu')},
     ${escapeSql(s.report_title || 'BÁO CÁO SĨ SỐ HỌC SINH')}, ${escapeSql(s.footer_text)}, ${escapeSql(s.developer_name || 'Vũ Văn Hùng')}, ${escapeSql(s.developer_contact || 'SĐT: 0984246993')},
     ${escapeSql(s.primary_color || '#1d4ed8')}, ${escapeSql(s.input_mode || 'MODE_1_TOTAL_PRESENT')}, ${escapeSql(Boolean(s.enable_campuses))}, ${escapeSql(s.week1_start_date || '2026-09-07')},
     ${escapeSql(Number(s.school_days_per_week) || 5)}, ${escapeSql(Number(s.ranking_threshold_excellent) || 98)}, ${escapeSql(Number(s.ranking_threshold_good) || 95)},
     ${escapeSql(Number(s.ranking_threshold_fair) || 90)}, ${escapeSql(Boolean(s.enable_early_report_bonus))}, ${escapeSql(s.early_report_deadline || '07:30')},
     ${escapeSql(Number(s.early_report_bonus_points) || 0.5)}, ${escapeSql(Number(s.early_report_max_bonus) || 2.5)}, ${escapeSql(Boolean(s.enable_auto_reminder))},
-    ${escapeSql(s.auto_reminder_time || '07:30')}, ${escapeSql(s.reminder_message_template)}
+    ${escapeSql(s.auto_reminder_time || '07:30')}, ${escapeSql(s.reminder_message_template)},
+    ${escapeSql(s.friday_breakfast !== undefined ? Boolean(s.friday_breakfast) : true)},
+    ${escapeSql(s.friday_lunch !== undefined ? Boolean(s.friday_lunch) : true)},
+    ${escapeSql(Boolean(s.friday_dinner))},
+    ${escapeSql(Boolean(s.saturday_breakfast))},
+    ${escapeSql(Boolean(s.saturday_lunch))},
+    ${escapeSql(Boolean(s.saturday_dinner))},
+    ${escapeSql(s.allow_gvcn_report_friday !== undefined ? Boolean(s.allow_gvcn_report_friday) : true)},
+    ${escapeSql(Boolean(s.allow_gvcn_report_saturday))},
+    ${escapeSql(s.boarding_sheet_title || 'SỔ CHẤM ĂN HỌC SINH BÁN TRÚ')}
 ) ON CONFLICT (id) DO UPDATE SET
     school_name = EXCLUDED.school_name,
     short_name = EXCLUDED.short_name,
@@ -928,9 +997,9 @@ ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, code = EXCLUDED.code, enabl
         sql += `-- 7. DANH SÁCH HỌC SINH (${students.length} học sinh)\n`;
         students.forEach((s) => {
           const finalGender = resolveStudentGender(s.gender, s.full_name);
-          sql += `INSERT INTO public.students (id, class_id, full_name, address, gender, student_code, birth_date, ethnicity, notes, is_boarding)
-VALUES (${escapeSql(s.id)}, ${escapeSql(s.class_id)}, ${escapeSql(s.full_name)}, ${escapeSql(s.address || s.village || '')}, ${escapeSql(finalGender)}, ${escapeSql(s.student_code)}, ${escapeSql(s.birth_date)}, ${escapeSql(s.ethnicity)}, ${escapeSql(s.notes)}, ${escapeSql(Boolean(s.isBoarding ?? s.is_boarding))})
-ON CONFLICT (id) DO UPDATE SET full_name = EXCLUDED.full_name, class_id = EXCLUDED.class_id, address = EXCLUDED.address, gender = EXCLUDED.gender, student_code = EXCLUDED.student_code, birth_date = EXCLUDED.birth_date, ethnicity = EXCLUDED.ethnicity, notes = EXCLUDED.notes, is_boarding = EXCLUDED.is_boarding;\n`;
+          sql += `INSERT INTO public.students (id, class_id, full_name, address, village, gender, student_code, birth_date, ethnicity, notes, is_boarding)
+VALUES (${escapeSql(s.id)}, ${escapeSql(s.class_id)}, ${escapeSql(s.full_name)}, ${escapeSql(s.address || '')}, ${escapeSql(s.village || '')}, ${escapeSql(finalGender)}, ${escapeSql(s.student_code)}, ${escapeSql(s.birth_date)}, ${escapeSql(s.ethnicity)}, ${escapeSql(s.notes)}, ${escapeSql(Boolean(s.isBoarding ?? s.is_boarding))})
+ON CONFLICT (id) DO UPDATE SET full_name = EXCLUDED.full_name, class_id = EXCLUDED.class_id, address = EXCLUDED.address, village = EXCLUDED.village, gender = EXCLUDED.gender, student_code = EXCLUDED.student_code, birth_date = EXCLUDED.birth_date, ethnicity = EXCLUDED.ethnicity, notes = EXCLUDED.notes, is_boarding = EXCLUDED.is_boarding;\n`;
         });
         sql += `\n`;
       }

@@ -70,7 +70,7 @@ interface BoardingManagementPageProps {
 type TabType = 'daily-attendance' | 'monthly-sheet' | 'students-list' | 'kitchen-report' | 'rules-info';
 
 export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ onNavigate, initialTab }) => {
-  const { classes, campuses, students, addStudent, updateStudent, deleteStudent, deleteStudentsByClass, importStudents } = useSchool();
+  const { classes, campuses, students, settings, addStudent, updateStudent, deleteStudent, deleteStudentsByClass, importStudents } = useSchool();
   const { currentUser, isGVCN, isAdmin, isBGH } = useAuth();
 
   // Active Tab
@@ -86,10 +86,22 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
   // Selected Date (defaults to today)
   const [selectedDate, setSelectedDate] = useState<string>(getTodayDateStr());
 
+  // Find GVCN's assigned class by profile's assigned_class_id OR class's homeroom_teacher_id
+  const myAssignedClass = useMemo(() => {
+    if (!isGVCN || !currentUser) return null;
+    return (
+      classes.find((c) => currentUser.assigned_class_id && c.id === currentUser.assigned_class_id) ||
+      classes.find((c) => currentUser.id && c.homeroom_teacher_id === currentUser.id) ||
+      null
+    );
+  }, [classes, isGVCN, currentUser]);
+
   // Selected Class ID
   const [selectedClassId, setSelectedClassId] = useState<string>(() => {
-    if (isGVCN && currentUser?.assigned_class_id) {
-      return currentUser.assigned_class_id;
+    if (isGVCN) {
+      if (currentUser?.assigned_class_id) return currentUser.assigned_class_id;
+      const found = classes.find((c) => currentUser?.id && c.homeroom_teacher_id === currentUser.id);
+      if (found) return found.id;
     }
     const firstActive = classes.find((c) => c.active && !c.is_locked);
     return firstActive?.id || classes[0]?.id || '';
@@ -97,10 +109,10 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
 
   // Keep in sync with user's class if GVCN
   useEffect(() => {
-    if (isGVCN && currentUser?.assigned_class_id && selectedClassId !== currentUser.assigned_class_id) {
-      setSelectedClassId(currentUser.assigned_class_id);
+    if (isGVCN && myAssignedClass && selectedClassId !== myAssignedClass.id) {
+      setSelectedClassId(myAssignedClass.id);
     }
-  }, [isGVCN, currentUser, selectedClassId]);
+  }, [isGVCN, myAssignedClass, selectedClassId]);
 
   // Selected Class info
   const selectedClass = useMemo(() => {
@@ -149,8 +161,8 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
 
   // Day Meal Schedule
   const mealSchedule = useMemo(() => {
-    return getMealScheduleForDate(selectedDate);
-  }, [selectedDate]);
+    return getMealScheduleForDate(selectedDate, undefined, settings);
+  }, [selectedDate, settings]);
 
   // Meal Attendance State for selected date and class
   const [mealReport, setMealReport] = useState<BoardingDailyReport | null>(null);
@@ -2351,26 +2363,52 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
             <div className="bg-amber-50/70 border border-amber-200 rounded-2xl p-4 space-y-2">
               <div className="flex items-center gap-2 font-extrabold text-amber-900 text-sm">
                 <Home className="w-4 h-4 text-amber-600" />
-                <span>Thứ 6 (Cuối tuần)</span>
+                <span>Thứ 6</span>
               </div>
               <p className="text-xs text-amber-800 leading-relaxed">
-                Học sinh ăn <strong>2 bữa: Sáng, Trưa</strong>. Chiều thứ 6 sau khi tan học, học sinh về nhà với gia đình nên <strong>KHÔNG ăn tối</strong>.
+                {settings?.friday_dinner
+                  ? 'Học sinh ăn 3 bữa: Sáng, Trưa, Tối (Đã bật chấm ăn tối Thứ 6 theo cấu hình BGH).'
+                  : 'Học sinh ăn 2 bữa: Sáng, Trưa. Chiều thứ 6 tan học học sinh về gia đình (mặc định không ăn tối).'}
               </p>
-              <div className="pt-2 text-[11px] text-amber-700 font-semibold">
-                ⚠️ Hệ thống mặc định tắt bữa Tối ngày Thứ 6.
+              <div className="pt-2 text-[11px] text-amber-700 font-semibold flex items-center justify-between">
+                <span>{settings?.friday_dinner ? '✅ Bữa Tối: Đang bật' : '⚠️ Bữa Tối: Tắt (Mặc định)'}</span>
+                {isAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => onNavigate?.('/settings/school')}
+                    className="text-blue-700 underline font-bold hover:text-blue-900"
+                  >
+                    Đổi cấu hình
+                  </button>
+                )}
               </div>
             </div>
 
-            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-2">
+            <div className={`border rounded-2xl p-4 space-y-2 ${
+              settings?.allow_gvcn_report_saturday || settings?.saturday_breakfast || settings?.saturday_lunch || settings?.saturday_dinner
+                ? 'bg-emerald-50/80 border-emerald-200'
+                : 'bg-slate-50 border-slate-200'
+            }`}>
               <div className="flex items-center gap-2 font-extrabold text-slate-800 text-sm">
                 <Calendar className="w-4 h-4 text-slate-600" />
                 <span>Thứ 7 & Chủ Nhật</span>
               </div>
-              <p className="text-xs text-slate-600 leading-relaxed">
-                Học sinh nghỉ tại gia đình. Nhà trường <strong>không tổ chức nấu ăn bán trú</strong> vào hai ngày cuối tuần.
+              <p className="text-xs text-slate-700 leading-relaxed">
+                {settings?.allow_gvcn_report_saturday || settings?.saturday_breakfast || settings?.saturday_lunch || settings?.saturday_dinner
+                  ? `Thứ 7: ĐÃ BẬT chấm ăn bán trú (${[settings?.saturday_breakfast && 'Sáng', settings?.saturday_lunch && 'Trưa', settings?.saturday_dinner && 'Tối'].filter(Boolean).join(', ')}). GVCN được phép báo sĩ số và đồng bộ sang sổ chấm cơm.`
+                  : 'Học sinh nghỉ tại gia đình. Mặc định không tổ chức ăn bán trú vào cuối tuần.'}
               </p>
-              <div className="pt-2 text-[11px] text-slate-500 font-medium">
-                Trừ các trường hợp có thông báo bồi dưỡng/ôn thi đột xuất của BGH.
+              <div className="pt-2 text-[11px] text-slate-600 font-medium flex items-center justify-between">
+                <span>Chủ Nhật: Học sinh nghỉ về gia đình</span>
+                {isAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => onNavigate?.('/settings/school')}
+                    className="text-blue-700 underline font-bold hover:text-blue-900"
+                  >
+                    Đổi cấu hình
+                  </button>
+                )}
               </div>
             </div>
           </div>

@@ -6,7 +6,7 @@ import { StorageService } from '../services/storage';
 import { AbsentStudent, DailyReport, DailyReportValue, Student, BoardingDailyReport } from '../types';
 import { DateNavigator } from '../components/DateNavigator';
 import { getTodayDateStr, formatDateVN } from '../utils/schoolWeeks';
-import { buildDefaultMealRecords, generateDefaultBoardingStudentsForClass } from '../utils/boardingRules';
+import { buildDefaultMealRecords, generateDefaultBoardingStudentsForClass, getMealScheduleForDate } from '../utils/boardingRules';
 import { isValidStudentAddress, cleanStudentAddress } from '../utils/studentUtils';
 import {
   CheckCircle2,
@@ -77,10 +77,22 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
     return initialDate || getTodayDateStr();
   });
 
+  // Find GVCN's assigned class by profile's assigned_class_id OR class's homeroom_teacher_id
+  const myAssignedClass = useMemo(() => {
+    if (!isGVCN || !currentUser) return null;
+    return (
+      classes.find((c) => currentUser.assigned_class_id && c.id === currentUser.assigned_class_id) ||
+      classes.find((c) => currentUser.id && c.homeroom_teacher_id === currentUser.id) ||
+      null
+    );
+  }, [classes, isGVCN, currentUser]);
+
   // Selected class ID
   const [selectedClassId, setSelectedClassId] = useState<string>(() => {
-    if (isGVCN && currentUser?.assigned_class_id) {
-      return currentUser.assigned_class_id;
+    if (isGVCN) {
+      if (currentUser?.assigned_class_id) return currentUser.assigned_class_id;
+      const found = classes.find((c) => currentUser?.id && c.homeroom_teacher_id === currentUser.id);
+      if (found) return found.id;
     }
     if (initialClassId) {
       return initialClassId;
@@ -97,21 +109,20 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
   }, [initialDate]);
 
   useEffect(() => {
-    if (initialClassId && initialClassId !== selectedClassId && (!isGVCN || !currentUser?.assigned_class_id)) {
+    if (initialClassId && initialClassId !== selectedClassId && (!isGVCN || !myAssignedClass)) {
       setSelectedClassId(initialClassId);
     }
-  }, [initialClassId, isGVCN, currentUser]);
+  }, [initialClassId, isGVCN, myAssignedClass, selectedClassId]);
 
+  // Keep selectedClassId in sync with teacher's assigned class
   useEffect(() => {
-    if (!selectedClassId && classes.length > 0) {
-      if (isGVCN && currentUser?.assigned_class_id) {
-        setSelectedClassId(currentUser.assigned_class_id);
-      } else {
-        const firstActive = classes.find((c) => c.active && !c.is_locked);
-        setSelectedClassId(firstActive?.id || classes[0]?.id || '');
-      }
+    if (isGVCN && myAssignedClass && selectedClassId !== myAssignedClass.id) {
+      setSelectedClassId(myAssignedClass.id);
+    } else if (!selectedClassId && classes.length > 0) {
+      const firstActive = classes.find((c) => c.active && !c.is_locked);
+      setSelectedClassId(firstActive?.id || classes[0]?.id || '');
     }
-  }, [classes, selectedClassId, isGVCN, currentUser]);
+  }, [isGVCN, myAssignedClass, classes, selectedClassId]);
 
   // Get active selected class
   const selectedClass = useMemo(() => {
@@ -153,6 +164,11 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
   const [isLoadingReport, setIsLoadingReport] = useState<boolean>(true);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null);
+
+  // Day meal schedule for current date & settings
+  const currentMealSchedule = useMemo(() => {
+    return getMealScheduleForDate(selectedDate, undefined, settings);
+  }, [selectedDate, settings]);
 
   // Form values: groupId -> { total, present, absent }
   const [formValues, setFormValues] = useState<Record<string, { total: number | ''; present: number | ''; absent: number | '' }>>({});
@@ -1128,7 +1144,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
               }
             });
           }
-          const synthRecords = buildDefaultMealRecords(classBoardingStudents, selectedDate, selectedClassId, absentMap);
+          const synthRecords = buildDefaultMealRecords(classBoardingStudents, selectedDate, selectedClassId, absentMap, settings);
           let bCount = 0;
           let lCount = 0;
           let dCount = 0;
@@ -1456,6 +1472,15 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
               selectedDate={selectedDate}
               onChangeDate={(d) => setSelectedDate(d)}
             />
+            {currentMealSchedule && (
+              <div className="mt-1.5 flex items-center gap-1.5 text-[11px]">
+                <Utensils className={`w-3 h-3 ${currentMealSchedule.isMealDay ? 'text-amber-600' : 'text-slate-400'} shrink-0`} />
+                <span className="font-bold text-slate-700">{currentMealSchedule.dayName}:</span>
+                <span className={`${currentMealSchedule.isMealDay ? 'text-emerald-700 font-bold' : 'text-slate-500 font-medium'}`}>
+                  {currentMealSchedule.note}
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Class Selector */}
@@ -1464,15 +1489,17 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
               <School className="w-3.5 h-3.5 text-blue-600" />
               Lớp học
             </label>
-            {isGVCN && currentUser?.assigned_class_id ? (
+            {isGVCN && (myAssignedClass || currentUser?.assigned_class_id) ? (
               <div className="flex items-center justify-between p-2.5 rounded-xl bg-blue-50/50 border border-blue-200 shadow-2xs">
                 <div className="flex items-center gap-2.5">
                   <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center font-black text-sm shadow-xs">
-                    {selectedClass?.class_name}
+                    {selectedClass?.class_name || myAssignedClass?.class_name}
                   </div>
                   <div>
-                    <div className="text-sm font-black text-slate-900">Lớp {selectedClass?.class_name}</div>
-                    <div className="text-[11px] text-slate-600 font-medium">GVCN: {currentUser.full_name}</div>
+                    <div className="text-sm font-black text-slate-900">
+                      Lớp {selectedClass?.class_name || myAssignedClass?.class_name}
+                    </div>
+                    <div className="text-[11px] text-slate-600 font-medium">GVCN: {currentUser?.full_name}</div>
                   </div>
                 </div>
                 <span className="text-[11px] font-bold text-blue-700 bg-white px-2.5 py-1 rounded-lg border border-blue-200 shadow-2xs">

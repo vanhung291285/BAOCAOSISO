@@ -36,6 +36,9 @@ export const SettingsNavTabs: React.FC<SettingsNavTabsProps> = ({ currentPath })
 
   const handleNav = (path: string) => {
     window.location.hash = path;
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('app_navigate', { detail: { path } }));
+    }
   };
 
   return (

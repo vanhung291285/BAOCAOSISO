@@ -120,11 +120,15 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     // Subscribe to realtime changes - ONLY for school configuration tables, NEVER for daily_reports
     const SCHOOL_CONTEXT_TABLES = new Set([
       'school_settings',
+      'settings',
       'school_years',
       'campuses',
       'classes',
       'indicator_groups',
       'students',
+      'profiles',
+      'off_days',
+      'school_off_days',
       'all_reset',
       'all'
     ]);

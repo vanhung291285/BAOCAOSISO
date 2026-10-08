@@ -42,7 +42,14 @@ interface MonthlyReportPageProps {
 export const MonthlyReportPage: React.FC<MonthlyReportPageProps> = ({ onNavigate }) => {
   const { settings, campuses, classes, students } = useSchool();
   const { isGVCN, currentUser } = useAuth();
-  const assignedClass = classes.find((c) => c.id === currentUser?.assigned_class_id);
+  const assignedClass = useMemo(() => {
+    if (!currentUser) return null;
+    return (
+      classes.find((c) => currentUser.assigned_class_id && c.id === currentUser.assigned_class_id) ||
+      classes.find((c) => currentUser.id && c.homeroom_teacher_id === currentUser.id) ||
+      null
+    );
+  }, [classes, currentUser]);
 
   const [isExportingBoarding, setIsExportingBoarding] = useState(false);
   const [isExportingStandard, setIsExportingStandard] = useState(false);
@@ -59,28 +66,35 @@ export const MonthlyReportPage: React.FC<MonthlyReportPageProps> = ({ onNavigate
 
   // Campus filter
   const [selectedCampusId, setSelectedCampusId] = useState<string>(() => {
-    if (isGVCN && currentUser?.assigned_class_id) {
-      const cls = classes.find((c) => c.id === currentUser.assigned_class_id);
-      return cls?.campus_id || 'all';
+    if (isGVCN && assignedClass) {
+      return assignedClass.campus_id || 'all';
     }
     return 'all';
   });
 
   // Class filter: 'all' hoặc class_id cụ thể
   const [selectedClassFilter, setSelectedClassFilter] = useState<string>(() => {
-    if (isGVCN && currentUser?.assigned_class_id) {
-      return currentUser.assigned_class_id;
+    if (isGVCN && assignedClass) {
+      return assignedClass.id;
     }
     return 'all';
   });
 
   // Chế độ xem: 'class_detail' = Chi tiết theo ngày của lớp | 'all_classes_summary' = Tổng hợp tất cả các lớp | 'boarding_sheet' = Sổ chấm ăn bán trú tháng
   const [viewMode, setViewMode] = useState<'class_detail' | 'all_classes_summary' | 'boarding_sheet'>(() => {
-    if (isGVCN && currentUser?.assigned_class_id) {
+    if (isGVCN && assignedClass) {
       return 'class_detail';
     }
     return 'all_classes_summary';
   });
+
+  // Keep in sync if assignedClass changes
+  useEffect(() => {
+    if (isGVCN && assignedClass) {
+      setSelectedClassFilter(assignedClass.id);
+      if (assignedClass.campus_id) setSelectedCampusId(assignedClass.campus_id);
+    }
+  }, [isGVCN, assignedClass]);
 
   // Tùy chọn lọc: chỉ hiện các ngày đã có báo cáo trong tháng (khi xem chi tiết lớp)
   const [onlyReportedDays, setOnlyReportedDays] = useState(false);
