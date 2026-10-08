@@ -779,6 +779,86 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
         });
       });
 
+      // 2. Tự động tổng hợp số liệu từ các ngày đã nộp Báo cáo sĩ số (daily_reports)
+      // Đảm bảo Sổ chấm cơm tháng tự động hiển thị đầy đủ số liệu chính xác ngay cả khi GVCN chưa lưu thủ công ở tab chấm ăn
+      let targetStudents = classBoardingStudents;
+      if (targetStudents.length === 0) {
+        const clsStudents = await StorageService.getStudentsByClass(selectedClassId, currentClass?.class_name);
+        targetStudents = clsStudents.filter((s) => s.isBoarding !== false);
+        if (targetStudents.length === 0 && currentClass) {
+          targetStudents = generateDefaultBoardingStudentsForClass(selectedClassId, currentClass.class_name);
+          StorageService.saveStudents(targetStudents).catch(console.warn);
+        }
+      }
+
+      try {
+        const classDaily = await StorageService.getDailyReportsByMonth(selectedClassId, selectedMonth);
+        const synthToSave: BoardingDailyReport[] = [];
+
+        classDaily.forEach((dr) => {
+          if (!dr || (dr.status as string) === 'NOT_REPORTED') return;
+          const cleanDate = String(dr.report_date).split('T')[0].trim();
+          if (!cleanDate.startsWith(selectedMonth)) return;
+
+          // Nếu ngày này chưa có bản ghi báo ăn cụ thể nào trong reportMap
+          if (!reportMap.has(cleanDate)) {
+            const absentMap = new Map<string, { reason?: string }>();
+            if (dr.absent_students && Array.isArray(dr.absent_students)) {
+              dr.absent_students.forEach((ab: any) => {
+                if (ab.id) {
+                  absentMap.set(ab.id, { reason: ab.reason });
+                }
+                if (ab.full_name) {
+                  absentMap.set(ab.full_name.trim().toLowerCase(), { reason: ab.reason });
+                }
+              });
+            }
+
+            const synthRecords = buildDefaultMealRecords(targetStudents, cleanDate, selectedClassId, absentMap);
+            let bCount = 0;
+            let lCount = 0;
+            let dCount = 0;
+            let abCount = 0;
+
+            synthRecords.forEach((rec) => {
+              if (rec.breakfast) bCount++;
+              if (rec.lunch) lCount++;
+              if (rec.dinner) dCount++;
+              if (rec.is_absent) abCount++;
+            });
+
+            const newRep: BoardingDailyReport = {
+              id: `boarding_rep_${selectedClassId}_${cleanDate}`,
+              class_id: selectedClassId,
+              date: cleanDate,
+              status: 'SUBMITTED',
+              total_boarding_students: targetStudents.length,
+              breakfast_count: bCount,
+              lunch_count: lCount,
+              dinner_count: dCount,
+              absent_count: abCount,
+              total_meals: bCount + lCount + dCount,
+              notes: dr.notes || 'Tổng hợp từ Báo cáo sĩ số ngày',
+              records: synthRecords,
+              submitted_by: currentUser?.id,
+              submitted_by_name: currentUser?.full_name || 'GVCN',
+              submitted_at: dr.updated_at || dr.created_at || new Date().toISOString(),
+              created_at: dr.created_at || new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            };
+
+            reportMap.set(cleanDate, newRep);
+            synthToSave.push(newRep);
+          }
+        });
+
+        if (synthToSave.length > 0) {
+          StorageService.saveBoardingReportsBulk(synthToSave, currentUser || undefined).catch(console.warn);
+        }
+      } catch (errSync) {
+        console.warn('Auto-sync daily reports to boarding sheet error:', errSync);
+      }
+
       // Track actually reported dates for dynamic standard calculations
       const reportedSet = new Set<string>();
       reportMap.forEach((rep, dateStr) => {
@@ -792,8 +872,9 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
       setReportedDates(reportedSet);
 
       const initialMatrix: Record<string, Record<string, { breakfast: boolean; lunch: boolean; dinner: boolean }>> = {};
+      const studentsToRender = classBoardingStudents.length > 0 ? classBoardingStudents : targetStudents;
 
-      classBoardingStudents.forEach((st) => {
+      studentsToRender.forEach((st) => {
         initialMatrix[st.id] = {};
         const normName = st.full_name.trim().toLowerCase();
 

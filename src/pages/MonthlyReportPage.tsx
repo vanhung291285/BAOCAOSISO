@@ -32,6 +32,7 @@ import {
 import { exportMonthlyBoardingExcel } from '../utils/exportBoardingExcel';
 import { DEFAULT_BOARDING_STUDENTS_SEED } from '../utils/boardingRules';
 import { isValidStudentAddress, cleanStudentAddress } from '../utils/studentUtils';
+import { MonthlyBoardingSheet } from '../components/MonthlyBoardingSheet';
 
 interface MonthlyReportPageProps {
   onNavigate?: (path: string) => void;
@@ -71,8 +72,8 @@ export const MonthlyReportPage: React.FC<MonthlyReportPageProps> = ({ onNavigate
     return 'all';
   });
 
-  // Chế độ xem: 'class_detail' = Chi tiết theo ngày của lớp | 'all_classes_summary' = Tổng hợp tất cả các lớp
-  const [viewMode, setViewMode] = useState<'class_detail' | 'all_classes_summary'>(() => {
+  // Chế độ xem: 'class_detail' = Chi tiết theo ngày của lớp | 'all_classes_summary' = Tổng hợp tất cả các lớp | 'boarding_sheet' = Sổ chấm ăn bán trú tháng
+  const [viewMode, setViewMode] = useState<'class_detail' | 'all_classes_summary' | 'boarding_sheet'>(() => {
     if (isGVCN && currentUser?.assigned_class_id) {
       return 'class_detail';
     }
@@ -528,6 +529,25 @@ export const MonthlyReportPage: React.FC<MonthlyReportPageProps> = ({ onNavigate
               <CalendarDays className="w-3.5 h-3.5" />
               <span>CHI TIẾT THEO NGÀY CỦA LỚP</span>
             </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setViewMode('boarding_sheet');
+                if (selectedClassFilter === 'all') {
+                  const firstCls = displayClasses[0]?.id || classes[0]?.id || '';
+                  setSelectedClassFilter(firstCls);
+                }
+              }}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                viewMode === 'boarding_sheet'
+                  ? 'bg-indigo-600 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5" />
+              <span>SỔ CHẤM CƠM BÁN TRÚ</span>
+            </button>
           </div>
         </div>
 
@@ -733,8 +753,17 @@ export const MonthlyReportPage: React.FC<MonthlyReportPageProps> = ({ onNavigate
         </div>
       )}
 
-      {/* Main Document Layout - Đúng 100% chuẩn biểu mẫu gốc 13 cột */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 sm:p-8 print-container text-black">
+      {/* Khi chọn xem Sổ chấm cơm bán trú */}
+      {viewMode === 'boarding_sheet' && (
+        <MonthlyBoardingSheet
+          selectedClassId={selectedClassFilter !== 'all' ? selectedClassFilter : (assignedClass?.id || displayClasses[0]?.id || '')}
+          onClassChange={(cid) => handleSelectClass(cid)}
+        />
+      )}
+
+      {/* Main Document Layout - Đúng 100% chuẩn biểu mẫu gốc 13 cột (Ẩn khi xem Sổ chấm cơm bán trú) */}
+      {viewMode !== 'boarding_sheet' && (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 sm:p-8 print-container text-black">
         {/* Official Document Header Block */}
         <div className="flex flex-col md:flex-row justify-between items-start font-serif text-black mb-6">
           <div className="flex flex-col items-start text-left">
@@ -1180,6 +1209,7 @@ export const MonthlyReportPage: React.FC<MonthlyReportPageProps> = ({ onNavigate
           </div>
         </div>
       </div>
+      )}
     </div>
   );
 };

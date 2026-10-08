@@ -59,7 +59,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
   onSavedSuccess,
   onNavigate,
 }) => {
-  const { settings, classes, campuses, indicators, students } = useSchool();
+  const { settings, classes, campuses, indicators, students, updateStudent } = useSchool();
   const { currentUser, isGVCN, isAdmin, isBGH } = useAuth();
   const { testSound, isSoundEnabled, isAudioBlocked } = useNotifications();
   const [isPlayingSoundTest, setIsPlayingSoundTest] = useState(false);
@@ -1058,17 +1058,25 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
 
       const resolvedAbsentStudents = absentStudents.map((st) => {
         let addr = cleanStudentAddress(st.address);
+        const match = st.id
+          ? classStudents.find((s) => s.id === st.id) || students.find((s) => s.id === st.id)
+          : classStudents.find((s) => s.full_name.trim().toLowerCase() === st.full_name.trim().toLowerCase())
+            || students.find((s) => s.full_name.trim().toLowerCase() === st.full_name.trim().toLowerCase());
+
         if (!addr) {
-          const match = st.id
-            ? classStudents.find((s) => s.id === st.id) || students.find((s) => s.id === st.id)
-            : classStudents.find((s) => s.full_name.trim().toLowerCase() === st.full_name.trim().toLowerCase())
-              || students.find((s) => s.full_name.trim().toLowerCase() === st.full_name.trim().toLowerCase());
           if (match && isValidStudentAddress(match.address || match.village)) {
             addr = cleanStudentAddress(match.address || match.village);
           }
         }
+
+        // Tự động cập nhật địa chỉ vào hồ sơ học sinh nếu GVCN nhập địa chỉ mới cho học sinh
+        if (match && addr && isValidStudentAddress(addr) && addr !== cleanStudentAddress(match.address || match.village)) {
+          updateStudent(match.id, { address: addr, village: addr }).catch(console.warn);
+        }
+
         return {
           ...st,
+          id: st.id || match?.id,
           address: addr,
         };
       });
@@ -2104,7 +2112,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                               handleUpdateAbsentStudent(index, {
                                 id: selectedSt.id,
                                 full_name: selectedSt.full_name,
-                                address: selectedSt.address || selectedSt.village || '',
+                                address: cleanStudentAddress(selectedSt.address || selectedSt.village),
                                 isBoarding: !!selectedSt.isBoarding,
                               });
                             }
@@ -2179,7 +2187,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                   <input
                     type="text"
                     disabled={isLocked}
-                    value={cleanStudentAddress(st.address)}
+                    value={st.address || ''}
                     placeholder="Ví dụ: Bản Tào La- Tia Dình, Bản Pú Nhi..."
                     onChange={(e) => handleUpdateAbsentStudent(index, { address: e.target.value })}
                     className="w-full bg-slate-50/70 focus:bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs sm:text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all placeholder:text-slate-400 shadow-inner"
@@ -2518,7 +2526,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                 <input
                   type="text"
                   placeholder="Ví dụ: Bản Nà Sản A"
-                  value={cleanStudentAddress(newAbsentAddress)}
+                  value={newAbsentAddress}
                   onChange={(e) => setNewAbsentAddress(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-base sm:text-sm text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />

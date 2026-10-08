@@ -3218,10 +3218,17 @@ export const StorageService = {
 
     // Helper resolve student address from object or matched student
     const resolveAddr = (s: any): string => {
+      // 1. Ưu tiên trực tiếp địa chỉ đã lưu trong bản ghi học sinh vắng của ngày đó
+      const direct = cleanStudentAddress(s.address || s.village);
+      if (direct && isValidStudentAddress(direct)) {
+        return direct;
+      }
+      // 2. Tìm theo ID học sinh trong danh sách học sinh của lớp / trường
       if (s.id) {
         const m = classStudents.find((std) => std.id === s.id) || students.find((std) => std.id === s.id);
         if (m && isValidStudentAddress(m.address || m.village)) return cleanStudentAddress(m.address || m.village);
       }
+      // 3. Tìm theo họ tên học sinh
       if (s.full_name || s.name) {
         const queryName = (s.full_name || s.name || '').trim().toLowerCase();
         const m = classStudents.find((std) => std.full_name.trim().toLowerCase() === queryName)
@@ -3230,8 +3237,7 @@ export const StorageService = {
         const seed = DEFAULT_BOARDING_STUDENTS_SEED.find((sd) => sd.name.toLowerCase() === queryName);
         if (seed) return seed.village;
       }
-      const raw = cleanStudentAddress(s.address || s.village);
-      return raw || '-';
+      return direct || '-';
     };
 
     // Helper resolve student address string from absent names text

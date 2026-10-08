@@ -441,12 +441,19 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
   };
 
   const getResolvedAddress = (s: any, classId: string): string => {
+    // 1. Ưu tiên trực tiếp địa chỉ đã nhập trong bản ghi học sinh vắng của ngày đó
+    const direct = cleanStudentAddress(s.address || s.village);
+    if (direct && isValidStudentAddress(direct)) {
+      return direct;
+    }
+    // 2. Tìm theo ID học sinh trong danh sách học sinh
     if (s.id) {
       const match = students.find((std) => std.id === s.id);
       if (match && isValidStudentAddress(match.address || match.village)) {
         return cleanStudentAddress(match.address || match.village);
       }
     }
+    // 3. Tìm theo họ tên học sinh
     if (s.full_name) {
       const trimmed = s.full_name.trim().toLowerCase();
       const matchInClass = students.find(
@@ -462,8 +469,7 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
       const seed = DEFAULT_BOARDING_STUDENTS_SEED.find((sd) => sd.name.toLowerCase() === trimmed);
       if (seed) return seed.village;
     }
-    const direct = cleanStudentAddress(s.address || s.village);
-    return direct;
+    return direct || '';
   };
 
   const getAbsentStudentText = (row: ClassReportRow): string => {
