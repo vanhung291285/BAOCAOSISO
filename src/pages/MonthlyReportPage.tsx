@@ -28,6 +28,7 @@ import {
   CalendarDays,
   Users,
   Check,
+  RefreshCw,
 } from 'lucide-react';
 import { exportMonthlyBoardingExcel } from '../utils/exportBoardingExcel';
 import { DEFAULT_BOARDING_STUDENTS_SEED } from '../utils/boardingRules';
@@ -45,6 +46,7 @@ export const MonthlyReportPage: React.FC<MonthlyReportPageProps> = ({ onNavigate
 
   const [isExportingBoarding, setIsExportingBoarding] = useState(false);
   const [isExportingStandard, setIsExportingStandard] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [boardingExportMessage, setBoardingExportMessage] = useState<string | null>(null);
 
   // Month state (YYYY-MM)
@@ -191,7 +193,12 @@ export const MonthlyReportPage: React.FC<MonthlyReportPageProps> = ({ onNavigate
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const targetClassId = selectedClassFilter !== 'all' ? selectedClassFilter : undefined;
+      const targetClassId =
+        selectedClassFilter !== 'all'
+          ? selectedClassFilter
+          : viewMode === 'class_detail'
+          ? displayClasses[0]?.id || classes[0]?.id
+          : undefined;
 
       // 1. Load KPI aggregate
       const kpiData = await StorageService.getMonthlyAggregate(
@@ -227,14 +234,27 @@ export const MonthlyReportPage: React.FC<MonthlyReportPageProps> = ({ onNavigate
           rows: cData.rows,
         });
 
-        const rosterTotal = students.filter((s) => s.class_id === cls.id).length;
+        const matchStudentClass = (sClassId: string | undefined, c: ClassItem) => {
+          const normS = String(sClassId || '').trim().toLowerCase();
+          const cleanS = normS.replace(/^c_/, '').replace(/^lớp\s*/i, '');
+          const validKeys = [c.id, c.class_name, (c as any)?.code]
+            .filter(Boolean)
+            .flatMap((k) => [
+              String(k).trim().toLowerCase(),
+              String(k).replace(/^c_/, '').trim().toLowerCase(),
+              String(k).replace(/^lớp\s*/i, '').trim().toLowerCase(),
+            ]);
+          return validKeys.includes(normS) || validKeys.includes(cleanS);
+        };
+
+        const rosterTotal = students.filter((s) => matchStudentClass(s.class_id, cls)).length;
         const clsTotal = rosterTotal > 0
           ? rosterTotal
           : (cData.summary.totalDaysReported > 0
               ? Math.round(cData.summary.sumTotalAll / cData.summary.totalDaysReported)
               : 35);
 
-        const rosterBoarding = students.filter((s) => s.class_id === cls.id && s.isBoarding !== false).length;
+        const rosterBoarding = students.filter((s) => matchStudentClass(s.class_id, cls) && s.isBoarding !== false).length;
         const clsBoarding = rosterBoarding > 0
           ? rosterBoarding
           : (cData.summary.totalDaysReported > 0
@@ -321,6 +341,20 @@ export const MonthlyReportPage: React.FC<MonthlyReportPageProps> = ({ onNavigate
       unsubscribe();
     };
   }, [loadData]);
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await loadData();
+      setBoardingExportMessage('Đã cập nhật số liệu báo cáo thành công!');
+      setTimeout(() => setBoardingExportMessage(null), 3000);
+    } catch {
+      setBoardingExportMessage('Có lỗi khi làm mới số liệu!');
+      setTimeout(() => setBoardingExportMessage(null), 3000);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   // Lọc hàng tháng của lớp
   const displayMonthlyRows = useMemo(() => {
@@ -606,6 +640,18 @@ export const MonthlyReportPage: React.FC<MonthlyReportPageProps> = ({ onNavigate
 
           {/* Action buttons */}
           <div className="flex flex-wrap items-center gap-2">
+            {/* Nút Làm Mới Số Liệu */}
+            <button
+              type="button"
+              onClick={handleRefresh}
+              disabled={isRefreshing || loading}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 shadow-2xs transition-colors cursor-pointer disabled:opacity-50"
+              title="Làm mới và đồng bộ số liệu báo cáo mới nhất từ hệ thống"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 text-blue-600 ${isRefreshing ? 'animate-spin' : ''}`} />
+              <span>{isRefreshing ? 'ĐANG CẬP NHẬT...' : 'LÀM MỚI'}</span>
+            </button>
+
             {/* Nút In Báo Cáo A4 Landscape */}
             <button
               type="button"

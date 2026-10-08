@@ -6,7 +6,7 @@ import { StorageService } from '../services/storage';
 import { AbsentStudent, DailyReport, DailyReportValue, Student, BoardingDailyReport } from '../types';
 import { DateNavigator } from '../components/DateNavigator';
 import { getTodayDateStr, formatDateVN } from '../utils/schoolWeeks';
-import { buildDefaultMealRecords } from '../utils/boardingRules';
+import { buildDefaultMealRecords, generateDefaultBoardingStudentsForClass } from '../utils/boardingRules';
 import { isValidStudentAddress, cleanStudentAddress } from '../utils/studentUtils';
 import {
   CheckCircle2,
@@ -1092,10 +1092,24 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
 
       // Tự động đồng bộ báo ăn sang Sổ chấm cơm bán trú (biểu xử lý) ngay lập tức
       try {
-        const validClassIds = new Set([selectedClassId, selectedClass?.id, selectedClass?.class_name].filter(Boolean));
-        const classBoardingStudents = students.filter(
-          (s) => validClassIds.has(s.class_id) && s.isBoarding !== false
-        );
+        const validClassKeys = [selectedClassId, selectedClass?.id, selectedClass?.class_name, (selectedClass as any)?.code]
+          .filter(Boolean)
+          .flatMap((k) => [
+            String(k).trim().toLowerCase(),
+            String(k).replace(/^c_/, '').trim().toLowerCase(),
+            String(k).replace(/^lớp\s*/i, '').trim().toLowerCase(),
+          ]);
+        const validClassSet = new Set(validClassKeys);
+        let classBoardingStudents = students.filter((s) => {
+          if (s.isBoarding === false) return false;
+          const sCls = String(s.class_id || '').trim().toLowerCase();
+          const sClsClean = sCls.replace(/^c_/, '').replace(/^lớp\s*/i, '');
+          return validClassSet.has(sCls) || validClassSet.has(sClsClean);
+        });
+
+        if (classBoardingStudents.length === 0 && selectedClass) {
+          classBoardingStudents = generateDefaultBoardingStudentsForClass(selectedClassId, selectedClass.class_name);
+        }
 
         if (classBoardingStudents.length > 0) {
           const absentMap = new Map<string, { reason?: string }>();

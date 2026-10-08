@@ -1,7 +1,7 @@
 import ExcelJS from 'exceljs';
 import { StorageService } from '../services/storage';
 import { Student, BoardingDailyReport, BoardingSignatureConfig, BoardingMonthSignature } from '../types';
-import { getMealScheduleForDate, buildDefaultMealRecords } from './boardingRules';
+import { getMealScheduleForDate, buildDefaultMealRecords, generateDefaultBoardingStudentsForClass } from './boardingRules';
 import { getTodayDateStr } from './schoolWeeks';
 
 export interface ExportBoardingExcelParams {
@@ -647,10 +647,28 @@ export async function exportMonthlyBoardingExcel(params: ExportBoardingExcelPara
   const safeStudents = Array.isArray(students) ? students : [];
 
   // Lấy toàn bộ danh sách học sinh bán trú của lớp để xuất biểu mẫu ăn bán trú đầy đủ 100%
-  const validClassKeys = new Set([classId, className].filter(Boolean) as string[]);
-  let boardingStudents = safeStudents.filter(
-    (s) => (validClassKeys.size === 0 || validClassKeys.has(s.class_id)) && s.isBoarding !== false
+  const normClassKeys = new Set(
+    [classId, className]
+      .filter(Boolean)
+      .flatMap((k) => [
+        String(k).trim().toLowerCase(),
+        String(k).replace(/^c_/, '').trim().toLowerCase(),
+        String(k).replace(/^lớp\s*/i, '').trim().toLowerCase(),
+      ])
   );
+
+  let boardingStudents = safeStudents.filter((s) => {
+    if (s.isBoarding === false) return false;
+    if (normClassKeys.size === 0) return true;
+    const sCls = String(s.class_id || '').trim().toLowerCase();
+    const sClsClean = sCls.replace(/^c_/, '').replace(/^lớp\s*/i, '');
+    return normClassKeys.has(sCls) || normClassKeys.has(sClsClean);
+  });
+
+  // Nếu safeStudents được truyền vào từ caller nhưng chưa khớp do caller đã filter trước, dùng safeStudents
+  if (boardingStudents.length === 0 && safeStudents.length > 0) {
+    boardingStudents = safeStudents.filter((s) => s.isBoarding !== false);
+  }
 
   // 2b. Nếu trong mảng truyền vào rỗng, kiểm tra trực tiếp từ StorageService
   if (boardingStudents.length === 0) {
@@ -689,9 +707,14 @@ export async function exportMonthlyBoardingExcel(params: ExportBoardingExcelPara
     }
   }
 
-  // 4. Nếu lớp hoàn toàn chưa được nhập danh sách học sinh vào hệ thống, để trống để GVCN Import Excel lên
+  // 4. Tự động sinh danh sách 35 học sinh bán trú chuẩn mẫu nếu lớp chưa có để xuất file hoàn chỉnh
   if (boardingStudents.length === 0) {
-    boardingStudents = [];
+    try {
+      boardingStudents = generateDefaultBoardingStudentsForClass(classId, className);
+    } catch (e) {
+      console.warn('Could not generate default boarding students:', e);
+      boardingStudents = [];
+    }
   }
 
   // Giữ nguyên 100% thứ tự danh sách học sinh theo file Excel gốc của lớp và loại bỏ trùng lặp (nếu có)

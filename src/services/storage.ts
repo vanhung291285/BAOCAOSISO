@@ -3015,15 +3015,44 @@ export const StorageService = {
             const rawReports = localStorage.getItem(STORAGE_KEYS.REPORTS);
             let reports: DailyReport[] = rawReports ? JSON.parse(rawReports) : [];
             cloudReports.forEach((cRep) => {
-              const idx = reports.findIndex((r) => r.id === cRep.id);
-              if (idx >= 0) reports[idx] = cRep;
-              else reports.push(cRep);
+              const cleanDate = String(cRep.report_date).split('T')[0].trim();
+              const repObj = { ...cRep, report_date: cleanDate };
+              const idx = reports.findIndex(
+                (r) =>
+                  r.id === cRep.id ||
+                  (String(r.class_id).toLowerCase() === String(cRep.class_id).toLowerCase() &&
+                    String(r.report_date).split('T')[0] === cleanDate)
+              );
+              if (idx >= 0) {
+                const localTs = new Date(reports[idx].updated_at || reports[idx].created_at || 0).getTime();
+                const cloudTs = new Date(cRep.updated_at || cRep.created_at || 0).getTime();
+                if (cloudTs >= localTs) {
+                  reports[idx] = repObj;
+                }
+              } else {
+                reports.push(repObj);
+              }
             });
             localStorage.setItem(STORAGE_KEYS.REPORTS, JSON.stringify(reports));
 
             const rawValues = localStorage.getItem(STORAGE_KEYS.VALUES);
             let allValues: DailyReportValue[] = rawValues ? JSON.parse(rawValues) : [];
-            allValues = allValues.filter((v) => !repIds.includes(v.report_id)).concat(cloudValues);
+            cloudValues.forEach((cVal) => {
+              const vIdx = allValues.findIndex(
+                (v) =>
+                  v.id === cVal.id ||
+                  (v.report_id === cVal.report_id && v.indicator_group_id === cVal.indicator_group_id)
+              );
+              if (vIdx >= 0) {
+                const localVTs = new Date(allValues[vIdx].updated_at || allValues[vIdx].created_at || 0).getTime();
+                const cloudVTs = new Date(cVal.updated_at || cVal.created_at || 0).getTime();
+                if (cloudVTs >= localVTs) {
+                  allValues[vIdx] = cVal;
+                }
+              } else {
+                allValues.push(cVal);
+              }
+            });
             localStorage.setItem(STORAGE_KEYS.VALUES, JSON.stringify(allValues));
           }
         }
@@ -3042,16 +3071,41 @@ export const StorageService = {
       activeClasses = activeClasses.filter((c) => c.campus_id === campusId);
     }
     if (classId && classId !== 'all') {
-      activeClasses = activeClasses.filter((c) => c.id === classId || c.class_name === classId);
+      const cidTrim = String(classId).trim().toLowerCase();
+      activeClasses = activeClasses.filter(
+        (c) =>
+          c.id === classId ||
+          c.class_name === classId ||
+          String(c.id).toLowerCase() === cidTrim ||
+          String(c.class_name).toLowerCase() === cidTrim ||
+          String(c.class_name).replace(/^lớp\s*/i, '').toLowerCase() === cidTrim.replace(/^lớp\s*/i, '')
+      );
     }
-    const activeClassIds = new Set(activeClasses.map((c) => c.id));
+    const normActiveClassIds = new Set(
+      activeClasses.flatMap((c) => [
+        c.id,
+        c.class_name,
+        c.code,
+        String(c.id).toLowerCase(),
+        String(c.class_name).toLowerCase(),
+        String(c.class_name).replace(/^lớp\s*/i, '').trim().toLowerCase(),
+        String(c.id).replace(/^c_/, '').trim().toLowerCase(),
+      ]).filter(Boolean) as string[]
+    );
 
     const mainIndicator = indicators.find((i) => i.code === 'ALL') || indicators[0];
 
     const rawReports = localStorage.getItem(STORAGE_KEYS.REPORTS);
     const reports: DailyReport[] = rawReports ? JSON.parse(rawReports) : [];
     // Only include reports for the active filtered classes
-    const monthReports = reports.filter((r) => r.report_date.startsWith(yearMonth) && activeClassIds.has(r.class_id));
+    const monthReports = reports.filter((r) => {
+      if (!r || !r.report_date) return false;
+      const cleanDate = String(r.report_date).split('T')[0].trim();
+      if (!cleanDate.startsWith(yearMonth)) return false;
+      const rCls = String(r.class_id || '').trim().toLowerCase();
+      const rClsClean = rCls.replace(/^c_/, '').replace(/^lớp\s*/i, '');
+      return normActiveClassIds.has(rCls) || normActiveClassIds.has(rClsClean);
+    });
 
     const rawValues = localStorage.getItem(STORAGE_KEYS.VALUES);
     const allValues: DailyReportValue[] = rawValues ? JSON.parse(rawValues) : [];
@@ -3087,7 +3141,21 @@ export const StorageService = {
           dayTotal += val.total_count;
           dayAbsent += val.absent_count;
 
-          const cStat = classStats.get(r.class_id);
+          let cStat = classStats.get(r.class_id);
+          if (!cStat) {
+            const matchedCls = activeClasses.find(
+              (c) =>
+                c.id === r.class_id ||
+                c.class_name.toLowerCase() === String(r.class_id || '').toLowerCase() ||
+                c.class_name.replace(/^lớp\s*/i, '').toLowerCase() ===
+                  String(r.class_id || '')
+                    .replace(/^lớp\s*/i, '')
+                    .toLowerCase()
+            );
+            if (matchedCls) {
+              cStat = classStats.get(matchedCls.id);
+            }
+          }
           if (cStat) {
             cStat.total += val.total_count;
             cStat.absent += val.absent_count;
@@ -3212,7 +3280,20 @@ export const StorageService = {
     const firstDayStr = `${yearMonth}-01`;
     const lastDayStr = `${yearMonth}-${String(daysInMonth).padStart(2, '0')}`;
 
-    const classStudents = classItem ? students.filter((s) => s.class_id === classItem.id) : [];
+    const normClassIds = new Set(
+      [classItem?.id, classItem?.class_name, classItem?.code, classId]
+        .filter(Boolean)
+        .flatMap((k) => [
+          String(k).trim().toLowerCase(),
+          String(k).replace(/^c_/, '').trim().toLowerCase(),
+          String(k).replace(/^lớp\s*/i, '').trim().toLowerCase(),
+        ])
+    );
+    const classStudents = students.filter((s) => {
+      const sCls = String(s.class_id || '').trim().toLowerCase();
+      const sClsClean = sCls.replace(/^c_/, '').replace(/^lớp\s*/i, '');
+      return normClassIds.has(sCls) || normClassIds.has(sClsClean);
+    });
     const defaultClassTotal = classStudents.length > 0 ? classStudents.length : 35;
     const defaultClassBoarding = classStudents.filter((s) => s.isBoarding !== false).length || Math.min(25, defaultClassTotal);
 
@@ -3265,100 +3346,17 @@ export const StorageService = {
       return addrs.length > 0 ? addrs.join('\n') : '-';
     };
 
-    const supabase = getSupabaseClient();
-
-    // Thử gọi qua Supabase RPC chuyên dụng nếu database đã cập nhật schema mới
-    if (supabase && isSupabaseConnected()) {
-      try {
-        const targetId = classItem?.id || classId;
-        const { data: rpcRows, error: rpcErr } = await supabase.rpc('get_class_monthly_attendance_report', {
-          p_class_id: targetId,
-          p_year_month: yearMonth,
-        });
-
-        if (!rpcErr && rpcRows && Array.isArray(rpcRows) && rpcRows.length > 0) {
-          const rows = rpcRows.map((r: any) => {
-            const isRep = Boolean(r.is_reported);
-            const parts = r.report_date.split('-');
-            const y_val = parseInt(parts[0], 10);
-            const m_val = parseInt(parts[1], 10) - 1;
-            const d_val = parseInt(parts[2], 10);
-            const dayOfWeek = new Date(y_val, m_val, d_val).getDay();
-
-            let finalNames = isRep ? (r.absent_students_names || '') : '';
-            if (dayOfWeek === 6 || dayOfWeek === 0) {
-              finalNames = 'Ngày nghỉ';
-            } else if (dayOfWeek === 5) {
-              if (finalNames) {
-                finalNames += '\n- Thứ 6 chỉ ăn sáng và ăn trưa';
-              } else {
-                finalNames = 'Thứ 6 chỉ ăn sáng và ăn trưa';
-              }
-            }
-
-            return {
-              date: r.report_date,
-              dayLabel: r.day_label || `Ngày ${r.day_str}/${mStr}`,
-              className: r.class_name || classItem?.class_name || '',
-              teacherName: r.teacher_name || teacherName,
-              totalAll: isRep ? Number(r.total_all ?? defaultClassTotal) : 0,
-              absentAll: isRep ? Number(r.absent_all ?? 0) : 0,
-              presentAll: isRep ? Number(r.present_all ?? defaultClassTotal) : 0,
-              totalBoarding: isRep ? Number(r.total_boarding ?? defaultClassBoarding) : 0,
-              absentBoarding: isRep ? Number(r.absent_boarding ?? 0) : 0,
-              baoAnBoarding: isRep ? Number(r.bao_an_boarding ?? defaultClassBoarding) : 0,
-              totalNgoaiTru: isRep ? Number(r.total_ngoai_tru ?? Math.max(0, defaultClassTotal - defaultClassBoarding)) : 0,
-              absentNgoaiTru: isRep ? Number(r.absent_ngoai_tru ?? 0) : 0,
-              studentNames: finalNames,
-              studentAddresses: isRep && r.absent_students_names ? resolveAddressesFromNames(r.absent_students_names) : (isRep ? '-' : ''),
-              absentRate: isRep ? Number(r.absent_rate ?? 0) : 0,
-              presentRate: isRep ? Number(r.present_rate ?? 100) : 0,
-              isReported: isRep,
-            };
-          });
-
-          const reportedRows = rows.filter((r) => r.isReported);
-          const sumTotalAll = reportedRows.reduce((acc, r) => acc + r.totalAll, 0);
-          const sumAbsentAll = reportedRows.reduce((acc, r) => acc + r.absentAll, 0);
-          const sumPresentAll = sumTotalAll - sumAbsentAll;
-          const sumTotalBoarding = reportedRows.reduce((acc, r) => acc + r.totalBoarding, 0);
-          const sumAbsentBoarding = reportedRows.reduce((acc, r) => acc + r.absentBoarding, 0);
-          const sumBaoAnBoarding = reportedRows.reduce((acc, r) => acc + r.baoAnBoarding, 0);
-          const sumTotalNgoaiTru = reportedRows.reduce((acc, r) => acc + r.totalNgoaiTru, 0);
-          const sumAbsentNgoaiTru = reportedRows.reduce((acc, r) => acc + r.absentNgoaiTru, 0);
-
-          return {
-            classItem,
-            teacher,
-            rows,
-            summary: {
-              totalDaysReported: reportedRows.length,
-              sumTotalAll,
-              sumAbsentAll,
-              sumPresentAll,
-              sumTotalBoarding,
-              sumAbsentBoarding,
-              sumBaoAnBoarding,
-              sumTotalNgoaiTru,
-              sumAbsentNgoaiTru,
-              avgAbsentRate: sumTotalAll > 0 ? (sumAbsentAll / sumTotalAll) * 100 : 0,
-              avgPresentRate: sumTotalAll > 0 ? (sumPresentAll / sumTotalAll) * 100 : 100,
-            },
-          };
-        }
-      } catch (rpcEx) {
-        // Tiếp tục phương án truy vấn bảng chuẩn bên dưới
-      }
-    }
-
     // Đồng bộ nhanh từ Supabase bảng daily_reports & daily_report_values nếu có kết nối
+    const rawTargetIds = [classId, classItem?.id, classItem?.class_name, (classItem as any)?.code].filter(Boolean) as string[];
+    const targetQueryIds = Array.from(new Set(rawTargetIds.flatMap((k) => [String(k), String(k).toLowerCase(), String(k).toUpperCase()])));
+
+    const supabase = getSupabaseClient();
     if (supabase && isSupabaseConnected()) {
       try {
-        const targetIds = Array.from(new Set([classId, classItem?.id, classItem?.class_name].filter(Boolean))) as string[];
         const { data: cloudReports, error: cErr } = await supabase
           .from('daily_reports')
           .select('*')
-          .in('class_id', targetIds)
+          .in('class_id', targetQueryIds)
           .gte('report_date', firstDayStr)
           .lte('report_date', lastDayStr);
 
@@ -3366,9 +3364,23 @@ export const StorageService = {
           const rawReports = localStorage.getItem(STORAGE_KEYS.REPORTS);
           let reports: DailyReport[] = rawReports ? JSON.parse(rawReports) : [];
           cloudReports.forEach((cRep) => {
-            const idx = reports.findIndex((r) => r.id === cRep.id || (r.class_id === cRep.class_id && r.report_date === cRep.report_date));
-            if (idx >= 0) reports[idx] = cRep;
-            else reports.push(cRep);
+            const cleanDate = String(cRep.report_date).split('T')[0].trim();
+            const repObj = { ...cRep, report_date: cleanDate };
+            const idx = reports.findIndex(
+              (r) =>
+                r.id === cRep.id ||
+                (String(r.class_id).toLowerCase() === String(cRep.class_id).toLowerCase() &&
+                  String(r.report_date).split('T')[0] === cleanDate)
+            );
+            if (idx >= 0) {
+              const localTs = new Date(reports[idx].updated_at || reports[idx].created_at || 0).getTime();
+              const cloudTs = new Date(cRep.updated_at || cRep.created_at || 0).getTime();
+              if (cloudTs >= localTs) {
+                reports[idx] = repObj;
+              }
+            } else {
+              reports.push(repObj);
+            }
           });
           localStorage.setItem(STORAGE_KEYS.REPORTS, JSON.stringify(reports));
 
@@ -3383,9 +3395,20 @@ export const StorageService = {
               const rawValues = localStorage.getItem(STORAGE_KEYS.VALUES);
               let allValues: DailyReportValue[] = rawValues ? JSON.parse(rawValues) : [];
               cloudValues.forEach((cVal) => {
-                const vIdx = allValues.findIndex(v => v.id === cVal.id || (v.report_id === cVal.report_id && v.indicator_group_id === cVal.indicator_group_id));
-                if (vIdx >= 0) allValues[vIdx] = cVal;
-                else allValues.push(cVal);
+                const vIdx = allValues.findIndex(
+                  (v) =>
+                    v.id === cVal.id ||
+                    (v.report_id === cVal.report_id && v.indicator_group_id === cVal.indicator_group_id)
+                );
+                if (vIdx >= 0) {
+                  const localVTs = new Date(allValues[vIdx].updated_at || allValues[vIdx].created_at || 0).getTime();
+                  const cloudVTs = new Date(cVal.updated_at || cVal.created_at || 0).getTime();
+                  if (cloudVTs >= localVTs) {
+                    allValues[vIdx] = cVal;
+                  }
+                } else {
+                  allValues.push(cVal);
+                }
               });
               localStorage.setItem(STORAGE_KEYS.VALUES, JSON.stringify(allValues));
             }
@@ -3399,10 +3422,30 @@ export const StorageService = {
     const allIndicator = indicators.find((i) => i.code === 'ALL' || i.id === 'ig_all') || indicators[0];
     const boardingIndicator = indicators.find((i) => i.code === 'BOARDING_HALF' || i.id === 'ig_boarding_half' || i.name.toLowerCase().includes('bán trú')) || indicators[1];
 
+    const normValidClassIds = new Set(
+      rawTargetIds.flatMap((k) => [
+        String(k).trim().toLowerCase(),
+        String(k).replace(/^c_/, '').trim().toLowerCase(),
+        String(k).replace(/^lớp\s*/i, '').trim().toLowerCase(),
+      ])
+    );
+
     const rawReports = localStorage.getItem(STORAGE_KEYS.REPORTS);
     const reports: DailyReport[] = rawReports ? JSON.parse(rawReports) : [];
-    const validClassIds = new Set([classId, classItem?.id, classItem?.class_name].filter(Boolean));
-    const monthReports = reports.filter((r) => validClassIds.has(r.class_id) && r.report_date.startsWith(yearMonth));
+    const monthReports = reports
+      .filter((r) => {
+        if (!r || !r.report_date) return false;
+        const cleanDate = String(r.report_date).split('T')[0].trim();
+        if (!cleanDate.startsWith(yearMonth)) return false;
+        const rCls = String(r.class_id || '').trim().toLowerCase();
+        const rClsClean = rCls.replace(/^c_/, '').replace(/^lớp\s*/i, '');
+        return normValidClassIds.has(rCls) || normValidClassIds.has(rClsClean);
+      })
+      .sort((a, b) => {
+        const timeA = new Date(a.updated_at || a.created_at || 0).getTime();
+        const timeB = new Date(b.updated_at || b.created_at || 0).getTime();
+        return timeB - timeA;
+      });
 
     const rawValues = localStorage.getItem(STORAGE_KEYS.VALUES);
     const allValues: DailyReportValue[] = rawValues ? JSON.parse(rawValues) : [];
@@ -3432,8 +3475,8 @@ export const StorageService = {
       const dateStr = `${yearMonth}-${dayStr}`;
       const dayLabel = `Ngày ${dayStr}/${mStr}`;
 
-      const rep = monthReports.find((r) => r.report_date === dateStr);
-      if (rep && (rep.status === 'SUBMITTED' || rep.status === 'LOCKED' || rep.status === 'DRAFT' || rep.status === 'REPORTED' || rep.status !== 'NOT_REPORTED')) {
+      const rep = monthReports.find((r) => String(r.report_date).split('T')[0].trim() === dateStr);
+      if (rep && (rep.status as string) !== 'NOT_REPORTED') {
         const repVals = allValues.filter((v) => v.report_id === rep.id);
         const allVal = repVals.find((v) => 
           v.indicator_group_id === allIndicator?.id || 
@@ -3459,13 +3502,15 @@ export const StorageService = {
           absentStudentsList = rep.absent_students;
         }
 
-        const totalAll = allVal?.total_count ?? defaultClassTotal;
-        const absentAll = allVal?.absent_count ?? (absentStudentsList.length > 0 ? absentStudentsList.length : 0);
-        const presentAll = allVal?.present_count ?? Math.max(0, totalAll - absentAll);
+        const totalAll = Number(allVal?.total_count) > 0 ? Number(allVal!.total_count) : defaultClassTotal;
+        const absentAll = Math.max(Number(allVal?.absent_count) || 0, absentStudentsList.length);
+        const presentAll = Number(allVal?.present_count) !== undefined && Number(allVal?.present_count) > 0
+          ? Number(allVal!.present_count)
+          : Math.max(0, totalAll - absentAll);
 
-        const listBoardingAbsent = absentStudentsList.filter((s) => s.isBoarding === true || s.is_boarding === true).length;
-        const totalBoarding = boardingVal?.total_count ?? defaultClassBoarding;
-        const absentBoarding = boardingVal?.absent_count ?? (listBoardingAbsent > 0 ? listBoardingAbsent : 0);
+        const listBoardingAbsent = absentStudentsList.filter((s) => s.isBoarding === true || s.is_boarding === true || s.isBoarding !== false).length;
+        const totalBoarding = Number(boardingVal?.total_count) > 0 ? Number(boardingVal!.total_count) : defaultClassBoarding;
+        const absentBoarding = Math.max(Number(boardingVal?.absent_count) || 0, listBoardingAbsent);
         const baoAnBoarding = Math.max(0, totalBoarding - absentBoarding);
 
         const totalNgoaiTru = Math.max(0, totalAll - totalBoarding);

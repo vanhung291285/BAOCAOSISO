@@ -62,7 +62,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
   selectedClassId,
   onClassChange,
 }) => {
-  const { classes, campuses, students, settings, addStudent, updateStudent } = useSchool();
+  const { classes, campuses, students, settings, addStudent, updateStudent, refreshAll } = useSchool();
   const { currentUser, isGVCN, isAdmin, isBGH } = useAuth();
 
   // Class Boarding & Day Students Roster Modal State
@@ -245,17 +245,32 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
   }, [campuses, currentClass]);
 
   const validClassIds = useMemo(() => {
-    return new Set([
-      selectedClassId,
-      currentClass?.id,
-      currentClass?.class_name,
-    ].filter(Boolean) as string[]);
+    return new Set(
+      [
+        selectedClassId,
+        currentClass?.id,
+        currentClass?.class_name,
+        (currentClass as any)?.code,
+      ]
+        .filter(Boolean)
+        .flatMap((x) => [
+          String(x).trim().toLowerCase(),
+          String(x).replace(/^c_/, '').trim().toLowerCase(),
+          String(x).replace(/^lớp\s*/i, '').trim().toLowerCase(),
+        ])
+    );
   }, [selectedClassId, currentClass]);
+
+  const [asyncBoardingStudents, setAsyncBoardingStudents] = useState<Student[]>([]);
 
   // Class student statistics (Total vs Boarding vs Day students)
   const totalClassStudents = useMemo(() => {
     if (!selectedClassId) return [];
-    return students.filter((s) => validClassIds.has(s.class_id));
+    return students.filter((s) => {
+      const sCls = String(s.class_id || '').trim().toLowerCase();
+      const sClsClean = sCls.replace(/^c_/, '').replace(/^lớp\s*/i, '');
+      return validClassIds.has(sCls) || validClassIds.has(sClsClean);
+    });
   }, [students, validClassIds, selectedClassId]);
 
   const classDayStudentsCount = useMemo(() => {
@@ -266,7 +281,11 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
   // Học sinh ngoại trú (isBoarding === false) tuyệt đối không xuất hiện trên sổ chấm cơm!
   const classBoardingStudents = useMemo(() => {
     if (!selectedClassId) return [];
-    const rawSts = students.filter((s) => validClassIds.has(s.class_id));
+    const rawSts = students.filter((s) => {
+      const sCls = String(s.class_id || '').trim().toLowerCase();
+      const sClsClean = sCls.replace(/^c_/, '').replace(/^lớp\s*/i, '');
+      return validClassIds.has(sCls) || validClassIds.has(sClsClean);
+    });
     const seenIds = new Set<string>();
     const seenNames = new Set<string>();
     const classSts: Student[] = [];
@@ -287,6 +306,13 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
     }
     return classSts;
   }, [students, selectedClassId, validClassIds, currentClass]);
+
+  // Danh sách học sinh bán trú hiệu lực (kết hợp Context và danh sách nạp từ Storage hoặc tạo tự động mẫu 35 em)
+  const effectiveBoardingStudents = useMemo(() => {
+    if (classBoardingStudents.length > 0) return classBoardingStudents;
+    if (asyncBoardingStudents.length > 0) return asyncBoardingStudents;
+    return [];
+  }, [classBoardingStudents, asyncBoardingStudents]);
 
   // Parse Year and Month
   const { yearNum, monthNum, daysInMonth } = useMemo(() => {
@@ -381,8 +407,8 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
   // Hovered item details for visual crosshair indicator
   const hoveredStudent = useMemo(() => {
     if (!hoveredStudentId) return null;
-    return classBoardingStudents.find((s) => s.id === hoveredStudentId) || null;
-  }, [hoveredStudentId, classBoardingStudents]);
+    return effectiveBoardingStudents.find((s) => s.id === hoveredStudentId) || null;
+  }, [hoveredStudentId, effectiveBoardingStudents]);
 
   const hoveredDayInfo = useMemo(() => {
     if (!hoveredDateStr) return null;
@@ -425,7 +451,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
       let dayHasD = false;
 
       // Kiểm tra từ ma trận chấm ăn của học sinh: chỉ tính nếu CÓ ÍT NHẤT 1 học sinh được chấm ăn bữa tương ứng
-      for (const st of classBoardingStudents) {
+      for (const st of effectiveBoardingStudents) {
         const meal = mealMatrix[st.id]?.[d.dateStr];
         if (meal?.breakfast) dayHasB = true;
         if (meal?.lunch) dayHasL = true;
@@ -444,7 +470,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
       autoDinner: dCount,
       hasAnyReported: bCount > 0 || lCount > 0 || dCount > 0,
     };
-  }, [monthDays, classBoardingStudents, mealMatrix]);
+  }, [monthDays, effectiveBoardingStudents, mealMatrix]);
 
   const standardSaveTimerRef = useRef<any>(null);
 
@@ -782,14 +808,20 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
       // 2. Tự động tổng hợp số liệu từ các ngày đã nộp Báo cáo sĩ số (daily_reports)
       // Đảm bảo Sổ chấm cơm tháng tự động hiển thị đầy đủ số liệu chính xác ngay cả khi GVCN chưa lưu thủ công ở tab chấm ăn
       let targetStudents = classBoardingStudents;
+      if (targetStudents.length === 0 && asyncBoardingStudents.length > 0) {
+        targetStudents = asyncBoardingStudents;
+      }
       if (targetStudents.length === 0) {
         const clsStudents = await StorageService.getStudentsByClass(selectedClassId, currentClass?.class_name);
         targetStudents = clsStudents.filter((s) => s.isBoarding !== false);
         if (targetStudents.length === 0 && currentClass) {
           targetStudents = generateDefaultBoardingStudentsForClass(selectedClassId, currentClass.class_name);
-          StorageService.saveStudents(targetStudents).catch(console.warn);
+          StorageService.saveStudents(targetStudents)
+            .then(() => refreshAll?.())
+            .catch(console.warn);
         }
       }
+      setAsyncBoardingStudents(targetStudents);
 
       try {
         const classDaily = await StorageService.getDailyReportsByMonth(selectedClassId, selectedMonth);
@@ -872,7 +904,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
       setReportedDates(reportedSet);
 
       const initialMatrix: Record<string, Record<string, { breakfast: boolean; lunch: boolean; dinner: boolean }>> = {};
-      const studentsToRender = classBoardingStudents.length > 0 ? classBoardingStudents : targetStudents;
+      const studentsToRender = targetStudents.length > 0 ? targetStudents : effectiveBoardingStudents;
 
       studentsToRender.forEach((st) => {
         initialMatrix[st.id] = {};
@@ -949,8 +981,11 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
         const payloadClassId = event.payload?.classId;
         const payloadDate = event.payload?.reportDate || event.payload?.date;
 
+        const cleanPayloadCls = String(payloadClassId || '').trim().toLowerCase();
+        const cleanPayloadClsNoPrefix = cleanPayloadCls.replace(/^c_/, '').replace(/^lớp\s*/i, '');
+
         // Bỏ qua các sự kiện của lớp khác hoặc tháng khác để tránh giật lag khi nhiều GVCN cùng báo cáo
-        if (payloadClassId && !validClassIds.has(payloadClassId)) return;
+        if (payloadClassId && !validClassIds.has(cleanPayloadCls) && !validClassIds.has(cleanPayloadClsNoPrefix)) return;
         if (payloadDate && !payloadDate.startsWith(selectedMonth)) return;
 
         if (debounceTimer) clearTimeout(debounceTimer);
@@ -1006,7 +1041,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
       Object.values(saveTimersRef.current).forEach((t) => clearTimeout(t));
       if (autoSaveTimeoutRef.current) clearTimeout(autoSaveTimeoutRef.current);
     };
-  }, [selectedClassId, selectedMonth, classBoardingStudents.length, validClassIds]);
+  }, [selectedClassId, selectedMonth, effectiveBoardingStudents.length, validClassIds]);
 
   // Đồng bộ thủ công từ tất cả báo cáo ngày của GVCN
   const handleSyncFromDailyReports = async () => {
@@ -1014,10 +1049,16 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
     setIsLoading(true);
     try {
       // 1. Đảm bảo có danh sách học sinh đầy đủ
-      let currentStudents = classBoardingStudents;
+      let currentStudents = effectiveBoardingStudents;
       if (!currentStudents || currentStudents.length === 0) {
         currentStudents = await StorageService.getStudentsByClass(selectedClassId, currentClass?.class_name);
+        currentStudents = currentStudents.filter((s) => s.isBoarding !== false);
+        if (currentStudents.length === 0 && currentClass) {
+          currentStudents = generateDefaultBoardingStudentsForClass(selectedClassId, currentClass.class_name);
+          StorageService.saveStudents(currentStudents).catch(console.warn);
+        }
       }
+      setAsyncBoardingStudents(currentStudents);
 
       const classDaily = await StorageService.getDailyReportsByMonth(selectedClassId, selectedMonth);
       const reportsToSave: BoardingDailyReport[] = [];
@@ -1108,7 +1149,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
       let dCount = 0;
       let abCount = 0;
 
-      const records: BoardingMealRecord[] = classBoardingStudents.map((st) => {
+      const records: BoardingMealRecord[] = effectiveBoardingStudents.map((st) => {
         const dayMeal = currentMatrix[st.id]?.[dateStr] || {
           breakfast: false,
           lunch: false,
@@ -1172,7 +1213,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
         class_id: selectedClassId,
         date: dateStr,
         status: 'SUBMITTED',
-        total_boarding_students: classBoardingStudents.length,
+        total_boarding_students: effectiveBoardingStudents.length,
         breakfast_count: bCount,
         lunch_count: lCount,
         dinner_count: dCount,
@@ -1235,7 +1276,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
     meal: 'breakfast' | 'lunch' | 'dinner',
     forcedState?: boolean
   ) => {
-    if (classBoardingStudents.length === 0) return;
+    if (effectiveBoardingStudents.length === 0) return;
 
     const dayInfo = monthDays.find((d) => d.dateStr === dateStr);
     const dayNum = dayInfo?.dayNum || dateStr.slice(8);
@@ -1243,13 +1284,13 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
 
     setMealMatrix((prev) => {
       // Check if all students currently have this meal checked
-      const allChecked = classBoardingStudents.every(
+      const allChecked = effectiveBoardingStudents.every(
         (st) => prev[st.id]?.[dateStr]?.[meal] === true
       );
       const targetState = forcedState !== undefined ? forcedState : !allChecked;
 
       const updated = { ...prev };
-      classBoardingStudents.forEach((st) => {
+      effectiveBoardingStudents.forEach((st) => {
         const currentStudentDays = updated[st.id] || {};
         const currentDay = currentStudentDays[dateStr] || {
           breakfast: false,
@@ -1282,7 +1323,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
 
       showToast(
         targetState
-          ? `Đã chấm bữa ${mealLabel} ngày ${dayNum}/${monthNum} cho ${classBoardingStudents.length} học sinh!`
+          ? `Đã chấm bữa ${mealLabel} ngày ${dayNum}/${monthNum} cho ${effectiveBoardingStudents.length} học sinh!`
           : `Đã hủy chấm bữa ${mealLabel} ngày ${dayNum}/${monthNum}!`
       );
 
@@ -1292,7 +1333,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
 
   // Batch mark or clear entire day (all meals) for all students
   const handleBatchMarkDay = (dateStr: string, targetState: boolean = true) => {
-    if (classBoardingStudents.length === 0) return;
+    if (effectiveBoardingStudents.length === 0) return;
 
     const dayInfo = monthDays.find((d) => d.dateStr === dateStr);
     const dayNum = dayInfo?.dayNum || dateStr.slice(8);
@@ -1300,7 +1341,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
 
     setMealMatrix((prev) => {
       const updated = { ...prev };
-      classBoardingStudents.forEach((st) => {
+      effectiveBoardingStudents.forEach((st) => {
         const currentStudentDays = updated[st.id] || {};
         updated[st.id] = {
           ...currentStudentDays,
@@ -1329,7 +1370,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
 
       showToast(
         targetState
-          ? `Đã chấm ăn cả ngày ${dayNum}/${monthNum} cho ${classBoardingStudents.length} học sinh!`
+          ? `Đã chấm ăn cả ngày ${dayNum}/${monthNum} cho ${effectiveBoardingStudents.length} học sinh!`
           : `Đã xóa sạch toàn bộ chấm ăn ngày ${dayNum}/${monthNum}!`
       );
 
@@ -1343,11 +1384,11 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
     mealOption: 'all_day' | 'breakfast' | 'lunch' | 'dinner' | 'clear',
     targetStudentIds?: string[]
   ) => {
-    if (dates.length === 0 || classBoardingStudents.length === 0) return;
+    if (dates.length === 0 || effectiveBoardingStudents.length === 0) return;
 
     const targetStudents = targetStudentIds
-      ? classBoardingStudents.filter((st) => targetStudentIds.includes(st.id))
-      : classBoardingStudents;
+      ? effectiveBoardingStudents.filter((st) => targetStudentIds.includes(st.id))
+      : effectiveBoardingStudents;
 
     let updatedMatrix = { ...mealMatrix };
 
@@ -1472,7 +1513,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
 
         // 2. Đưa ma trận về rỗng 100%
         const emptyMatrix: Record<string, Record<string, { breakfast: boolean; lunch: boolean; dinner: boolean }>> = {};
-        classBoardingStudents.forEach((st) => {
+        effectiveBoardingStudents.forEach((st) => {
           emptyMatrix[st.id] = {};
           monthDays.forEach((d) => {
             emptyMatrix[st.id][d.dateStr] = {
@@ -1500,7 +1541,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
         console.error('Clear all month error:', e);
         // Fallback tự phục hồi: Vẫn làm rỗng ma trận bộ nhớ để không làm gián đoạn công việc của giáo viên
         const emptyMatrix: Record<string, Record<string, { breakfast: boolean; lunch: boolean; dinner: boolean }>> = {};
-        classBoardingStudents.forEach((st) => {
+        effectiveBoardingStudents.forEach((st) => {
           emptyMatrix[st.id] = {};
           monthDays.forEach((d) => {
             emptyMatrix[st.id][d.dateStr] = {
@@ -1539,7 +1580,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
       }
     > = {};
 
-    classBoardingStudents.forEach((st) => {
+    effectiveBoardingStudents.forEach((st) => {
       const stDays = mealMatrix[st.id] || {};
       let eatenB = 0;
       let eatenL = 0;
@@ -1585,7 +1626,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
       standardDinnerDays,
       summaries,
     };
-  }, [classBoardingStudents, mealMatrix, monthDays, standardBreakfastDays, standardLunchDays, standardDinnerDays]);
+  }, [effectiveBoardingStudents, mealMatrix, monthDays, standardBreakfastDays, standardLunchDays, standardDinnerDays]);
 
   // Daily column meal counts for footer CỘNG
   const columnTotals = useMemo(() => {
@@ -1595,7 +1636,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
       let b = 0;
       let l = 0;
       let dn = 0;
-      classBoardingStudents.forEach((st) => {
+      effectiveBoardingStudents.forEach((st) => {
         const dMeal = mealMatrix[st.id]?.[d.dateStr];
         if (dMeal?.breakfast) b++;
         if (dMeal?.lunch) l++;
@@ -1612,7 +1653,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
     let totalMissedD = 0;
     let totalActualDays = 0;
 
-    classBoardingStudents.forEach((st) => {
+    effectiveBoardingStudents.forEach((st) => {
       const sum = studentSummaries.summaries[st.id];
       if (sum) {
         totalEatenB += sum.eatenBreakfast;
@@ -1635,7 +1676,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
       totalMissedD,
       totalActualDays: Math.round(totalActualDays * 10) / 10,
     };
-  }, [displayedMonthDays, classBoardingStudents, mealMatrix, studentSummaries]);
+  }, [displayedMonthDays, effectiveBoardingStudents, mealMatrix, studentSummaries]);
 
   // Thống kê ngày đã báo / chưa báo trong tháng
   const monthReportStats = useMemo(() => {
@@ -1648,7 +1689,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
       if (d.dateStr > todayStr) {
         futureDays++;
       } else {
-        const hasAnyMeal = classBoardingStudents.some((st) => {
+        const hasAnyMeal = effectiveBoardingStudents.some((st) => {
           const m = mealMatrix[st.id]?.[d.dateStr];
           return m?.breakfast || m?.lunch || m?.dinner;
         });
@@ -1661,7 +1702,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
     });
 
     return { reportedDays, unreportedDays, futureDays, totalDays: monthDays.length };
-  }, [monthDays, classBoardingStudents, mealMatrix]);
+  }, [monthDays, effectiveBoardingStudents, mealMatrix]);
 
   // Save all days in month
   const handleSaveMonth = async () => {
@@ -1680,7 +1721,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
         }
 
         // 2. Chỉ lưu những ngày có ít nhất 1 học sinh được chấm ăn (đã báo ăn thực tế)
-        const hasAnyMeal = classBoardingStudents.some((st) => {
+        const hasAnyMeal = effectiveBoardingStudents.some((st) => {
           const m = mealMatrix[st.id]?.[day.dateStr];
           return m?.breakfast || m?.lunch || m?.dinner;
         });
@@ -1696,7 +1737,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
         let dCount = 0;
         let abCount = 0;
 
-        const records: BoardingMealRecord[] = classBoardingStudents.map((st) => {
+        const records: BoardingMealRecord[] = effectiveBoardingStudents.map((st) => {
           const dayMeal = mealMatrix[st.id]?.[day.dateStr] || {
             breakfast: false,
             lunch: false,
@@ -1730,7 +1771,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
           class_id: selectedClassId,
           date: day.dateStr,
           status: 'SUBMITTED',
-          total_boarding_students: classBoardingStudents.length,
+          total_boarding_students: effectiveBoardingStudents.length,
           breakfast_count: bCount,
           lunch_count: lCount,
           dinner_count: dCount,
@@ -1804,7 +1845,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
         schoolName: settings?.school_name || 'TRƯỜNG PTDTBT THCS XA DUNG',
         locationName: signingLocation.trim() || 'Xa Dung',
         monthStr: selectedMonth,
-        students: classBoardingStudents, // Đúng 100% danh sách học sinh bán trú đang hiển thị
+        students: effectiveBoardingStudents, // Đúng 100% danh sách học sinh bán trú đang hiển thị
         teacherName: effectiveTeacherName,
         teacherTitle: sigConfig.teacher_title || 'GIÁO VIÊN CHỦ NHIỆM',
         principalName: settings?.principal_name || 'Hiệu trưởng',
@@ -1831,6 +1872,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
       await StorageService.deleteStudentsByClass(selectedClassId, currentClass.class_name);
       const defaultStds = generateDefaultBoardingStudentsForClass(selectedClassId, currentClass.class_name);
       await StorageService.saveStudents(defaultStds);
+      setAsyncBoardingStudents(defaultStds);
       await StorageService.getStudents();
       showToast(`Đã khởi tạo thành công 35 học sinh bán trú lớp ${currentClass.class_name}!`);
     } catch (e: any) {
@@ -2312,7 +2354,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
             )}
             <div className="text-[11px] text-slate-500 font-medium flex flex-wrap items-center justify-center md:justify-end gap-1.5 mt-0.5">
               <span>
-                Sĩ số ăn bán trú: <strong className="text-emerald-700 font-black">{classBoardingStudents.length} học sinh</strong>
+                Sĩ số ăn bán trú: <strong className="text-emerald-700 font-black">{effectiveBoardingStudents.length} học sinh</strong>
               </span>
               {classDayStudentsCount > 0 && (
                 <span className="text-slate-500 font-normal">
@@ -2358,7 +2400,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
         </div>
 
         {/* View Mode Toggle (Trang 1 / Trang 2 / Cả tháng) & Mobile Scroll Navigation */}
-        {classBoardingStudents.length > 0 && !isLoading && (
+        {effectiveBoardingStudents.length > 0 && !isLoading && (
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-3.5 no-print">
             {/* View Switcher: Segmented Control */}
             <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-xl border border-slate-200 overflow-x-auto no-scrollbar touch-pan-x">
@@ -2445,7 +2487,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
             <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin" />
             <span className="text-xs font-semibold">Đang tải dữ liệu sổ chấm cơm tháng...</span>
           </div>
-        ) : classBoardingStudents.length === 0 ? (
+        ) : effectiveBoardingStudents.length === 0 ? (
           <div className="py-12 px-4 text-center max-w-lg mx-auto">
             <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto mb-3 border border-amber-200">
               <FileSpreadsheet className="w-6 h-6" />
@@ -2689,7 +2731,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
                 </thead>
 
                 <tbody className="divide-y divide-slate-300" onMouseOver={handleTbodyMouseOver}>
-                  {classBoardingStudents.map((st, idx) => {
+                  {effectiveBoardingStudents.map((st, idx) => {
                     const stDays = mealMatrix[st.id] || {};
                     const sum = studentSummaries.summaries[st.id] || {
                       eatenBreakfast: 0,
@@ -2959,7 +3001,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
       )}
 
         {/* Signatures block for printing / review */}
-        {classBoardingStudents.length > 0 && !isLoading && (
+        {effectiveBoardingStudents.length > 0 && !isLoading && (
           <div className="mt-8 pt-4">
             {viewMode === 'page1' ? (
               /* TRANG 1 (NGÀY 1-15): BỎ CHỮ KÝ CỦA CẢ GVCN VÀ HIỆU TRƯỞNG */
@@ -3366,7 +3408,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
         isOpen={showBatchModal}
         onClose={() => setShowBatchModal(false)}
         monthDays={monthDays}
-        students={classBoardingStudents}
+        students={effectiveBoardingStudents}
         classNameStr={currentClass?.class_name || ''}
         monthNum={monthNum}
         yearNum={yearNum}
@@ -3384,7 +3426,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
         yearNum={yearNum}
         daysInMonth={daysInMonth}
         monthDays={monthDays}
-        students={classBoardingStudents}
+        students={effectiveBoardingStudents}
         mealMatrix={mealMatrix}
         studentSummaries={studentSummaries}
         columnTotals={columnTotals}

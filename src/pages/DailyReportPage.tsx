@@ -1371,14 +1371,28 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
                   {/* Summary Row Theo Tháng của Lớp */}
                   {monthlyData && (
                     (() => {
-                      const rosterTotal = students.filter((s) => s.class_id === currentMonthlyClassObj?.id).length;
+                      const normKeys = new Set(
+                        [currentMonthlyClassObj?.id, currentMonthlyClassObj?.class_name, (currentMonthlyClassObj as any)?.code]
+                          .filter(Boolean)
+                          .flatMap((k) => [
+                            String(k).trim().toLowerCase(),
+                            String(k).replace(/^c_/, '').trim().toLowerCase(),
+                            String(k).replace(/^lớp\s*/i, '').trim().toLowerCase(),
+                          ])
+                      );
+                      const classRoster = students.filter((s) => {
+                        const sCls = String(s.class_id || '').trim().toLowerCase();
+                        const sClsClean = sCls.replace(/^c_/, '').replace(/^lớp\s*/i, '');
+                        return normKeys.has(sCls) || normKeys.has(sClsClean);
+                      });
+                      const rosterTotal = classRoster.length;
                       const curTotal = rosterTotal > 0 
                         ? rosterTotal 
                         : (monthlyData.summary.totalDaysReported > 0 
                             ? Math.round(monthlyData.summary.sumTotalAll / monthlyData.summary.totalDaysReported) 
                             : 35);
 
-                      const rosterBoarding = students.filter((s) => s.class_id === currentMonthlyClassObj?.id && s.isBoarding !== false).length;
+                      const rosterBoarding = classRoster.filter((s) => s.isBoarding !== false).length;
                       const curBoarding = rosterBoarding > 0 
                         ? rosterBoarding 
                         : (monthlyData.summary.totalDaysReported > 0 
