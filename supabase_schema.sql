@@ -379,7 +379,41 @@ BEGIN
     BEGIN
         ALTER TABLE public.campuses ADD COLUMN reporter_title TEXT;
     EXCEPTION WHEN duplicate_column THEN END;
+
+    -- HỦY BỎ KHÓA NGOẠI CHẶT CHẼ ĐỂ TRÁNH LỖI KHI GVCN NHẬP HỌC SINH MỚI
+    BEGIN
+        ALTER TABLE public.students DROP CONSTRAINT IF EXISTS students_class_id_fkey;
+    EXCEPTION WHEN OTHERS THEN END;
+
+    BEGIN
+        ALTER TABLE public.daily_reports DROP CONSTRAINT IF EXISTS daily_reports_class_id_fkey;
+    EXCEPTION WHEN OTHERS THEN END;
+
+    BEGIN
+        ALTER TABLE public.boarding_reports DROP CONSTRAINT IF EXISTS boarding_reports_class_id_fkey;
+    EXCEPTION WHEN OTHERS THEN END;
+
+    BEGIN
+        ALTER TABLE public.boarding_signature_configs DROP CONSTRAINT IF EXISTS boarding_signature_configs_class_id_fkey;
+    EXCEPTION WHEN OTHERS THEN END;
+
+    BEGIN
+        ALTER TABLE public.boarding_month_signatures DROP CONSTRAINT IF EXISTS boarding_month_signatures_class_id_fkey;
+    EXCEPTION WHEN OTHERS THEN END;
 END $$;
+
+-- Khởi tạo sẵn 8 lớp tiêu chuẩn nếu chưa có
+INSERT INTO public.classes (id, class_name, grade, active, sort_order)
+VALUES 
+    ('c_6a', '6A', 6, true, 1),
+    ('c_6b', '6B', 6, true, 2),
+    ('c_7a', '7A', 7, true, 3),
+    ('c_7b', '7B', 7, true, 4),
+    ('c_8a', '8A', 8, true, 5),
+    ('c_8b', '8B', 8, true, 6),
+    ('c_9a', '9A', 9, true, 7),
+    ('c_9b', '9B', 9, true, 8)
+ON CONFLICT (id) DO UPDATE SET class_name = EXCLUDED.class_name, grade = EXCLUDED.grade;
 
 -- ==============================================================================
 -- PHÂN QUYỀN ROW LEVEL SECURITY (RLS) & ANONYMOUS KEY ACCESS

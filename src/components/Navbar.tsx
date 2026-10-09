@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useSchool } from '../contexts/SchoolContext';
 import { PWAInstallButton } from './PWAInstallButton';
 import { NotificationCenter } from './NotificationCenter';
+import { isSupabaseConnected } from '../services/supabase';
 import {
   School,
   Menu,
@@ -29,6 +30,7 @@ import {
   Users,
   Utensils,
   GraduationCap,
+  Cloud,
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -163,6 +165,28 @@ export const Navbar: React.FC<NavbarProps> = ({ currentPath, onNavigate, onToggl
 
           {/* 3. Right: Notification, PWA, User Profile & Menu */}
           <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
+            {/* Supabase Cloud Connection Status Pill */}
+            <button
+              type="button"
+              onClick={() => handleNav('/settings/supabase')}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[11px] font-bold border shadow-2xs transition-all cursor-pointer ${
+                isSupabaseConnected()
+                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100'
+                  : 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100 animate-pulse'
+              }`}
+              title={
+                isSupabaseConnected()
+                  ? 'Đã kết nối Supabase Cloud: Dữ liệu tự động đồng bộ trên mọi thiết bị'
+                  : 'Chưa kết nối Supabase Cloud: Bấm để kết nối và lưu dữ liệu vĩnh viễn'
+              }
+            >
+              <span className={`w-2 h-2 rounded-full ${isSupabaseConnected() ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+              <Cloud className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">
+                {isSupabaseConnected() ? 'Cloud Đã kết nối' : 'Chưa nối Cloud'}
+              </span>
+            </button>
+
             {/* PWA Install Button */}
             <PWAInstallButton />
 

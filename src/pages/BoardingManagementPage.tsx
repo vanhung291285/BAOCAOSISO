@@ -70,11 +70,13 @@ interface BoardingManagementPageProps {
 type TabType = 'daily-attendance' | 'monthly-sheet' | 'students-list' | 'kitchen-report' | 'rules-info';
 
 export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ onNavigate, initialTab }) => {
-  const { classes, campuses, students, settings, addStudent, updateStudent, deleteStudent, deleteStudentsByClass, importStudents } = useSchool();
+  const { classes, campuses, students, settings, refreshAll, addStudent, updateStudent, deleteStudent, deleteStudentsByClass, importStudents } = useSchool();
   const { currentUser, isGVCN, isAdmin, isBGH } = useAuth();
 
   // Active Tab
   const [activeTab, setActiveTab] = useState<TabType>(initialTab || 'daily-attendance');
+  const [isSyncingCloud, setIsSyncingCloud] = useState<boolean>(false);
+  const isCloudConnected = isSupabaseConnected();
 
   // Keep active tab in sync if initialTab prop changes
   useEffect(() => {
@@ -237,6 +239,41 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
   const [studentSearchText, setStudentSearchText] = useState<string>('');
   const [studentGenderFilter, setStudentGenderFilter] = useState<string>('ALL');
   const [studentBoardingFilter, setStudentBoardingFilter] = useState<'ALL' | 'BOARDING' | 'DAY'>('ALL');
+
+  // Cloud Sync Handlers
+  const handleSyncFromCloud = async () => {
+    setIsSyncingCloud(true);
+    try {
+      const res = await StorageService.syncAllFromSupabase();
+      await refreshAll();
+      await loadMealAttendance();
+      if (res.success) {
+        showToast(`Tải từ Supabase Cloud thành công! Đã đồng bộ ${res.counts.students || 0} học sinh toàn trường.`);
+      } else {
+        showToast(res.message, 'error');
+      }
+    } catch (err: any) {
+      showToast(`Lỗi đồng bộ: ${err?.message || err}`, 'error');
+    } finally {
+      setIsSyncingCloud(false);
+    }
+  };
+
+  const handlePushStudentsToCloud = async () => {
+    setIsSyncingCloud(true);
+    try {
+      const res = await StorageService.syncTableToSupabase('students');
+      if (res.success) {
+        showToast(`Đã đẩy ${res.count || 0} học sinh lên Supabase Cloud thành công! Mọi máy/trình duyệt khác có thể truy cập.`);
+      } else {
+        showToast(res.message, 'error');
+      }
+    } catch (err: any) {
+      showToast(`Lỗi đẩy học sinh: ${err?.message || err}`, 'error');
+    } finally {
+      setIsSyncingCloud(false);
+    }
+  };
 
   // Load Boarding Report for Selected Class & Date
   const loadMealAttendance = async () => {
@@ -1244,6 +1281,68 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
         </div>
       </div>
 
+      {/* CLOUD DATA PERSISTENCE STATUS BANNER */}
+      {!isCloudConnected ? (
+        <div className="bg-amber-50 border-2 border-amber-300 rounded-2xl p-4 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-3 animate-in fade-in">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-sm mt-0.5 md:mt-0">
+              <AlertTriangle className="w-5 h-5" />
+            </div>
+            <div>
+              <h4 className="font-extrabold text-amber-950 text-sm flex items-center gap-2">
+                Trình duyệt này chưa liên kết với Supabase Cloud
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-200 text-amber-900 uppercase">
+                  Bộ nhớ máy này
+                </span>
+              </h4>
+              <p className="text-xs text-amber-800 mt-0.5">
+                Dữ liệu học sinh bán trú chỉ lưu trong trình duyệt này. Để mở ở trình duyệt khác hoặc điện thoại không bị rỗng, Thầy/Cô cần liên kết Supabase Cloud.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap shrink-0">
+            <button
+              type="button"
+              onClick={() => onNavigate?.('/settings/supabase')}
+              className="px-3.5 py-2 rounded-xl text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <SlidersHorizontal className="w-4 h-4" />
+              <span>Cấu hình Supabase ngay</span>
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="bg-emerald-50/90 border border-emerald-200 rounded-2xl px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs shadow-2xs">
+          <div className="flex items-center gap-2 text-emerald-900 font-bold">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+            <span>Supabase Cloud: Đã kết nối</span>
+            <span className="text-emerald-700 font-medium">({students.length} học sinh toàn trường, {classBoardingStudents.length} HS bán trú lớp {selectedClass?.class_name})</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleSyncFromCloud}
+              disabled={isSyncingCloud}
+              className="px-3 py-1.5 rounded-xl text-xs font-bold text-emerald-800 bg-white hover:bg-emerald-100 border border-emerald-300 flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer disabled:opacity-50"
+              title="Tải toàn bộ dữ liệu mới nhất từ Supabase Cloud về máy này"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 text-emerald-600 ${isSyncingCloud ? 'animate-spin' : ''}`} />
+              <span>{isSyncingCloud ? 'Đang tải...' : 'Tải từ Cloud về'}</span>
+            </button>
+            <button
+              type="button"
+              onClick={handlePushStudentsToCloud}
+              disabled={isSyncingCloud}
+              className="px-3 py-1.5 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer disabled:opacity-50"
+              title="Đẩy danh sách học sinh của máy này lên Supabase Cloud để máy khác xem được"
+            >
+              <Upload className="w-3.5 h-3.5" />
+              <span>Đẩy HS lên Cloud</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ========================================================================= */}
       {/* TAB 1: CHẤM BÁO ĂN NGÀY (DAILY MEAL ATTENDANCE) */}
       {/* ========================================================================= */}
@@ -1558,9 +1657,29 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
                 </div>
                 <h4 className="font-bold text-slate-800 text-base">Chưa có danh sách học sinh bán trú cho lớp này</h4>
                 <p className="text-xs text-slate-500 max-w-md mt-1 mb-4">
-                  Thầy/Cô vui lòng chuyển sang tab "Danh sách HS bán trú" để Import file Excel hoặc thêm danh sách học sinh cho lớp.
+                  Thầy/Cô vui lòng chuyển sang tab "Danh sách HS bán trú" để Import file Excel, hoặc bấm "Tải từ Cloud" nếu đã nhập từ trình duyệt khác.
                 </p>
                 <div className="flex flex-wrap items-center justify-center gap-2.5">
+                  {isCloudConnected ? (
+                    <button
+                      type="button"
+                      onClick={handleSyncFromCloud}
+                      disabled={isSyncingCloud}
+                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-md flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                    >
+                      <RefreshCw className={`w-4 h-4 ${isSyncingCloud ? 'animate-spin' : ''}`} />
+                      <span>{isSyncingCloud ? 'Đang tải...' : 'Tải dữ liệu từ Supabase Cloud về'}</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => onNavigate?.('/settings/supabase')}
+                      className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl shadow-md flex items-center gap-2 cursor-pointer"
+                    >
+                      <SlidersHorizontal className="w-4 h-4" />
+                      <span>Kết nối Supabase Cloud để lấy dữ liệu từ máy khác</span>
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => setActiveTab('students-list')}

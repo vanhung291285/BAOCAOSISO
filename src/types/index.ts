@@ -135,6 +135,7 @@ export interface Student {
   birth_date?: string;
   ethnicity?: string;
   isBoarding?: boolean;
+  is_boarding?: boolean;
   notes?: string;
   created_at?: string;
 }
