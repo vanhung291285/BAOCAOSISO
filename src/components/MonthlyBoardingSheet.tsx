@@ -826,11 +826,15 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
       try {
         const classDaily = await StorageService.getDailyReportsByMonth(selectedClassId, selectedMonth);
         const synthToSave: BoardingDailyReport[] = [];
+        const submittedDailyDates = new Set<string>();
 
         classDaily.forEach((dr) => {
-          if (!dr || (dr.status as string) === 'NOT_REPORTED') return;
+          // Chỉ đồng bộ khi GVCN ĐÃ NỘP BÁO CÁO SĨ SỐ THỰC SỰ (SUBMITTED hoặc LOCKED)
+          if (!dr || (dr.status !== 'SUBMITTED' && dr.status !== 'LOCKED')) return;
           const cleanDate = String(dr.report_date).split('T')[0].trim();
           if (!cleanDate.startsWith(selectedMonth)) return;
+
+          submittedDailyDates.add(cleanDate);
 
           // Nếu ngày này chưa có bản ghi báo ăn cụ thể nào trong reportMap
           if (!reportMap.has(cleanDate)) {
@@ -883,6 +887,20 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
             synthToSave.push(newRep);
           }
         });
+
+        // BẢO VỆ DỮ LIỆU: Nếu ngày này trong quá khứ/hiện tại GVCN CHƯA BÁO CÁO SĨ SỐ,
+        // xóa bỏ các bản ghi tự động đồng bộ cũ để trên sổ chấm cơm KHÔNG hiển thị chấm ăn
+        const todayStr = getTodayDateStr();
+        const invalidDatesToRemove: string[] = [];
+        reportMap.forEach((rep, cleanDate) => {
+          if (cleanDate <= todayStr && !submittedDailyDates.has(cleanDate)) {
+            const isAuto = Boolean(rep.notes?.includes('Tổng hợp') || rep.notes?.includes('đồng bộ') || rep.notes?.includes('Báo cáo sĩ số'));
+            if (isAuto) {
+              invalidDatesToRemove.push(cleanDate);
+            }
+          }
+        });
+        invalidDatesToRemove.forEach((d) => reportMap.delete(d));
 
         if (synthToSave.length > 0) {
           StorageService.saveBoardingReportsBulk(synthToSave, currentUser || undefined).catch(console.warn);
@@ -1064,8 +1082,8 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
       const reportsToSave: BoardingDailyReport[] = [];
 
       classDaily.forEach((dr) => {
-        // Đồng bộ mọi báo cáo đã nộp của GVCN (SUBMITTED, REPORTED, LOCKED, DRAFT có dữ liệu, không phải NOT_REPORTED)
-        if (!dr || (dr.status as string) === 'NOT_REPORTED') return;
+        // Chỉ đồng bộ khi GVCN ĐÃ NỘP BÁO CÁO SĨ SỐ THỰC SỰ (SUBMITTED hoặc LOCKED)
+        if (!dr || (dr.status !== 'SUBMITTED' && dr.status !== 'LOCKED')) return;
         const cleanDate = String(dr.report_date).split('T')[0].trim();
         if (!cleanDate.startsWith(selectedMonth)) return;
 

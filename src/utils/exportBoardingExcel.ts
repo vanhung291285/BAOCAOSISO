@@ -796,8 +796,8 @@ export async function exportMonthlyBoardingExcel(params: ExportBoardingExcelPara
       if (typeof recs === 'string') {
         try { recs = JSON.parse(recs); } catch { recs = []; }
       }
-      if (!Array.isArray(recs) || recs.length === 0) {
-        recs = buildDefaultMealRecords(boardingStudents, cleanDate, classId);
+      if (!Array.isArray(recs)) {
+        recs = [];
       }
       reportMap.set(cleanDate, {
         ...r,
@@ -809,10 +809,14 @@ export async function exportMonthlyBoardingExcel(params: ExportBoardingExcelPara
     // Fallback: Đồng bộ từ daily_reports nếu chưa có boarding_reports
     try {
       const dailyReports = await StorageService.getDailyReportsByMonth(classId, monthStr);
+      const submittedDates = new Set<string>();
+
       dailyReports.forEach((dr) => {
         // Chỉ lấy các ngày GVCN ĐÃ NỘP BÁO CÁO THỰC SỰ (SUBMITTED hoặc LOCKED)
         if (dr.status !== 'SUBMITTED' && dr.status !== 'LOCKED') return;
         const cleanDate = String(dr.report_date).split('T')[0].trim();
+        submittedDates.add(cleanDate);
+
         if (!reportMap.has(cleanDate)) {
           const absentMap = new Map<string, { reason?: string }>();
           if (dr.absent_students) {
@@ -847,6 +851,17 @@ export async function exportMonthlyBoardingExcel(params: ExportBoardingExcelPara
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           });
+        }
+      });
+
+      // Loại bỏ các bản ghi tự động đồng bộ trên những ngày GVCN CHƯA nộp báo cáo sĩ số
+      const todayStr = getTodayDateStr();
+      reportMap.forEach((rep, cleanDate) => {
+        if (cleanDate <= todayStr && !submittedDates.has(cleanDate)) {
+          const isAuto = Boolean(rep.notes?.includes('Tổng hợp') || rep.notes?.includes('đồng bộ') || rep.notes?.includes('Báo cáo sĩ số'));
+          if (isAuto) {
+            reportMap.delete(cleanDate);
+          }
         }
       });
     } catch (err) {

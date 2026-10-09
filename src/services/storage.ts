@@ -2185,10 +2185,40 @@ export const StorageService = {
     rows: BoardingMealSummaryRow[];
   }> {
     ensureInitialized();
+    const cleanDate = date.split('T')[0].trim();
     const classes = await this.getClasses();
     const profiles = await this.getProfiles();
     const students = await this.getStudents();
-    const boardingReports = await this.getBoardingReportsByDate(date);
+    const boardingReports = await this.getBoardingReportsByDate(cleanDate);
+
+    // Đồng bộ kiểm tra báo cáo sĩ số ngày thực tế từ Supabase (nếu kết nối)
+    const supabase = getSupabaseClient();
+    if (supabase && isSupabaseConnected()) {
+      try {
+        const { data: cloudDaily } = await supabase
+          .from('daily_reports')
+          .select('*')
+          .eq('report_date', cleanDate);
+        if (cloudDaily && cloudDaily.length > 0) {
+          const rawReports = localStorage.getItem(STORAGE_KEYS.REPORTS);
+          let reports: DailyReport[] = rawReports ? JSON.parse(rawReports) : [];
+          cloudDaily.forEach((cRep: any) => {
+            const rDate = String(cRep.report_date).split('T')[0].trim();
+            const idx = reports.findIndex(
+              (r) => r.id === cRep.id || (r.class_id === cRep.class_id && String(r.report_date).split('T')[0].trim() === rDate)
+            );
+            if (idx >= 0) reports[idx] = { ...cRep, report_date: rDate };
+            else reports.push({ ...cRep, report_date: rDate });
+          });
+          localStorage.setItem(STORAGE_KEYS.REPORTS, JSON.stringify(reports));
+        }
+      } catch (err) {
+        console.warn('getBoardingSummaryByDate cloud sync daily reports error:', err);
+      }
+    }
+
+    const rawDailyReports = localStorage.getItem(STORAGE_KEYS.REPORTS);
+    const dailyReports: DailyReport[] = rawDailyReports ? JSON.parse(rawDailyReports) : [];
 
     let activeClasses = classes.filter((c) => c.active && !c.is_locked);
     if (campusId && campusId !== 'all') {
@@ -2204,15 +2234,58 @@ export const StorageService = {
     let sumMeals = 0;
     let reportedCount = 0;
 
+    const normCls = (id: any) => String(id || '').trim().toLowerCase().replace(/^c_/, '').replace(/^lớp\s*/i, '');
+
     const rows: BoardingMealSummaryRow[] = activeClasses.map((cls) => {
       const teacher = profiles.find((p) => p.id === cls.homeroom_teacher_id || (p.assigned_class_id === cls.id && p.role === 'GVCN'));
       const classStudents = students.filter((s) => s.class_id === cls.id);
       const classBoardingStudents = classStudents.filter((s) => s.isBoarding !== false);
-      const rep = boardingReports.find((r) => r.class_id === cls.id);
+      const estBoarding = classBoardingStudents.length;
 
+      const targetId = normCls(cls.id);
+      const targetName = normCls(cls.class_name);
+
+      // 1. Kiểm tra xem GVCN lớp này ĐÃ THỰC SỰ NỘP BÁO CÁO SĨ SỐ NGÀY chưa
+      const dailyRep = dailyReports.find((dr) => {
+        if (!dr || String(dr.report_date).split('T')[0].trim() !== cleanDate) return false;
+        const dCls = normCls(dr.class_id);
+        return dCls === targetId || dCls === targetName;
+      });
+
+      const isDailySubmitted = Boolean(
+        dailyRep && (dailyRep.status === 'SUBMITTED' || dailyRep.status === 'LOCKED')
+      );
+
+      // 2. Tìm bản ghi báo ăn tương ứng của lớp
+      const rep = boardingReports.find((r) => {
+        if (!r || String(r.date).split('T')[0].trim() !== cleanDate) return false;
+        const rCls = normCls(r.class_id);
+        return rCls === targetId || rCls === targetName;
+      });
+
+      // NGUYÊN TẮC QUAN TRỌNG:
+      // Nếu GVCN CHƯA BÁO CÁO SĨ SỐ HOẶC QUÊN BÁO SĨ SỐ (isDailySubmitted = false):
+      // Tuyệt đối KHÔNG tự động tính/chấm suất ăn vào bảng tổng hợp nhà bếp!
+      if (!isDailySubmitted) {
+        sumBoarding += estBoarding;
+        return {
+          classItem: cls,
+          teacher,
+          totalBoarding: estBoarding,
+          breakfastCount: 0,
+          lunchCount: 0,
+          dinnerCount: 0,
+          absentCount: 0,
+          totalMeals: 0,
+          status: 'NOT_REPORTED',
+          report: undefined,
+        };
+      }
+
+      // Nếu GVCN ĐÃ NỘP SĨ SỐ và có bản ghi báo ăn hợp lệ
       if (rep && (rep.status === 'SUBMITTED' || rep.status === 'LOCKED')) {
         reportedCount++;
-        sumBoarding += rep.total_boarding_students;
+        sumBoarding += rep.total_boarding_students || estBoarding;
         sumBreakfast += rep.breakfast_count;
         sumLunch += rep.lunch_count;
         sumDinner += rep.dinner_count;
@@ -2222,7 +2295,7 @@ export const StorageService = {
         return {
           classItem: cls,
           teacher,
-          totalBoarding: rep.total_boarding_students,
+          totalBoarding: rep.total_boarding_students || estBoarding,
           breakfastCount: rep.breakfast_count,
           lunchCount: rep.lunch_count,
           dinnerCount: rep.dinner_count,
@@ -2233,7 +2306,6 @@ export const StorageService = {
         };
       }
 
-      const estBoarding = classBoardingStudents.length;
       sumBoarding += estBoarding;
 
       return {
@@ -2251,7 +2323,7 @@ export const StorageService = {
     });
 
     return {
-      date,
+      date: cleanDate,
       totalClasses: activeClasses.length,
       reportedClasses: reportedCount,
       unreportedClasses: activeClasses.length - reportedCount,

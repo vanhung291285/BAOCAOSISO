@@ -170,6 +170,7 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
   const [mealNotes, setMealNotes] = useState<string>('');
   const [isLoadingReport, setIsLoadingReport] = useState<boolean>(true);
   const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [isDailyAttendanceSubmitted, setIsDailyAttendanceSubmitted] = useState<boolean>(true);
   const [hoveredDailyStudentId, setHoveredDailyStudentId] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null);
 
@@ -239,6 +240,13 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
       const rep = await StorageService.getBoardingReport(selectedClassId, selectedDate);
       const existingAttendanceReport = await StorageService.getDailyReport(selectedClassId, selectedDate);
 
+      // Kiểm tra thực tế GVCN đã gửi Báo cáo sĩ số ngày chưa
+      const isDailySubmitted = Boolean(
+        existingAttendanceReport.report &&
+        (existingAttendanceReport.report.status === 'SUBMITTED' || existingAttendanceReport.report.status === 'LOCKED')
+      );
+      setIsDailyAttendanceSubmitted(isDailySubmitted);
+
       // Build absent map from standard daily report
       const absentMap = new Map<string, { reason?: string }>();
       if (existingAttendanceReport.report?.absent_students) {
@@ -261,10 +269,16 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
       const recordById = new Map<string, BoardingMealRecord>();
       const recordByName = new Map<string, BoardingMealRecord>();
 
-      if (rep && rep.records && rep.records.length > 0) {
-        setMealReport(rep);
-        setMealNotes(rep.notes || '');
-        let recs = rep.records;
+      // Kiểm tra nếu bản ghi cũ là tự động đồng bộ nhưng thực tế ngày này GVCN chưa nộp sĩ số
+      const isAutoSyncedRep = Boolean(
+        rep && (rep.notes?.includes('Tổng hợp') || rep.notes?.includes('đồng bộ') || rep.notes?.includes('Báo cáo sĩ số'))
+      );
+      const validRep = (!isDailySubmitted && isAutoSyncedRep) ? null : rep;
+
+      if (validRep && validRep.records && validRep.records.length > 0) {
+        setMealReport(validRep);
+        setMealNotes(validRep.notes || '');
+        let recs = validRep.records;
         if (typeof recs === 'string') {
           try { recs = JSON.parse(recs); } catch { recs = []; }
         }
@@ -284,7 +298,7 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
         const normName = st.full_name.trim().toLowerCase();
         // Ưu tiên khớp chuẩn tuyệt đối theo ID học sinh để học sinh trùng tên không bị ghi đè dữ liệu của nhau
         const sameNameCount = classBoardingStudents.filter((s) => s.full_name.trim().toLowerCase() === normName).length;
-        const existing = recordById.get(st.id) || (sameNameCount === 1 ? recordByName.get(normName) : undefined);
+        const existing = validRep ? (recordById.get(st.id) || (sameNameCount === 1 ? recordByName.get(normName) : undefined)) : undefined;
 
         if (existing) {
           return {
@@ -296,6 +310,28 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
             student_name: st.full_name,
             gender: st.gender || existing.gender,
             village: st.village || existing.village,
+          };
+        }
+
+        // NGUYÊN TẮC BẢO VỆ DỮ LIỆU:
+        // Nếu GVCN CHƯA NỘP hoặc QUÊN BÁO CÁO SĨ SỐ NGÀY (isDailySubmitted = false):
+        // Tuyệt đối KHÔNG tự động chấm ăn (tất cả các bữa = false, is_absent = false, tổng suất = 0)
+        // Tránh tình trạng lớp không báo sĩ số mà sổ chấm ăn vẫn tự động chấm sinh ra số liệu ảo cho nhà bếp!
+        if (!isDailySubmitted) {
+          return {
+            id: `meal_${selectedClassId}_${selectedDate}_${st.id}`,
+            class_id: selectedClassId,
+            date: selectedDate,
+            student_id: st.id,
+            student_name: st.full_name,
+            gender: st.gender,
+            village: st.village,
+            breakfast: false,
+            lunch: false,
+            dinner: false,
+            is_absent: false,
+            absent_reason: undefined,
+            notes: '',
           };
         }
 
@@ -482,13 +518,20 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
   const handleSyncFromDailyAttendance = async () => {
     try {
       const dailyRep = await StorageService.getDailyReport(selectedClassId, selectedDate);
-      if (!dailyRep.report || (dailyRep.report.status as string) === 'NOT_REPORTED') {
-        showToast('Chưa có báo cáo sĩ số đã nộp cho lớp này vào ngày đã chọn! Vui lòng nộp báo cáo sĩ số ngày trước khi đồng bộ.', 'info');
+      const isDailySubmitted = Boolean(
+        dailyRep.report &&
+        (dailyRep.report.status === 'SUBMITTED' || dailyRep.report.status === 'LOCKED')
+      );
+
+      if (!isDailySubmitted) {
+        setIsDailyAttendanceSubmitted(false);
+        showToast('Lớp này chưa có Báo cáo sĩ số ngày đã nộp (GVCN chưa báo hoặc quên báo cáo sĩ số). Vui lòng gửi Báo cáo sĩ số trước!', 'error');
         return;
       }
 
+      setIsDailyAttendanceSubmitted(true);
       const absentMap = new Map<string, { reason?: string }>();
-      if (dailyRep.report.absent_students) {
+      if (dailyRep.report?.absent_students) {
         dailyRep.report.absent_students.forEach((ab) => {
           if (ab.id) {
             absentMap.set(ab.id, { reason: ab.reason });
@@ -504,9 +547,9 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
         });
       }
 
-      const synced = buildDefaultMealRecords(classBoardingStudents, selectedDate, selectedClassId, absentMap);
+      const synced = buildDefaultMealRecords(classBoardingStudents, selectedDate, selectedClassId, absentMap, settings);
       setMealRecords(synced);
-      showToast(`Đã đồng bộ tự động: ${absentMap.size} học sinh vắng, ${classBoardingStudents.length - absentMap.size} học sinh được chấm ăn.`);
+      showToast(`Đã đồng bộ tự động từ Báo cáo sĩ số: ${absentMap.size} học sinh vắng, ${classBoardingStudents.length - absentMap.size} học sinh được chấm ăn.`);
     } catch (e) {
       console.error(e);
       showToast('Lỗi khi đồng bộ dữ liệu từ báo cáo sĩ số!', 'error');
@@ -515,16 +558,31 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
 
   // Reset to default rule
   const handleResetToDefault = () => {
-    if (window.confirm('Bạn có chắc muốn đặt lại chấm ăn theo mặc định (tất cả học sinh không vắng đều được chấm ăn theo lịch ngày)?')) {
-      const defaults = buildDefaultMealRecords(classBoardingStudents, selectedDate, selectedClassId);
-      setMealRecords(defaults);
-      showToast('Đã khôi phục chấm ăn mặc định theo quy định!');
+    if (!isDailyAttendanceSubmitted) {
+      if (!window.confirm('CẢNH BÁO: Lớp này chưa nộp Báo cáo sĩ số ngày! Bạn có chắc chắn muốn chấm ăn theo mặc định cho toàn bộ học sinh khi chưa có sĩ số thực tế?')) {
+        return;
+      }
+    } else {
+      if (!window.confirm('Bạn có chắc muốn đặt lại chấm ăn theo mặc định (tất cả học sinh không vắng đều được chấm ăn theo lịch ngày)?')) {
+        return;
+      }
     }
+    const defaults = buildDefaultMealRecords(classBoardingStudents, selectedDate, selectedClassId, undefined, settings);
+    setMealRecords(defaults);
+    showToast('Đã khôi phục chấm ăn mặc định theo quy định!');
   };
 
   // Save Meal Attendance Report
   const handleSaveMealReport = async () => {
     if (!selectedClassId || !selectedDate) return;
+
+    if (!isDailyAttendanceSubmitted) {
+      const confirmSave = window.confirm(
+        `CẢNH BÁO: Lớp ${selectedClass?.class_name || ''} chưa nộp Báo cáo sĩ số ngày hôm nay (${formatDateVN(selectedDate)}).\nBạn có chắc chắn muốn lưu và gửi báo ăn thủ công khi chưa có dữ liệu sĩ số không?`
+      );
+      if (!confirmSave) return;
+    }
+
     setIsSaving(true);
     try {
       const reportId = mealReport?.id || `boarding_rep_${selectedClassId}_${selectedDate}_${Date.now()}`;
@@ -1223,7 +1281,12 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
 
               {/* Status Badge */}
               <div className="flex items-center gap-2">
-                {mealReport?.status === 'SUBMITTED' ? (
+                {!isDailyAttendanceSubmitted ? (
+                  <span className="px-3 py-1.5 rounded-xl text-xs font-black bg-rose-100 text-rose-800 border-2 border-rose-300 flex items-center gap-1.5 shadow-xs animate-pulse">
+                    <AlertTriangle className="w-4 h-4 text-rose-600" />
+                    Chưa báo cáo sĩ số
+                  </span>
+                ) : mealReport?.status === 'SUBMITTED' ? (
                   <span className="px-3 py-1.5 rounded-xl text-xs font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1.5">
                     <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                     Đã nộp báo ăn
@@ -1251,6 +1314,40 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
               </div>
             </div>
           </div>
+
+          {/* Cảnh báo rõ ràng khi GVCN chưa báo cáo sĩ số ngày */}
+          {!isDailyAttendanceSubmitted && (
+            <div className="bg-gradient-to-r from-rose-50 via-amber-50 to-orange-50 border-2 border-rose-300 rounded-2xl p-4 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-xl bg-rose-500 text-white flex items-center justify-center shrink-0 shadow-sm mt-0.5 sm:mt-0">
+                  <AlertTriangle className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="font-black text-rose-950 text-sm flex items-center gap-2">
+                    Lớp {selectedClass?.class_name} chưa nộp Báo cáo sĩ số ngày ({formatDateVN(selectedDate)})
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-200 text-rose-900 uppercase">
+                      Chưa có sĩ số
+                    </span>
+                  </h4>
+                  <p className="text-xs text-rose-800 mt-1 leading-relaxed">
+                    Giáo viên chủ nhiệm chưa báo cáo hoặc quên báo cáo sĩ số ngày hôm nay. Hệ thống <strong>không tự động chấm ăn</strong> (tất cả các bữa = 0 suất) để đảm bảo dữ liệu trung thực và không làm sai lệch số lượng khẩu phần ăn của nhà bếp.
+                  </p>
+                  <p className="text-xs text-amber-800 mt-0.5 font-medium">
+                    👉 Sau khi GVCN nộp Báo cáo sĩ số ngày, hệ thống sẽ tự động đồng bộ sang sổ chấm ăn; hoặc Thầy/Cô có thể bấm <strong>"Kiểm tra & Đồng bộ"</strong>.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleSyncFromDailyAttendance}
+                className="shrink-0 px-4 py-2 rounded-xl text-xs font-black bg-rose-600 hover:bg-rose-700 text-white shadow-md flex items-center gap-1.5 transition-all cursor-pointer"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Kiểm tra & Đồng bộ</span>
+              </button>
+            </div>
+          )}
 
           {/* Real-time Summary Cards */}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
