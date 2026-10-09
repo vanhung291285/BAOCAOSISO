@@ -1,7 +1,7 @@
 import ExcelJS from 'exceljs';
 import { StorageService } from '../services/storage';
 import { Student, BoardingDailyReport, BoardingSignatureConfig, BoardingMonthSignature } from '../types';
-import { getMealScheduleForDate, buildDefaultMealRecords, generateDefaultBoardingStudentsForClass } from './boardingRules';
+import { getMealScheduleForDate, buildDefaultMealRecords } from './boardingRules';
 import { getTodayDateStr } from './schoolWeeks';
 
 export interface ExportBoardingExcelParams {

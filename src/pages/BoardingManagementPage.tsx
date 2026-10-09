@@ -15,7 +15,6 @@ import { getTodayDateStr, formatDateVN } from '../utils/schoolWeeks';
 import {
   getMealScheduleForDate,
   buildDefaultMealRecords,
-  generateDefaultBoardingStudentsForClass,
 } from '../utils/boardingRules';
 import { resolveStudentGender, inferGenderFromName, cleanStudentAddress } from '../utils/studentUtils';
 import {
@@ -393,24 +392,6 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
     setTimeout(() => setToastMessage(null), 4000);
   };
 
-  const [isGeneratingStudents, setIsGeneratingStudents] = useState(false);
-  const handleGenerateDefaultStudents = async () => {
-    if (!selectedClass) return;
-    setIsGeneratingStudents(true);
-    try {
-      await StorageService.deleteStudentsByClass(selectedClassId, selectedClass.class_name);
-      const defaultStds = generateDefaultBoardingStudentsForClass(selectedClassId, selectedClass.class_name);
-      await StorageService.saveStudents(defaultStds);
-      await StorageService.getStudents();
-      showToast(`Đã khởi tạo thành công 35 học sinh bán trú lớp ${selectedClass.class_name}!`);
-      await loadMealAttendance();
-    } catch (e: any) {
-      showToast(e?.message || 'Lỗi khi khởi tạo danh sách học sinh!', 'error');
-    } finally {
-      setIsGeneratingStudents(false);
-    }
-  };
-
   // Real-time Meal Statistics
   const stats = useMemo(() => {
     const total = mealRecords.length;
@@ -734,6 +715,7 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
       try {
         await deleteStudent(id);
         showToast(`Đã xóa học sinh ${name}`);
+        await loadMealAttendance();
       } catch (e) {
         console.error(e);
         showToast('Lỗi khi xóa học sinh!', 'error');
@@ -1564,20 +1546,22 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
                 <div className="flex flex-wrap items-center justify-center gap-2.5">
                   <button
                     type="button"
-                    onClick={handleGenerateDefaultStudents}
-                    disabled={isGeneratingStudents}
+                    onClick={() => setActiveTab('students-list')}
                     className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-md flex items-center gap-2 cursor-pointer"
                   >
-                    <Sparkles className="w-4 h-4 text-amber-300" />
-                    <span>{isGeneratingStudents ? 'Đang tạo danh sách...' : `Tạo nhanh DS 35 học sinh lớp ${selectedClass?.class_name}`}</span>
+                    <Upload className="w-4 h-4" />
+                    <span>Tải lên danh sách học sinh (Excel)</span>
                   </button>
                   <button
                     type="button"
-                    onClick={() => setActiveTab('students-list')}
+                    onClick={() => {
+                      setActiveTab('students-list');
+                      setShowStudentModal(true);
+                    }}
                     className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 text-xs font-bold rounded-xl flex items-center gap-2 cursor-pointer"
                   >
                     <Plus className="w-4 h-4" />
-                    <span>Nhập danh sách riêng từ Excel</span>
+                    <span>Thêm học sinh thủ công</span>
                   </button>
                 </div>
               </div>
@@ -2118,24 +2102,31 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
               <div className="py-16 text-center text-slate-400 flex flex-col items-center justify-center p-4">
                 <Users className="w-10 h-10 text-slate-300 mb-2" />
                 <p className="text-sm font-bold text-slate-600">Chưa có học sinh nào trong danh sách lớp {selectedClass?.class_name}</p>
-                <p className="text-xs text-slate-400 mt-1 mb-4">Thầy/Cô có thể tạo nhanh danh sách 35 học sinh bán trú mẫu đặc trưng trường Xa Dung hoặc Import từ file Excel.</p>
+                <p className="text-xs text-slate-400 mt-1 mb-4">GVCN vui lòng tải lên danh sách học sinh thực tế từ file Excel hoặc nhập danh sách học sinh cho lớp.</p>
                 <div className="flex flex-wrap items-center justify-center gap-2.5">
                   <button
                     type="button"
-                    onClick={handleGenerateDefaultStudents}
-                    disabled={isGeneratingStudents}
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-md flex items-center gap-2 cursor-pointer"
-                  >
-                    <Sparkles className="w-4 h-4 text-amber-300" />
-                    <span>{isGeneratingStudents ? 'Đang tạo...' : `Tạo nhanh DS 35 học sinh lớp ${selectedClass?.class_name}`}</span>
-                  </button>
-                  <button
-                    type="button"
                     onClick={() => fileInputRef.current?.click()}
-                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 text-xs font-bold rounded-xl flex items-center gap-2 cursor-pointer"
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-md flex items-center gap-2 cursor-pointer"
                   >
                     <Upload className="w-4 h-4" />
                     <span>Import từ file Excel</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowQuickPasteModal(true)}
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 text-xs font-bold rounded-xl flex items-center gap-2 cursor-pointer"
+                  >
+                    <FileSpreadsheet className="w-4 h-4" />
+                    <span>Dán nhanh danh sách</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowStudentModal(true)}
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-md flex items-center gap-2 cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Thêm học sinh</span>
                   </button>
                 </div>
               </div>

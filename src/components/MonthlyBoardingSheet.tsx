@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { StorageService, subscribeRealtime } from '../services/storage';
 import { getSupabaseClient, isSupabaseConnected } from '../services/supabase';
 import { Student, BoardingDailyReport, BoardingMealRecord, BoardingSignatureConfig, BoardingMonthSignature, SchoolOffDay, BoardingStandardMealConfig } from '../types';
-import { getMealScheduleForDate, buildDefaultMealRecords, generateDefaultBoardingStudentsForClass } from '../utils/boardingRules';
+import { getMealScheduleForDate, buildDefaultMealRecords } from '../utils/boardingRules';
 import { formatDateVN, getTodayDateStr } from '../utils/schoolWeeks';
 import { exportMonthlyBoardingExcel } from '../utils/exportBoardingExcel';
 import { DEFAULT_CLASS_TEACHER_MAP } from '../utils/exportAttendanceStandardExcel';
@@ -1878,24 +1878,6 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
     }
   };
 
-  const [isGeneratingStudents, setIsGeneratingStudents] = useState(false);
-  const handleGenerateDefaultStudents = async () => {
-    if (!currentClass) return;
-    setIsGeneratingStudents(true);
-    try {
-      await StorageService.deleteStudentsByClass(selectedClassId, currentClass.class_name);
-      const defaultStds = generateDefaultBoardingStudentsForClass(selectedClassId, currentClass.class_name);
-      await StorageService.saveStudents(defaultStds);
-      setAsyncBoardingStudents(defaultStds);
-      await StorageService.getStudents();
-      showToast(`Đã khởi tạo thành công 35 học sinh bán trú lớp ${currentClass.class_name}!`);
-    } catch (e: any) {
-      showToast(e?.message || 'Lỗi khi khởi tạo danh sách học sinh!', 'error');
-    } finally {
-      setIsGeneratingStudents(false);
-    }
-  };
-
   return (
     <div className={`space-y-4 transition-all duration-300 ${isFullscreen ? 'fixed inset-0 z-50 bg-slate-100 overflow-y-auto p-4 sm:p-8 shadow-2xl' : ''}`}>
       {/* Toast */}
@@ -2510,25 +2492,16 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
               Lớp {currentClass?.class_name || ''} chưa có danh sách học sinh bán trú
             </h3>
             <p className="text-xs text-slate-500 mb-4 leading-relaxed">
-              Thầy/Cô có thể bấm nút bên dưới để tạo nhanh danh sách 35 học sinh bán trú mẫu theo đặc thù trường PTDTBT THCS Xa Dung, hoặc bấm nút Xuất Excel ở trên để hệ thống tự động điền và tạo file.
+              GVCN vui lòng chuyển sang tab "Chấm ăn" hoặc "Danh sách HS bán trú" để tải lên file danh sách học sinh từ Excel hoặc bấm nút Xuất Excel bên dưới để tải biểu mẫu trống.
             </p>
             <div className="flex flex-wrap items-center justify-center gap-2.5">
               <button
                 type="button"
-                onClick={handleGenerateDefaultStudents}
-                disabled={isGeneratingStudents}
-                className="px-4 py-2.5 rounded-xl text-xs font-black text-white bg-blue-600 hover:bg-blue-700 shadow-sm transition-all cursor-pointer flex items-center gap-1.5"
-              >
-                <Sparkles className="w-4 h-4 text-amber-300" />
-                <span>{isGeneratingStudents ? 'Đang tạo danh sách...' : `Tạo nhanh DS 35 học sinh lớp ${currentClass?.class_name || ''}`}</span>
-              </button>
-              <button
-                type="button"
                 onClick={handleExportExcel}
-                className="px-4 py-2.5 rounded-xl text-xs font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 transition-all cursor-pointer flex items-center gap-1.5"
+                className="px-4 py-2.5 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-sm transition-all cursor-pointer flex items-center gap-1.5"
               >
-                <Download className="w-4 h-4 text-emerald-700" />
-                <span>Xuất file Excel mẫu ngay</span>
+                <Download className="w-4 h-4 text-white" />
+                <span>Xuất file Excel mẫu biểu</span>
               </button>
             </div>
           </div>

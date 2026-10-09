@@ -6,7 +6,7 @@ import { StorageService } from '../services/storage';
 import { AbsentStudent, DailyReport, DailyReportValue, Student, BoardingDailyReport } from '../types';
 import { DateNavigator } from '../components/DateNavigator';
 import { getTodayDateStr, formatDateVN } from '../utils/schoolWeeks';
-import { buildDefaultMealRecords, generateDefaultBoardingStudentsForClass, getMealScheduleForDate } from '../utils/boardingRules';
+import { buildDefaultMealRecords, getMealScheduleForDate } from '../utils/boardingRules';
 import { isValidStudentAddress, cleanStudentAddress } from '../utils/studentUtils';
 import {
   CheckCircle2,
