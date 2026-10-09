@@ -7,7 +7,7 @@ import { AbsentStudent, DailyReport, DailyReportValue, Student, BoardingDailyRep
 import { DateNavigator } from '../components/DateNavigator';
 import { getTodayDateStr, formatDateVN } from '../utils/schoolWeeks';
 import { buildDefaultMealRecords, getMealScheduleForDate } from '../utils/boardingRules';
-import { isValidStudentAddress, cleanStudentAddress } from '../utils/studentUtils';
+import { isValidStudentAddress, cleanStudentAddress, isStudentInClass } from '../utils/studentUtils';
 import {
   CheckCircle2,
   RotateCcw,
@@ -147,7 +147,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
   // Students belonging to selected class (with de-duplication)
   const classStudents = useMemo(() => {
     if (!selectedClassId) return [];
-    const raw = students.filter((s) => validClassIds.has(s.class_id));
+    const raw = students.filter((s) => isStudentInClass(s.class_id, selectedClassId, selectedClass?.class_name));
     const seenIds = new Set<string>();
     const unique: Student[] = [];
     for (const s of raw) {
@@ -157,7 +157,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
       unique.push(s);
     }
     return unique;
-  }, [students, validClassIds, selectedClassId]);
+  }, [students, selectedClassId, selectedClass]);
 
   // Existing report & values
   const [existingReport, setExistingReport] = useState<DailyReport | null>(null);

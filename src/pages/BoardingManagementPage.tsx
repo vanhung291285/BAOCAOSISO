@@ -16,7 +16,7 @@ import {
   getMealScheduleForDate,
   buildDefaultMealRecords,
 } from '../utils/boardingRules';
-import { resolveStudentGender, inferGenderFromName, cleanStudentAddress } from '../utils/studentUtils';
+import { resolveStudentGender, inferGenderFromName, cleanStudentAddress, isStudentInClass } from '../utils/studentUtils';
 import {
   parseStudentExcelData,
   recomputeStudentsWithBoardingColumn,
@@ -106,6 +106,20 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
     return firstActive?.id || classes[0]?.id || '';
   });
 
+  // Ensure a valid selectedClassId once classes are loaded
+  useEffect(() => {
+    if (classes.length > 0) {
+      if (!selectedClassId || !classes.some((c) => c.id === selectedClassId)) {
+        if (isGVCN && myAssignedClass) {
+          setSelectedClassId(myAssignedClass.id);
+        } else {
+          const firstActive = classes.find((c) => c.active && !c.is_locked);
+          setSelectedClassId(firstActive?.id || classes[0].id);
+        }
+      }
+    }
+  }, [classes, isGVCN, myAssignedClass, selectedClassId]);
+
   // Keep in sync with user's class if GVCN
   useEffect(() => {
     if (isGVCN && myAssignedClass && selectedClassId !== myAssignedClass.id) {
@@ -118,18 +132,10 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
     return classes.find((c) => c.id === selectedClassId) || null;
   }, [classes, selectedClassId]);
 
-  const validClassIds = useMemo(() => {
-    return new Set([
-      selectedClassId,
-      selectedClass?.id,
-      selectedClass?.class_name,
-    ].filter(Boolean) as string[]);
-  }, [selectedClassId, selectedClass]);
-
   // Students belonging to selected class (with strict de-duplication by id and full_name)
   const classStudents = useMemo(() => {
     if (!selectedClassId) return [];
-    const raw = students.filter((s) => validClassIds.has(s.class_id));
+    const raw = students.filter((s) => isStudentInClass(s.class_id, selectedClassId, selectedClass?.class_name));
     const seenIds = new Set<string>();
     const seenNames = new Set<string>();
     const unique: Student[] = [];
@@ -146,7 +152,7 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
       unique.push(s);
     }
     return unique;
-  }, [students, validClassIds, selectedClassId]);
+  }, [students, selectedClassId, selectedClass]);
 
   // Boarding students belonging to selected class (strictly isBoarding !== false)
   const classBoardingStudents = useMemo(() => {

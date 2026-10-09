@@ -371,8 +371,10 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       await StorageService.deleteStudentsByClass(replaceClassId, replaceClassName);
     }
     const baseTime = Date.now();
+    const targetClassId = replaceClassId || newStudents[0]?.class_id || '';
     const studentsToSave: Student[] = newStudents.map((s, idx) => ({
       ...s,
+      class_id: targetClassId || s.class_id,
       id: `std_${baseTime}_${String(idx).padStart(4, '0')}`,
       created_at: new Date(baseTime + idx * 10).toISOString(),
     }));

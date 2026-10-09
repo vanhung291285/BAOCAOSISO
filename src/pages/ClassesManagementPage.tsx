@@ -4,7 +4,7 @@ import { useSchool } from '../contexts/SchoolContext';
 import { useAuth } from '../contexts/AuthContext';
 import { ClassItem, Profile, Student } from '../types';
 import { parseStudentExcelData, removeVietnameseAccents } from '../utils/studentExcelParser';
-import { isValidStudentAddress, cleanStudentAddress } from '../utils/studentUtils';
+import { isValidStudentAddress, cleanStudentAddress, isStudentInClass } from '../utils/studentUtils';
 import {
   Layers,
   Plus,
@@ -65,8 +65,8 @@ export const ClassesManagementPage: React.FC = () => {
 
   const rosterStudents = useMemo(() => {
     if (!rosterClassId) return [];
-    return students.filter((s) => s.class_id === rosterClassId);
-  }, [students, rosterClassId]);
+    return students.filter((s) => isStudentInClass(s.class_id, rosterClassId, rosterClass?.class_name));
+  }, [students, rosterClassId, rosterClass]);
 
   const handleOpenRosterModal = (cls: ClassItem) => {
     setRosterClassId(cls.id);
@@ -916,7 +916,7 @@ export const ClassesManagementPage: React.FC = () => {
                             title="Quản lý danh sách học sinh"
                           >
                             <Users className="w-4 h-4 text-emerald-600" />
-                            <span className="text-[10px] font-black hidden sm:inline">HS ({students.filter((s) => s.class_id === c.id).length})</span>
+                            <span className="text-[10px] font-black hidden sm:inline">HS ({students.filter((s) => isStudentInClass(s.class_id, c.id, c.class_name)).length})</span>
                           </button>
 
                           <button

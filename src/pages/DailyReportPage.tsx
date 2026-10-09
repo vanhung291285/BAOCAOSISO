@@ -15,7 +15,7 @@ import {
   resolveTeacherName,
 } from '../utils/exportAttendanceStandardExcel';
 import { DEFAULT_BOARDING_STUDENTS_SEED } from '../utils/boardingRules';
-import { isValidStudentAddress, cleanStudentAddress } from '../utils/studentUtils';
+import { isValidStudentAddress, cleanStudentAddress, isStudentInClass } from '../utils/studentUtils';
 import {
   Printer,
   Download,
@@ -352,7 +352,8 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
 
   // Helper to resolve the real count of students for a class from roster or latest reports
   const getClassStudentCount = useCallback((classId: string) => {
-    const rosterCount = students.filter((s) => s.class_id === classId).length;
+    const targetClass = classes.find((c) => c.id === classId);
+    const rosterCount = students.filter((s) => isStudentInClass(s.class_id, classId, targetClass?.class_name)).length;
     if (rosterCount > 0) return rosterCount;
 
     // Fallback to the latest report values from localStorage if available
@@ -635,14 +636,14 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
           rows: cData.rows,
         });
 
-        const rosterTotal = students.filter((s) => s.class_id === cls.id).length;
+        const rosterTotal = students.filter((s) => isStudentInClass(s.class_id, cls.id, cls.class_name)).length;
         const clsTotal = rosterTotal > 0 
           ? rosterTotal 
           : (cData.summary.totalDaysReported > 0 
               ? Math.round(cData.summary.sumTotalAll / cData.summary.totalDaysReported) 
               : 35);
 
-        const rosterBoarding = students.filter((s) => s.class_id === cls.id && s.isBoarding !== false).length;
+        const rosterBoarding = students.filter((s) => isStudentInClass(s.class_id, cls.id, cls.class_name) && s.isBoarding !== false).length;
         const clsBoarding = rosterBoarding > 0 
           ? rosterBoarding 
           : (cData.summary.totalDaysReported > 0 

@@ -172,7 +172,7 @@ CREATE TABLE IF NOT EXISTS public.system_logs (
 -- 11. TABLE: students (Danh sách học sinh theo từng lớp)
 CREATE TABLE IF NOT EXISTS public.students (
     id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-    class_id TEXT NOT NULL REFERENCES public.classes(id) ON DELETE CASCADE,
+    class_id TEXT NOT NULL,
     full_name TEXT NOT NULL,
     address TEXT,
     village TEXT,
