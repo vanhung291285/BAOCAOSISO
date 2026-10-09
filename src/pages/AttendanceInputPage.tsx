@@ -42,6 +42,7 @@ import {
   Download,
   FileSpreadsheet,
   ClipboardList,
+  GraduationCap,
 } from 'lucide-react';
 import { getIndicatorMeta } from '../utils/indicatorIcons';
 import { exportMonthlyBoardingExcel } from '../utils/exportBoardingExcel';
@@ -1430,6 +1431,31 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
               </button>
             )}
 
+            {/* Quick Prominent School Links */}
+            <a
+              href={settings?.website || 'https://thcsxadung.db.edu.vn/'}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hidden lg:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-blue-900 bg-blue-50/90 hover:bg-blue-600 hover:text-white border border-blue-200 shadow-2xs transition-all active:scale-95 cursor-pointer group"
+              title="Mở Trang thông tin điện tử nhà trường (https://thcsxadung.db.edu.vn/)"
+            >
+              <Globe className="w-3.5 h-3.5 text-blue-600 group-hover:text-white shrink-0" />
+              <span>Trang TTĐT</span>
+              <ExternalLink className="w-3 h-3 text-blue-400 group-hover:text-white shrink-0" />
+            </a>
+
+            <a
+              href={settings?.student_results_url || 'https://kqht.db.edu.vn/'}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hidden xl:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-emerald-900 bg-emerald-50/90 hover:bg-emerald-600 hover:text-white border border-emerald-200 shadow-2xs transition-all active:scale-95 cursor-pointer group"
+              title="Mở Trang tra cứu kết quả học tập (https://kqht.db.edu.vn/)"
+            >
+              <GraduationCap className="w-3.5 h-3.5 text-emerald-600 group-hover:text-white shrink-0" />
+              <span>Tra cứu KQHT</span>
+              <ExternalLink className="w-3 h-3 text-emerald-400 group-hover:text-white shrink-0" />
+            </a>
+
             {onNavigate && (
               <button
                 type="button"
@@ -1440,6 +1466,41 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                 Tổng quan
               </button>
             )}
+          </div>
+        </div>
+
+        {/* Prominent School Links Banner */}
+        <div className="mt-3.5 pt-3 border-t border-slate-100 flex flex-wrap sm:flex-nowrap items-center justify-between gap-2.5 bg-gradient-to-r from-blue-50/90 via-indigo-50/40 to-emerald-50/90 p-2.5 sm:p-3 rounded-xl border border-blue-100/80 shadow-2xs">
+          <div className="flex items-center gap-2 text-xs font-extrabold text-slate-800 shrink-0">
+            <Sparkles className="w-4 h-4 text-amber-500 fill-amber-400 animate-pulse shrink-0" />
+            <span className="uppercase tracking-wider text-[11px] text-blue-950 font-extrabold">
+              Liên kết nổi bật nhà trường:
+            </span>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap w-full sm:w-auto">
+            <a
+              href={settings?.website || 'https://thcsxadung.db.edu.vn/'}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-extrabold text-blue-900 bg-white hover:bg-blue-600 hover:text-white border border-blue-300 hover:border-blue-600 shadow-2xs hover:shadow-md transition-all active:scale-95 group cursor-pointer"
+              title="Mở Trang thông tin điện tử nhà trường (https://thcsxadung.db.edu.vn/)"
+            >
+              <Globe className="w-4 h-4 text-blue-600 group-hover:text-white shrink-0" />
+              <span>Trang thông tin điện tử</span>
+              <ExternalLink className="w-3.5 h-3.5 text-blue-400 group-hover:text-white shrink-0 ml-0.5" />
+            </a>
+
+            <a
+              href={settings?.student_results_url || 'https://kqht.db.edu.vn/'}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-extrabold text-emerald-950 bg-white hover:bg-emerald-600 hover:text-white border border-emerald-300 hover:border-emerald-600 shadow-2xs hover:shadow-md transition-all active:scale-95 group cursor-pointer"
+              title="Mở Trang tra cứu kết quả học tập của trường (https://kqht.db.edu.vn/)"
+            >
+              <GraduationCap className="w-4 h-4 text-emerald-600 group-hover:text-white shrink-0" />
+              <span>Tra cứu kết quả học tập</span>
+              <ExternalLink className="w-3.5 h-3.5 text-emerald-400 group-hover:text-white shrink-0 ml-0.5" />
+            </a>
           </div>
         </div>
 

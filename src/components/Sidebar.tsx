@@ -23,6 +23,7 @@ import {
   School,
   Sparkles,
   Utensils,
+  GraduationCap,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -253,32 +254,35 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* External Useful Links */}
         {!collapsed && (
           <div className="pt-3 border-t border-slate-100 space-y-1.5">
-            <div className="px-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+            <div className="px-3 text-[10px] font-extrabold text-blue-700 uppercase tracking-wider flex items-center gap-1">
+              <Sparkles className="w-3 h-3 text-amber-500 fill-amber-400" />
               Liên kết nhà trường
             </div>
             <a
-              href="https://thcsxadung.db.edu.vn"
+              href={settings?.website || 'https://thcsxadung.db.edu.vn/'}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium text-slate-600 hover:text-blue-700 hover:bg-blue-50/60 transition-colors"
+              className="flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold text-blue-900 bg-blue-50/80 hover:bg-blue-600 hover:text-white transition-all border border-blue-200/70 group shadow-2xs"
+              title="Trang thông tin điện tử nhà trường (https://thcsxadung.db.edu.vn/)"
             >
               <div className="flex items-center gap-2 truncate">
-                <School className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                <Globe className="w-3.5 h-3.5 text-blue-600 group-hover:text-white shrink-0" />
                 <span className="truncate">Cổng TTĐT Trường</span>
               </div>
-              <ExternalLink className="w-3 h-3 text-slate-400 shrink-0" />
+              <ExternalLink className="w-3 h-3 text-blue-400 group-hover:text-white shrink-0" />
             </a>
             <a
-              href="https://kqht.db.edu.vn"
+              href={settings?.student_results_url || 'https://kqht.db.edu.vn/'}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium text-slate-600 hover:text-emerald-700 hover:bg-emerald-50/60 transition-colors"
+              className="flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold text-emerald-950 bg-emerald-50/80 hover:bg-emerald-600 hover:text-white transition-all border border-emerald-200/70 group shadow-2xs"
+              title="Trang tra cứu kết quả học tập (https://kqht.db.edu.vn/)"
             >
               <div className="flex items-center gap-2 truncate">
-                <FileCheck2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <GraduationCap className="w-3.5 h-3.5 text-emerald-600 group-hover:text-white shrink-0" />
                 <span className="truncate">Kết quả học tập HS</span>
               </div>
-              <ExternalLink className="w-3 h-3 text-slate-400 shrink-0" />
+              <ExternalLink className="w-3 h-3 text-emerald-400 group-hover:text-white shrink-0" />
             </a>
           </div>
         )}
