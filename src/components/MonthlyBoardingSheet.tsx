@@ -814,12 +814,6 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
       if (targetStudents.length === 0) {
         const clsStudents = await StorageService.getStudentsByClass(selectedClassId, currentClass?.class_name);
         targetStudents = clsStudents.filter((s) => s.isBoarding !== false);
-        if (targetStudents.length === 0 && currentClass) {
-          targetStudents = generateDefaultBoardingStudentsForClass(selectedClassId, currentClass.class_name);
-          StorageService.saveStudents(targetStudents)
-            .then(() => refreshAll?.())
-            .catch(console.warn);
-        }
       }
       setAsyncBoardingStudents(targetStudents);
 
@@ -1071,12 +1065,13 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
       if (!currentStudents || currentStudents.length === 0) {
         currentStudents = await StorageService.getStudentsByClass(selectedClassId, currentClass?.class_name);
         currentStudents = currentStudents.filter((s) => s.isBoarding !== false);
-        if (currentStudents.length === 0 && currentClass) {
-          currentStudents = generateDefaultBoardingStudentsForClass(selectedClassId, currentClass.class_name);
-          StorageService.saveStudents(currentStudents).catch(console.warn);
-        }
       }
       setAsyncBoardingStudents(currentStudents);
+
+      if (currentStudents.length === 0) {
+        showToast('Lớp này chưa có danh sách học sinh bán trú. Thầy/Cô vui lòng tải lên danh sách học sinh trước!', 'info');
+        return;
+      }
 
       const classDaily = await StorageService.getDailyReportsByMonth(selectedClassId, selectedMonth);
       const reportsToSave: BoardingDailyReport[] = [];

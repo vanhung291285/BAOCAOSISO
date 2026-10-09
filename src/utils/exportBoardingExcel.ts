@@ -711,16 +711,6 @@ export async function exportMonthlyBoardingExcel(params: ExportBoardingExcelPara
     }
   }
 
-  // 4. Tự động sinh danh sách 35 học sinh bán trú chuẩn mẫu nếu lớp chưa có để xuất file hoàn chỉnh
-  if (boardingStudents.length === 0) {
-    try {
-      boardingStudents = generateDefaultBoardingStudentsForClass(classId, className);
-    } catch (e) {
-      console.warn('Could not generate default boarding students:', e);
-      boardingStudents = [];
-    }
-  }
-
   // Giữ nguyên 100% thứ tự danh sách học sinh theo file Excel gốc của lớp và loại bỏ trùng lặp (nếu có)
   const seenIds = new Set<string>();
   const uniqueBoarding: Student[] = [];

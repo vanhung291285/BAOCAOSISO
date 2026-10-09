@@ -1271,36 +1271,68 @@ export const StorageService = {
   async deleteStudentsByClass(classId: string, className?: string): Promise<void> {
     const list = await this.getStudents();
     const rawKeys = [classId, className].filter(Boolean) as string[];
-    const normKeys = new Set(rawKeys.map((k) => k.trim().toLowerCase()));
+    const normKeys = new Set<string>();
+
+    rawKeys.forEach((k) => {
+      const lower = k.trim().toLowerCase();
+      normKeys.add(lower);
+      normKeys.add(lower.replace(/^c_/, ''));
+      normKeys.add(lower.replace(/^lớp\s*/i, ''));
+      normKeys.add(`c_${lower.replace(/^c_/, '').replace(/^lớp\s*/i, '')}`);
+    });
 
     // Also look up classes list in storage to grab both id and class_name
     try {
       const clsRaw = localStorage.getItem(STORAGE_KEYS.CLASSES);
       if (clsRaw) {
         const clsList = JSON.parse(clsRaw);
-        const match = clsList.find(
-          (c: any) =>
-            normKeys.has(String(c.id).trim().toLowerCase()) ||
-            normKeys.has(String(c.class_name).trim().toLowerCase())
-        );
+        const match = clsList.find((c: any) => {
+          const cId = String(c.id || '').trim().toLowerCase();
+          const cName = String(c.class_name || '').trim().toLowerCase();
+          return normKeys.has(cId) || normKeys.has(cName) || normKeys.has(cName.replace(/^lớp\s*/i, ''));
+        });
         if (match) {
-          normKeys.add(String(match.id).trim().toLowerCase());
-          normKeys.add(String(match.class_name).trim().toLowerCase());
+          const mId = String(match.id).trim().toLowerCase();
+          const mName = String(match.class_name).trim().toLowerCase();
+          normKeys.add(mId);
+          normKeys.add(mName);
+          normKeys.add(mName.replace(/^lớp\s*/i, ''));
+          normKeys.add(`c_${mName.replace(/^lớp\s*/i, '')}`);
         }
       }
     } catch {}
 
-    const filtered = list.filter((s) => {
+    // Xác định chính xác toàn bộ học sinh cần xóa của lớp
+    const studentsToDelete = list.filter((s) => {
       const sCls = String(s.class_id || '').trim().toLowerCase();
-      return !normKeys.has(sCls);
+      const sClsClean = sCls.replace(/^c_/, '').replace(/^lớp\s*/i, '');
+      return normKeys.has(sCls) || normKeys.has(sClsClean);
+    });
+    const idsToDelete = studentsToDelete.map((s) => s.id).filter(Boolean);
+
+    // Cập nhật bộ nhớ cục bộ
+    const filtered = list.filter((s) => {
+      if (s.id && idsToDelete.includes(s.id)) return false;
+      const sCls = String(s.class_id || '').trim().toLowerCase();
+      const sClsClean = sCls.replace(/^c_/, '').replace(/^lớp\s*/i, '');
+      return !normKeys.has(sCls) && !normKeys.has(sClsClean);
     });
     localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(filtered));
 
     const supabase = getSupabaseClient();
     if (supabase && isSupabaseConnected()) {
       try {
-        for (const k of normKeys) {
+        // 1. Xóa chính xác theo ID từng học sinh trên Supabase để bảo đảm sạch 100%
+        if (idsToDelete.length > 0) {
+          for (let i = 0; i < idsToDelete.length; i += 100) {
+            const batch = idsToDelete.slice(i, i + 100);
+            await supabase.from('students').delete().in('id', batch);
+          }
+        }
+        // 2. Xóa bổ sung theo tất cả các biến thể class_id của lớp trên Supabase
+        for (const k of Array.from(normKeys)) {
           await supabase.from('students').delete().eq('class_id', k);
+          await supabase.from('students').delete().eq('class_id', k.toUpperCase());
         }
       } catch (e) {
         console.error('Supabase deleteStudentsByClass error:', e);

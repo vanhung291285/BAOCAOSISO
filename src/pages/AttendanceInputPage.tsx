@@ -1124,10 +1124,6 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
           return validClassSet.has(sCls) || validClassSet.has(sClsClean);
         });
 
-        if (classBoardingStudents.length === 0 && selectedClass) {
-          classBoardingStudents = generateDefaultBoardingStudentsForClass(selectedClassId, selectedClass.class_name);
-        }
-
         if (classBoardingStudents.length > 0) {
           const absentMap = new Map<string, { reason?: string }>();
           if (absentStudents) {

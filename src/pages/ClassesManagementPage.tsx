@@ -1419,7 +1419,7 @@ export const ClassesManagementPage: React.FC = () => {
                       type="button"
                       onClick={async () => {
                         if (rosterClassId && window.confirm(`Bạn có chắc muốn XÓA TOÀN BỘ ${rosterStudents.length} học sinh của lớp ${rosterClass?.class_name}?`)) {
-                          await deleteStudentsByClass(rosterClassId);
+                          await deleteStudentsByClass(rosterClassId, rosterClass?.class_name);
                           setSuccessToast(`Đã xóa toàn bộ học sinh lớp ${rosterClass?.class_name}!`);
                           setTimeout(() => setSuccessToast(''), 3000);
                         }

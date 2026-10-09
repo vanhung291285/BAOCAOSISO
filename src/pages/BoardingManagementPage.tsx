@@ -751,8 +751,9 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
     if (window.confirm(confirmMsg)) {
       setIsDeletingAll(true);
       try {
-        await deleteStudentsByClass(selectedClassId);
+        await deleteStudentsByClass(selectedClassId, className);
         showToast(`Đã xóa toàn bộ ${count} học sinh của lớp ${className}!`);
+        await loadMealAttendance();
       } catch (e) {
         console.error(e);
         showToast('Lỗi khi xóa toàn bộ danh sách học sinh!', 'error');
