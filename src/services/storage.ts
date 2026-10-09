@@ -1238,20 +1238,26 @@ export const StorageService = {
 
     const supabase = getSupabaseClient();
     // Map DB student row (snake_case) to JS student object (camelCase)
-    const mapDBToJSStudent = (s: any) => ({
-      id: s.id,
-      student_code: s.student_code || '',
-      full_name: s.full_name,
-      gender: resolveStudentGender(s.gender, s.full_name),
-      birth_date: s.birth_date || '',
-      class_id: s.class_id,
-      village: cleanStudentAddress(s.address || s.village),
-      address: cleanStudentAddress(s.address || s.village),
-      ethnicity: s.ethnicity || '',
-      isBoarding: s.is_boarding !== undefined ? s.is_boarding : false,
-      notes: s.notes || '',
-      created_at: s.created_at,
-    });
+    const mapDBToJSStudent = (s: any) => {
+      const bVal = s.is_boarding !== undefined 
+        ? Boolean(s.is_boarding) 
+        : (s.isBoarding !== undefined ? Boolean(s.isBoarding) : true);
+      return {
+        id: s.id,
+        student_code: s.student_code || '',
+        full_name: s.full_name,
+        gender: resolveStudentGender(s.gender, s.full_name),
+        birth_date: s.birth_date || '',
+        class_id: s.class_id,
+        village: cleanStudentAddress(s.address || s.village),
+        address: cleanStudentAddress(s.address || s.village),
+        ethnicity: s.ethnicity || '',
+        isBoarding: bVal,
+        is_boarding: bVal,
+        notes: s.notes || '',
+        created_at: s.created_at,
+      };
+    };
 
     if (supabase && isSupabaseConnected()) {
       try {
@@ -1293,7 +1299,8 @@ export const StorageService = {
               address: cleanStudentAddress(localMatch?.address || localMatch?.village || mapped.address || mapped.village),
               village: cleanStudentAddress(localMatch?.village || localMatch?.address || mapped.village || mapped.address),
               notes: localMatch?.notes || mapped.notes,
-              isBoarding: mapped.isBoarding !== undefined ? mapped.isBoarding : (localMatch?.isBoarding !== undefined ? localMatch.isBoarding : false),
+              isBoarding: mapped.isBoarding !== undefined ? mapped.isBoarding : (localMatch?.isBoarding !== undefined ? localMatch.isBoarding : true),
+              is_boarding: mapped.isBoarding !== undefined ? mapped.isBoarding : (localMatch?.isBoarding !== undefined ? localMatch.isBoarding : true),
             };
 
             cloudActiveMap.set(mapped.id, mergedStudent);
@@ -1386,7 +1393,10 @@ export const StorageService = {
 
     const list = await this.getStudents();
     const finalGender = resolveStudentGender(student.gender, student.full_name);
-    const studentToSave = { ...student, gender: finalGender };
+    const bVal = student.isBoarding !== undefined 
+      ? Boolean(student.isBoarding) 
+      : ((student as any).is_boarding !== undefined ? Boolean((student as any).is_boarding) : true);
+    const studentToSave = { ...student, gender: finalGender, isBoarding: bVal, is_boarding: bVal };
 
     let idx = list.findIndex((s) => s.id === student.id);
     if (idx >= 0) list[idx] = { ...list[idx], ...studentToSave };
@@ -1398,19 +1408,37 @@ export const StorageService = {
       id: s.id,
       class_id: s.class_id,
       full_name: s.full_name,
-      address: s.village || s.address || '',
+      address: s.address || s.village || '',
+      village: s.village || s.address || '',
       gender: resolveStudentGender(s.gender, s.full_name),
       student_code: s.student_code || '',
       birth_date: s.birth_date || '',
       ethnicity: s.ethnicity || '',
       notes: s.notes || '',
-      is_boarding: s.isBoarding !== undefined ? s.isBoarding : false,
+      is_boarding: bVal,
     });
 
     const supabase = getSupabaseClient();
     if (supabase && isSupabaseConnected()) {
       try {
-        const { error } = await supabase.from('students').upsert(mapJSToDBStudent(studentToSave));
+        // Tự động đảm bảo lớp học tồn tại trên Supabase trước khi lưu học sinh
+        if (studentToSave.class_id) {
+          const localClasses = await this.getClasses();
+          const targetCls = localClasses.find((c) => isStudentInClass(studentToSave.class_id, c.id, c.class_name));
+          if (targetCls) {
+            try {
+              await supabase.from('classes').upsert({
+                id: targetCls.id,
+                class_name: targetCls.class_name,
+                grade: targetCls.grade || 6,
+                active: true,
+                sort_order: targetCls.sort_order || 0,
+              }, { onConflict: 'id' });
+            } catch {}
+          }
+        }
+
+        const { error } = await supabase.from('students').upsert(mapJSToDBStudent(studentToSave), { onConflict: 'id' });
         if (error) {
           console.warn('Supabase saveStudent warning:', error.message);
           if (error.message?.includes('column') || error.code === 'PGRST204') {
@@ -1419,8 +1447,8 @@ export const StorageService = {
               class_id: studentToSave.class_id,
               full_name: studentToSave.full_name,
               address: studentToSave.village || studentToSave.address || '',
-              is_boarding: studentToSave.isBoarding !== undefined ? studentToSave.isBoarding : false,
-            });
+              is_boarding: bVal,
+            }, { onConflict: 'id' });
           }
         }
       } catch (e) {
@@ -1611,7 +1639,10 @@ export const StorageService = {
     for (const student of students) {
       if (!student || !student.id) continue;
       const finalGender = resolveStudentGender(student.gender, student.full_name);
-      const sCopy = { ...student, gender: finalGender };
+      const bVal = student.isBoarding !== undefined 
+        ? Boolean(student.isBoarding) 
+        : ((student as any).is_boarding !== undefined ? Boolean((student as any).is_boarding) : true);
+      const sCopy = { ...student, gender: finalGender, isBoarding: bVal, is_boarding: bVal };
       studentsToSave.push(sCopy);
 
       let idx = updated.findIndex((s) => s.id === student.id);
@@ -1624,22 +1655,49 @@ export const StorageService = {
       id: s.id,
       class_id: s.class_id,
       full_name: s.full_name,
-      address: s.village || s.address || '',
+      address: s.address || s.village || '',
+      village: s.village || s.address || '',
       gender: resolveStudentGender(s.gender, s.full_name),
       student_code: s.student_code || '',
       birth_date: s.birth_date || '',
       ethnicity: s.ethnicity || '',
       notes: s.notes || '',
-      is_boarding: s.isBoarding !== undefined ? s.isBoarding : false,
+      is_boarding: s.isBoarding !== undefined ? Boolean(s.isBoarding) : (s.is_boarding !== undefined ? Boolean(s.is_boarding) : true),
     });
 
     const supabase = getSupabaseClient();
     if (supabase && isSupabaseConnected()) {
       try {
+        // 1. Tự động đảm bảo lớp học của các học sinh này tồn tại trên Supabase để ngăn chặn lỗi khóa ngoại
+        const classIdsInBatch = Array.from(new Set(studentsToSave.map((s) => s.class_id).filter(Boolean)));
+        const localClasses = await this.getClasses();
+        const classesToUpsert = localClasses.filter((c) =>
+          classIdsInBatch.includes(c.id) ||
+          classIdsInBatch.includes(c.class_name) ||
+          classIdsInBatch.some((cid) => isStudentInClass(cid, c.id, c.class_name))
+        );
+        if (classesToUpsert.length > 0) {
+          try {
+            await supabase.from('classes').upsert(
+              classesToUpsert.map((c) => ({
+                id: c.id,
+                class_name: c.class_name,
+                grade: c.grade || 6,
+                active: true,
+                sort_order: c.sort_order || 0,
+              })),
+              { onConflict: 'id' }
+            );
+          } catch (eCls) {
+            console.warn('Supabase auto ensure classes notice:', eCls);
+          }
+        }
+
+        // 2. Lưu toàn bộ học sinh lên Supabase với onConflict 'id'
         const dbStudents = studentsToSave.map(mapJSToDBStudent);
         for (let i = 0; i < dbStudents.length; i += 100) {
           const batch = dbStudents.slice(i, i + 100);
-          const { error } = await supabase.from('students').upsert(batch);
+          const { error } = await supabase.from('students').upsert(batch, { onConflict: 'id' });
           if (error) {
             console.warn('Supabase saveStudents bulk warning:', error.message);
             if (error.message?.includes('column') || error.code === 'PGRST204') {
@@ -1647,10 +1705,10 @@ export const StorageService = {
                 id: s.id,
                 class_id: s.class_id,
                 full_name: s.full_name,
-                address: s.address || '',
+                address: s.address || s.village || '',
                 is_boarding: s.is_boarding,
               }));
-              await supabase.from('students').upsert(fallback);
+              await supabase.from('students').upsert(fallback, { onConflict: 'id' });
             }
           }
         }
@@ -6063,9 +6121,28 @@ export const StorageService = {
       if (indicators && indicators.length > 0) counts.indicator_groups = updateMergedList(STORAGE_KEYS.INDICATORS, indicators);
       if (students && students.length > 0) {
         const deletedIds = this.getDeletedStudentIds();
-        const cleanCloudStudents = students.filter(
-          (s: any) => !deletedIds.has(String(s.id).trim()) && !isAutoGeneratedSeedStudent(s)
-        );
+        const cleanCloudStudents = students
+          .filter((s: any) => !deletedIds.has(String(s.id).trim()) && !isAutoGeneratedSeedStudent(s))
+          .map((s: any) => {
+            const bVal = s.is_boarding !== undefined 
+              ? Boolean(s.is_boarding) 
+              : (s.isBoarding !== undefined ? Boolean(s.isBoarding) : true);
+            return {
+              id: s.id,
+              student_code: s.student_code || '',
+              full_name: s.full_name,
+              gender: resolveStudentGender(s.gender, s.full_name),
+              birth_date: s.birth_date || '',
+              class_id: s.class_id,
+              village: cleanStudentAddress(s.address || s.village),
+              address: cleanStudentAddress(s.address || s.village),
+              ethnicity: s.ethnicity || '',
+              isBoarding: bVal,
+              is_boarding: bVal,
+              notes: s.notes || '',
+              created_at: s.created_at,
+            };
+          });
         counts.students = updateMergedList(STORAGE_KEYS.STUDENTS, cleanCloudStudents);
       }
       if (reports && reports.length > 0) counts.daily_reports = updateMergedList(STORAGE_KEYS.REPORTS, reports);

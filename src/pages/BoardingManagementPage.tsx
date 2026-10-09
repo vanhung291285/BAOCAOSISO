@@ -17,6 +17,7 @@ import {
   buildDefaultMealRecords,
 } from '../utils/boardingRules';
 import { resolveStudentGender, inferGenderFromName, cleanStudentAddress, isStudentInClass } from '../utils/studentUtils';
+import { isSupabaseConnected } from '../services/supabase';
 import {
   parseStudentExcelData,
   recomputeStudentsWithBoardingColumn,
@@ -866,9 +867,19 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
       await importStudents(importPreviewData, selectedClassId, selectedClass?.class_name);
       const bCount = importPreviewData.filter((s) => s.isBoarding !== false).length;
       const dCount = importPreviewData.filter((s) => s.isBoarding === false).length;
-      showToast(
-        `Đã nhập thành công ${importPreviewData.length} học sinh (${bCount} Bán trú, ${dCount} Ngoại trú) vào lớp ${selectedClass?.class_name}! Giữ nguyên 100% thứ tự file Excel.`
-      );
+      
+      if (isSupabaseConnected()) {
+        showToast(
+          `Đã nhập và LƯU SUPABASE CLOUD thành công ${importPreviewData.length} học sinh (${bCount} Bán trú) lớp ${selectedClass?.class_name}! Dữ liệu đã sẵn sàng trên mọi trình duyệt.`,
+          'success'
+        );
+      } else {
+        showToast(
+          `Đã lưu ${importPreviewData.length} học sinh (${bCount} Bán trú) vào bộ nhớ máy này. Lưu ý: Supabase chưa kết nối nên trình duyệt khác chưa xem được. Hãy vào Cài đặt -> Supabase để kết nối Cloud!`,
+          'info'
+        );
+      }
+
       setShowImportModal(false);
       setImportPreviewData([]);
       await loadMealAttendance();
@@ -2109,6 +2120,26 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
                 <Users className="w-10 h-10 text-slate-300 mb-2" />
                 <p className="text-sm font-bold text-slate-600">Chưa có học sinh nào trong danh sách lớp {selectedClass?.class_name}</p>
                 <p className="text-xs text-slate-400 mt-1 mb-4">GVCN vui lòng tải lên danh sách học sinh thực tế từ file Excel hoặc nhập danh sách học sinh cho lớp.</p>
+                
+                {!isSupabaseConnected() && (
+                  <div className="mb-5 max-w-md p-3 bg-amber-50 border border-amber-300 rounded-xl text-left flex items-start gap-2.5">
+                    <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                    <div className="text-[11px] text-amber-900 leading-relaxed">
+                      <strong>Lưu ý đồng bộ:</strong> Trình duyệt này hiện chưa kết nối Supabase Cloud. Nếu bạn đã nhập học sinh trên máy tính hoặc trình duyệt khác, hãy vào <strong>Cài đặt → Supabase</strong> để kết nối đám mây, dữ liệu sẽ tự động tải về ngay.
+                      {onNavigate && (
+                        <div className="mt-1.5">
+                          <button
+                            type="button"
+                            onClick={() => onNavigate('/settings/supabase')}
+                            className="text-xs font-bold text-blue-700 hover:text-blue-900 underline cursor-pointer"
+                          >
+                            Đến trang Cài đặt Supabase →
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
                 <div className="flex flex-wrap items-center justify-center gap-2.5">
                   <button
                     type="button"

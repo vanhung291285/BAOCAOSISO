@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { SUPABASE_SQL_SCHEMA, generateFullDatabaseSqlScript } from '../services/sqlSchema';
+import { SUPABASE_SQL_SCHEMA, SUPABASE_STUDENTS_FIX_SQL, generateFullDatabaseSqlScript } from '../services/sqlSchema';
 import { StorageService, TableSyncStatus } from '../services/storage';
 import {
   getSupabaseCredentials,
@@ -28,13 +28,17 @@ import {
   FileCode,
   Download,
   Trash2,
+  Share2,
+  Users,
 } from 'lucide-react';
 
 export const SettingsSupabasePage: React.FC = () => {
   const [copied, setCopied] = useState(false);
   const [copiedFull, setCopiedFull] = useState(false);
+  const [copiedStudents, setCopiedStudents] = useState(false);
+  const [quickLinkCopied, setQuickLinkCopied] = useState(false);
   const [resetSuccess, setResetSuccess] = useState(false);
-  const [sqlViewMode, setSqlViewMode] = useState<'schema' | 'full'>('full');
+  const [sqlViewMode, setSqlViewMode] = useState<'students' | 'full' | 'schema'>('students');
 
   // Credentials
   const [supabaseUrl, setSupabaseUrl] = useState('');
@@ -325,10 +329,38 @@ export const SettingsSupabasePage: React.FC = () => {
     setTimeout(() => setCopiedFull(false), 2500);
   };
 
+  const handleCopyStudentsSql = () => {
+    navigator.clipboard.writeText(SUPABASE_STUDENTS_FIX_SQL);
+    setCopiedStudents(true);
+    setTimeout(() => setCopiedStudents(false), 2500);
+  };
+
+  const handleShareQuickConnectLink = () => {
+    if (!supabaseUrl || !supabaseKey) {
+      alert('Vui lòng nhập và lưu Supabase Project URL và API Key trước khi sao chép liên kết.');
+      return;
+    }
+    const origin = window.location.origin;
+    const link = `${origin}/#/?sb_url=${encodeURIComponent(supabaseUrl)}&sb_key=${encodeURIComponent(supabaseKey)}`;
+    navigator.clipboard.writeText(link);
+    setQuickLinkCopied(true);
+    setTimeout(() => setQuickLinkCopied(false), 3000);
+  };
+
   const handleDownloadSqlFile = () => {
-    const fullSql = sqlViewMode === 'full' ? generateFullDatabaseSqlScript() : SUPABASE_SQL_SCHEMA;
-    const filename = sqlViewMode === 'full' ? `supabase_full_dump_${new Date().toISOString().split('T')[0]}.sql` : 'supabase_schema.sql';
-    const blob = new Blob([fullSql], { type: 'text/plain;charset=utf-8' });
+    const sqlText =
+      sqlViewMode === 'students'
+        ? SUPABASE_STUDENTS_FIX_SQL
+        : sqlViewMode === 'full'
+        ? generateFullDatabaseSqlScript()
+        : SUPABASE_SQL_SCHEMA;
+    const filename =
+      sqlViewMode === 'students'
+        ? 'fix_students_supabase.sql'
+        : sqlViewMode === 'full'
+        ? `supabase_full_dump_${new Date().toISOString().split('T')[0]}.sql`
+        : 'supabase_schema.sql';
+    const blob = new Blob([sqlText], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -353,7 +385,12 @@ export const SettingsSupabasePage: React.FC = () => {
     }
   };
 
-  const displayedSql = sqlViewMode === 'full' ? generateFullDatabaseSqlScript() : SUPABASE_SQL_SCHEMA;
+  const displayedSql =
+    sqlViewMode === 'students'
+      ? SUPABASE_STUDENTS_FIX_SQL
+      : sqlViewMode === 'full'
+      ? generateFullDatabaseSqlScript()
+      : SUPABASE_SQL_SCHEMA;
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
@@ -488,6 +525,17 @@ export const SettingsSupabasePage: React.FC = () => {
             >
               {purgingSeed ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
               <span>Dọn dẹp HS tự sinh (Giữ HS GVCN)</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleSyncSingleTable('students')}
+              disabled={syncingTableKey === 'students' || !connStatus?.connected}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 shadow-xs transition-colors disabled:opacity-50"
+              title="Đẩy ngay danh sách học sinh từ máy này lên Supabase Cloud"
+            >
+              {syncingTableKey === 'students' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Users className="w-4 h-4 text-emerald-700" />}
+              <span>Đẩy Học Sinh lên Cloud</span>
             </button>
 
             <button
@@ -700,13 +748,23 @@ export const SettingsSupabasePage: React.FC = () => {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <button
               type="button"
               onClick={handleSaveConnection}
-              className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-xs transition-colors"
+              className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-xs transition-colors cursor-pointer"
             >
               Lưu & Kiểm tra kết nối
+            </button>
+
+            <button
+              type="button"
+              onClick={handleShareQuickConnectLink}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-300 shadow-xs transition-colors cursor-pointer"
+              title="Tạo liên kết tự động điền URL & Key khi mở trên trình duyệt/máy tính/điện thoại khác"
+            >
+              {quickLinkCopied ? <Check className="w-4 h-4 text-emerald-600" /> : <Share2 className="w-4 h-4 text-indigo-600" />}
+              <span>{quickLinkCopied ? 'ĐÃ SAO CHÉP LINK KẾT NỐI!' : 'Sao chép Link kết nối cho máy khác'}</span>
             </button>
           </div>
         </div>
@@ -722,7 +780,7 @@ export const SettingsSupabasePage: React.FC = () => {
                 KỊCH BẢN TẠO BẢNG & ĐẨY DỮ LIỆU SQL (SUPABASE SQL EDITOR)
               </h2>
               <p className="text-xs text-slate-500">
-                1. Sao chép hoặc Tải file SQL → 2. Mở Supabase Dashboard → 3. Chọn mục <b>SQL Editor</b> → 4. Dán và bấm <b>Run</b>
+                1. Sao chép SQL → 2. Mở Supabase Dashboard → 3. Vào <b>SQL Editor</b> → 4. Dán và bấm <b>Run</b>
               </p>
             </div>
           </div>
@@ -731,9 +789,19 @@ export const SettingsSupabasePage: React.FC = () => {
             <div className="bg-slate-200 p-1 rounded-xl flex items-center gap-1 text-[11px] font-bold">
               <button
                 type="button"
+                onClick={() => setSqlViewMode('students')}
+                className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
+                  sqlViewMode === 'students' ? 'bg-white text-emerald-700 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900'
+                }`}
+                title="Kịch bản tối ưu hóa chuẩn lưu học sinh, bỏ khóa ngoại chặn ghi và tạo sẵn lớp"
+              >
+                SQL Học Sinh & Bán Trú
+              </button>
+              <button
+                type="button"
                 onClick={() => setSqlViewMode('full')}
-                className={`px-2.5 py-1 rounded-lg transition-colors ${
-                  sqlViewMode === 'full' ? 'bg-white text-blue-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
+                  sqlViewMode === 'full' ? 'bg-white text-blue-700 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
                 Cả Cấu Trúc + Dữ Liệu
@@ -741,8 +809,8 @@ export const SettingsSupabasePage: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setSqlViewMode('schema')}
-                className={`px-2.5 py-1 rounded-lg transition-colors ${
-                  sqlViewMode === 'schema' ? 'bg-white text-blue-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
+                  sqlViewMode === 'schema' ? 'bg-white text-blue-700 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
                 Chỉ Cấu Trúc Bảng
@@ -752,7 +820,7 @@ export const SettingsSupabasePage: React.FC = () => {
             <button
               type="button"
               onClick={handleDownloadSqlFile}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-300 shadow-xs transition-colors"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-300 shadow-xs transition-colors cursor-pointer"
               title="Tải tệp tin .sql về máy tính để mở trên SQL Editor"
             >
               <Download className="w-4 h-4 text-slate-600" />
@@ -761,11 +829,25 @@ export const SettingsSupabasePage: React.FC = () => {
 
             <button
               type="button"
-              onClick={sqlViewMode === 'full' ? handleCopyFullSql : handleCopySql}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-xs transition-colors flex-shrink-0"
+              onClick={
+                sqlViewMode === 'students'
+                  ? handleCopyStudentsSql
+                  : sqlViewMode === 'full'
+                  ? handleCopyFullSql
+                  : handleCopySql
+              }
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-xs transition-colors flex-shrink-0 cursor-pointer"
             >
-              {(sqlViewMode === 'full' ? copiedFull : copied) ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-              <span>{(sqlViewMode === 'full' ? copiedFull : copied) ? 'ĐÃ SAO CHÉP SQL!' : 'SAO CHÉP SQL'}</span>
+              {(sqlViewMode === 'students' ? copiedStudents : sqlViewMode === 'full' ? copiedFull : copied) ? (
+                <Check className="w-4 h-4" />
+              ) : (
+                <Copy className="w-4 h-4" />
+              )}
+              <span>
+                {(sqlViewMode === 'students' ? copiedStudents : sqlViewMode === 'full' ? copiedFull : copied)
+                  ? 'ĐÃ SAO CHÉP SQL!'
+                  : 'SAO CHÉP SQL'}
+              </span>
             </button>
           </div>
         </div>

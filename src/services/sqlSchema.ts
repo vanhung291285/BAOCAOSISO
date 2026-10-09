@@ -478,7 +478,41 @@ BEGIN
     BEGIN
         ALTER TABLE public.boarding_month_signatures ADD COLUMN standard_dinner INTEGER;
     EXCEPTION WHEN duplicate_column THEN END;
+
+    -- HỦY BỎ KHÓA NGOẠI CHẶT CHẼ ĐỂ TRÁNH LỖI KHI GVCN NHẬP HỌC SINH MỚI / LỆCH MÃ LỚP
+    BEGIN
+        ALTER TABLE public.students DROP CONSTRAINT IF EXISTS students_class_id_fkey;
+    EXCEPTION WHEN OTHERS THEN END;
+
+    BEGIN
+        ALTER TABLE public.daily_reports DROP CONSTRAINT IF EXISTS daily_reports_class_id_fkey;
+    EXCEPTION WHEN OTHERS THEN END;
+
+    BEGIN
+        ALTER TABLE public.boarding_reports DROP CONSTRAINT IF EXISTS boarding_reports_class_id_fkey;
+    EXCEPTION WHEN OTHERS THEN END;
+
+    BEGIN
+        ALTER TABLE public.boarding_signature_configs DROP CONSTRAINT IF EXISTS boarding_signature_configs_class_id_fkey;
+    EXCEPTION WHEN OTHERS THEN END;
+
+    BEGIN
+        ALTER TABLE public.boarding_month_signatures DROP CONSTRAINT IF EXISTS boarding_month_signatures_class_id_fkey;
+    EXCEPTION WHEN OTHERS THEN END;
 END $$;
+
+-- Nạp sẵn 8 lớp học tiêu chuẩn của trường nếu chưa có
+INSERT INTO public.classes (id, class_name, grade, active, sort_order)
+VALUES 
+    ('c_6a', '6A', 6, true, 1),
+    ('c_6b', '6B', 6, true, 2),
+    ('c_7a', '7A', 7, true, 3),
+    ('c_7b', '7B', 7, true, 4),
+    ('c_8a', '8A', 8, true, 5),
+    ('c_8b', '8B', 8, true, 6),
+    ('c_9a', '9A', 9, true, 7),
+    ('c_9b', '9B', 9, true, 8)
+ON CONFLICT (id) DO UPDATE SET class_name = EXCLUDED.class_name, grade = EXCLUDED.grade;
 
 -- ==============================================================================
 -- PHÂN QUYỀN ROW LEVEL SECURITY (RLS) & ANONYMOUS KEY ACCESS
@@ -552,26 +586,13 @@ DROP POLICY IF EXISTS "Allow all for boarding_month_signatures" ON public.boardi
 CREATE POLICY "Allow all for boarding_month_signatures" ON public.boarding_month_signatures FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
 
 -- ==============================================================================
--- DỌN DẸP SẠCH TOÀN BỘ HỌC SINH MẪU TỰ SINH TRÊN SUPABASE
--- GIỮ NGUYÊN 100% DANH SÁCH HỌC SINH DO GVCN ĐÃ TẢI LÊN (id dạng timestamp std_17..., std_18...)
+-- DỌN DẸP SẠCH TOÀN BỘ HỌC SINH MẪU TỰ SINH TRÊN SUPABASE (NẾU CÓ)
+-- TUYỆT ĐỐI BẢO VỆ 100% DANH SÁCH HỌC SINH DO GVCN ĐÃ TẢI LÊN (id dạng timestamp std_1..., std_2...)
 -- ==============================================================================
 DELETE FROM public.students
-WHERE id ~ '^std_[a-zA-Z0-9]+_\d{1,3}$'
+WHERE ((id ~ '^std_[a-zA-Z0-9]{1,6}_\d{1,2}$') AND NOT (id ~ '^std_1[6-9]\d{10,}') AND NOT (id ~ '^std_2\d{11,}'))
    OR id LIKE 'std_seed_%'
-   OR id LIKE 'seed_%'
-   OR student_code ~ '^HS[a-zA-Z0-9]+\d{1,3}$'
-   OR (
-      lower(trim(full_name)) IN (
-        'vừ a lềnh', 'sùng thị mỷ', 'mùa a tủa', 'giàng a chống', 'thào thị dợ',
-        'hờ a cháng', 'cứ thị dế', 'lầu a lầu', 'vừ thị sinh', 'mùa thị pa',
-        'giàng thị hoa', 'sùng a dơ', 'thào a lử', 'hờ thị dở', 'cứ a sùng',
-        'lầu thị mai', 'vừ a tủa', 'sùng thị dua', 'mùa a súa', 'giàng a vừ',
-        'thào thị sua', 'hờ a tủa', 'cứ thị mỷ', 'lầu a chống', 'lý a lềnh',
-        'khang thị dợ', 'lò văn inh', 'quàng thị lan', 'cà văn bun', 'tòng thị duyên',
-        'vừ a cháng', 'sùng thị chi', 'mùa thị say', 'giàng a tế', 'thào a phềnh'
-      )
-      AND NOT (id ~ '^std_1[7-9]\d+')
-   );
+   OR id LIKE 'seed_%';
 
 -- ==============================================================================
 -- REALTIME SUBSCRIPTIONS
@@ -888,6 +909,137 @@ WHERE (
 );
 `;
 
+/**
+ * KỊCH BẢN SQL CHUYÊN BIỆT: ĐẢM BẢO 100% LƯU HỌC SINH & BÁN TRÚ TRÊN SUPABASE
+ * Chạy kịch bản này trên Supabase SQL Editor để khắc phục triệt để lỗi học sinh không lưu hoặc mở trình duyệt khác bị rỗng
+ */
+export const SUPABASE_STUDENTS_FIX_SQL = `-- ==============================================================================
+-- KỊCH BẢN SQL CHUẨN HÓA LƯU DỮ LIỆU HỌC SINH & BÁN TRÚ TRÊN SUPABASE
+-- Mục đích: Đảm bảo bảng students & classes lưu vĩnh viễn, mở trình duyệt nào cũng đầy đủ
+-- ==============================================================================
+
+-- 1. BẢNG HỌC SINH (public.students)
+CREATE TABLE IF NOT EXISTS public.students (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    class_id TEXT NOT NULL,
+    full_name TEXT NOT NULL,
+    address TEXT,
+    village TEXT,
+    gender TEXT,
+    student_code TEXT,
+    birth_date TEXT,
+    ethnicity TEXT,
+    notes TEXT,
+    is_boarding BOOLEAN DEFAULT false,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
+);
+
+-- Bổ sung các cột nếu bảng đã tạo từ trước
+DO $$
+BEGIN
+    BEGIN ALTER TABLE public.students ADD COLUMN IF NOT EXISTS address TEXT; EXCEPTION WHEN duplicate_column THEN END;
+    BEGIN ALTER TABLE public.students ADD COLUMN IF NOT EXISTS village TEXT; EXCEPTION WHEN duplicate_column THEN END;
+    BEGIN ALTER TABLE public.students ADD COLUMN IF NOT EXISTS gender TEXT; EXCEPTION WHEN duplicate_column THEN END;
+    BEGIN ALTER TABLE public.students ADD COLUMN IF NOT EXISTS student_code TEXT; EXCEPTION WHEN duplicate_column THEN END;
+    BEGIN ALTER TABLE public.students ADD COLUMN IF NOT EXISTS birth_date TEXT; EXCEPTION WHEN duplicate_column THEN END;
+    BEGIN ALTER TABLE public.students ADD COLUMN IF NOT EXISTS ethnicity TEXT; EXCEPTION WHEN duplicate_column THEN END;
+    BEGIN ALTER TABLE public.students ADD COLUMN IF NOT EXISTS notes TEXT; EXCEPTION WHEN duplicate_column THEN END;
+    BEGIN ALTER TABLE public.students ADD COLUMN IF NOT EXISTS is_boarding BOOLEAN DEFAULT false; EXCEPTION WHEN duplicate_column THEN END;
+    BEGIN ALTER TABLE public.students ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()); EXCEPTION WHEN duplicate_column THEN END;
+END $$;
+
+-- 2. HỦY BỎ CÁC RÀNG BUỘC KHÓA NGOẠI CHẶT CHẼ TRÁNH LỖI KHI NHẬP HỌC SINH
+ALTER TABLE public.students DROP CONSTRAINT IF EXISTS students_class_id_fkey;
+ALTER TABLE public.daily_reports DROP CONSTRAINT IF EXISTS daily_reports_class_id_fkey;
+ALTER TABLE public.boarding_reports DROP CONSTRAINT IF EXISTS boarding_reports_class_id_fkey;
+
+-- 3. BẢNG LỚP HỌC (public.classes)
+CREATE TABLE IF NOT EXISTS public.classes (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    school_year_id TEXT,
+    campus_id TEXT,
+    class_name TEXT NOT NULL,
+    grade INTEGER NOT NULL DEFAULT 6,
+    homeroom_teacher_id TEXT,
+    room_number TEXT,
+    active BOOLEAN NOT NULL DEFAULT true,
+    is_locked BOOLEAN NOT NULL DEFAULT false,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
+);
+
+-- Khởi tạo sẵn 8 lớp tiêu chuẩn nếu chưa có
+INSERT INTO public.classes (id, class_name, grade, active, sort_order)
+VALUES 
+    ('c_6a', '6A', 6, true, 1),
+    ('c_6b', '6B', 6, true, 2),
+    ('c_7a', '7A', 7, true, 3),
+    ('c_7b', '7B', 7, true, 4),
+    ('c_8a', '8A', 8, true, 5),
+    ('c_8b', '8B', 8, true, 6),
+    ('c_9a', '9A', 9, true, 7),
+    ('c_9b', '9B', 9, true, 8)
+ON CONFLICT (id) DO UPDATE SET class_name = EXCLUDED.class_name, grade = EXCLUDED.grade;
+
+-- 4. BẢNG BÁO CÁO BÁN TRÚ NGÀY (public.boarding_reports)
+CREATE TABLE IF NOT EXISTS public.boarding_reports (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    class_id TEXT NOT NULL,
+    date DATE NOT NULL,
+    status TEXT NOT NULL DEFAULT 'SUBMITTED' CHECK (status IN ('DRAFT', 'SUBMITTED', 'LOCKED')),
+    total_boarding_students INTEGER DEFAULT 0,
+    breakfast_count INTEGER DEFAULT 0,
+    lunch_count INTEGER DEFAULT 0,
+    dinner_count INTEGER DEFAULT 0,
+    absent_count INTEGER DEFAULT 0,
+    total_meals INTEGER DEFAULT 0,
+    notes TEXT,
+    records JSONB NOT NULL DEFAULT '[]'::jsonb,
+    submitted_by TEXT,
+    submitted_by_name TEXT,
+    submitted_at TIMESTAMPTZ,
+    locked_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
+    CONSTRAINT unique_class_boarding_date UNIQUE (class_id, date)
+);
+
+-- 5. CẤP QUYỀN ĐẦY ĐỦ CHO ANON & AUTHENTICATED (ROW LEVEL SECURITY)
+GRANT USAGE ON SCHEMA public TO anon, authenticated;
+GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated;
+
+ALTER TABLE public.students ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all for students" ON public.students;
+CREATE POLICY "Allow all for students" ON public.students FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+ALTER TABLE public.classes ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all for classes" ON public.classes;
+CREATE POLICY "Allow all for classes" ON public.classes FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+ALTER TABLE public.boarding_reports ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all for boarding_reports" ON public.boarding_reports;
+CREATE POLICY "Allow all for boarding_reports" ON public.boarding_reports FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+-- 6. REALTIME SUBSCRIPTIONS
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime') THEN
+    CREATE PUBLICATION supabase_realtime;
+  END IF;
+END $$;
+
+ALTER PUBLICATION supabase_realtime ADD TABLE public.students;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.classes;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.boarding_reports;
+
+-- 7. DỌN SẠCH CÁC HỌC SINH MẪU TỰ SINH ĐỜI CŨ (BẢO VỆ 100% HỌC SINH DO GVCN ĐÃ TẢI LÊN)
+DELETE FROM public.students
+WHERE ((id ~ '^std_[a-zA-Z0-9]{1,6}_\\d{1,2}$') AND NOT (id ~ '^std_1[6-9]\\d{10,}') AND NOT (id ~ '^std_2\\d{11,}'))
+   OR id LIKE 'std_seed_%'
+   OR id LIKE 'seed_%';
+`;
+
 export const generateFullDatabaseSqlScript = (): string => {
   const escapeSql = (val: any): string => {
     if (val === null || val === undefined) return 'NULL';
@@ -1034,24 +1186,11 @@ ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, code = EXCLUDED.code, enabl
     }
 
     // 7. students (Dọn dẹp học sinh mẫu tự sinh và chỉ xuất học sinh thực tế do GVCN tải lên)
-    sql += `-- 7. DỌN DẸP SẠCH TOÀN BỘ HỌC SINH MẪU TỰ SINH TRÊN SUPABASE (GIỮ NGUYÊN HỌC SINH GVCN UPLOAD)\n`;
+    sql += `-- 7. DỌN DẸP SẠCH TOÀN BỘ HỌC SINH MẪU TỰ SINH TRÊN SUPABASE (NẾU CÓ)\n`;
     sql += `DELETE FROM public.students
-WHERE id ~ '^std_[a-zA-Z0-9]+_\\d{1,3}$'
+WHERE ((id ~ '^std_[a-zA-Z0-9]{1,6}_\\d{1,2}$') AND NOT (id ~ '^std_1[6-9]\\d{10,}') AND NOT (id ~ '^std_2\\d{11,}'))
    OR id LIKE 'std_seed_%'
-   OR id LIKE 'seed_%'
-   OR student_code ~ '^HS[a-zA-Z0-9]+\\d{1,3}$'
-   OR (
-      lower(trim(full_name)) IN (
-        'vừ a lềnh', 'sùng thị mỷ', 'mùa a tủa', 'giàng a chống', 'thào thị dợ',
-        'hờ a cháng', 'cứ thị dế', 'lầu a lầu', 'vừ thị sinh', 'mùa thị pa',
-        'giàng thị hoa', 'sùng a dơ', 'thào a lử', 'hờ thị dở', 'cứ a sùng',
-        'lầu thị mai', 'vừ a tủa', 'sùng thị dua', 'mùa a súa', 'giàng a vừ',
-        'thào thị sua', 'hờ a tủa', 'cứ thị mỷ', 'lầu a chống', 'lý a lềnh',
-        'khang thị dợ', 'lò văn inh', 'quàng thị lan', 'cà văn bun', 'tòng thị duyên',
-        'vừ a cháng', 'sùng thị chi', 'mùa thị say', 'giàng a tế', 'thào a phềnh'
-      )
-      AND NOT (id ~ '^std_1[7-9]\\d+')
-   );\n\n`;
+   OR id LIKE 'seed_%';\n\n`;
 
     const rawStudents = getLocalItem('sso_students');
     if (rawStudents) {

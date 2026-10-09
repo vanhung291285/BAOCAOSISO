@@ -11,6 +11,29 @@ export interface SupabaseConnectionStatus {
 
 // Get Supabase credentials from localStorage (both key formats supported) or import.meta.env
 export function getSupabaseCredentials(): { url: string; anonKey: string } {
+  // Tự động nhận diện cấu hình từ URL (nếu mở liên kết chia sẻ kết nối nhanh từ máy khác)
+  if (typeof window !== 'undefined' && (window.location.search || window.location.hash)) {
+    try {
+      const searchParams = new URLSearchParams(window.location.search);
+      let pUrl = searchParams.get('sb_url');
+      let pKey = searchParams.get('sb_key') || searchParams.get('sb_anon');
+
+      if (!pUrl && window.location.hash.includes('?')) {
+        const hashQuery = window.location.hash.split('?')[1];
+        const hashParams = new URLSearchParams(hashQuery);
+        pUrl = hashParams.get('sb_url');
+        pKey = hashParams.get('sb_key') || hashParams.get('sb_anon');
+      }
+
+      if (pUrl && pKey && pUrl.startsWith('http')) {
+        saveSupabaseCredentials(pUrl, pKey);
+        // Làm sạch URL để không để lộ key trên thanh địa chỉ
+        const cleanPath = window.location.pathname + (window.location.hash.split('?')[0] || '');
+        window.history.replaceState({}, document.title, cleanPath);
+      }
+    } catch {}
+  }
+
   const localUrl =
     (typeof window !== 'undefined' &&
       (localStorage.getItem('sso_supabase_url') ||

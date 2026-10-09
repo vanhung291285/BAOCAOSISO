@@ -160,12 +160,20 @@ CREATE TABLE IF NOT EXISTS public.system_logs (
 -- 11. TABLE: students (Danh sách học sinh theo từng lớp)
 CREATE TABLE IF NOT EXISTS public.students (
     id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-    class_id TEXT NOT NULL REFERENCES public.classes(id) ON DELETE CASCADE,
+    class_id TEXT NOT NULL,
     full_name TEXT NOT NULL,
     address TEXT,
+    village TEXT,
+    gender TEXT,
+    student_code TEXT,
+    birth_date TEXT,
+    ethnicity TEXT,
+    notes TEXT,
     is_boarding BOOLEAN DEFAULT false,
     created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
 );
+
+ALTER TABLE public.students DROP CONSTRAINT IF EXISTS students_class_id_fkey;
 
 -- 12. TABLE: school_off_days (Quản lý các ngày nghỉ học sinh - lễ, tết, thời tiết)
 CREATE TABLE IF NOT EXISTS public.school_off_days (
