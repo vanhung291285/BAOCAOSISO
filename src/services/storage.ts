@@ -1742,14 +1742,95 @@ export const StorageService = {
     return list;
   },
 
+  getBoardingReportLocal(classId: string, date: string): BoardingDailyReport | null {
+    ensureInitialized();
+    const raw = localStorage.getItem(STORAGE_KEYS.BOARDING_REPORTS);
+    if (!raw) return null;
+    try {
+      const list: BoardingDailyReport[] = JSON.parse(raw);
+      return list.find((r) => r.class_id === classId && r.date === date) || null;
+    } catch {
+      return null;
+    }
+  },
+
   async getBoardingReport(classId: string, date: string): Promise<BoardingDailyReport | null> {
-    const list = await this.getBoardingReports();
-    return list.find((r) => r.class_id === classId && r.date === date) || null;
+    ensureInitialized();
+    const localRep = this.getBoardingReportLocal(classId, date);
+
+    const supabase = getSupabaseClient();
+    if (supabase && isSupabaseConnected()) {
+      try {
+        const { data: cloudRep, error } = await supabase
+          .from('boarding_reports')
+          .select('*')
+          .eq('class_id', classId)
+          .eq('date', date)
+          .maybeSingle();
+        if (!error && cloudRep) {
+          const cleanDate = String(cloudRep.date).split('T')[0].trim();
+          let parsedRecords = cloudRep.records;
+          if (typeof parsedRecords === 'string') {
+            try { parsedRecords = JSON.parse(parsedRecords); } catch { parsedRecords = []; }
+          }
+          const repObj: BoardingDailyReport = {
+            ...cloudRep,
+            date: cleanDate,
+            records: Array.isArray(parsedRecords) ? parsedRecords : [],
+          };
+          
+          const raw = localStorage.getItem(STORAGE_KEYS.BOARDING_REPORTS);
+          let list: BoardingDailyReport[] = raw ? JSON.parse(raw) : [];
+          const idx = list.findIndex((r) => r.id === repObj.id || (r.class_id === repObj.class_id && r.date === cleanDate));
+          if (idx >= 0) list[idx] = repObj;
+          else list.push(repObj);
+          localStorage.setItem(STORAGE_KEYS.BOARDING_REPORTS, JSON.stringify(list));
+          return repObj;
+        }
+      } catch (e) {
+        console.warn('Supabase fetch boarding report error:', e);
+      }
+    }
+    return localRep;
   },
 
   async getBoardingReportsByDate(date: string): Promise<BoardingDailyReport[]> {
-    const list = await this.getBoardingReports();
-    return list.filter((r) => r.date === date);
+    ensureInitialized();
+    const cleanDate = date.split('T')[0].trim();
+    const raw = localStorage.getItem(STORAGE_KEYS.BOARDING_REPORTS);
+    let list: BoardingDailyReport[] = raw ? JSON.parse(raw) : [];
+
+    const supabase = getSupabaseClient();
+    if (supabase && isSupabaseConnected()) {
+      try {
+        const { data, error } = await supabase
+          .from('boarding_reports')
+          .select('*')
+          .eq('date', cleanDate);
+        if (!error && data && data.length > 0) {
+          data.forEach((cloudRep: any) => {
+            const cleanD = String(cloudRep.date).split('T')[0].trim();
+            let parsedRecords = cloudRep.records;
+            if (typeof parsedRecords === 'string') {
+              try { parsedRecords = JSON.parse(parsedRecords); } catch { parsedRecords = []; }
+            }
+            const repObj: BoardingDailyReport = {
+              ...cloudRep,
+              date: cleanD,
+              records: Array.isArray(parsedRecords) ? parsedRecords : [],
+            };
+            const idx = list.findIndex((r) => r.id === repObj.id || (r.class_id === repObj.class_id && r.date === cleanD));
+            if (idx >= 0) list[idx] = repObj;
+            else list.push(repObj);
+          });
+          localStorage.setItem(STORAGE_KEYS.BOARDING_REPORTS, JSON.stringify(list));
+        }
+      } catch (err) {
+        console.warn('Supabase fetch boarding reports by date error:', err);
+      }
+    }
+
+    return list.filter((r) => r.date === cleanDate);
   },
 
   async getBoardingReportsByClass(classId: string): Promise<BoardingDailyReport[]> {
@@ -2530,10 +2611,12 @@ export const StorageService = {
   }> {
     ensureInitialized();
     const cleanDate = date.split('T')[0].trim();
-    const classes = await this.getClasses();
-    const profiles = await this.getProfiles();
-    const students = await this.getStudents();
-    const boardingReports = await this.getBoardingReportsByDate(cleanDate);
+    const [classes, profiles, students, boardingReports] = await Promise.all([
+      this.getClasses(),
+      this.getProfiles(),
+      this.getStudents(),
+      this.getBoardingReportsByDate(cleanDate),
+    ]);
 
     // Đồng bộ kiểm tra báo cáo sĩ số ngày thực tế từ Supabase (nếu kết nối)
     const supabase = getSupabaseClient();
@@ -3284,61 +3367,113 @@ export const StorageService = {
   async deleteDailyReport(classId: string, reportDate: string, user: Profile): Promise<boolean> {
     ensureInitialized();
 
+    const normCls = (id: any) => String(id || '').trim().toLowerCase().replace(/^c_/, '').replace(/^lớp\s*/i, '');
+    const cleanDate = (d: any) => String(d || '').split('T')[0].trim();
+    const cleanReportDate = cleanDate(reportDate);
+    const targetNormCls = normCls(classId);
+
     // Kiểm tra quyền
-    const isAllowed = user.role === 'ADMIN' || user.role === 'BGH' || (user.role === 'GVCN' && user.assigned_class_id === classId);
+    const classes = await this.getClasses();
+    const cls = classes.find((c) => normCls(c.id) === targetNormCls || normCls(c.class_name) === targetNormCls);
+    const resolvedClassId = cls?.id || classId;
+
+    const isAllowed =
+      user.role === 'ADMIN' ||
+      user.role === 'BGH' ||
+      (user.role === 'GVCN' && normCls(user.assigned_class_id) === targetNormCls);
+
     if (!isAllowed) {
       throw new Error('Bạn không có quyền reset báo cáo sĩ số này!');
     }
 
+    // 1. Tìm & xóa khỏi danh sách reports cục bộ
     const rawReports = localStorage.getItem(STORAGE_KEYS.REPORTS);
     const reports: DailyReport[] = rawReports ? JSON.parse(rawReports) : [];
-    const reportToDelete = reports.find((r) => r.class_id === classId && r.report_date === reportDate);
-
-    if (!reportToDelete) {
-      return false;
-    }
     
-    // Kiểm tra khóa
-    if (reportToDelete.status === 'LOCKED') {
+    const matchingReports = reports.filter(
+      (r) => normCls(r.class_id) === targetNormCls && cleanDate(r.report_date) === cleanReportDate
+    );
+    const reportToDelete = matchingReports[0];
+
+    // Kiểm tra khóa sổ
+    if (reportToDelete && reportToDelete.status === 'LOCKED' && user.role !== 'ADMIN') {
       throw new Error('Báo cáo đã bị khóa, không thể reset!');
     }
 
-    // 1. Xóa khỏi danh sách reports cục bộ
-    const filteredReports = reports.filter((r) => r.id !== reportToDelete.id);
+    // Filter local daily_reports
+    const filteredReports = reports.filter(
+      (r) => !(normCls(r.class_id) === targetNormCls && cleanDate(r.report_date) === cleanReportDate)
+    );
     localStorage.setItem(STORAGE_KEYS.REPORTS, JSON.stringify(filteredReports));
 
-    // 2. Xóa các giá trị chỉ tiêu tương ứng trong daily_report_values
+    // 2. Xóa/reset sổ báo ăn bán trú tương ứng để đồng bộ đồng nhất
+    const rawBoarding = localStorage.getItem(STORAGE_KEYS.BOARDING_REPORTS);
+    if (rawBoarding) {
+      try {
+        const bReports: BoardingDailyReport[] = JSON.parse(rawBoarding);
+        const filteredBoarding = bReports.filter(
+          (br) => !(normCls(br.class_id) === targetNormCls && cleanDate(br.date) === cleanReportDate)
+        );
+        localStorage.setItem(STORAGE_KEYS.BOARDING_REPORTS, JSON.stringify(filteredBoarding));
+      } catch {}
+    }
+
+    // 3. Xóa các giá trị chỉ tiêu tương ứng trong daily_report_values
     const rawValues = localStorage.getItem(STORAGE_KEYS.VALUES);
     const allValues: DailyReportValue[] = rawValues ? JSON.parse(rawValues) : [];
-    const filteredValues = allValues.filter((v) => v.report_id !== reportToDelete.id);
+    const reportIdsToDelete = new Set(matchingReports.map((r) => r.id));
+    if (reportToDelete) reportIdsToDelete.add(reportToDelete.id);
+
+    const filteredValues = allValues.filter((v) => !reportIdsToDelete.has(v.report_id));
     localStorage.setItem(STORAGE_KEYS.VALUES, JSON.stringify(filteredValues));
 
-    // 3. Xóa trên Supabase nếu có kết nối
+    // 4. Xóa triệt để trên Supabase nếu có kết nối
     const supabase = getSupabaseClient();
     if (supabase && isSupabaseConnected()) {
       try {
-        await supabase.from('daily_report_values').delete().eq('report_id', reportToDelete.id);
-        await supabase.from('daily_reports').delete().eq('class_id', classId).eq('report_date', reportDate);
+        // Lấy danh sách ID daily_reports từ Supabase
+        const rawIds = [classId, resolvedClassId, cls?.class_name, cls?.code].filter(Boolean) as string[];
+        const classIdsToQuery = Array.from(new Set(rawIds.flatMap((id) => [id, `c_${id}`, id.replace(/^c_/, '')])));
+
+        const { data: cloudReps } = await supabase
+          .from('daily_reports')
+          .select('id')
+          .in('class_id', classIdsToQuery)
+          .eq('report_date', cleanReportDate);
+
+        if (cloudReps && cloudReps.length > 0) {
+          const cIds = cloudReps.map((cr) => cr.id);
+          await supabase.from('daily_report_values').delete().in('report_id', cIds);
+        }
+
+        if (reportIdsToDelete.size > 0) {
+          await supabase.from('daily_report_values').delete().in('report_id', Array.from(reportIdsToDelete));
+        }
+
+        // Xóa daily_reports
+        await supabase.from('daily_reports').delete().in('class_id', classIdsToQuery).eq('report_date', cleanReportDate);
+
+        // Đồng thời xóa báo ăn bán trú trên Supabase
+        await supabase.from('boarding_reports').delete().in('class_id', classIdsToQuery).eq('date', cleanReportDate);
       } catch (err) {
-        console.error('Supabase delete daily report error:', err);
+        console.error('Supabase delete daily & boarding reports error:', err);
       }
     }
 
-    // 4. Ghi log kiểm toán
-    const classes = await this.getClasses();
-    const cls = classes.find((c) => c.id === classId);
+    // 5. Ghi log kiểm toán
     await this.addLog({
       user_id: user.id,
       user_name: user.full_name,
       user_role: user.role,
       action: 'DELETE',
       class_name: cls?.class_name || classId,
-      report_date: reportDate,
+      report_date: cleanReportDate,
       old_data: reportToDelete,
       new_data: { status: 'NOT_REPORTED', note: 'Reset trạng thái báo cáo nhầm về Chưa báo cáo' },
     });
 
-    notifyRealtimeChange('daily_reports', { classId, reportDate, action: 'RESET' });
+    notifyRealtimeChange('daily_reports', { classId: resolvedClassId, reportDate: cleanReportDate, action: 'RESET' });
+    notifyRealtimeChange('boarding_reports', { classId: resolvedClassId, date: cleanReportDate, action: 'RESET' });
     return true;
   },
 

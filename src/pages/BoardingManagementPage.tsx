@@ -8,6 +8,8 @@ import {
   BoardingDailyReport,
   BoardingMealRecord,
   BoardingMealSummaryRow,
+  DailyReport,
+  DailyReportValue,
 } from '../types';
 import { MonthlyBoardingSheet } from '../components/MonthlyBoardingSheet';
 import { DateNavigator } from '../components/DateNavigator';
@@ -279,10 +281,11 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
   const loadMealAttendance = async () => {
     if (!selectedClassId || !selectedDate) return;
     setIsLoadingReport(true);
-    try {
-      const rep = await StorageService.getBoardingReport(selectedClassId, selectedDate);
-      const existingAttendanceReport = await StorageService.getDailyReport(selectedClassId, selectedDate);
 
+    const renderMealRecordsFromData = (
+      rep: BoardingDailyReport | null,
+      existingAttendanceReport: { report?: DailyReport; values: DailyReportValue[] }
+    ) => {
       // Kiểm tra thực tế GVCN đã gửi Báo cáo sĩ số ngày chưa
       const isDailySubmitted = Boolean(
         existingAttendanceReport.report &&
@@ -312,11 +315,11 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
       const recordById = new Map<string, BoardingMealRecord>();
       const recordByName = new Map<string, BoardingMealRecord>();
 
-      // Kiểm tra nếu bản ghi cũ là tự động đồng bộ nhưng thực tế ngày này GVCN chưa nộp sĩ số
-      const isAutoSyncedRep = Boolean(
-        rep && (rep.notes?.includes('Tổng hợp') || rep.notes?.includes('đồng bộ') || rep.notes?.includes('Báo cáo sĩ số'))
-      );
-      const validRep = (!isDailySubmitted && isAutoSyncedRep) ? null : rep;
+      // QUY TẮC BẢO VỆ ĐỒNG BỘ NGUYÊN TẮC:
+      // Nếu GVCN CHƯA NỘP hoặc VỪA RESET BÁO CÁO SĨ SỐ NGÀY HÔM ĐÓ (isDailySubmitted = false),
+      // TẤT CẢ các bản ghi báo ăn cũ (hoặc tự động tạo) của ngày đó ĐỀU BỊ BỎ QUA (validRep = null)!
+      // Tránh việc reset báo cáo sĩ số mà sổ báo ăn vẫn lưu vết tích chấm ăn của ngày cũ/sau.
+      const validRep = isDailySubmitted ? rep : null;
 
       if (validRep && validRep.records && validRep.records.length > 0) {
         setMealReport(validRep);
@@ -400,8 +403,27 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
       });
 
       setMealRecords(syncedRecords);
+    };
+
+    // 1. Phục vụ tức thời (0ms) từ dữ liệu offline cục bộ
+    try {
+      const localRep = StorageService.getBoardingReportLocal(selectedClassId, selectedDate);
+      const localDaily = StorageService.getLocalDailyReport(selectedClassId, selectedDate);
+      renderMealRecordsFromData(localRep, localDaily);
+      setIsLoadingReport(false); // Hiển thị tức thời 0ms không đợi mạng!
+    } catch (e) {
+      console.warn('Local instant load error:', e);
+    }
+
+    // 2. Chạy nền lấy dữ liệu mới nhất song song từ Cloud (Promise.all)
+    try {
+      const [rep, existingAttendanceReport] = await Promise.all([
+        StorageService.getBoardingReport(selectedClassId, selectedDate),
+        StorageService.getDailyReport(selectedClassId, selectedDate),
+      ]);
+      renderMealRecordsFromData(rep, existingAttendanceReport);
     } catch (err) {
-      console.error('Error loading boarding meal report:', err);
+      console.error('Error loading boarding meal report from cloud:', err);
     } finally {
       setIsLoadingReport(false);
     }
@@ -595,6 +617,27 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
     const defaults = buildDefaultMealRecords(classBoardingStudents, selectedDate, selectedClassId, undefined, settings);
     setMealRecords(defaults);
     showToast('Đã khôi phục chấm ăn mặc định theo quy định!');
+  };
+
+  // Reset / Xóa báo cáo sĩ số & sổ báo ăn của lớp hiện tại
+  const handleResetDailyReportFromBoarding = async () => {
+    if (!selectedClassId || !selectedDate || !currentUser) return;
+    const confirmReset = window.confirm(
+      `CẢNH BÁO: Bạn có chắc chắn muốn XÓA & RESET báo cáo sĩ số và sổ chấm ăn ngày ${formatDateVN(selectedDate)} của lớp ${selectedClass?.class_name || ''} về trạng thái CHƯA BÁO CÁO?\n\nHành động này áp dụng cho trường hợp báo nhầm ngày ăn hoặc nộp nhầm số liệu!`
+    );
+    if (!confirmReset) return;
+
+    setIsSaving(true);
+    try {
+      await StorageService.deleteDailyReport(selectedClassId, selectedDate, currentUser);
+      showToast(`Đã xóa và reset báo cáo ngày ${formatDateVN(selectedDate)} về trạng thái chưa nộp!`, 'success');
+      await loadMealAttendance();
+    } catch (err: any) {
+      console.error('Error resetting report from boarding:', err);
+      showToast(err?.message || 'Lỗi khi reset báo cáo!', 'error');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   // Save Meal Attendance Report
@@ -1529,6 +1572,18 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
               >
                 <Sparkles className="w-4 h-4 text-blue-600" />
                 <span>Đồng bộ từ Báo cáo sĩ số</span>
+              </button>
+
+              {/* Reset / Xóa ngày báo nếu báo nhầm */}
+              <button
+                type="button"
+                onClick={handleResetDailyReportFromBoarding}
+                disabled={isSaving}
+                className="px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 flex items-center gap-1.5 transition-all shadow-xs cursor-pointer disabled:opacity-50"
+                title="Xóa / Reset báo cáo sĩ số & sổ báo ăn ngày này về trạng thái Chưa báo cáo nếu báo nhầm ngày"
+              >
+                <Trash2 className="w-4 h-4 text-rose-600" />
+                <span>Reset / Xóa ngày báo</span>
               </button>
 
               {/* Sync with class boarding roster */}

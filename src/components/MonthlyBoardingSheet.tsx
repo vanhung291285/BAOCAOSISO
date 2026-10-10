@@ -2317,7 +2317,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
       )}
 
       {/* Printable Sheet View matching the official photo */}
-      <div className={`bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-6 overflow-hidden ${isPreviewOpen ? 'print:hidden' : 'print:p-0 print:border-none print:shadow-none'}`}>
+      <div className={`bg-white rounded-2xl border border-slate-200 shadow-sm p-3 sm:p-6 overflow-visible ${isPreviewOpen ? 'print:hidden' : 'print:p-0 print:border-none print:shadow-none'}`}>
         {/* Print Header */}
         <div className="flex flex-col md:flex-row md:items-start justify-between gap-2 pb-4 mb-4 border-b border-slate-200 print:border-black">
           <div>
@@ -2399,7 +2399,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
         {effectiveBoardingStudents.length > 0 && !isLoading && (
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-3.5 no-print">
             {/* View Switcher: Segmented Control */}
-            <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-xl border border-slate-200 overflow-x-auto no-scrollbar touch-pan-x">
+            <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-xl border border-slate-200 overflow-x-auto no-scrollbar touch-manipulation">
               <button
                 type="button"
                 onClick={() => setViewMode('all')}
@@ -2469,6 +2469,30 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
                 >
                   ⏭ Cuối
                 </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (tableScrollRef.current) {
+                      tableScrollRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+                    }
+                  }}
+                  className="px-2 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold border border-emerald-200 transition-all cursor-pointer active:scale-95 text-[10px] sm:text-xs"
+                  title="Cuộn lên đầu danh sách học sinh"
+                >
+                  🔼 Đầu DS
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (tableScrollRef.current) {
+                      tableScrollRef.current.scrollTo({ top: 99999, behavior: 'smooth' });
+                    }
+                  }}
+                  className="px-2 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold border border-emerald-200 transition-all cursor-pointer active:scale-95 text-[10px] sm:text-xs"
+                  title="Cuộn xuống cuối danh sách học sinh"
+                >
+                  🔽 Cuối DS
+                </button>
               </div>
 
               <div className="text-[10px] text-slate-500 italic hidden md:inline">
@@ -2511,8 +2535,10 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
             <div
               ref={tableScrollRef}
               className={`relative ${
-                isFullscreen ? 'max-h-[calc(100vh-140px)]' : 'max-h-[72vh] min-h-[420px]'
-              } overflow-auto border border-slate-400 rounded-xl shadow-xs bg-white select-none overscroll-x-contain touch-pan-x`}
+                isFullscreen
+                  ? 'max-h-[calc(100vh-120px)]'
+                  : 'max-h-[68vh] sm:max-h-[75vh] min-h-[240px] sm:min-h-[380px]'
+              } overflow-auto border border-slate-400 rounded-xl shadow-xs bg-white overscroll-contain touch-auto`}
               onMouseLeave={clearCrosshair}
             >
               <table className="w-full text-center border-collapse text-[11px] border-separate border-spacing-0">
