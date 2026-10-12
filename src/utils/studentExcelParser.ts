@@ -730,7 +730,7 @@ export function parseStudentExcelData(
     });
   });
 
-  const bCount = parsedStudents.filter((s) => s.isBoarding !== false).length;
+  const bCount = parsedStudents.filter((s) => s.isBoarding === true).length;
   const dCount = parsedStudents.filter((s) => s.isBoarding === false).length;
 
   return {

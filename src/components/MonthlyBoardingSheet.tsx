@@ -56,11 +56,13 @@ import {
 interface MonthlyBoardingSheetProps {
   selectedClassId: string;
   onClassChange?: (classId: string) => void;
+  onNavigateToStudents?: () => void;
 }
 
 export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
   selectedClassId,
   onClassChange,
+  onNavigateToStudents,
 }) => {
   const { classes, campuses, students, settings, addStudent, updateStudent, refreshAll } = useSchool();
   const { currentUser, isGVCN, isAdmin, isBGH } = useAuth();
@@ -204,9 +206,24 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
     dayOfWeekShort: string;
   } | null>(null);
   const [isGuideOpen, setIsGuideOpen] = useState<boolean>(true);
-  const [isConfigOpen, setIsConfigOpen] = useState<boolean>(true);
+  const [isConfigOpen, setIsConfigOpen] = useState<boolean>(() => {
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      return false; // Auto-collapse on mobile to keep student meal table immediately visible
+    }
+    return true;
+  });
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null);
   const tableScrollRef = useRef<HTMLDivElement>(null);
+
+  const scrollTableVertically = (direction: 'up' | 'down') => {
+    if (tableScrollRef.current) {
+      const scrollAmount = 260; // scrolls ~7-8 students smoothly
+      tableScrollRef.current.scrollBy({
+        top: direction === 'down' ? scrollAmount : -scrollAmount,
+        behavior: 'smooth',
+      });
+    }
+  };
 
   const handleScrollToDate = (targetDateStr?: string) => {
     if (!tableScrollRef.current) return;
@@ -263,6 +280,10 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
 
   const [asyncBoardingStudents, setAsyncBoardingStudents] = useState<Student[]>([]);
 
+  useEffect(() => {
+    setAsyncBoardingStudents([]);
+  }, [selectedClassId]);
+
   // Class student statistics (Total vs Boarding vs Day students)
   const totalClassStudents = useMemo(() => {
     if (!selectedClassId) return [];
@@ -277,8 +298,8 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
     return totalClassStudents.filter((s) => s.isBoarding === false).length;
   }, [totalClassStudents]);
 
-  // Boarding students: STRICTLY filter only boarding students (isBoarding !== false)
-  // Học sinh ngoại trú (isBoarding === false) tuyệt đối không xuất hiện trên sổ chấm cơm!
+  // Boarding students: STRICTLY filter only boarding students (isBoarding === true hoặc is_boarding === true)
+  // Học sinh ngoại trú (hoặc chưa đăng ký bán trú) tuyệt đối không xuất hiện trên sổ chấm cơm!
   const classBoardingStudents = useMemo(() => {
     if (!selectedClassId) return [];
     const rawSts = students.filter((s) => {
@@ -291,8 +312,8 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
     const classSts: Student[] = [];
     for (const s of rawSts) {
       if (!s || !s.full_name) continue;
-      // Lọc chuẩn xác: Loại bỏ học sinh ngoại trú (isBoarding === false)
-      if (s.isBoarding === false) continue;
+      // Lọc chuẩn xác: Chỉ nhận học sinh bán trú (isBoarding === true hoặc is_boarding === true)
+      if (s.isBoarding !== true && (s as any).is_boarding !== true) continue;
 
       const sId = String(s.id || '').trim();
       const normName = String(s.full_name || '').trim().toLowerCase();
@@ -809,11 +830,11 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
       // Đảm bảo Sổ chấm cơm tháng tự động hiển thị đầy đủ số liệu chính xác ngay cả khi GVCN chưa lưu thủ công ở tab chấm ăn
       let targetStudents = effectiveBoardingStudents.length > 0 ? effectiveBoardingStudents : classBoardingStudents;
       if (targetStudents.length === 0 && asyncBoardingStudents.length > 0) {
-        targetStudents = asyncBoardingStudents;
+        targetStudents = asyncBoardingStudents.filter((s) => s.isBoarding === true || (s as any).is_boarding === true);
       }
       if (targetStudents.length === 0) {
-        const clsStudents = await StorageService.getStudentsByClass(selectedClassId, currentClass?.class_name);
-        targetStudents = clsStudents.filter((s) => s.isBoarding !== false);
+        // Không tự động kéo danh sách học sinh thường nếu GVCN chưa tải lên/khai báo danh sách học sinh bán trú
+        targetStudents = [];
       }
       setAsyncBoardingStudents(targetStudents);
 
@@ -1060,16 +1081,17 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
     if (!selectedClassId || !selectedMonth) return;
     setIsLoading(true);
     try {
-      // 1. Đảm bảo có danh sách học sinh đầy đủ
-      let currentStudents = effectiveBoardingStudents;
+      // 1. Đảm bảo chỉ đồng bộ khi lớp ĐÃ CÓ danh sách học sinh bán trú thực sự
+      let currentStudents = classBoardingStudents;
       if (!currentStudents || currentStudents.length === 0) {
-        currentStudents = await StorageService.getStudentsByClass(selectedClassId, currentClass?.class_name);
-        currentStudents = currentStudents.filter((s) => s.isBoarding !== false);
+        const clsStudents = await StorageService.getStudentsByClass(selectedClassId, currentClass?.class_name);
+        currentStudents = clsStudents.filter((s) => s.isBoarding === true || (s as any).is_boarding === true);
       }
       setAsyncBoardingStudents(currentStudents);
 
       if (currentStudents.length === 0) {
-        showToast('Lớp này chưa có danh sách học sinh bán trú. Thầy/Cô vui lòng tải lên danh sách học sinh trước!', 'info');
+        showToast('Lớp này chưa có danh sách học sinh bán trú được tải lên. Sổ chấm ăn chỉ đồng bộ khi GVCN tải lên danh sách HS bán trú!', 'info');
+        setIsLoading(false);
         return;
       }
 
@@ -2009,9 +2031,9 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
           </div>
         </div>
 
-        {/* Hàng 2: Dải công cụ nghiệp vụ chấm cơm bán trú (Vuốt ngang mượt mà trên điện thoại) */}
-        <div className="px-2.5 sm:px-4 py-2 sm:py-2.5 bg-slate-50/90 flex items-center justify-between gap-2 border-t border-slate-100">
-          <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar scroll-smooth py-0.5 max-w-[calc(100vw-70px)] sm:max-w-none">
+        {/* Hàng 2: Dải công cụ nghiệp vụ chấm cơm bán trú (Tối ưu hiển thị đầy đủ, không bị khuất trên mobile) */}
+        <div className="px-2.5 sm:px-4 py-2 sm:py-2.5 bg-slate-50/90 flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-t border-slate-100">
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 w-full sm:w-auto">
             <span className="text-[11px] font-black uppercase tracking-wider text-slate-500 mr-0.5 hidden md:inline shrink-0">
               Tác vụ:
             </span>
@@ -2091,11 +2113,11 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
           <button
             type="button"
             onClick={() => setIsConfigOpen(!isConfigOpen)}
-            className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl text-xs font-bold text-slate-600 hover:text-slate-900 hover:bg-slate-200/70 transition-all flex items-center gap-1 cursor-pointer bg-white border border-slate-200 shadow-2xs shrink-0"
+            className="self-end sm:self-auto px-2.5 py-1.5 rounded-xl text-xs font-bold text-slate-600 hover:text-slate-900 hover:bg-slate-200/70 transition-all flex items-center gap-1 cursor-pointer bg-white border border-slate-200 shadow-2xs shrink-0"
             title="Ẩn hoặc hiện bảng cấu hình số ngày định mức ăn và chữ ký"
           >
-            <span className="hidden sm:inline">{isConfigOpen ? 'Thu gọn cấu hình' : 'Hiện cấu hình'}</span>
-            {isConfigOpen ? <ChevronUp className="w-4 h-4 text-slate-500" /> : <ChevronDown className="w-4 h-4 text-slate-500" />}
+            <span>{isConfigOpen ? 'Thu gọn cấu hình' : 'Hiện cấu hình'}</span>
+            {isConfigOpen ? <ChevronUp className="w-3.5 h-3.5 text-slate-500" /> : <ChevronDown className="w-3.5 h-3.5 text-slate-500" />}
           </button>
         </div>
       </div>
@@ -2397,47 +2419,50 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
 
         {/* View Mode Toggle (Trang 1 / Trang 2 / Cả tháng) & Mobile Scroll Navigation */}
         {effectiveBoardingStudents.length > 0 && !isLoading && (
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-3.5 no-print">
-            {/* View Switcher: Segmented Control */}
-            <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-xl border border-slate-200 overflow-x-auto no-scrollbar touch-manipulation">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-2.5 mb-3.5 no-print">
+            {/* View Switcher: Segmented Control (Hiển thị vừa vặn 100% màn hình, không bị lệch/cắt chữ) */}
+            <div className="grid grid-cols-3 gap-1 p-1 bg-slate-100 rounded-xl border border-slate-200 w-full md:w-auto touch-manipulation">
               <button
                 type="button"
                 onClick={() => setViewMode('all')}
-                className={`flex-1 sm:flex-initial px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap text-center ${
+                className={`px-2 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap text-center ${
                   viewMode === 'all'
                     ? 'bg-blue-600 text-white shadow-xs'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
                 }`}
               >
-                Cả tháng (1 - {daysInMonth})
+                <span>Cả tháng</span>
+                <span className="hidden sm:inline text-[10px] opacity-80"> (1-{daysInMonth})</span>
               </button>
               <button
                 type="button"
                 onClick={() => setViewMode('page1')}
-                className={`flex-1 sm:flex-initial px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap text-center ${
+                className={`px-2 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap text-center ${
                   viewMode === 'page1'
                     ? 'bg-blue-600 text-white shadow-xs'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
                 }`}
               >
-                Trang 1 (Ngày 01 - 15)
+                <span>Trang 1</span>
+                <span className="text-[10px] opacity-80"> (01-15)</span>
               </button>
               <button
                 type="button"
                 onClick={() => setViewMode('page2')}
-                className={`flex-1 sm:flex-initial px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap text-center ${
+                className={`px-2 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap text-center ${
                   viewMode === 'page2'
                     ? 'bg-blue-600 text-white shadow-xs'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
                 }`}
               >
-                Trang 2 (Ngày 16 - {daysInMonth})
+                <span>Trang 2</span>
+                <span className="text-[10px] opacity-80"> (16-{daysInMonth})</span>
               </button>
             </div>
 
             {/* Mobile Scroll Helpers & Tips */}
-            <div className="flex items-center justify-between sm:justify-end gap-1.5 text-[11px] text-slate-500">
-              <div className="flex items-center gap-1">
+            <div className="flex flex-wrap items-center justify-between md:justify-end gap-1.5 text-[11px] text-slate-500 w-full md:w-auto">
+              <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5">
                 <button
                   type="button"
                   onClick={() => handleScrollToDate()}
@@ -2471,15 +2496,21 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
-                    if (tableScrollRef.current) {
-                      tableScrollRef.current.scrollTo({ top: 0, behavior: 'smooth' });
-                    }
-                  }}
-                  className="px-2 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold border border-emerald-200 transition-all cursor-pointer active:scale-95 text-[10px] sm:text-xs"
-                  title="Cuộn lên đầu danh sách học sinh"
+                  onClick={() => scrollTableVertically('up')}
+                  className="px-2 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold border border-emerald-200 transition-all cursor-pointer active:scale-95 text-[10px] sm:text-xs flex items-center gap-0.5"
+                  title="Cuộn lên danh sách học sinh"
                 >
-                  🔼 Đầu DS
+                  <ChevronUp className="w-3 h-3" />
+                  <span>Lên</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => scrollTableVertically('down')}
+                  className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold transition-all cursor-pointer active:scale-95 text-[10px] sm:text-xs flex items-center gap-0.5 shadow-2xs"
+                  title="Cuộn xuống dưới xem thêm học sinh"
+                >
+                  <ChevronDown className="w-3 h-3" />
+                  <span>Xuống dưới</span>
                 </button>
                 <button
                   type="button"
@@ -2488,14 +2519,14 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
                       tableScrollRef.current.scrollTo({ top: 99999, behavior: 'smooth' });
                     }
                   }}
-                  className="px-2 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold border border-emerald-200 transition-all cursor-pointer active:scale-95 text-[10px] sm:text-xs"
+                  className="px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold border border-slate-200 transition-all cursor-pointer active:scale-95 text-[10px] sm:text-xs"
                   title="Cuộn xuống cuối danh sách học sinh"
                 >
-                  🔽 Cuối DS
+                  Cuối DS
                 </button>
               </div>
 
-              <div className="text-[10px] text-slate-500 italic hidden md:inline">
+              <div className="text-[10px] text-slate-500 italic hidden lg:inline">
                 💡 Bấm <strong>Trang 1</strong> hoặc <strong>Trang 2</strong> để xem và in chuẩn A4 ngang.
               </div>
             </div>
@@ -2519,12 +2550,22 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
               GVCN vui lòng chuyển sang tab "Chấm ăn" hoặc "Danh sách HS bán trú" để tải lên file danh sách học sinh từ Excel hoặc bấm nút Xuất Excel bên dưới để tải biểu mẫu trống.
             </p>
             <div className="flex flex-wrap items-center justify-center gap-2.5">
+              {onNavigateToStudents && (
+                <button
+                  type="button"
+                  onClick={onNavigateToStudents}
+                  className="px-4 py-2.5 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 shadow-md shadow-emerald-600/20 transition-all cursor-pointer flex items-center gap-1.5"
+                >
+                  <Users className="w-4 h-4 text-white" />
+                  <span>Khai báo / Tải lên DS Bán Trú</span>
+                </button>
+              )}
               <button
                 type="button"
                 onClick={handleExportExcel}
-                className="px-4 py-2.5 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-sm transition-all cursor-pointer flex items-center gap-1.5"
+                className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-300 shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
               >
-                <Download className="w-4 h-4 text-white" />
+                <Download className="w-4 h-4 text-slate-600" />
                 <span>Xuất file Excel mẫu biểu</span>
               </button>
             </div>
@@ -2537,22 +2578,23 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
               className={`relative ${
                 isFullscreen
                   ? 'max-h-[calc(100vh-120px)]'
-                  : 'max-h-[68vh] sm:max-h-[75vh] min-h-[240px] sm:min-h-[380px]'
-              } overflow-auto border border-slate-400 rounded-xl shadow-xs bg-white overscroll-contain touch-auto`}
+                  : 'max-h-[72vh] sm:max-h-[78vh] min-h-[260px] sm:min-h-[380px]'
+              } overflow-auto border border-slate-400 rounded-xl shadow-xs bg-white touch-pan-x touch-pan-y`}
+              style={{ WebkitOverflowScrolling: 'touch' }}
               onMouseLeave={clearCrosshair}
             >
               <table className="w-full text-center border-collapse text-[11px] border-separate border-spacing-0">
                 <thead>
                   {/* Row 1: STT (spans 3 rows), [Thứ - Ngày], Day numbers 1..N */}
-                  <tr className="bg-slate-100 font-bold text-slate-900 sticky top-0 z-30 h-[28px]">
+                  <tr className="bg-slate-100 font-bold text-slate-900 sticky top-0 z-30 h-[30px]">
                     <th
                       rowSpan={3}
-                      className="py-1 px-0.5 sm:px-1 w-8 sm:w-9 min-w-[32px] sm:min-w-[36px] max-w-[32px] sm:max-w-[36px] border-r border-b border-slate-400 sticky top-0 left-0 z-50 bg-slate-100 text-center font-bold text-slate-900"
+                      className="py-1 px-0.5 sm:px-1 w-9 min-w-[36px] max-w-[36px] border-r border-b border-slate-400 sticky top-0 left-0 z-50 bg-slate-100 text-center font-bold text-slate-900 box-border"
                     >
                       STT
                     </th>
                     <th
-                      className="py-1 px-1 sm:px-2 w-[115px] sm:w-[150px] min-w-[115px] sm:min-w-[150px] max-w-[115px] sm:max-w-[150px] border-r border-b border-slate-400 sticky top-0 left-[32px] sm:left-9 z-50 bg-slate-100 font-bold text-slate-900"
+                      className="py-1 px-1 sm:px-2 w-[125px] sm:w-[150px] min-w-[125px] sm:min-w-[150px] max-w-[125px] sm:max-w-[150px] border-r border-b border-slate-400 sticky top-0 left-[36px] z-50 bg-slate-100 font-bold text-slate-900 box-border"
                     >
                       <div className="flex items-center justify-between px-1 text-[10px] sm:text-[11px] font-bold text-slate-900">
                         <span>Thứ</span>
@@ -2630,10 +2672,10 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
                   </tr>
 
                   {/* Row 2: Họ và tên (spans 2 rows), Day of week: 5, 6, 7, CN, 2, 3... */}
-                  <tr className="bg-slate-100 font-bold text-slate-800 sticky top-[28px] z-30 h-[24px]">
+                  <tr className="bg-slate-100 font-bold text-slate-800 sticky top-[30px] z-30 h-[26px]">
                     <th
                       rowSpan={2}
-                      className="py-1 px-1 sm:px-2 w-[115px] sm:w-[150px] min-w-[115px] sm:min-w-[150px] max-w-[115px] sm:max-w-[150px] text-center border-r border-b border-slate-400 sticky top-[28px] left-[32px] sm:left-9 z-50 bg-slate-100 font-bold text-slate-900 text-[10px] sm:text-xs"
+                      className="py-1 px-1 sm:px-2 w-[125px] sm:w-[150px] min-w-[125px] sm:min-w-[150px] max-w-[125px] sm:max-w-[150px] text-center border-r border-b border-slate-400 sticky top-[30px] left-[36px] z-50 bg-slate-100 font-bold text-slate-900 text-[10px] sm:text-xs box-border"
                     >
                       Họ và tên
                     </th>
@@ -2644,7 +2686,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
                           key={d.dayNum}
                           colSpan={3}
                           onMouseEnter={() => updateCrosshair(hoverRef.current.studentId, d.dateStr, hoverRef.current.meal)}
-                          className={`py-0.5 px-0.5 border-r border-b border-slate-400 text-center cursor-pointer sticky top-[28px] z-30 transition-colors ${
+                          className={`py-0.5 px-0.5 border-r border-b border-slate-400 text-center cursor-pointer sticky top-[30px] z-30 transition-colors ${
                             isDateHovered
                               ? 'bg-amber-100 text-slate-950 font-black'
                               : 'bg-slate-100 text-slate-800 font-bold'
@@ -2658,10 +2700,10 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
                     })}
                     {showSummaryColumns && (
                       <>
-                        <th colSpan={3} className="py-0.5 px-1 border-r border-b border-slate-400 bg-slate-100 text-slate-900 font-bold sticky top-[28px] z-30 text-[10px]">
+                        <th colSpan={3} className="py-0.5 px-1 border-r border-b border-slate-400 bg-slate-100 text-slate-900 font-bold sticky top-[30px] z-30 text-[10px]">
                           Báo ăn
                         </th>
-                        <th colSpan={3} className="py-0.5 px-1 border-r border-b border-slate-400 bg-slate-100 text-slate-900 font-bold sticky top-[28px] z-30 text-[10px]">
+                        <th colSpan={3} className="py-0.5 px-1 border-r border-b border-slate-400 bg-slate-100 text-slate-900 font-bold sticky top-[30px] z-30 text-[10px]">
                           Không báo
                         </th>
                       </>
@@ -2669,7 +2711,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
                   </tr>
 
                   {/* Row 3: S, T, T headers */}
-                  <tr className="bg-slate-100 font-bold text-slate-800 sticky top-[52px] z-30 border-b border-slate-400 h-[22px]">
+                  <tr className="bg-slate-100 font-bold text-slate-800 sticky top-[56px] z-30 border-b border-slate-400 h-[24px]">
                     {displayedMonthDays.map((d) => {
                       const isDateHovered = hoveredDateStr === d.dateStr;
                       return (
@@ -2680,7 +2722,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
                               handleBatchToggleSession(d.dateStr, 'breakfast');
                             }}
                             onMouseEnter={() => updateCrosshair(hoverRef.current.studentId, d.dateStr, 'breakfast')}
-                            className={`py-0.5 w-[21px] sm:w-[22px] min-w-[20px] sm:min-w-[22px] border-r border-b border-slate-400 cursor-pointer sticky top-[52px] z-30 font-bold group/meal transition-colors text-[10px] sm:text-xs ${
+                            className={`py-0.5 w-[21px] sm:w-[22px] min-w-[20px] sm:min-w-[22px] border-r border-b border-slate-400 cursor-pointer sticky top-[56px] z-30 font-bold group/meal transition-colors text-[10px] sm:text-xs ${
                               isDateHovered && hoveredMealType === 'breakfast'
                                 ? 'bg-amber-200 text-black font-black ring-1 ring-inset ring-amber-500'
                                 : isDateHovered
@@ -2697,7 +2739,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
                               handleBatchToggleSession(d.dateStr, 'lunch');
                             }}
                             onMouseEnter={() => updateCrosshair(hoverRef.current.studentId, d.dateStr, 'lunch')}
-                            className={`py-0.5 w-[21px] sm:w-[22px] min-w-[20px] sm:min-w-[22px] border-r border-b border-slate-400 cursor-pointer sticky top-[52px] z-30 font-bold group/meal transition-colors text-[10px] sm:text-xs ${
+                            className={`py-0.5 w-[21px] sm:w-[22px] min-w-[20px] sm:min-w-[22px] border-r border-b border-slate-400 cursor-pointer sticky top-[56px] z-30 font-bold group/meal transition-colors text-[10px] sm:text-xs ${
                               isDateHovered && hoveredMealType === 'lunch'
                                 ? 'bg-amber-200 text-black font-black ring-1 ring-inset ring-amber-500'
                                 : isDateHovered
@@ -2714,7 +2756,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
                               handleBatchToggleSession(d.dateStr, 'dinner');
                             }}
                             onMouseEnter={() => updateCrosshair(hoverRef.current.studentId, d.dateStr, 'dinner')}
-                            className={`py-0.5 w-[21px] sm:w-[22px] min-w-[20px] sm:min-w-[22px] border-r border-b border-slate-400 cursor-pointer sticky top-[52px] z-30 font-bold group/meal transition-colors text-[10px] sm:text-xs ${
+                            className={`py-0.5 w-[21px] sm:w-[22px] min-w-[20px] sm:min-w-[22px] border-r border-b border-slate-400 cursor-pointer sticky top-[56px] z-30 font-bold group/meal transition-colors text-[10px] sm:text-xs ${
                               isDateHovered && hoveredMealType === 'dinner'
                                 ? 'bg-amber-200 text-black font-black ring-1 ring-inset ring-amber-500'
                                 : isDateHovered
@@ -2731,13 +2773,13 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
                     {showSummaryColumns && (
                       <>
                         {/* Summary S,T,T for eaten */}
-                        <th className="py-0.5 w-5 sm:w-6 border-r border-b border-slate-400 bg-slate-100 text-slate-800 font-bold sticky top-[52px] z-30 text-[10px]">S</th>
-                        <th className="py-0.5 w-5 sm:w-6 border-r border-b border-slate-400 bg-slate-100 text-slate-800 font-bold sticky top-[52px] z-30 text-[10px]">T</th>
-                        <th className="py-0.5 w-5 sm:w-6 border-r border-b border-slate-400 bg-slate-100 text-slate-800 font-bold sticky top-[52px] z-30 text-[10px]">T</th>
+                        <th className="py-0.5 w-5 sm:w-6 border-r border-b border-slate-400 bg-slate-100 text-slate-800 font-bold sticky top-[56px] z-30 text-[10px]">S</th>
+                        <th className="py-0.5 w-5 sm:w-6 border-r border-b border-slate-400 bg-slate-100 text-slate-800 font-bold sticky top-[56px] z-30 text-[10px]">T</th>
+                        <th className="py-0.5 w-5 sm:w-6 border-r border-b border-slate-400 bg-slate-100 text-slate-800 font-bold sticky top-[56px] z-30 text-[10px]">T</th>
                         {/* Summary S,T,T for missed */}
-                        <th className="py-0.5 w-5 sm:w-6 border-r border-b border-slate-400 bg-slate-100 text-slate-800 font-bold sticky top-[52px] z-30 text-[10px]">S</th>
-                        <th className="py-0.5 w-5 sm:w-6 border-r border-b border-slate-400 bg-slate-100 text-slate-800 font-bold sticky top-[52px] z-30 text-[10px]">T</th>
-                        <th className="py-0.5 w-5 sm:w-6 border-r border-b border-slate-400 bg-slate-100 text-slate-800 font-bold sticky top-[52px] z-30 text-[10px]">T</th>
+                        <th className="py-0.5 w-5 sm:w-6 border-r border-b border-slate-400 bg-slate-100 text-slate-800 font-bold sticky top-[56px] z-30 text-[10px]">S</th>
+                        <th className="py-0.5 w-5 sm:w-6 border-r border-b border-slate-400 bg-slate-100 text-slate-800 font-bold sticky top-[56px] z-30 text-[10px]">T</th>
+                        <th className="py-0.5 w-5 sm:w-6 border-r border-b border-slate-400 bg-slate-100 text-slate-800 font-bold sticky top-[56px] z-30 text-[10px]">T</th>
                       </>
                     )}
                   </tr>
@@ -2769,7 +2811,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
                         }`}
                       >
                         <td
-                          className={`py-1 px-0.5 sm:px-1 w-8 sm:w-9 min-w-[32px] sm:min-w-[36px] max-w-[32px] sm:max-w-[36px] font-medium border-r border-b border-slate-300 text-center sticky left-0 z-20 ${
+                          className={`py-1 px-0.5 sm:px-1 w-9 min-w-[36px] max-w-[36px] font-medium border-r border-b border-slate-300 text-center sticky left-0 z-20 box-border ${
                             isStudentHovered
                               ? 'bg-amber-100 text-slate-950 font-bold'
                               : 'bg-white text-slate-800'
@@ -2778,7 +2820,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
                           {idx + 1}
                         </td>
                         <td
-                          className={`py-1 px-1.5 sm:px-2 w-[115px] sm:w-[150px] min-w-[115px] sm:min-w-[150px] max-w-[115px] sm:max-w-[150px] text-left font-medium border-r border-b border-slate-300 sticky left-[32px] sm:left-9 z-20 ${
+                          className={`py-1 px-1.5 sm:px-2 w-[125px] sm:w-[150px] min-w-[125px] sm:min-w-[150px] max-w-[125px] sm:max-w-[150px] text-left font-medium border-r border-b border-slate-300 sticky left-[36px] z-20 box-border ${
                             isStudentHovered
                               ? 'bg-amber-50 text-slate-950 font-bold'
                               : 'bg-white text-slate-900'
@@ -3009,6 +3051,45 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
                   </tr>
                 </tfoot>
               </table>
+            </div>
+
+            {/* Mobile Bottom Quick-Scroll Action Bar */}
+            <div className="md:hidden flex items-center justify-between px-3 py-2 bg-slate-100 border border-t-0 border-slate-400 rounded-b-xl text-xs shadow-xs no-print">
+              <span className="text-[11px] font-bold text-slate-700">
+                DS: <strong className="text-blue-900">{effectiveBoardingStudents.length} HS</strong>
+              </span>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => scrollTableVertically('up')}
+                  className="px-2.5 py-1 rounded-lg bg-white active:bg-blue-50 text-blue-700 font-extrabold border border-blue-200 shadow-2xs flex items-center gap-1 text-[11px]"
+                  title="Cuộn lên danh sách học sinh"
+                >
+                  <ChevronUp className="w-3.5 h-3.5" />
+                  <span>Cuộn lên</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => scrollTableVertically('down')}
+                  className="px-2.5 py-1 rounded-lg bg-blue-600 active:bg-blue-700 text-white font-extrabold shadow-2xs flex items-center gap-1 text-[11px]"
+                  title="Cuộn xuống dưới xem thêm học sinh"
+                >
+                  <ChevronDown className="w-3.5 h-3.5" />
+                  <span>Cuộn xuống</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (tableScrollRef.current) {
+                      tableScrollRef.current.scrollTo({ top: 99999, behavior: 'smooth' });
+                    }
+                  }}
+                  className="px-2 py-1 rounded-lg bg-slate-200 active:bg-slate-300 text-slate-800 font-bold text-[10px]"
+                  title="Cuộn xuống cuối danh sách học sinh"
+                >
+                  Cuối DS
+                </button>
+              </div>
             </div>
           </div>
       )}
@@ -3510,12 +3591,12 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
                 <span className="text-slate-300">•</span>
                 <span className="font-extrabold text-emerald-700 flex items-center gap-1">
                   <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                  Bán trú: {totalClassStudents.filter((s) => s.isBoarding !== false).length} em (chấm ăn)
+                  Bán trú: {totalClassStudents.filter((s) => s.isBoarding === true || (s as any).is_boarding === true).length} em (chấm ăn)
                 </span>
                 <span className="text-slate-300">•</span>
                 <span className="font-extrabold text-amber-700 flex items-center gap-1">
                   <span className="w-2 h-2 rounded-full bg-amber-500" />
-                  Ngoại trú: {totalClassStudents.filter((s) => s.isBoarding === false).length} em
+                  Ngoại trú: {totalClassStudents.filter((s) => s.isBoarding === false || (s as any).is_boarding === false).length} em
                 </span>
               </div>
             </div>
@@ -3542,7 +3623,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
                     : 'text-slate-600 hover:bg-slate-100'
                 }`}
               >
-                Bán trú ({totalClassStudents.filter((s) => s.isBoarding !== false).length})
+                Bán trú ({totalClassStudents.filter((s) => s.isBoarding === true || (s as any).is_boarding === true).length})
               </button>
               <button
                 type="button"
@@ -3553,7 +3634,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
                     : 'text-slate-600 hover:bg-slate-100'
                 }`}
               >
-                Ngoại trú ({totalClassStudents.filter((s) => s.isBoarding === false).length})
+                Ngoại trú ({totalClassStudents.filter((s) => s.isBoarding === false || (s as any).is_boarding === false).length})
               </button>
             </div>
 
@@ -3561,12 +3642,13 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
             <div className="flex-1 overflow-y-auto border border-slate-200 rounded-xl divide-y divide-slate-100 max-h-72">
               {totalClassStudents
                 .filter((st) => {
-                  if (rosterFilter === 'BOARDING' && st.isBoarding === false) return false;
-                  if (rosterFilter === 'DAY' && st.isBoarding !== false) return false;
+                  const isBoardingStudent = st.isBoarding === true || (st as any).is_boarding === true;
+                  if (rosterFilter === 'BOARDING' && !isBoardingStudent) return false;
+                  if (rosterFilter === 'DAY' && isBoardingStudent) return false;
                   return true;
                 })
                 .map((st, idx) => {
-                  const isBoarding = st.isBoarding !== false;
+                  const isBoarding = st.isBoarding === true || (st as any).is_boarding === true;
                   return (
                     <div
                       key={st.id}

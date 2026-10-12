@@ -173,8 +173,8 @@ export const ClassesManagementPage: React.FC = () => {
       await importStudents(parsedStudents, rosterClassId, rosterClass?.class_name);
       setBulkStudentText('');
       setShowBulkImport(false);
-      const bCount = parsedStudents.filter((s) => s.isBoarding !== false).length;
-      const dCount = parsedStudents.filter((s) => s.isBoarding === false).length;
+      const bCount = parsedStudents.filter((s) => s.isBoarding === true || (s as any).is_boarding === true).length;
+      const dCount = parsedStudents.filter((s) => s.isBoarding === false || (s as any).is_boarding === false).length;
       setSuccessToast(`Đã thêm ${parsedStudents.length} học sinh (${bCount} Bán trú, ${dCount} Ngoại trú) thành công!`);
       setTimeout(() => setSuccessToast(''), 3000);
     }
@@ -1402,7 +1402,7 @@ export const ClassesManagementPage: React.FC = () => {
                       Danh Sách Học Sinh Của Lớp ({rosterStudents.length})
                     </h4>
                     <span className="text-[11px] text-slate-500 font-medium">
-                      (Bán trú: <strong className="text-emerald-700 font-bold">{rosterStudents.filter((s) => s.isBoarding !== false).length}</strong> • Ngoại trú: <strong className="text-amber-700 font-bold">{rosterStudents.filter((s) => s.isBoarding === false).length}</strong>)
+                      (Bán trú: <strong className="text-emerald-700 font-bold">{rosterStudents.filter((s) => s.isBoarding === true || (s as any).is_boarding === true).length}</strong> • Ngoại trú: <strong className="text-amber-700 font-bold">{rosterStudents.filter((s) => s.isBoarding === false || (s as any).is_boarding === false).length}</strong>)
                     </span>
                   </div>
                   {rosterStudents.length > 0 && (
@@ -1482,13 +1482,13 @@ export const ClassesManagementPage: React.FC = () => {
                                     setTimeout(() => setSuccessToast(''), 2500);
                                   }}
                                   className={`px-2.5 py-0.5 rounded-lg text-[11px] font-extrabold transition-all cursor-pointer ${
-                                    student.isBoarding !== false
+                                    (student.isBoarding === true || (student as any).is_boarding === true)
                                       ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200'
                                       : 'bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200'
                                   }`}
                                   title="Bấm để chuyển đổi giữa Bán trú (chấm ăn) và Ngoại trú (không chấm ăn)"
                                 >
-                                  {student.isBoarding !== false ? '✓ Bán trú' : '🏠 Ngoại trú'}
+                                  {(student.isBoarding === true || (student as any).is_boarding === true) ? '✓ Bán trú' : '🏠 Ngoại trú'}
                                 </button>
                               </td>
                               <td className="py-2 px-4 text-center">

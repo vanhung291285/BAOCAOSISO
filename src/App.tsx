@@ -180,7 +180,7 @@ const AppContent: React.FC = () => {
             className={`flex-1 w-full max-w-[1600px] mx-auto px-3 sm:px-6 lg:px-8 ${
               currentPath === '/attendance'
                 ? 'pt-3.5 pb-0 sm:py-6'
-                : 'py-3.5 sm:py-6 pb-20 sm:pb-8'
+                : 'py-3.5 sm:py-6 pb-28 sm:pb-8'
             }`}
           >
             {currentPath === '/dashboard' && (

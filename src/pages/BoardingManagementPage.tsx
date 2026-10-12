@@ -159,14 +159,14 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
     return unique;
   }, [students, selectedClassId, selectedClass]);
 
-  // Boarding students belonging to selected class (strictly isBoarding !== false)
+  // Boarding students belonging to selected class (strictly isBoarding === true or is_boarding === true)
   const classBoardingStudents = useMemo(() => {
-    return classStudents.filter((s) => s.isBoarding !== false);
+    return classStudents.filter((s) => s.isBoarding === true || (s as any).is_boarding === true);
   }, [classStudents]);
 
-  // Day students belonging to selected class (ngoại trú isBoarding === false)
+  // Day students belonging to selected class
   const classDayStudents = useMemo(() => {
-    return classStudents.filter((s) => s.isBoarding === false);
+    return classStudents.filter((s) => s.isBoarding === false || (s as any).is_boarding === false);
   }, [classStudents]);
 
   // Day Meal Schedule
@@ -705,10 +705,11 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
         studentGenderFilter === 'ALL' ||
         st.gender === studentGenderFilter;
 
+      const isB = st.isBoarding === true || (st as any).is_boarding === true;
       const matchBoarding =
         studentBoardingFilter === 'ALL' ||
-        (studentBoardingFilter === 'BOARDING' && st.isBoarding !== false) ||
-        (studentBoardingFilter === 'DAY' && st.isBoarding === false);
+        (studentBoardingFilter === 'BOARDING' && isB) ||
+        (studentBoardingFilter === 'DAY' && !isB);
 
       return matchSearch && matchGender && matchBoarding;
     });
@@ -744,7 +745,7 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
       village: st.village || st.address || '',
       birth_date: st.birth_date || '',
       ethnicity: st.ethnicity || 'Mông',
-      isBoarding: st.isBoarding !== false,
+      isBoarding: st.isBoarding === true || (st as any).is_boarding === true,
       notes: st.notes || '',
     });
     setShowStudentModal(true);
@@ -945,8 +946,8 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
         await deleteStudentsByClass(selectedClassId, selectedClass?.class_name);
       }
       await importStudents(importPreviewData, selectedClassId, selectedClass?.class_name);
-      const bCount = importPreviewData.filter((s) => s.isBoarding !== false).length;
-      const dCount = importPreviewData.filter((s) => s.isBoarding === false).length;
+      const bCount = importPreviewData.filter((s) => s.isBoarding === true || (s as any).is_boarding === true).length;
+      const dCount = importPreviewData.filter((s) => s.isBoarding === false || (s as any).is_boarding === false).length;
       
       if (isSupabaseConnected()) {
         showToast(
@@ -1127,7 +1128,7 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
       'Thôn/Bản': st.village || st.address || '',
       'Dân tộc': st.ethnicity || '',
       'Ngày sinh': st.birth_date || '',
-      'Bán trú': st.isBoarding !== false ? 'Có' : 'Không',
+      'Bán trú': (st.isBoarding === true || (st as any).is_boarding === true) ? 'Có' : 'Không',
       'Ghi chú': st.notes || '',
     }));
 
@@ -1641,23 +1642,23 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
               </button>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
               <button
                 type="button"
                 onClick={() => setActiveTab('monthly-sheet')}
                 className="px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold bg-amber-50 text-amber-900 hover:bg-amber-100 border border-amber-300 flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
                 title="Mở Sổ chấm cơm tháng & Xuất file Excel chuẩn mẫu"
               >
-                <FileSpreadsheet className="w-4 h-4 text-amber-600" />
+                <FileSpreadsheet className="w-4 h-4 text-amber-600 shrink-0" />
                 <span>Sổ chấm cơm tháng & Xuất Excel</span>
               </button>
 
               <button
                 type="button"
                 onClick={handlePrintMealReport}
-                className="px-3 py-2 rounded-xl text-xs sm:text-sm font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200 flex items-center gap-1.5 transition-all"
+                className="px-3 py-2 rounded-xl text-xs sm:text-sm font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200 flex items-center gap-1.5 transition-all shrink-0"
               >
-                <Printer className="w-4 h-4" />
+                <Printer className="w-4 h-4 shrink-0" />
                 <span className="hidden sm:inline">In phiếu báo ăn</span>
               </button>
 
@@ -1667,7 +1668,7 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
                 disabled={isSaving || mealRecords.length === 0}
                 className="px-4 py-2 rounded-xl text-xs sm:text-sm font-black bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/30 flex items-center gap-2 transition-all disabled:opacity-50"
               >
-                <Save className="w-4 h-4" />
+                <Save className="w-4 h-4 shrink-0" />
                 <span>{isSaving ? 'Đang lưu...' : 'Lưu & Gửi Báo Ăn'}</span>
               </button>
             </div>
@@ -2111,6 +2112,7 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
         <MonthlyBoardingSheet
           selectedClassId={selectedClassId}
           onClassChange={(cid) => setSelectedClassId(cid)}
+          onNavigateToStudents={() => setActiveTab('students-list')}
         />
       )}
 
@@ -2380,13 +2382,13 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
                             type="button"
                             onClick={() => handleToggleStudentBoarding(st)}
                             className={`px-2.5 py-1 rounded-xl text-xs font-extrabold transition-all cursor-pointer flex items-center justify-center gap-1 mx-auto ${
-                              st.isBoarding !== false
+                              (st.isBoarding === true || (st as any).is_boarding === true)
                                 ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200 border border-emerald-300 shadow-2xs'
                                 : 'bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-300 shadow-2xs'
                             }`}
                             title="Bấm để chuyển đổi giữa Bán trú (chấm ăn) và Ngoại trú (không chấm ăn)"
                           >
-                            {st.isBoarding !== false ? (
+                            {(st.isBoarding === true || (st as any).is_boarding === true) ? (
                               <>
                                 <Utensils className="w-3.5 h-3.5 text-emerald-600" />
                                 <span>Bán trú</span>
@@ -2764,12 +2766,12 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
                 <span className="text-slate-300">•</span>
                 <span className="font-extrabold text-emerald-700 flex items-center gap-1">
                   <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                  Bán trú: {importPreviewData.filter((s) => s.isBoarding !== false).length} em
+                  Bán trú: {importPreviewData.filter((s) => s.isBoarding === true || (s as any).is_boarding === true).length} em
                 </span>
                 <span className="text-slate-300">•</span>
                 <span className="font-extrabold text-amber-700 flex items-center gap-1">
                   <span className="w-2 h-2 rounded-full bg-amber-500" />
-                  Ngoại trú: {importPreviewData.filter((s) => s.isBoarding === false).length} em
+                  Ngoại trú: {importPreviewData.filter((s) => s.isBoarding === false || (s as any).is_boarding === false).length} em
                 </span>
               </div>
 
@@ -2858,7 +2860,7 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
                     : 'text-slate-600 hover:bg-slate-100'
                 }`}
               >
-                Bán trú ({importPreviewData.filter((s) => s.isBoarding !== false).length})
+                Bán trú ({importPreviewData.filter((s) => s.isBoarding === true || (s as any).is_boarding === true).length})
               </button>
               <button
                 type="button"
@@ -2869,15 +2871,16 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
                     : 'text-slate-600 hover:bg-slate-100'
                 }`}
               >
-                Ngoại trú ({importPreviewData.filter((s) => s.isBoarding === false).length})
+                Ngoại trú ({importPreviewData.filter((s) => s.isBoarding === false || (s as any).is_boarding === false).length})
               </button>
             </div>
 
             <div className="flex-1 overflow-y-auto border border-slate-200 rounded-xl divide-y divide-slate-100 max-h-64">
               {importPreviewData.map((st, idx) => {
-                if (previewFilter === 'BOARDING' && st.isBoarding === false) return null;
-                if (previewFilter === 'DAY' && st.isBoarding !== false) return null;
-                const isBoarding = st.isBoarding !== false;
+                const isB = st.isBoarding === true || (st as any).is_boarding === true;
+                if (previewFilter === 'BOARDING' && !isB) return null;
+                if (previewFilter === 'DAY' && isB) return null;
+                const isBoarding = isB;
                 return (
                   <div key={idx} className="p-2.5 flex items-center justify-between text-xs hover:bg-slate-50 transition-colors">
                     <div className="flex items-center gap-2">
@@ -2937,7 +2940,7 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
                   onClick={handleConfirmImport}
                   className="px-5 py-2 rounded-xl text-xs font-black bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-600/20 cursor-pointer"
                 >
-                  Xác nhận Import ({importPreviewData.length} HS • {importPreviewData.filter((s) => s.isBoarding !== false).length} Bán trú)
+                  Xác nhận Import ({importPreviewData.length} HS • {importPreviewData.filter((s) => s.isBoarding === true || (s as any).is_boarding === true).length} Bán trú)
                 </button>
               </div>
             </div>

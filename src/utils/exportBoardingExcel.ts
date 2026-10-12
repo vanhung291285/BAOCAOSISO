@@ -662,23 +662,23 @@ export async function exportMonthlyBoardingExcel(params: ExportBoardingExcelPara
   );
 
   let boardingStudents = safeStudents.filter((s) => {
-    if (s.isBoarding === false) return false;
+    if (s.isBoarding !== true && (s as any).is_boarding !== true) return false;
     if (normClassKeys.size === 0) return true;
     const sCls = String(s.class_id || '').trim().toLowerCase();
     const sClsClean = sCls.replace(/^c_/, '').replace(/^lớp\s*/i, '');
     return normClassKeys.has(sCls) || normClassKeys.has(sClsClean);
   });
 
-  // Nếu safeStudents được truyền vào từ caller nhưng chưa khớp do caller đã filter trước, dùng safeStudents
+  // Nếu safeStudents được truyền vào từ caller nhưng chưa khớp do caller đã filter trước, dùng safeStudents đã được đánh dấu bán trú
   if (boardingStudents.length === 0 && safeStudents.length > 0) {
-    boardingStudents = safeStudents.filter((s) => s.isBoarding !== false);
+    boardingStudents = safeStudents.filter((s) => s.isBoarding === true || (s as any).is_boarding === true);
   }
 
   // 2b. Nếu trong mảng truyền vào rỗng, kiểm tra trực tiếp từ StorageService
   if (boardingStudents.length === 0) {
     try {
       const clsStds = await StorageService.getStudentsByClass(classId, className);
-      boardingStudents = clsStds.filter((s) => s.isBoarding !== false);
+      boardingStudents = clsStds.filter((s) => s.isBoarding === true || (s as any).is_boarding === true);
     } catch (e) {
       console.warn('Could not fetch students from StorageService:', e);
     }

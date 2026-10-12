@@ -268,12 +268,12 @@ export const MonthlyReportPage: React.FC<MonthlyReportPageProps> = ({ onNavigate
               ? Math.round(cData.summary.sumTotalAll / cData.summary.totalDaysReported)
               : 35);
 
-        const rosterBoarding = students.filter((s) => matchStudentClass(s.class_id, cls) && s.isBoarding !== false).length;
+        const rosterBoarding = students.filter((s) => matchStudentClass(s.class_id, cls) && (s.isBoarding === true || (s as any).is_boarding === true)).length;
         const clsBoarding = rosterBoarding > 0
           ? rosterBoarding
           : (cData.summary.totalDaysReported > 0
               ? Math.round(cData.summary.sumTotalBoarding / cData.summary.totalDaysReported)
-              : Math.min(25, clsTotal));
+              : 0);
         const clsNgoaiTru = Math.max(0, clsTotal - clsBoarding);
 
         summaryRows.push({

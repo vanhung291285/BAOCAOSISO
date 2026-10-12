@@ -303,12 +303,10 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
           const enrolledCount = classStudents.length;
 
           const defaultTotal = enrolledCount > 0 ? enrolledCount : 35;
-          const expBoarding = classStudents.filter((s) => s.isBoarding === true);
-          const boardingStudentsCount = expBoarding.length > 0
-            ? expBoarding.length
-            : classStudents.filter((s) => s.isBoarding !== false).length;
+          const expBoarding = classStudents.filter((s) => s.isBoarding === true || (s as any).is_boarding === true);
+          const boardingStudentsCount = expBoarding.length;
 
-          const boardingTotal = boardingStudentsCount > 0 ? boardingStudentsCount : defaultTotal;
+          const boardingTotal = boardingStudentsCount;
           const nonBoardingTotal = Math.max(0, defaultTotal - boardingTotal);
 
           enabledIndicators.forEach((ig, idx) => {
@@ -1874,11 +1872,9 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
             i.name.toLowerCase().includes('ăn trưa')
         );
 
-        const expBoarding = classStudents.filter((s) => s.isBoarding === true);
-        const rosterBoardingCount = expBoarding.length > 0
-          ? expBoarding.length
-          : classStudents.filter((s) => s.isBoarding !== false).length;
-        const rosterAbsentBoarding = absentStudents.filter((s) => s.isBoarding).length;
+        const expBoarding = classStudents.filter((s) => s.isBoarding === true || (s as any).is_boarding === true);
+        const rosterBoardingCount = expBoarding.length;
+        const rosterAbsentBoarding = absentStudents.filter((s) => s.isBoarding === true || (s as any).is_boarding === true).length;
 
         const pTotal = classStudents.length > 0 ? classStudents.length : (primaryInd ? Number(formValues[primaryInd.id]?.total) || 0 : 0);
         const pAbsent = primaryInd ? Number(formValues[primaryInd.id]?.absent) || absentStudents.length : absentStudents.length;

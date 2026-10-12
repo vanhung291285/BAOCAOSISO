@@ -1241,7 +1241,7 @@ export const StorageService = {
     const mapDBToJSStudent = (s: any) => {
       const bVal = s.is_boarding !== undefined 
         ? Boolean(s.is_boarding) 
-        : (s.isBoarding !== undefined ? Boolean(s.isBoarding) : true);
+        : (s.isBoarding !== undefined ? Boolean(s.isBoarding) : false);
       return {
         id: s.id,
         student_code: s.student_code || '',
@@ -1299,8 +1299,8 @@ export const StorageService = {
               address: cleanStudentAddress(localMatch?.address || localMatch?.village || mapped.address || mapped.village),
               village: cleanStudentAddress(localMatch?.village || localMatch?.address || mapped.village || mapped.address),
               notes: localMatch?.notes || mapped.notes,
-              isBoarding: mapped.isBoarding !== undefined ? mapped.isBoarding : (localMatch?.isBoarding !== undefined ? localMatch.isBoarding : true),
-              is_boarding: mapped.isBoarding !== undefined ? mapped.isBoarding : (localMatch?.isBoarding !== undefined ? localMatch.isBoarding : true),
+              isBoarding: mapped.isBoarding !== undefined ? mapped.isBoarding : (localMatch?.isBoarding !== undefined ? localMatch.isBoarding : false),
+              is_boarding: mapped.isBoarding !== undefined ? mapped.isBoarding : (localMatch?.isBoarding !== undefined ? localMatch.isBoarding : false),
             };
 
             cloudActiveMap.set(mapped.id, mergedStudent);
@@ -1406,7 +1406,7 @@ export const StorageService = {
     const finalGender = resolveStudentGender(student.gender, student.full_name);
     const bVal = student.isBoarding !== undefined 
       ? Boolean(student.isBoarding) 
-      : ((student as any).is_boarding !== undefined ? Boolean((student as any).is_boarding) : true);
+      : ((student as any).is_boarding !== undefined ? Boolean((student as any).is_boarding) : false);
     const studentToSave = { ...student, gender: finalGender, isBoarding: bVal, is_boarding: bVal };
 
     let idx = list.findIndex((s) => s.id === student.id);
@@ -1652,7 +1652,7 @@ export const StorageService = {
       const finalGender = resolveStudentGender(student.gender, student.full_name);
       const bVal = student.isBoarding !== undefined 
         ? Boolean(student.isBoarding) 
-        : ((student as any).is_boarding !== undefined ? Boolean((student as any).is_boarding) : true);
+        : ((student as any).is_boarding !== undefined ? Boolean((student as any).is_boarding) : false);
       const sCopy = { ...student, gender: finalGender, isBoarding: bVal, is_boarding: bVal };
       studentsToSave.push(sCopy);
 
@@ -1673,7 +1673,7 @@ export const StorageService = {
       birth_date: s.birth_date || '',
       ethnicity: s.ethnicity || '',
       notes: s.notes || '',
-      is_boarding: s.isBoarding !== undefined ? Boolean(s.isBoarding) : (s.is_boarding !== undefined ? Boolean(s.is_boarding) : true),
+      is_boarding: s.isBoarding !== undefined ? Boolean(s.isBoarding) : (s.is_boarding !== undefined ? Boolean(s.is_boarding) : false),
     });
 
     const supabase = getSupabaseClient();
@@ -2666,7 +2666,7 @@ export const StorageService = {
     const rows: BoardingMealSummaryRow[] = activeClasses.map((cls) => {
       const teacher = profiles.find((p) => p.id === cls.homeroom_teacher_id || (p.assigned_class_id === cls.id && p.role === 'GVCN'));
       const classStudents = students.filter((s) => s.class_id === cls.id);
-      const classBoardingStudents = classStudents.filter((s) => s.isBoarding !== false);
+      const classBoardingStudents = classStudents.filter((s) => s.isBoarding === true || (s as any).is_boarding === true);
       const estBoarding = classBoardingStudents.length;
 
       const targetId = normCls(cls.id);
@@ -4125,7 +4125,7 @@ export const StorageService = {
       return normClassIds.has(sCls) || normClassIds.has(sClsClean);
     });
     const defaultClassTotal = classStudents.length > 0 ? classStudents.length : 35;
-    const defaultClassBoarding = classStudents.filter((s) => s.isBoarding !== false).length || Math.min(25, defaultClassTotal);
+    const defaultClassBoarding = classStudents.filter((s) => s.isBoarding === true || (s as any).is_boarding === true).length;
 
     // Helper resolve student address from object or matched student
     const resolveAddr = (s: any): string => {
@@ -4377,7 +4377,7 @@ export const StorageService = {
               std.id === s.id ||
               std.full_name.trim().toLowerCase() === String(s.full_name || s.name || '').trim().toLowerCase()
           );
-          return found ? found.isBoarding !== false : true;
+          return found ? (found.isBoarding === true || (found as any).is_boarding === true) : false;
         }).length;
         const totalBoarding = Number(boardingVal?.total_count) > 0 ? Number(boardingVal!.total_count) : defaultClassBoarding;
         const absentBoarding = Number(boardingVal?.absent_count) !== undefined && boardingVal
@@ -6312,7 +6312,7 @@ export const StorageService = {
           .map((s: any) => {
             const bVal = s.is_boarding !== undefined 
               ? Boolean(s.is_boarding) 
-              : (s.isBoarding !== undefined ? Boolean(s.isBoarding) : true);
+              : (s.isBoarding !== undefined ? Boolean(s.isBoarding) : false);
             return {
               id: s.id,
               student_code: s.student_code || '',

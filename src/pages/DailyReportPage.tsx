@@ -643,12 +643,12 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
               ? Math.round(cData.summary.sumTotalAll / cData.summary.totalDaysReported) 
               : 35);
 
-        const rosterBoarding = students.filter((s) => isStudentInClass(s.class_id, cls.id, cls.class_name) && s.isBoarding !== false).length;
+        const rosterBoarding = students.filter((s) => isStudentInClass(s.class_id, cls.id, cls.class_name) && (s.isBoarding === true || (s as any).is_boarding === true)).length;
         const clsBoarding = rosterBoarding > 0 
           ? rosterBoarding 
           : (cData.summary.totalDaysReported > 0 
               ? Math.round(cData.summary.sumTotalBoarding / cData.summary.totalDaysReported) 
-              : Math.min(25, clsTotal));
+              : 0);
         const clsNgoaiTru = Math.max(0, clsTotal - clsBoarding);
 
         summaryRows.push({
@@ -1393,12 +1393,12 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
                             ? Math.round(monthlyData.summary.sumTotalAll / monthlyData.summary.totalDaysReported) 
                             : 35);
 
-                      const rosterBoarding = classRoster.filter((s) => s.isBoarding !== false).length;
+                      const rosterBoarding = classRoster.filter((s) => s.isBoarding === true || (s as any).is_boarding === true).length;
                       const curBoarding = rosterBoarding > 0 
                         ? rosterBoarding 
                         : (monthlyData.summary.totalDaysReported > 0 
                             ? Math.round(monthlyData.summary.sumTotalBoarding / monthlyData.summary.totalDaysReported) 
-                            : Math.min(25, curTotal));
+                            : 0);
                       const curNgoaiTru = Math.max(0, curTotal - curBoarding);
 
                       return (
