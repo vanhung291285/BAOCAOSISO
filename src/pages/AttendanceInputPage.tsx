@@ -1190,10 +1190,19 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
       }
     } catch (err: any) {
       console.error('Error saving report:', err);
-      setToastMessage({
-        text: err?.message || 'Có lỗi xảy ra khi lưu báo cáo!',
-        type: 'error',
-      });
+      const isQuota = String(err?.message || '').toLowerCase().includes('quota');
+      if (isQuota) {
+        StorageService.cleanupStorageForQuota();
+        setToastMessage({
+          text: 'Bộ nhớ trình duyệt đã đầy. Hệ thống đã tự động dọn dẹp bộ nhớ đệm, vui lòng bấm Gửi báo cáo lại!',
+          type: 'error',
+        });
+      } else {
+        setToastMessage({
+          text: err?.message || 'Có lỗi xảy ra khi lưu báo cáo!',
+          type: 'error',
+        });
+      }
     } finally {
       setIsSaving(false);
     }
