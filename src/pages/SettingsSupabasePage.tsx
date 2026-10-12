@@ -425,6 +425,22 @@ export const SettingsSupabasePage: React.FC = () => {
 
           <button
             type="button"
+            onClick={() => {
+              StorageService.cleanupStorageForQuota();
+              setSyncMessage({
+                type: 'success',
+                text: 'Đã dọn dẹp và giải phóng bộ nhớ đệm trình duyệt thành công! Các dữ liệu chính vẫn được bảo toàn.',
+              });
+            }}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-sky-800 bg-sky-50 hover:bg-sky-100 border border-sky-300 transition-colors"
+            title="Dọn dẹp logs và bộ nhớ tạm trình duyệt để tránh đầy bộ nhớ"
+          >
+            <Trash2 className="w-3.5 h-3.5 text-sky-700" />
+            <span>Giải phóng bộ nhớ</span>
+          </button>
+
+          <button
+            type="button"
             onClick={handleResetSampleData}
             className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-300 transition-colors"
           >
