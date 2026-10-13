@@ -29,6 +29,7 @@ import {
   Users,
   Check,
   RefreshCw,
+  ArrowLeft,
 } from 'lucide-react';
 import { exportMonthlyBoardingExcel } from '../utils/exportBoardingExcel';
 import { DEFAULT_BOARDING_STUDENTS_SEED } from '../utils/boardingRules';
@@ -532,13 +533,26 @@ export const MonthlyReportPage: React.FC<MonthlyReportPageProps> = ({ onNavigate
       {/* Top Bar with Controls (Ẩn khi in ấn) */}
       <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs flex flex-col gap-4 no-print">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-          <div>
-            <h1 className="text-xl font-black text-slate-900 tracking-tight">
-              BÁO CÁO TỔNG HỢP SĨ SỐ THEO THÁNG
-            </h1>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Thống kê chuyên cần và tổng hợp biểu mẫu báo cáo sĩ số chuẩn (13 cột) của từng lớp hoặc toàn trường y như hình gốc
-            </p>
+          <div className="flex items-center gap-3">
+            {onNavigate && (
+              <button
+                type="button"
+                onClick={() => onNavigate('/dashboard')}
+                className="px-3 py-2 rounded-xl text-xs font-extrabold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-300 transition-all cursor-pointer flex items-center gap-1.5 shrink-0 shadow-2xs active:scale-95"
+                title="Thoát quay về Bảng điều khiển"
+              >
+                <ArrowLeft className="w-4 h-4 text-slate-700 shrink-0" />
+                <span>Thoát</span>
+              </button>
+            )}
+            <div>
+              <h1 className="text-xl font-black text-slate-900 tracking-tight">
+                BÁO CÁO TỔNG HỢP SĨ SỐ THEO THÁNG
+              </h1>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Thống kê chuyên cần và tổng hợp biểu mẫu báo cáo sĩ số chuẩn (13 cột) của từng lớp hoặc toàn trường y như hình gốc
+              </p>
+            </div>
           </div>
 
           {/* Mode Switcher Tabs */}

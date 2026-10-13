@@ -62,6 +62,7 @@ import {
   FileUp,
   SlidersHorizontal,
   RefreshCw,
+  ArrowLeft,
 } from 'lucide-react';
 
 interface BoardingManagementPageProps {
@@ -1224,9 +1225,20 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
         <div className="absolute bottom-0 right-1/4 -mb-10 w-48 h-48 rounded-full bg-amber-500/10 blur-2xl pointer-events-none" />
 
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-start sm:items-center gap-3.5">
-            <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-tr from-amber-500 to-orange-400 text-white flex items-center justify-center shadow-lg shadow-amber-500/30 flex-shrink-0">
-              <Utensils className="w-6 h-6 sm:w-7 sm:h-7" />
+          <div className="flex items-start sm:items-center gap-3">
+            {onNavigate && (
+              <button
+                type="button"
+                onClick={() => onNavigate('/dashboard')}
+                className="px-3 py-2 rounded-xl text-xs font-extrabold text-white bg-white/15 hover:bg-white/25 border border-white/25 shadow-2xs transition-all cursor-pointer flex items-center gap-1.5 shrink-0 active:scale-95"
+                title="Thoát quay về Bảng điều khiển"
+              >
+                <ArrowLeft className="w-4 h-4 text-white shrink-0" />
+                <span>Thoát</span>
+              </button>
+            )}
+            <div className="w-11 h-11 sm:w-13 sm:h-13 rounded-2xl bg-gradient-to-tr from-amber-500 to-orange-400 text-white flex items-center justify-center shadow-lg shadow-amber-500/30 flex-shrink-0">
+              <Utensils className="w-5 h-5 sm:w-6 sm:h-6" />
             </div>
             <div>
               <div className="flex flex-wrap items-center gap-2">

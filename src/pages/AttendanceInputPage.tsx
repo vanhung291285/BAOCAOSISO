@@ -1332,6 +1332,17 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-100">
           <div>
             <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+              {onNavigate && (
+                <button
+                  type="button"
+                  onClick={() => onNavigate('/dashboard')}
+                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-extrabold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-300 transition-all cursor-pointer shrink-0 shadow-2xs active:scale-95"
+                  title="Thoát quay về Bảng điều khiển"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5 text-slate-700" />
+                  <span>Thoát</span>
+                </button>
+              )}
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200 shadow-2xs">
                 <FileText className="w-3.5 h-3.5" />
                 PHIẾU ĐIỂM DANH & BÁO CÁO SĨ SỐ HẰNG NGÀY
@@ -1500,18 +1511,29 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
 
         {/* Quick Switcher between Báo cáo Sĩ số & Báo ăn của lớp (Tối ưu tuyệt đối cho điện thoại) */}
         <div className="mt-3.5 pt-3 border-t border-slate-100 flex items-center gap-2">
-          <div className="flex-1 py-2 px-3 rounded-xl bg-blue-600 text-white font-black text-xs sm:text-sm text-center shadow-xs flex items-center justify-center gap-1.5">
-            <ClipboardList className="w-4 h-4" />
-            <span>1. Điểm danh sĩ số</span>
+          {onNavigate && (
+            <button
+              type="button"
+              onClick={() => onNavigate('/dashboard')}
+              className="py-2 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-black text-xs sm:text-sm text-center transition-all flex items-center justify-center gap-1.5 cursor-pointer border border-slate-300 shrink-0 shadow-2xs active:scale-95"
+              title="Thoát quay về Bảng điều khiển"
+            >
+              <ArrowLeft className="w-4 h-4 text-slate-700 shrink-0" />
+              <span>Thoát</span>
+            </button>
+          )}
+          <div className="flex-1 py-2 px-2.5 sm:px-3 rounded-xl bg-blue-600 text-white font-black text-xs sm:text-sm text-center shadow-xs flex items-center justify-center gap-1.5 min-w-0">
+            <ClipboardList className="w-4 h-4 shrink-0" />
+            <span className="truncate">1. Điểm danh sĩ số</span>
           </div>
           <button
             type="button"
             onClick={() => onNavigate && onNavigate('/boarding')}
-            className="flex-1 py-2 px-3 rounded-xl bg-amber-50 text-amber-900 border border-amber-300 hover:bg-amber-100 font-bold text-xs sm:text-sm text-center transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs active:scale-95"
+            className="flex-1 py-2 px-2.5 sm:px-3 rounded-xl bg-amber-50 text-amber-900 border border-amber-300 hover:bg-amber-100 font-bold text-xs sm:text-sm text-center transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs active:scale-95 min-w-0"
             title="Mở giao diện Chấm báo ăn bán trú hằng ngày của lớp"
           >
-            <Utensils className="w-4 h-4 text-amber-600" />
-            <span>2. Báo ăn của lớp (Bán trú)</span>
+            <Utensils className="w-4 h-4 text-amber-600 shrink-0" />
+            <span className="truncate">2. Báo ăn của lớp</span>
           </button>
         </div>
 
