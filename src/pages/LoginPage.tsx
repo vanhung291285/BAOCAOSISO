@@ -75,26 +75,21 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
   const [yearError, setYearError] = useState('');
   const [isSavingYear, setIsSavingYear] = useState(false);
 
-  // Mặc định tên lớp là "Chọn tên lớp" (rỗng), không tự động chọn trước
+  // Mặc định luôn là thẻ GVCN, tên lớp là "Chọn tên lớp" (rỗng), không tự động điền tài khoản/mật khẩu quản trị
   useEffect(() => {
+    setActiveTab('GVCN');
     setSelectedClassId('');
     setSelectedTeacherId('');
+    setEmail('');
+    setPassword('');
 
-    const savedTab = localStorage.getItem('sso_saved_active_tab') as 'GVCN' | 'ADMIN';
-    if (savedTab) {
-      setActiveTab(savedTab);
-    }
-
-    const savedAdminCreds = localStorage.getItem('sso_saved_admin_creds');
-    if (savedAdminCreds) {
-      try {
-        const parsed = JSON.parse(savedAdminCreds);
-        if (parsed.email) setEmail(parsed.email);
-        if (parsed.password) setPassword(parsed.password);
-      } catch {
-        // ignore
-      }
-    }
+    // Dọn sạch mọi cache tài khoản/mật khẩu quản trị cũ để tránh tự động điền
+    try {
+      localStorage.removeItem('sso_saved_admin_creds');
+      localStorage.removeItem('sso_saved_active_tab');
+      localStorage.removeItem('sso_saved_class_id');
+      localStorage.removeItem('sso_saved_teacher_id');
+    } catch {}
   }, []);
 
   // Sorted classes by grade
@@ -270,11 +265,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
 
         if (rememberLogin) {
           localStorage.setItem('sso_admin_remember_login', 'true');
-          localStorage.setItem(
-            'sso_saved_admin_creds',
-            JSON.stringify({ email: cleanEmail, password: password.trim() })
-          );
-          localStorage.setItem('sso_saved_active_tab', 'ADMIN');
         }
 
         const ok = await login(email);
@@ -327,11 +317,15 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
     }
   };
 
-  // Xử lý khi nhấn biểu tượng Google / Microsoft:
-  // Theo yêu cầu người dùng: Giữ nguyên ở cửa sổ đăng nhập, tuyệt đối không tự động vào tài khoản quản trị!
+  // Xử lý khi nhấn biểu tượng Google / Microsoft (Đăng nhập nhanh):
+  // Theo yêu cầu người dùng: Giữ nguyên ở cửa sổ đăng nhập, không bao giờ hiển thị hay chuyển sang tài khoản/mật khẩu quản trị!
   const handleQuickDemoLogin = (provider: 'google' | 'microsoft') => {
     const providerName = provider === 'google' ? 'Google' : 'Microsoft';
     setError('');
+    // Đảm bảo tuyệt đối ở thẻ GVCN, xóa sạch mọi ô nhập quản trị
+    setActiveTab('GVCN');
+    setEmail('');
+    setPassword('');
     setSsoNotice(
       `Đăng nhập bằng tài khoản ${providerName}: Phương thức SSO đang được đồng bộ hóa theo tên miền trường học. Quý Thầy/Cô vui lòng chọn "Tên lớp" ở trên để đăng nhập trực tiếp vào sổ báo cáo sĩ số.`
     );
@@ -674,6 +668,9 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                 onClick={() => {
                   setActiveTab('GVCN');
                   setError('');
+                  setSsoNotice(null);
+                  setEmail('');
+                  setPassword('');
                 }}
                 className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer text-center select-none ${
                   activeTab === 'GVCN'
@@ -689,6 +686,9 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                 onClick={() => {
                   setActiveTab('ADMIN');
                   setError('');
+                  setSsoNotice(null);
+                  setEmail('');
+                  setPassword('');
                 }}
                 className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer text-center select-none ${
                   activeTab === 'ADMIN'
@@ -768,7 +768,10 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                     <input
                       id="login-admin-email"
                       type="text"
-                      autoComplete="username"
+                      autoComplete="off"
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      spellCheck="false"
                       required
                       placeholder="Tài khoản hoặc Email"
                       value={email}
@@ -823,7 +826,10 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                     <input
                       id="login-admin-password"
                       type={showPassword ? 'text' : 'password'}
-                      autoComplete="current-password"
+                      autoComplete="new-password"
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      spellCheck="false"
                       required
                       placeholder="Mật khẩu"
                       value={password}
@@ -985,14 +991,10 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                 Tên lớp, tên GVCN được tự động xác nhận, không yêu cầu ghi nhớ mật khẩu phức tạp.
               </p>
               <p>
-                - <strong>Ban Giám Hiệu / Quản trị viên:</strong> Mật khẩu mặc định hệ thống là{' '}
-                <code className="bg-slate-100 px-1 py-0.5 rounded font-bold text-teal-800">
-                  admin123456@
-                </code>{' '}
-                hoặc liên hệ quản trị viên:
+                - <strong>Ban Giám Hiệu / Quản trị viên:</strong> Vui lòng liên hệ Quản trị viên nhà trường để được hỗ trợ cấp lại mật khẩu đăng nhập:
               </p>
               <div className="p-2.5 bg-teal-50 border border-teal-200 rounded-xl font-bold text-teal-900 mt-2 text-xs">
-                Hỗ trợ kỹ thuật: Vũ Văn Hùng - 0984246993
+                Hỗ trợ kỹ thuật: Vũ Văn Hùng - SĐT: 0984246993
               </div>
             </div>
             <button
