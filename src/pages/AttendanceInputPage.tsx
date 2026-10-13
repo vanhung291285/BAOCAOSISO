@@ -61,10 +61,20 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
   onNavigate,
 }) => {
   const { settings, classes, campuses, indicators, students, updateStudent } = useSchool();
-  const { currentUser, isGVCN, isAdmin, isBGH } = useAuth();
+  const { currentUser, isGVCN, isAdmin, isBGH, logout } = useAuth();
   const { testSound, isSoundEnabled, isAudioBlocked } = useNotifications();
   const [isPlayingSoundTest, setIsPlayingSoundTest] = useState(false);
   const [isExportingBoarding, setIsExportingBoarding] = useState(false);
+  const [showPostSubmitModal, setShowPostSubmitModal] = useState(false);
+
+  const handleExit = () => {
+    if (isGVCN) {
+      // GVCN thoát sẽ quay về cửa sổ đăng nhập để lần báo cáo sau đăng nhập lại
+      logout();
+    } else if (onNavigate) {
+      onNavigate('/dashboard');
+    }
+  };
 
   // Active indicators sorted by sort_order
   const enabledIndicators = useMemo(() => {
@@ -1182,6 +1192,11 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
         type: 'success',
       });
 
+      // Đối với GVCN, mở modal xác nhận để có thể thoát ngay về cửa sổ đăng nhập
+      if (isGVCN) {
+        setShowPostSubmitModal(true);
+      }
+
       // Reload fresh state
       await loadClassReport();
 
@@ -1332,17 +1347,15 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-100">
           <div>
             <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-              {onNavigate && (
-                <button
-                  type="button"
-                  onClick={() => onNavigate('/dashboard')}
-                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-extrabold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-300 transition-all cursor-pointer shrink-0 shadow-2xs active:scale-95"
-                  title="Thoát quay về Bảng điều khiển"
-                >
-                  <ArrowLeft className="w-3.5 h-3.5 text-slate-700" />
-                  <span>Thoát</span>
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={handleExit}
+                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-extrabold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-300 transition-all cursor-pointer shrink-0 shadow-2xs active:scale-95"
+                title={isGVCN ? "Thoát về cửa sổ đăng nhập" : "Thoát quay về Bảng điều khiển"}
+              >
+                <ArrowLeft className="w-3.5 h-3.5 text-slate-700" />
+                <span>Thoát</span>
+              </button>
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200 shadow-2xs">
                 <FileText className="w-3.5 h-3.5" />
                 PHIẾU ĐIỂM DANH & BÁO CÁO SĨ SỐ HẰNG NGÀY
@@ -1354,6 +1367,20 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
               )}
             </div>
 
+            <div className="flex items-center gap-3 sm:gap-4 my-1">
+              <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight leading-tight">
+                <div>Báo cáo điểm</div>
+                <div>danh:</div>
+              </h1>
+              <div className="bg-blue-50 border border-blue-200 rounded-2xl px-3.5 sm:px-4 py-1 sm:py-1.5 text-center shadow-2xs min-w-[70px]">
+                <div className="text-[10px] sm:text-xs font-bold text-blue-600 uppercase tracking-wider leading-none">
+                  Lớp
+                </div>
+                <div className="text-lg sm:text-2xl font-black text-blue-800 leading-tight">
+                  {selectedClass?.class_name || '...'}
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* Status Badge & Controls */}
@@ -1506,17 +1533,15 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
 
         {/* Quick Switcher between Báo cáo Sĩ số & Báo ăn của lớp (Tối ưu tuyệt đối cho điện thoại) */}
         <div className="mt-3.5 pt-3 border-t border-slate-100 flex items-center gap-2">
-          {onNavigate && (
-            <button
-              type="button"
-              onClick={() => onNavigate('/dashboard')}
-              className="py-2 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-black text-xs sm:text-sm text-center transition-all flex items-center justify-center gap-1.5 cursor-pointer border border-slate-300 shrink-0 shadow-2xs active:scale-95"
-              title="Thoát quay về Bảng điều khiển"
-            >
-              <ArrowLeft className="w-4 h-4 text-slate-700 shrink-0" />
-              <span>Thoát</span>
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={handleExit}
+            className="py-2 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-black text-xs sm:text-sm text-center transition-all flex items-center justify-center gap-1.5 cursor-pointer border border-slate-300 shrink-0 shadow-2xs active:scale-95"
+            title={isGVCN ? "Thoát về cửa sổ đăng nhập" : "Thoát quay về Bảng điều khiển"}
+          >
+            <ArrowLeft className="w-4 h-4 text-slate-700 shrink-0" />
+            <span>Thoát</span>
+          </button>
           <div className="flex-1 py-2 px-2.5 sm:px-3 rounded-xl bg-blue-600 text-white font-black text-xs sm:text-sm text-center shadow-xs flex items-center justify-center gap-1.5 min-w-0">
             <ClipboardList className="w-4 h-4 shrink-0" />
             <span className="truncate">1. Điểm danh sĩ số</span>
@@ -2721,19 +2746,60 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                 <button
                   type="button"
                   onClick={() => setShowQuickAddModal(false)}
-                  className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-50"
+                  className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-50 cursor-pointer"
                 >
                   Đóng
                 </button>
                 <button
                   type="submit"
                   disabled={!newAbsentName.trim()}
-                  className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold text-xs shadow-md shadow-blue-600/20"
+                  className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold text-xs shadow-md shadow-blue-600/20 cursor-pointer"
                 >
                   Thêm vào danh sách
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal xác nhận sau khi nộp báo cáo thành công (dành cho GVCN) */}
+      {showPostSubmitModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-slate-200 text-center animate-in zoom-in-95">
+            <div className="w-14 h-14 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto mb-3 shadow-inner">
+              <CheckCircle2 className="w-8 h-8 stroke-[2.5]" />
+            </div>
+
+            <h3 className="text-base sm:text-lg font-black text-slate-900 tracking-tight">
+              ĐÃ GỬI BÁO CÁO THÀNH CÔNG!
+            </h3>
+            
+            <p className="text-xs text-slate-600 mt-1.5 leading-relaxed">
+              Báo cáo sĩ số lớp <strong>{selectedClass?.class_name || ''}</strong> ngày <strong>{formatDateVN(selectedDate)}</strong> đã được ghi nhận vào hệ thống.
+            </p>
+
+            <div className="mt-5 space-y-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowPostSubmitModal(false);
+                  logout();
+                }}
+                className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-[#003B5C] via-[#005B82] to-[#00897B] hover:opacity-95 text-white font-black text-xs sm:text-sm uppercase tracking-wider shadow-md shadow-teal-900/20 active:scale-[0.99] transition-all cursor-pointer flex items-center justify-center gap-2"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                <span>Thoát về cửa sổ đăng nhập</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowPostSubmitModal(false)}
+                className="w-full py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition-colors cursor-pointer"
+              >
+                Ở lại xem chi tiết báo cáo
+              </button>
+            </div>
           </div>
         </div>
       )}

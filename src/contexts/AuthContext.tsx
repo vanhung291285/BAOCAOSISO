@@ -40,11 +40,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               localStorage.removeItem(CURRENT_USER_KEY);
               return null;
             }
+            sessionStorage.setItem('sso_session_active', 'true');
+            sessionStorage.setItem(CURRENT_USER_KEY, match.id);
+            return match;
           }
-          // GVCN and remembered admin stay logged in reliably across tabs/sessions
-          sessionStorage.setItem('sso_session_active', 'true');
-          sessionStorage.setItem(CURRENT_USER_KEY, match.id);
-          return match;
+
+          // GVCN: Mỗi lần vào báo cáo sĩ số thì phải thực hiện thao tác đăng nhập ở cửa sổ đăng nhập
+          // Xóa session tự động để GVCN luôn bắt đầu tại cửa sổ đăng nhập
+          localStorage.removeItem(CURRENT_USER_KEY);
+          sessionStorage.removeItem(CURRENT_USER_KEY);
+          return null;
         }
       }
     } catch (err) {}
@@ -81,10 +86,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               setCurrentUser(null);
               return;
             }
+            sessionStorage.setItem('sso_session_active', 'true');
+            sessionStorage.setItem(CURRENT_USER_KEY, match.id);
+            setCurrentUser(match);
+            return;
           }
-          sessionStorage.setItem('sso_session_active', 'true');
-          sessionStorage.setItem(CURRENT_USER_KEY, match.id);
-          setCurrentUser(match);
+
+          // GVCN: Chỉ duy trì nếu đã được đăng nhập chủ động trong bộ nhớ React hiện tại
+          if (currentUser && currentUser.id === match.id) {
+            setCurrentUser(match);
+            return;
+          }
+
+          localStorage.removeItem(CURRENT_USER_KEY);
+          sessionStorage.removeItem(CURRENT_USER_KEY);
+          setCurrentUser(null);
           return;
         }
       }
@@ -159,7 +175,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           localStorage.removeItem(CURRENT_USER_KEY);
         }
       } else {
-        localStorage.setItem(CURRENT_USER_KEY, found.id);
+        // GVCN: Mỗi lần vào báo cáo sĩ số thì phải thực hiện thao tác đăng nhập ở cửa sổ đăng nhập
+        localStorage.removeItem(CURRENT_USER_KEY);
       }
       return true;
     }
@@ -190,7 +207,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           localStorage.removeItem(CURRENT_USER_KEY);
         }
       } else {
-        localStorage.setItem(CURRENT_USER_KEY, match.id);
+        // GVCN: Mỗi lần vào báo cáo sĩ số thì phải thực hiện thao tác đăng nhập ở cửa sổ đăng nhập
+        localStorage.removeItem(CURRENT_USER_KEY);
       }
     }
   };
