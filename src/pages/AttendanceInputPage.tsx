@@ -1353,12 +1353,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                 </span>
               )}
             </div>
-            <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-              <span>Báo cáo điểm danh:</span>
-              <span className="text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-xl border border-blue-200">
-                Lớp {selectedClass?.class_name || '...'}
-              </span>
-            </h1>
+
           </div>
 
           {/* Status Badge & Controls */}

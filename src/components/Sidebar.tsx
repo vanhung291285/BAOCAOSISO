@@ -11,6 +11,7 @@ import {
   Layers,
   Settings,
   User,
+  LogOut,
   MapPin,
   FileSpreadsheet,
   Database,
@@ -19,8 +20,6 @@ import {
   ChevronRight,
   Globe,
   ExternalLink,
-  FileCheck2,
-  School,
   Sparkles,
   Utensils,
   GraduationCap,
@@ -39,7 +38,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   collapsed,
   onToggleCollapse,
 }) => {
-  const { currentUser, isGVCN, isBGH, isAdmin } = useAuth();
+  const { currentUser, isGVCN, isBGH, isAdmin, logout } = useAuth();
   const { settings, classes } = useSchool();
 
   const assignedClass = classes.find((c) => c.id === currentUser?.assigned_class_id);
@@ -288,10 +287,27 @@ export const Sidebar: React.FC<SidebarProps> = ({
         )}
       </div>
 
+      {/* Logout Button in Sidebar */}
+      {currentUser && (
+        <div className="p-2 border-t border-slate-100 bg-slate-50/40">
+          <button
+            type="button"
+            onClick={logout}
+            title={collapsed ? 'Đăng xuất tài khoản' : undefined}
+            className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold text-rose-700 bg-rose-50/90 hover:bg-rose-100 transition-all border border-rose-200/80 shadow-2xs cursor-pointer active:scale-95 ${
+              collapsed ? 'justify-center px-2' : ''
+            }`}
+          >
+            <LogOut className="w-4 h-4 text-rose-600 shrink-0" />
+            {!collapsed && <span>Đăng xuất</span>}
+          </button>
+        </div>
+      )}
+
       {/* Collapse Toggle Footer */}
       <div className="p-2 border-t border-slate-200 bg-slate-50/70 flex items-center justify-between">
         {!collapsed && (
-          <div className="px-2 text-[11px] text-slate-400 truncate">
+          <div className="px-2 text-[11px] text-slate-400 truncate font-medium">
             {settings?.short_name || 'THCS Xa Dung'}
           </div>
         )}

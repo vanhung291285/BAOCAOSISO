@@ -9,11 +9,11 @@ import {
   Menu,
   X,
   LogOut,
+  LogIn,
   User,
   Settings,
   ClipboardList,
   BarChart3,
-  ShieldCheck,
   Calendar,
   Layers,
   Database,
@@ -23,7 +23,6 @@ import {
   ChevronDown,
   Globe,
   ExternalLink,
-  FileCheck2,
   Sparkles,
   LayoutDashboard,
   CalendarRange,
@@ -163,9 +162,132 @@ export const Navbar: React.FC<NavbarProps> = ({ currentPath, onNavigate, onToggl
             </a>
           </div>
 
-          {/* 3. Right: Notification, PWA, User Profile & Menu */}
-          <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
+          {/* 3. Right: Notification, PWA, User Profile, Login & Logout */}
+          <div className="flex items-center gap-2 sm:gap-2.5 flex-shrink-0">
+            {/* Supabase Cloud Connection Status Pill */}
+            <button
+              type="button"
+              onClick={() => handleNav('/settings/supabase')}
+              className={`hidden xl:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[11px] font-bold border shadow-2xs transition-all cursor-pointer ${
+                isSupabaseConnected()
+                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100'
+                  : 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100 animate-pulse'
+              }`}
+              title={
+                isSupabaseConnected()
+                  ? 'Đã kết nối Supabase Cloud'
+                  : 'Chưa kết nối Supabase Cloud'
+              }
+            >
+              <span className={`w-2 h-2 rounded-full ${isSupabaseConnected() ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+              <Cloud className="w-3.5 h-3.5" />
+              <span>{isSupabaseConnected() ? 'Cloud Đã kết nối' : 'Chưa nối Cloud'}</span>
+            </button>
 
+            {/* PWA Install Button */}
+            <div className="hidden lg:block">
+              <PWAInstallButton />
+            </div>
+
+            {/* Notification Bell Center */}
+            <div className="hidden md:block">
+              <NotificationCenter onNavigate={handleNav} />
+            </div>
+
+            {/* User Profile / Login / Logout */}
+            {currentUser ? (
+              <div className="hidden md:flex items-center gap-2" ref={userDropdownRef}>
+                {/* Profile Card & Dropdown */}
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setUserDropdownOpen(!userDropdownOpen)}
+                    className="flex items-center gap-2 p-1 px-2.5 py-1.5 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer border border-slate-200/80 hover:border-slate-300 bg-white"
+                    title="Tài khoản cá nhân"
+                  >
+                    <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-600 to-indigo-700 text-white flex items-center justify-center font-bold text-xs shadow-2xs shrink-0">
+                      {currentUser.full_name.charAt(0)}
+                    </div>
+                    <div className="text-left max-w-[120px] lg:max-w-[140px]">
+                      <div className="text-xs font-bold text-slate-900 truncate leading-tight">
+                        {currentUser.full_name}
+                      </div>
+                      <div className="text-[10px] text-slate-500 font-medium truncate leading-tight">
+                        {getRoleLabel()}
+                      </div>
+                    </div>
+                    <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                  </button>
+
+                  {userDropdownOpen && (
+                    <div className="absolute right-0 top-full mt-2 w-64 bg-white border border-slate-200 rounded-2xl shadow-xl p-2 z-50 animate-in fade-in zoom-in-95 duration-150">
+                      <div className="px-3 py-2.5 bg-slate-50 rounded-xl mb-1 border border-slate-100">
+                        <div className="text-xs font-bold text-slate-900 truncate">{currentUser.full_name}</div>
+                        <div className="text-[11px] text-slate-500 truncate mt-0.5">{currentUser.email}</div>
+                        <div className="mt-1.5 flex items-center gap-1.5">
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${getRoleBadgeColor()}`}>
+                            {getRoleLabel()}
+                          </span>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => handleNav('/profile')}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-colors"
+                      >
+                        <User className="w-4 h-4 text-slate-500" />
+                        <span>Thông tin tài khoản</span>
+                      </button>
+
+                      {isAdmin && (
+                        <button
+                          type="button"
+                          onClick={() => handleNav('/settings/school')}
+                          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-colors"
+                        >
+                          <Settings className="w-4 h-4 text-slate-500" />
+                          <span>Cấu hình nhà trường</span>
+                        </button>
+                      )}
+
+                      <div className="border-t border-slate-100 my-1 pt-1">
+                        <button
+                          type="button"
+                          onClick={logout}
+                          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-rose-600 hover:bg-rose-50 transition-colors"
+                        >
+                          <LogOut className="w-4 h-4 text-rose-600" />
+                          <span>Đăng xuất tài khoản</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Direct Logout Button */}
+                <button
+                  type="button"
+                  onClick={logout}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200/90 transition-all cursor-pointer shadow-2xs active:scale-95 shrink-0"
+                  title="Đăng xuất khỏi hệ thống"
+                >
+                  <LogOut className="w-3.5 h-3.5 text-rose-600" />
+                  <span>Đăng xuất</span>
+                </button>
+              </div>
+            ) : (
+              <div className="hidden md:flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleNav('/login')}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 transition-all cursor-pointer shadow-2xs active:scale-95 shrink-0"
+                >
+                  <LogIn className="w-3.5 h-3.5 text-white" />
+                  <span>Đăng nhập</span>
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -173,6 +295,45 @@ export const Navbar: React.FC<NavbarProps> = ({ currentPath, onNavigate, onToggl
       {/* 4. Mobile / Tablet Drawer Menu */}
       {mobileMenuOpen && (
         <div className="lg:hidden border-t border-slate-200 bg-white px-4 pt-3 pb-6 space-y-3 animate-in slide-in-from-top-2 duration-150 max-h-[85vh] overflow-y-auto">
+          {/* Mobile User Header Box */}
+          {currentUser ? (
+            <div className="p-3 bg-gradient-to-r from-slate-50 to-blue-50/50 rounded-2xl border border-slate-200/80 mb-2 flex items-center justify-between">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-9 h-9 rounded-xl bg-blue-600 text-white font-extrabold text-sm flex items-center justify-center shrink-0 shadow-2xs">
+                  {currentUser.full_name.charAt(0)}
+                </div>
+                <div className="min-w-0">
+                  <div className="text-xs font-extrabold text-slate-900 truncate leading-tight">
+                    {currentUser.full_name}
+                  </div>
+                  <div className="text-[10px] font-bold text-blue-700 truncate mt-0.5">
+                    {getRoleLabel()}
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={logout}
+                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-extrabold text-rose-700 bg-white border border-rose-200 hover:bg-rose-50 shadow-2xs shrink-0 active:scale-95 cursor-pointer"
+              >
+                <LogOut className="w-3.5 h-3.5 text-rose-600" />
+                <span>Đăng xuất</span>
+              </button>
+            </div>
+          ) : (
+            <div className="p-3 bg-blue-50 rounded-2xl border border-blue-200 mb-2 flex items-center justify-between">
+              <span className="text-xs font-bold text-blue-900">Chưa đăng nhập hệ thống</span>
+              <button
+                type="button"
+                onClick={() => handleNav('/login')}
+                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-extrabold text-white bg-blue-600 hover:bg-blue-700 shadow-2xs shrink-0 active:scale-95 cursor-pointer"
+              >
+                <LogIn className="w-3.5 h-3.5 text-white" />
+                <span>Đăng nhập</span>
+              </button>
+            </div>
+          )}
+
           {/* Main Direct Pages */}
           <div className="space-y-1">
             <button
@@ -380,20 +541,35 @@ export const Navbar: React.FC<NavbarProps> = ({ currentPath, onNavigate, onToggl
 
           {/* Account & Logout */}
           <div className="pt-3 border-t border-slate-200 flex items-center justify-between">
-            <button
-              onClick={() => handleNav('/profile')}
-              className="flex items-center gap-2 text-xs font-semibold text-slate-700 hover:text-blue-700"
-            >
-              <User className="w-4 h-4 text-slate-500" />
-              <span>{currentUser?.full_name}</span>
-            </button>
-            <button
-              onClick={logout}
-              className="flex items-center gap-1 text-xs font-semibold text-rose-600 px-2.5 py-1 rounded-lg hover:bg-rose-50"
-            >
-              <LogOut className="w-3.5 h-3.5" />
-              <span>Đăng xuất</span>
-            </button>
+            {currentUser ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => handleNav('/profile')}
+                  className="flex items-center gap-2 text-xs font-bold text-slate-700 hover:text-blue-700"
+                >
+                  <User className="w-4 h-4 text-slate-500" />
+                  <span>{currentUser.full_name}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={logout}
+                  className="inline-flex items-center gap-1.5 text-xs font-extrabold text-rose-700 bg-rose-50 px-3 py-1.5 rounded-xl border border-rose-200 hover:bg-rose-100 cursor-pointer active:scale-95"
+                >
+                  <LogOut className="w-3.5 h-3.5 text-rose-600" />
+                  <span>Đăng xuất</span>
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={() => handleNav('/login')}
+                className="w-full flex items-center justify-center gap-2 text-xs font-extrabold text-white bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-xl cursor-pointer shadow-2xs active:scale-95"
+              >
+                <LogIn className="w-4 h-4 text-white" />
+                <span>Đăng nhập vào hệ thống</span>
+              </button>
+            )}
           </div>
         </div>
       )}
