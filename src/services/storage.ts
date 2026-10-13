@@ -110,188 +110,6 @@ export function packExtSettingsIntoFooter(cleanFooter: string | undefined, setti
   return `${base}\n<!-- SSO_EXT_SETTINGS:${JSON.stringify(ext)} -->`.trim();
 }
 
-// In-memory fallback in case browser localStorage quota is reached
-const inMemoryStorageFallback = new Map<string, string>();
-
-export function isQuotaExceededError(err: any): boolean {
-  if (!err) return false;
-  return (
-    err.name === 'QuotaExceededError' ||
-    err.name === 'NS_ERROR_DOM_QUOTA_REACHED' ||
-    err.code === 22 ||
-    err.code === 1014 ||
-    String(err.message || '').toLowerCase().includes('quota') ||
-    String(err || '').toLowerCase().includes('quota')
-  );
-}
-
-export function cleanupStorageForQuota(): void {
-  if (typeof window === 'undefined') return;
-  try {
-    // 1. Dọn dẹp logs cũ - giữ tối đa 25 logs mới nhất
-    const rawLogs = localStorage.getItem(STORAGE_KEYS.LOGS);
-    if (rawLogs) {
-      try {
-        const logs = JSON.parse(rawLogs);
-        if (Array.isArray(logs) && logs.length > 25) {
-          localStorage.setItem(STORAGE_KEYS.LOGS, JSON.stringify(logs.slice(0, 25)));
-        }
-      } catch {}
-    }
-
-    // 2. Dọn dẹp notifications cũ - giữ tối đa 25 thông báo mới nhất
-    const rawNotifs = localStorage.getItem(STORAGE_KEYS.NOTIFICATIONS);
-    if (rawNotifs) {
-      try {
-        const notifs = JSON.parse(rawNotifs);
-        if (Array.isArray(notifs) && notifs.length > 25) {
-          localStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(notifs.slice(0, 25)));
-        }
-      } catch {}
-    }
-
-    // 3. Xóa các key rác, temporary keys, cache không cần thiết
-    const keysToRemove: string[] = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const k = localStorage.key(i);
-      if (!k) continue;
-      if (
-        k.startsWith('temp_') ||
-        k.startsWith('cache_') ||
-        k.startsWith('test_') ||
-        k.startsWith('debug_') ||
-        k.startsWith('preview_') ||
-        k.includes('_backup_') ||
-        k.includes('excel_cache') ||
-        k.includes('pdf_cache')
-      ) {
-        keysToRemove.push(k);
-      }
-    }
-    keysToRemove.forEach((k) => {
-      try { localStorage.removeItem(k); } catch {}
-    });
-
-    // 4. Giữ tối đa 60 báo cáo sĩ số gần nhất trong localStorage (dữ liệu đầy đủ đã có trên Supabase Cloud)
-    const rawReports = localStorage.getItem(STORAGE_KEYS.REPORTS);
-    if (rawReports) {
-      try {
-        const reports: any[] = JSON.parse(rawReports);
-        if (Array.isArray(reports) && reports.length > 60) {
-          reports.sort((a, b) => String(b.report_date || '').localeCompare(String(a.report_date || '')));
-          const recentReports = reports.slice(0, 60);
-          const recentReportIds = new Set(recentReports.map((r) => r.id));
-          localStorage.setItem(STORAGE_KEYS.REPORTS, JSON.stringify(recentReports));
-
-          // Dọn dẹp cả values tương ứng
-          const rawVals = localStorage.getItem(STORAGE_KEYS.VALUES);
-          if (rawVals) {
-            const vals: any[] = JSON.parse(rawVals);
-            if (Array.isArray(vals)) {
-              const recentVals = vals.filter((v) => recentReportIds.has(v.report_id));
-              localStorage.setItem(STORAGE_KEYS.VALUES, JSON.stringify(recentVals));
-            }
-          }
-        }
-      } catch {}
-    }
-
-    // 5. Giữ tối đa 40 ngày chấm ăn bán trú trong localStorage
-    const rawBoarding = localStorage.getItem(STORAGE_KEYS.BOARDING_REPORTS);
-    if (rawBoarding) {
-      try {
-        const bReps: any[] = JSON.parse(rawBoarding);
-        if (Array.isArray(bReps) && bReps.length > 40) {
-          bReps.sort((a, b) => String(b.date || b.report_date || '').localeCompare(String(a.date || a.report_date || '')));
-          localStorage.setItem(STORAGE_KEYS.BOARDING_REPORTS, JSON.stringify(bReps.slice(0, 40)));
-        }
-      } catch {}
-    }
-  } catch (err) {
-    console.warn('[Storage] Quota cleanup notice:', err);
-  }
-}
-
-function pruneDataForKey(key: string, value: string): string | null {
-  try {
-    if (key === STORAGE_KEYS.REPORTS) {
-      const reports = JSON.parse(value);
-      if (Array.isArray(reports)) {
-        reports.sort((a, b) => String(b.report_date || '').localeCompare(String(a.report_date || '')));
-        return JSON.stringify(reports.slice(0, 45));
-      }
-    } else if (key === STORAGE_KEYS.VALUES) {
-      const vals = JSON.parse(value);
-      if (Array.isArray(vals)) {
-        return JSON.stringify(vals.slice(-250));
-      }
-    } else if (key === STORAGE_KEYS.BOARDING_REPORTS) {
-      const bReps = JSON.parse(value);
-      if (Array.isArray(bReps)) {
-        bReps.sort((a, b) => String(b.date || b.report_date || '').localeCompare(String(a.date || a.report_date || '')));
-        return JSON.stringify(bReps.slice(0, 30));
-      }
-    } else if (key === STORAGE_KEYS.LOGS) {
-      const logs = JSON.parse(value);
-      if (Array.isArray(logs)) {
-        return JSON.stringify(logs.slice(0, 20));
-      }
-    } else if (key === STORAGE_KEYS.NOTIFICATIONS) {
-      const notifs = JSON.parse(value);
-      if (Array.isArray(notifs)) {
-        return JSON.stringify(notifs.slice(0, 20));
-      }
-    }
-  } catch {}
-  return null;
-}
-
-export function safeLocalStorageSet(key: string, value: string): boolean {
-  if (typeof window === 'undefined') return true;
-  try {
-    localStorage.setItem(key, value);
-    inMemoryStorageFallback.delete(key);
-    return true;
-  } catch (err: any) {
-    if (!isQuotaExceededError(err)) {
-      console.warn(`[Storage] Failed to save key "${key}":`, err);
-      inMemoryStorageFallback.set(key, value);
-      return false;
-    }
-
-    console.warn(`[Storage] Quota exceeded on "${key}". Cleaning up storage to free space...`);
-    cleanupStorageForQuota();
-
-    try {
-      localStorage.setItem(key, value);
-      inMemoryStorageFallback.delete(key);
-      return true;
-    } catch (retryErr: any) {
-      // Cắt gọn dữ liệu của chính key này
-      const pruned = pruneDataForKey(key, value);
-      if (pruned) {
-        try {
-          localStorage.setItem(key, pruned);
-          inMemoryStorageFallback.set(key, value);
-          return true;
-        } catch {}
-      }
-
-      // Lưu an toàn vào bộ nhớ tạm in-memory để không bao giờ quăng lỗi cho người dùng
-      inMemoryStorageFallback.set(key, value);
-      console.warn(`[Storage] Saved key "${key}" into in-memory fallback.`);
-      return false;
-    }
-  }
-}
-
-export function safeLocalStorageGet(key: string): string | null {
-  if (typeof window === 'undefined') return null;
-  const memoryVal = inMemoryStorageFallback.get(key);
-  if (memoryVal !== undefined) return memoryVal;
-  return localStorage.getItem(key);
-}
-
 // Cross-tab and in-tab realtime notification channel
 const realtimeChannel =
   typeof window !== 'undefined' && 'BroadcastChannel' in window
@@ -660,9 +478,6 @@ export function resetAllDataToEmpty() {
 export function ensureInitialized() {
   if (typeof window === 'undefined') return;
 
-  // Proactively keep storage within safe quota limits
-  cleanupStorageForQuota();
-
   if (localStorage.getItem(STORAGE_CLEAN_VERSION_KEY) !== 'v4_clean_blank_slate') {
     resetAllDataToEmpty();
     return;
@@ -700,8 +515,6 @@ export function ensureInitialized() {
 // STORAGE SERVICE CRUD & FULL SUPABASE PERSISTENCE API
 // ----------------------------------------------------
 export const StorageService = {
-  cleanupStorageForQuota,
-
   // --- 1. School Settings ---
   async getSettings(): Promise<SchoolSettings> {
     ensureInitialized();
@@ -2265,7 +2078,7 @@ export const StorageService = {
       list.push(finalReport);
     }
 
-    safeLocalStorageSet(STORAGE_KEYS.BOARDING_REPORTS, JSON.stringify(list));
+    localStorage.setItem(STORAGE_KEYS.BOARDING_REPORTS, JSON.stringify(list));
 
     const supabase = getSupabaseClient();
     if (supabase && isSupabaseConnected()) {
@@ -3312,10 +3125,10 @@ export const StorageService = {
     } else {
       reports.push(report);
     }
-    safeLocalStorageSet(STORAGE_KEYS.REPORTS, JSON.stringify(reports));
+    localStorage.setItem(STORAGE_KEYS.REPORTS, JSON.stringify(reports));
 
     // Update values (xóa sạch mọi giá trị cũ của báo cáo này để tránh rác / lệch số liệu)
-    const rawValues = safeLocalStorageGet(STORAGE_KEYS.VALUES);
+    const rawValues = localStorage.getItem(STORAGE_KEYS.VALUES);
     let allValues: DailyReportValue[] = rawValues ? JSON.parse(rawValues) : [];
     allValues = allValues.filter((v) => v.report_id !== reportId && (!prevReportId || v.report_id !== prevReportId));
 
@@ -3335,7 +3148,7 @@ export const StorageService = {
       newValues.push(vItem);
     });
 
-    safeLocalStorageSet(STORAGE_KEYS.VALUES, JSON.stringify(allValues));
+    localStorage.setItem(STORAGE_KEYS.VALUES, JSON.stringify(allValues));
 
     // PERSIST DIRECTLY TO SUPABASE (Awaited with timeout to ensure cloud persistence before realtime broadcast)
     let effectiveReportId = reportId;
@@ -3591,28 +3404,28 @@ export const StorageService = {
     const filteredReports = reports.filter(
       (r) => !(normCls(r.class_id) === targetNormCls && cleanDate(r.report_date) === cleanReportDate)
     );
-    safeLocalStorageSet(STORAGE_KEYS.REPORTS, JSON.stringify(filteredReports));
+    localStorage.setItem(STORAGE_KEYS.REPORTS, JSON.stringify(filteredReports));
 
     // 2. Xóa/reset sổ báo ăn bán trú tương ứng để đồng bộ đồng nhất
-    const rawBoarding = safeLocalStorageGet(STORAGE_KEYS.BOARDING_REPORTS);
+    const rawBoarding = localStorage.getItem(STORAGE_KEYS.BOARDING_REPORTS);
     if (rawBoarding) {
       try {
         const bReports: BoardingDailyReport[] = JSON.parse(rawBoarding);
         const filteredBoarding = bReports.filter(
           (br) => !(normCls(br.class_id) === targetNormCls && cleanDate(br.date) === cleanReportDate)
         );
-        safeLocalStorageSet(STORAGE_KEYS.BOARDING_REPORTS, JSON.stringify(filteredBoarding));
+        localStorage.setItem(STORAGE_KEYS.BOARDING_REPORTS, JSON.stringify(filteredBoarding));
       } catch {}
     }
 
     // 3. Xóa các giá trị chỉ tiêu tương ứng trong daily_report_values
-    const rawValues = safeLocalStorageGet(STORAGE_KEYS.VALUES);
+    const rawValues = localStorage.getItem(STORAGE_KEYS.VALUES);
     const allValues: DailyReportValue[] = rawValues ? JSON.parse(rawValues) : [];
     const reportIdsToDelete = new Set(matchingReports.map((r) => r.id));
     if (reportToDelete) reportIdsToDelete.add(reportToDelete.id);
 
     const filteredValues = allValues.filter((v) => !reportIdsToDelete.has(v.report_id));
-    safeLocalStorageSet(STORAGE_KEYS.VALUES, JSON.stringify(filteredValues));
+    localStorage.setItem(STORAGE_KEYS.VALUES, JSON.stringify(filteredValues));
 
     // 4. Xóa triệt để trên Supabase nếu có kết nối
     const supabase = getSupabaseClient();
@@ -5284,7 +5097,7 @@ export const StorageService = {
       created_at: new Date().toISOString(),
     };
     logs.unshift(item);
-    safeLocalStorageSet(STORAGE_KEYS.LOGS, JSON.stringify(logs.slice(0, 50)));
+    localStorage.setItem(STORAGE_KEYS.LOGS, JSON.stringify(logs.slice(0, 200)));
 
     const supabase = getSupabaseClient();
     if (supabase && isSupabaseConnected()) {
@@ -6473,7 +6286,7 @@ export const StorageService = {
 
       const updateMergedList = (storageKey: string, cloudList: any[]) => {
         if (!cloudList || cloudList.length === 0) return 0;
-        const raw = safeLocalStorageGet(storageKey);
+        const raw = localStorage.getItem(storageKey);
         let current: any[] = raw ? JSON.parse(raw) : [];
         const map = new Map<string, any>();
         current.forEach((item) => {
@@ -6482,22 +6295,8 @@ export const StorageService = {
         cloudList.forEach((item) => {
           if (item && item.id) map.set(item.id, { ...(map.get(item.id) || {}), ...item });
         });
-        let merged = Array.from(map.values());
-
-        // Quota safeguard for bulky collections from cloud
-        if (storageKey === STORAGE_KEYS.LOGS && merged.length > 30) {
-          merged = merged.slice(0, 30);
-        } else if (storageKey === STORAGE_KEYS.NOTIFICATIONS && merged.length > 30) {
-          merged = merged.slice(0, 30);
-        } else if (storageKey === STORAGE_KEYS.REPORTS && merged.length > 70) {
-          merged.sort((a, b) => String(b.report_date || '').localeCompare(String(a.report_date || '')));
-          merged = merged.slice(0, 70);
-        } else if (storageKey === STORAGE_KEYS.BOARDING_REPORTS && merged.length > 50) {
-          merged.sort((a, b) => String(b.date || b.report_date || '').localeCompare(String(a.date || a.report_date || '')));
-          merged = merged.slice(0, 50);
-        }
-
-        safeLocalStorageSet(storageKey, JSON.stringify(merged));
+        const merged = Array.from(map.values());
+        localStorage.setItem(storageKey, JSON.stringify(merged));
         return merged.length;
       };
 

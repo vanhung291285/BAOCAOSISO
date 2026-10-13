@@ -184,121 +184,6 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
   const [newAbsentReason, setNewAbsentReason] = useState<string>('Ốm');
   const [newAbsentIsBoarding, setNewAbsentIsBoarding] = useState<boolean>(false);
 
-  // Custom meals configuration for boarding students
-  const [customStudentMeals, setCustomStudentMeals] = useState<
-    Record<string, { breakfast: boolean; lunch: boolean; dinner: boolean }>
-  >({});
-  const [showBoardingMealsModal, setShowBoardingMealsModal] = useState<boolean>(false);
-  const [boardingSearchTerm, setBoardingSearchTerm] = useState<string>('');
-
-  // Batch meal selection for all present boarding students
-  const handleApplyBatchMealOption = (
-    option: 'all' | 'breakfast_only' | 'lunch_only' | 'dinner_only' | 'breakfast_lunch' | 'lunch_dinner'
-  ) => {
-    if (isLocked) return;
-    const expBoarding = classStudents.filter((s) => s.isBoarding === true || (s as any).is_boarding === true);
-
-    const absentSet = new Set<string>();
-    absentStudents.forEach((ab) => {
-      if (ab.id) absentSet.add(ab.id);
-      if (ab.full_name) absentSet.add(ab.full_name.trim().toLowerCase());
-    });
-
-    const updated: Record<string, { breakfast: boolean; lunch: boolean; dinner: boolean }> = { ...customStudentMeals };
-
-    expBoarding.forEach((st) => {
-      const isAbs = absentSet.has(st.id) || absentSet.has(st.full_name.trim().toLowerCase());
-      if (isAbs) {
-        updated[st.id] = { breakfast: false, lunch: false, dinner: false };
-        return;
-      }
-
-      switch (option) {
-        case 'all':
-          updated[st.id] = {
-            breakfast: currentMealSchedule.breakfastAllowed,
-            lunch: currentMealSchedule.lunchAllowed,
-            dinner: currentMealSchedule.dinnerAllowed,
-          };
-          break;
-        case 'breakfast_only':
-          updated[st.id] = { breakfast: true, lunch: false, dinner: false };
-          break;
-        case 'lunch_only':
-          updated[st.id] = { breakfast: false, lunch: true, dinner: false };
-          break;
-        case 'dinner_only':
-          updated[st.id] = { breakfast: false, lunch: false, dinner: true };
-          break;
-        case 'breakfast_lunch':
-          updated[st.id] = { breakfast: true, lunch: true, dinner: false };
-          break;
-        case 'lunch_dinner':
-          updated[st.id] = { breakfast: false, lunch: true, dinner: true };
-          break;
-      }
-    });
-
-    setCustomStudentMeals(updated);
-    setToastMessage({
-      text: `Đã cập nhật cấu hình bữa ăn cho tất cả học sinh bán trú!`,
-      type: 'info',
-    });
-  };
-
-  const handleToggleStudentMeal = (
-    studentId: string,
-    meal: 'breakfast' | 'lunch' | 'dinner'
-  ) => {
-    if (isLocked) return;
-    setCustomStudentMeals((prev) => {
-      const curr = prev[studentId] || {
-        breakfast: currentMealSchedule.breakfastAllowed,
-        lunch: currentMealSchedule.lunchAllowed,
-        dinner: currentMealSchedule.dinnerAllowed,
-      };
-      return {
-        ...prev,
-        [studentId]: {
-          ...curr,
-          [meal]: !curr[meal],
-        },
-      };
-    });
-  };
-
-  const handleSetStudentMealPreset = (
-    studentId: string,
-    option: 'all' | 'breakfast_only' | 'lunch_only' | 'dinner_only' | 'breakfast_lunch' | 'lunch_dinner'
-  ) => {
-    if (isLocked) return;
-    let newMeal = { breakfast: false, lunch: false, dinner: false };
-    switch (option) {
-      case 'all':
-        newMeal = { breakfast: true, lunch: true, dinner: true };
-        break;
-      case 'breakfast_only':
-        newMeal = { breakfast: true, lunch: false, dinner: false };
-        break;
-      case 'lunch_only':
-        newMeal = { breakfast: false, lunch: true, dinner: false };
-        break;
-      case 'dinner_only':
-        newMeal = { breakfast: false, lunch: false, dinner: true };
-        break;
-      case 'breakfast_lunch':
-        newMeal = { breakfast: true, lunch: true, dinner: false };
-        break;
-      case 'lunch_dinner':
-        newMeal = { breakfast: false, lunch: true, dinner: true };
-        break;
-    }
-    setCustomStudentMeals((prev) => ({
-      ...prev,
-      [studentId]: newMeal,
-    }));
-  };
-
   // Auto-hide toast after 4s
   useEffect(() => {
     if (toastMessage) {
@@ -468,29 +353,6 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
 
           setFormValues(newVals);
         }
-      }
-
-      // Tải cấu hình bữa ăn học sinh bán trú (nếu đã có báo cáo bán trú ngày này)
-      try {
-        const boardingRep = await StorageService.getBoardingReport(selectedClassId, selectedDate);
-        if (boardingRep && Array.isArray(boardingRep.records) && boardingRep.records.length > 0) {
-          const mealsMap: Record<string, { breakfast: boolean; lunch: boolean; dinner: boolean }> = {};
-          boardingRep.records.forEach((r) => {
-            if (r.student_id) {
-              mealsMap[r.student_id] = {
-                breakfast: Boolean(r.breakfast),
-                lunch: Boolean(r.lunch),
-                dinner: Boolean(r.dinner),
-              };
-            }
-          });
-          setCustomStudentMeals(mealsMap);
-        } else {
-          setCustomStudentMeals({});
-        }
-      } catch (bErr) {
-        console.warn('Error fetching boarding report for meals configuration:', bErr);
-        setCustomStudentMeals({});
       }
     } catch (err) {
       console.error('Error loading report for input:', err);
@@ -1277,20 +1139,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
               }
             });
           }
-
-          const customMap = new Map<string, { breakfast: boolean; lunch: boolean; dinner: boolean }>();
-          Object.entries(customStudentMeals).forEach(([sId, m]) => {
-            customMap.set(sId, m);
-          });
-
-          const synthRecords = buildDefaultMealRecords(
-            classBoardingStudents,
-            selectedDate,
-            selectedClassId,
-            absentMap,
-            settings,
-            customMap
-          );
+          const synthRecords = buildDefaultMealRecords(classBoardingStudents, selectedDate, selectedClassId, absentMap, settings);
           let bCount = 0;
           let lCount = 0;
           let dCount = 0;
@@ -1341,19 +1190,10 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
       }
     } catch (err: any) {
       console.error('Error saving report:', err);
-      const isQuota = String(err?.message || '').toLowerCase().includes('quota');
-      if (isQuota) {
-        StorageService.cleanupStorageForQuota();
-        setToastMessage({
-          text: 'Bộ nhớ trình duyệt đã đầy. Hệ thống đã tự động dọn dẹp bộ nhớ đệm, vui lòng bấm Gửi báo cáo lại!',
-          type: 'error',
-        });
-      } else {
-        setToastMessage({
-          text: err?.message || 'Có lỗi xảy ra khi lưu báo cáo!',
-          type: 'error',
-        });
-      }
+      setToastMessage({
+        text: err?.message || 'Có lỗi xảy ra khi lưu báo cáo!',
+        type: 'error',
+      });
     } finally {
       setIsSaving(false);
     }
@@ -2015,101 +1855,6 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                   />
                 </div>
               </div>
-
-              {/* TÍCH HỢP NÚT CHỌN TỪNG BỮA ĂN CỦA HS BÁN TRÚ TRỰC TIẾP VÀO THẺ BÁO CÁO NHƯ HÌNH */}
-              {isBoarding && (
-                <div className="mt-3.5 pt-3 border-t border-emerald-200/80 bg-emerald-100/40 -mx-3.5 sm:-mx-5 -mb-3.5 sm:-mb-5 p-3 sm:p-4 rounded-b-2xl border-t">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-2.5">
-                    <div className="flex items-center gap-2">
-                      <span className="p-1 rounded-lg bg-emerald-600 text-white shadow-2xs">
-                        <Utensils className="w-3.5 h-3.5" />
-                      </span>
-                      <div>
-                        <div className="text-xs font-black text-emerald-950 uppercase tracking-tight flex items-center gap-1.5">
-                          <span>Chế độ báo ăn bán trú:</span>
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-200 text-emerald-900 border border-emerald-300 lowercase">
-                            đồng bộ tự động sang sổ chấm ăn
-                          </span>
-                        </div>
-                        <div className="text-[11px] text-emerald-800 font-medium">
-                          Bấm chọn chế độ ăn của cả lớp hoặc tùy chỉnh riêng từng học sinh
-                        </div>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setShowBoardingMealsModal(true)}
-                      className="px-3 py-1.5 rounded-xl text-xs font-black text-emerald-950 bg-white hover:bg-emerald-50 border-2 border-emerald-400 hover:border-emerald-500 transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-xs active:scale-95 shrink-0"
-                    >
-                      <Sparkles className="w-3.5 h-3.5 text-emerald-700" />
-                      <span>Chi tiết từng học sinh ({classStudents.filter((s) => s.isBoarding === true || (s as any).is_boarding === true).length} em)</span>
-                    </button>
-                  </div>
-
-                  {/* CÁC NÚT TÙY CHỌN BỮA ĂN NHƯ YÊU CẦU */}
-                  <div className="flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => handleApplyBatchMealOption('all')}
-                      className="px-3 py-1.5 rounded-xl text-xs font-black bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition-all cursor-pointer flex items-center gap-1.5 active:scale-95"
-                      title="Báo ăn cả 3 bữa: Sáng, Trưa, Tối"
-                    >
-                      <span>🍱</span>
-                      <span>Ăn cả 3 bữa</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => handleApplyBatchMealOption('breakfast_only')}
-                      className="px-3 py-1.5 rounded-xl text-xs font-bold bg-white hover:bg-amber-50 text-amber-950 border-2 border-amber-300 shadow-2xs transition-all cursor-pointer flex items-center gap-1.5 active:scale-95"
-                      title="Chỉ báo ăn bữa sáng"
-                    >
-                      <span>🌅</span>
-                      <span>Chỉ ăn sáng</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => handleApplyBatchMealOption('lunch_only')}
-                      className="px-3 py-1.5 rounded-xl text-xs font-bold bg-white hover:bg-blue-50 text-blue-950 border-2 border-blue-300 shadow-2xs transition-all cursor-pointer flex items-center gap-1.5 active:scale-95"
-                      title="Chỉ báo ăn bữa trưa"
-                    >
-                      <span>☀️</span>
-                      <span>Chỉ ăn trưa</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => handleApplyBatchMealOption('dinner_only')}
-                      className="px-3 py-1.5 rounded-xl text-xs font-bold bg-white hover:bg-purple-50 text-purple-950 border-2 border-purple-300 shadow-2xs transition-all cursor-pointer flex items-center gap-1.5 active:scale-95"
-                      title="Chỉ báo ăn bữa tối"
-                    >
-                      <span>🌙</span>
-                      <span>Chỉ ăn tối</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => handleApplyBatchMealOption('breakfast_lunch')}
-                      className="px-3 py-1.5 rounded-xl text-xs font-bold bg-white hover:bg-teal-50 text-teal-950 border-2 border-teal-300 shadow-2xs transition-all cursor-pointer flex items-center gap-1.5 active:scale-95"
-                      title="Báo ăn 2 bữa: Sáng và Trưa"
-                    >
-                      <span>🥐</span>
-                      <span>Ăn sáng + trưa</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => handleApplyBatchMealOption('lunch_dinner')}
-                      className="px-3 py-1.5 rounded-xl text-xs font-bold bg-white hover:bg-indigo-50 text-indigo-950 border-2 border-indigo-300 shadow-2xs transition-all cursor-pointer flex items-center gap-1.5 active:scale-95"
-                      title="Báo ăn 2 bữa: Trưa và Tối"
-                    >
-                      <span>🍲</span>
-                      <span>Ăn trưa + tối</span>
-                    </button>
-                  </div>
-                </div>
-              )}
             </div>
           );
         })}
@@ -2216,78 +1961,6 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                     KHÔNG ĂN TẠI TRƯỜNG
                   </div>
                 </div>
-              </div>
-            </div>
-
-            {/* Thanh Cấu hình Bữa ăn Bán trú (Sáng, Trưa, Tối) */}
-            <div className="mt-3.5 pt-3 border-t border-emerald-100 flex flex-col gap-2.5 bg-emerald-50/70 p-3.5 rounded-xl border border-emerald-200/90 shadow-xs">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-emerald-700 shrink-0" />
-                  <span className="text-xs font-black text-emerald-950 uppercase tracking-tight">
-                    Cấu hình bữa ăn bán trú (Sáng, Trưa, Tối):
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setShowBoardingMealsModal(true)}
-                  className="px-3 py-1.5 rounded-xl text-xs font-black text-emerald-950 bg-emerald-200/90 hover:bg-emerald-300 border border-emerald-400 transition-all flex items-center gap-1.5 cursor-pointer shrink-0 shadow-2xs active:scale-95"
-                >
-                  <Utensils className="w-3.5 h-3.5 text-emerald-900" />
-                  <span>Tùy chỉnh từng HS ({expBoarding.length} em)</span>
-                </button>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-1.5">
-                <span className="text-[11px] font-bold text-slate-600 mr-1">Tùy chọn nhanh cả lớp:</span>
-                <button
-                  type="button"
-                  onClick={() => handleApplyBatchMealOption('all')}
-                  className="px-2.5 py-1 rounded-lg text-xs font-bold bg-white hover:bg-emerald-100 text-emerald-950 border border-emerald-300 transition-all cursor-pointer shadow-2xs"
-                  title="Tất cả HS bán trú ăn đủ 3 bữa Sáng - Trưa - Tối"
-                >
-                  🍱 Ăn cả 3 bữa
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleApplyBatchMealOption('breakfast_only')}
-                  className="px-2.5 py-1 rounded-lg text-xs font-bold bg-white hover:bg-amber-100 text-amber-950 border border-amber-300 transition-all cursor-pointer shadow-2xs"
-                  title="Tất cả HS bán trú chỉ ăn sáng"
-                >
-                  🌅 Chỉ ăn sáng
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleApplyBatchMealOption('lunch_only')}
-                  className="px-2.5 py-1 rounded-lg text-xs font-bold bg-white hover:bg-blue-100 text-blue-950 border border-blue-300 transition-all cursor-pointer shadow-2xs"
-                  title="Tất cả HS bán trú chỉ ăn trưa"
-                >
-                  ☀️ Chỉ ăn trưa
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleApplyBatchMealOption('dinner_only')}
-                  className="px-2.5 py-1 rounded-lg text-xs font-bold bg-white hover:bg-purple-100 text-purple-950 border border-purple-300 transition-all cursor-pointer shadow-2xs"
-                  title="Tất cả HS bán trú chỉ ăn tối"
-                >
-                  🌙 Chỉ ăn tối
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleApplyBatchMealOption('breakfast_lunch')}
-                  className="px-2.5 py-1 rounded-lg text-xs font-bold bg-white hover:bg-teal-100 text-teal-950 border border-teal-300 transition-all cursor-pointer shadow-2xs"
-                  title="Tất cả HS bán trú ăn Sáng và Trưa"
-                >
-                  🥐 Ăn sáng + trưa
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleApplyBatchMealOption('lunch_dinner')}
-                  className="px-2.5 py-1 rounded-lg text-xs font-bold bg-white hover:bg-indigo-100 text-indigo-950 border border-indigo-300 transition-all cursor-pointer shadow-2xs"
-                  title="Tất cả HS bán trú ăn Trưa và Tối"
-                >
-                  🍱 Ăn trưa + tối
-                </button>
               </div>
             </div>
 

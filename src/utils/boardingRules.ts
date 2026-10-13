@@ -216,8 +216,7 @@ export function buildDefaultMealRecords(
   dateStr: string,
   classId: string,
   absentStudentsMap?: Map<string, { reason?: string }>,
-  customSettings?: Partial<SchoolSettings>,
-  customMealsMap?: Map<string, { breakfast: boolean; lunch: boolean; dinner: boolean }>
+  customSettings?: Partial<SchoolSettings>
 ): BoardingMealRecord[] {
   const schedule = getMealScheduleForDate(dateStr, undefined, customSettings);
 
@@ -260,8 +259,6 @@ export function buildDefaultMealRecords(
       };
     }
 
-    const custom = (st.id ? customMealsMap?.get(st.id) : undefined) || customMealsMap?.get(normName);
-
     return {
       id: `meal_${classId}_${dateStr}_${st.id}`,
       class_id: classId,
@@ -270,9 +267,9 @@ export function buildDefaultMealRecords(
       student_name: st.full_name,
       gender: st.gender,
       village: st.village || st.address,
-      breakfast: custom ? custom.breakfast : schedule.breakfastAllowed,
-      lunch: custom ? custom.lunch : schedule.lunchAllowed,
-      dinner: custom ? custom.dinner : schedule.dinnerAllowed,
+      breakfast: schedule.breakfastAllowed,
+      lunch: schedule.lunchAllowed,
+      dinner: schedule.dinnerAllowed,
       is_absent: false,
       absent_reason: '',
       notes: '',
