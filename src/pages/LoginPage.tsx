@@ -265,6 +265,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
 
         if (rememberLogin) {
           localStorage.setItem('sso_admin_remember_login', 'true');
+          localStorage.setItem('sso_saved_admin_email', cleanEmail);
         }
 
         const ok = await login(email);
@@ -687,7 +688,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                   setActiveTab('ADMIN');
                   setError('');
                   setSsoNotice(null);
-                  setEmail('');
+                  const savedEmail = localStorage.getItem('sso_saved_admin_email');
+                  setEmail(savedEmail || '');
                   setPassword('');
                 }}
                 className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer text-center select-none ${
@@ -767,8 +769,9 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                     /* ADMIN: TÀI KHOẢN HOẶC EMAIL */
                     <input
                       id="login-admin-email"
+                      name="username"
                       type="text"
-                      autoComplete="off"
+                      autoComplete="username"
                       autoCapitalize="none"
                       autoCorrect="off"
                       spellCheck="false"
@@ -825,8 +828,9 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                     <Lock className="w-4 h-4 text-slate-400 shrink-0 mr-2.5" />
                     <input
                       id="login-admin-password"
+                      name="password"
                       type={showPassword ? 'text' : 'password'}
-                      autoComplete="new-password"
+                      autoComplete="current-password"
                       autoCapitalize="none"
                       autoCorrect="off"
                       spellCheck="false"
