@@ -1125,14 +1125,57 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
             String(k).replace(/^lớp\s*/i, '').trim().toLowerCase(),
           ]);
         const validClassSet = new Set(validClassKeys);
-        let classBoardingStudents = students.filter((s) => {
-          if (s.isBoarding === false) return false;
+
+        // Lấy đúng học sinh BÁN TRÚ của lớp (chỉ những em có isBoarding === true, loại bỏ tuyệt đối học sinh ngoại trú)
+        const rawBoardingStudents = students.filter((s) => {
+          const isBoarding = s.isBoarding === true || (s as any).is_boarding === true;
+          if (!isBoarding) return false;
           const sCls = String(s.class_id || '').trim().toLowerCase();
           const sClsClean = sCls.replace(/^c_/, '').replace(/^lớp\s*/i, '');
           return validClassSet.has(sCls) || validClassSet.has(sClsClean);
         });
 
-        if (classBoardingStudents.length > 0) {
+        // Khử trùng lặp học sinh theo ID và Tên
+        const seenIds = new Set<string>();
+        const seenNames = new Set<string>();
+        let classBoardingStudents: typeof students = [];
+        for (const s of rawBoardingStudents) {
+          if (!s || !s.full_name) continue;
+          const sId = String(s.id || '').trim();
+          const normName = s.full_name.trim().toLowerCase();
+          if (sId && seenIds.has(sId)) continue;
+          if (normName && seenNames.has(normName)) continue;
+          if (sId) seenIds.add(sId);
+          if (normName) seenNames.add(normName);
+          classBoardingStudents.push(s);
+        }
+
+        // Lấy chỉ tiêu Bán trú mà GVCN vừa nhập trong bảng báo cáo sĩ số
+        const bInd = enabledIndicators.find(
+          (i) =>
+            i.id === 'ig_boarding' ||
+            i.id === 'ig_boarding_half' ||
+            i.code.includes('BOARDING') ||
+            i.name.toLowerCase().includes('bán trú') ||
+            i.name.toLowerCase().includes('ăn trưa')
+        );
+        const enteredBoardingTotal =
+          bInd && formValues[bInd.id]?.total !== undefined && formValues[bInd.id]?.total !== ''
+            ? Number(formValues[bInd.id]?.total)
+            : undefined;
+
+        // Sĩ số bán trú chuẩn hóa theo đúng số liệu GVCN đã báo cáo (ví dụ: lớp 6A9 là 30)
+        const finalBoardingCount =
+          enteredBoardingTotal !== undefined && enteredBoardingTotal >= 0
+            ? enteredBoardingTotal
+            : classBoardingStudents.length;
+
+        // Nếu danh sách học sinh roster vượt quá sĩ số đã báo cáo, giới hạn danh sách đúng bằng số đã báo cáo
+        if (enteredBoardingTotal !== undefined && enteredBoardingTotal >= 0 && classBoardingStudents.length > enteredBoardingTotal) {
+          classBoardingStudents = classBoardingStudents.slice(0, enteredBoardingTotal);
+        }
+
+        if (classBoardingStudents.length > 0 || finalBoardingCount > 0) {
           const absentMap = new Map<string, { reason?: string }>();
           if (absentStudents) {
             absentStudents.forEach((ab) => {
@@ -1161,12 +1204,17 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
             if (r.is_absent) abCount++;
           });
 
+          // Nếu có số lượng sĩ số bán trú chính thức, đảm bảo các bữa ăn không vượt quá số này
+          bCount = Math.min(bCount, finalBoardingCount);
+          lCount = Math.min(lCount, finalBoardingCount);
+          dCount = Math.min(dCount, finalBoardingCount);
+
           const synthReport: BoardingDailyReport = {
             id: `boarding_rep_${selectedClassId}_${selectedDate}`,
             class_id: selectedClassId,
             date: selectedDate,
             status: 'SUBMITTED',
-            total_boarding_students: classBoardingStudents.length,
+            total_boarding_students: finalBoardingCount,
             breakfast_count: bCount,
             lunch_count: lCount,
             dinner_count: dCount,

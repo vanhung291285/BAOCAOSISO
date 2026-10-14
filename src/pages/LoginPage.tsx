@@ -266,6 +266,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
         if (rememberLogin) {
           localStorage.setItem('sso_admin_remember_login', 'true');
           localStorage.setItem('sso_saved_admin_email', cleanEmail);
+          localStorage.setItem('sso_saved_admin_password', password.trim());
         }
 
         const ok = await login(email);
@@ -689,8 +690,9 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                   setError('');
                   setSsoNotice(null);
                   const savedEmail = localStorage.getItem('sso_saved_admin_email');
+                  const savedPass = localStorage.getItem('sso_saved_admin_password');
                   setEmail(savedEmail || '');
-                  setPassword('');
+                  setPassword(savedPass || '');
                 }}
                 className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer text-center select-none ${
                   activeTab === 'ADMIN'
@@ -729,7 +731,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
             )}
 
             {/* FORM ĐĂNG NHẬP */}
-            <form onSubmit={handleLoginSubmit} className="space-y-3">
+            <form onSubmit={handleLoginSubmit} method="post" action="#" className="space-y-3">
               {/* ========================================================
                   Ô 1: TÀI KHOẢN EMAIL -> THAY BẰNG "TÊN LỚP" (GVCN)
                   Mặc định: "Chọn tên lớp"
