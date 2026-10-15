@@ -212,31 +212,25 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
             created_at: new Date().toISOString(),
           };
 
+          teacher = newProfile;
+
           try {
             await StorageService.saveProfile(newProfile);
             currentClass.homeroom_teacher_id = teacherId;
             await StorageService.saveClass(currentClass);
             await reloadUsers();
-            teacher = newProfile;
           } catch (saveErr) {
             console.warn('Auto create teacher profile fallback:', saveErr);
           }
         }
 
-        const targetTeacherId =
-          teacher?.id || selectedTeacherId || allUsers.find((u) => u.role === 'GVCN')?.id;
-
-        if (!targetTeacherId) {
-          setError('Chưa thể xác định thông tin giáo viên chủ nhiệm.');
-          setIsSubmitting(false);
-          return;
-        }
+        const targetTeacherId = teacher?.id || selectedTeacherId || `teacher_${currentClass.id}`;
 
         if (rememberLogin) {
           localStorage.setItem('sso_saved_active_tab', 'GVCN');
         }
 
-        await switchUser(targetTeacherId);
+        await switchUser(targetTeacherId, teacher);
         onLoginSuccess('/attendance');
       } else {
         // ADMIN / BGH login
