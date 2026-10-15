@@ -1068,7 +1068,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
       return;
     }
 
-    if (isLocked || !isValid || !currentUser || !selectedClassId) return;
+    if (isSaving || isLocked || !isValid || !currentUser || !selectedClassId) return;
 
     setIsSaving(true);
     try {
