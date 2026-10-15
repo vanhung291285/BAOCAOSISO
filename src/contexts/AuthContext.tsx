@@ -92,23 +92,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             return;
           }
 
-          // GVCN: Chỉ duy trì nếu đã được đăng nhập chủ động trong bộ nhớ React hiện tại
-          if (currentUser && currentUser.id === match.id) {
+          // GVCN: Duy trì phiên làm việc nếu có sso_session_active hoặc savedId khớp
+          const isSessionActive = sessionStorage.getItem('sso_session_active') === 'true';
+          const hasSessionId = sessionStorage.getItem(CURRENT_USER_KEY) === savedId;
+          if (isSessionActive || hasSessionId || (currentUser && (currentUser as Profile).id === match.id)) {
+            sessionStorage.setItem('sso_session_active', 'true');
+            sessionStorage.setItem(CURRENT_USER_KEY, match.id);
             setCurrentUser(match);
             return;
           }
-
-          localStorage.removeItem(CURRENT_USER_KEY);
-          sessionStorage.removeItem(CURRENT_USER_KEY);
-          setCurrentUser(null);
-          return;
         }
       }
-
-      setCurrentUser(null);
     } catch (err) {
       console.error('Error in reloadUsers:', err);
-      setCurrentUser(null);
     }
   };
 
