@@ -7,7 +7,7 @@ interface AuthContextType {
   loading: boolean;
   login: (email: string) => Promise<boolean>;
   logout: () => void;
-  switchUser: (userId: string) => Promise<void>;
+  switchUser: (userId: string, fallbackProfile?: Profile) => Promise<void>;
   updateCurrentProfile: (data: Partial<Profile>) => Promise<void>;
   allUsers: Profile[];
   reloadUsers: () => Promise<void>;
@@ -191,25 +191,53 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setCurrentUser(null);
   };
 
-  const switchUser = async (userId: string) => {
-    const users = await StorageService.getProfiles();
-    const match = users.find((u) => u.id === userId);
-    if (match) {
-      setCurrentUser(match);
-      sessionStorage.setItem('sso_session_active', 'true');
-      sessionStorage.setItem(CURRENT_USER_KEY, match.id);
+  const switchUser = async (userId: string, fallbackProfile?: Profile) => {
+    let users: Profile[] = [];
+    try {
+      users = await StorageService.getProfiles();
+    } catch {
+      users = allUsers;
+    }
 
-      const isRemembered = localStorage.getItem('sso_admin_remember_login') !== 'false';
-      if (match.role === 'ADMIN' || match.role === 'BGH') {
-        if (isRemembered) {
-          localStorage.setItem(CURRENT_USER_KEY, match.id);
-        } else {
-          localStorage.removeItem(CURRENT_USER_KEY);
-        }
+    let match = users.find((u) => u.id === userId);
+    if (!match && fallbackProfile && fallbackProfile.id === userId) {
+      match = fallbackProfile;
+    }
+    if (!match) {
+      match = allUsers.find(
+        (u) => u.id === userId || (u.role === 'GVCN' && u.assigned_class_id === userId)
+      );
+    }
+    if (!match && fallbackProfile) {
+      match = fallbackProfile;
+    }
+
+    if (!match) {
+      // Create emergency GVCN profile if no match exists
+      match = {
+        id: userId,
+        full_name: `GVCN (${userId})`,
+        email: `gvcn_${userId.toLowerCase().replace(/[^a-z0-9]/g, '')}@xadung.edu.vn`,
+        role: 'GVCN',
+        active: true,
+        assigned_class_id: userId,
+        created_at: new Date().toISOString(),
+      };
+    }
+
+    setCurrentUser(match);
+    sessionStorage.setItem('sso_session_active', 'true');
+    sessionStorage.setItem(CURRENT_USER_KEY, match.id);
+
+    const isRemembered = localStorage.getItem('sso_admin_remember_login') !== 'false';
+    if (match.role === 'ADMIN' || match.role === 'BGH') {
+      if (isRemembered) {
+        localStorage.setItem(CURRENT_USER_KEY, match.id);
       } else {
-        // GVCN: Mỗi lần vào báo cáo sĩ số thì phải thực hiện thao tác đăng nhập ở cửa sổ đăng nhập
         localStorage.removeItem(CURRENT_USER_KEY);
       }
+    } else {
+      localStorage.removeItem(CURRENT_USER_KEY);
     }
   };
 
