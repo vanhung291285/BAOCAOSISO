@@ -385,3 +385,93 @@ export interface BoardingMonthSignature {
   updated_at?: string;
 }
 
+// --- Weekly Report Types ---
+export interface WeeklyDayData {
+  date: string; // YYYY-MM-DD
+  dayOfWeek: number; // 1 = Mon ... 5 = Fri
+  dayLabel: string; // "Thứ Hai (07/09)"
+  isReported: boolean;
+  total: number;
+  present: number;
+  absent: number;
+  rate: number; // present rate %
+  absentRate: number; // absent rate %
+  boardingTotal: number;
+  boardingPresent: number;
+  boardingAbsent: number;
+  boardingMeals: number;
+  reportedTime?: string;
+  isEarly?: boolean;
+  absentStudents: AbsentStudent[];
+}
+
+export interface ClassWeeklySummary {
+  classItem: ClassItem;
+  teacherName: string;
+  campusName: string;
+  days: WeeklyDayData[]; // 5 days: Mon -> Fri
+  totalSessionsReported: number; // e.g. 5
+  totalEnrollment: number;
+  sumPresent: number;
+  sumAbsent: number;
+  avgPresentRate: number;
+  totalBoardingMeals: number;
+  earlyReportsCount: number;
+  absentStudentsAllWeek: {
+    studentId?: string;
+    studentName: string;
+    date: string;
+    dayLabel: string;
+    reason?: string;
+    address?: string;
+  }[];
+}
+
+export interface CampusWeeklySummary {
+  campus: Campus;
+  totalClasses: number;
+  totalStudents: number;
+  classes: ClassWeeklySummary[];
+  dayAverages: {
+    date: string;
+    dayLabel: string;
+    total: number;
+    present: number;
+    absent: number;
+    rate: number;
+    boardingMeals: number;
+  }[];
+  avgPresentRate: number;
+  totalWeeklyAbsent: number;
+  totalWeeklyBoardingMeals: number;
+}
+
+export interface SchoolWeeklyAggregate {
+  weekNumber: number;
+  startDate: string;
+  endDate: string;
+  label: string;
+  isCurrent: boolean;
+  classesSummary: ClassWeeklySummary[];
+  campusesSummary: CampusWeeklySummary[];
+  schoolTotals: {
+    totalClasses: number;
+    totalStudents: number;
+    avgDailyPresent: number;
+    avgDailyAbsent: number;
+    avgPresentRate: number;
+    totalWeeklyAbsent: number;
+    totalBoardingMeals: number;
+    fullyReportedClassesCount: number;
+    dayTotals: {
+      date: string;
+      dayLabel: string;
+      total: number;
+      present: number;
+      absent: number;
+      rate: number;
+      boardingMeals: number;
+      reportedCount: number;
+    }[];
+  };
+}

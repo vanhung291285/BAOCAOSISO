@@ -25,6 +25,10 @@ import {
   BoardingSignatureConfig,
   BoardingMonthSignature,
   BoardingStandardMealConfig,
+  SchoolWeeklyAggregate,
+  ClassWeeklySummary,
+  CampusWeeklySummary,
+  WeeklyDayData,
 } from '../types';
 import { getSupabaseClient, isSupabaseConnected } from './supabase';
 import {
@@ -40,6 +44,7 @@ import {
   parseDateParts,
   getTodayDateStr,
   formatDateVN,
+  formatDayMonthVN,
 } from '../utils/schoolWeeks';
 import { resolveTeacherName, DEFAULT_CLASS_TEACHER_MAP } from '../utils/exportAttendanceStandardExcel';
 import {
@@ -4845,6 +4850,392 @@ export const StorageService = {
         avgPresentRate,
       },
     };
+  },
+
+  // --- 9.0 Báo cáo theo Tuần (Từng lớp, Từng phân hiệu, Tổng hợp theo trường) ---
+  async getWeeklyAggregate(
+    weekNumber: number,
+    week1StartDate?: string,
+    campusId?: string,
+    classId?: string
+  ): Promise<SchoolWeeklyAggregate> {
+    ensureInitialized();
+    const settings = await this.getSchoolSettings();
+    const refStartDate = week1StartDate || settings.week1_start_date || DEFAULT_WEEK1_START_DATE;
+    const weekInfo = getSchoolWeekInfo(weekNumber, refStartDate);
+    const today = getTodayDateStr();
+    const isCurrent = today >= weekInfo.startDate && today <= addDaysToDateStr(weekInfo.startDate, 6);
+
+    const CACHE_KEY = `weekly_aggregate_w${weekNumber}_${refStartDate}_${campusId || 'all'}_${classId || 'all'}`;
+    const cached = getCached<SchoolWeeklyAggregate>(CACHE_KEY);
+    if (cached) return cached;
+
+    return coalesceRequest(CACHE_KEY, async () => {
+      // 5 ngày học trong tuần: Thứ 2 đến Thứ 6
+      const weekDates = [0, 1, 2, 3, 4].map((offset) => addDaysToDateStr(weekInfo.startDate, offset));
+      const mondayStr = weekDates[0];
+      const fridayStr = weekDates[4];
+
+      // Đồng bộ từ Supabase nếu có kết nối
+      const supabase = getSupabaseClient();
+      if (supabase && isSupabaseConnected()) {
+        try {
+          const { data: cloudReports } = await supabase
+            .from('daily_reports')
+            .select('*')
+            .gte('report_date', mondayStr)
+            .lte('report_date', fridayStr);
+
+          if (cloudReports && cloudReports.length > 0) {
+            const rawReports = localStorage.getItem(STORAGE_KEYS.REPORTS);
+            let reports: DailyReport[] = rawReports ? JSON.parse(rawReports) : [];
+            cloudReports.forEach((cRep) => {
+              const cleanDate = String(cRep.report_date).split('T')[0].trim();
+              const repObj = { ...cRep, report_date: cleanDate };
+              const idx = reports.findIndex(
+                (r) =>
+                  r.id === cRep.id ||
+                  (String(r.class_id).toLowerCase() === String(cRep.class_id).toLowerCase() &&
+                    String(r.report_date).split('T')[0] === cleanDate)
+              );
+              if (idx >= 0) reports[idx] = repObj;
+              else reports.push(repObj);
+            });
+            localStorage.setItem(STORAGE_KEYS.REPORTS, JSON.stringify(reports));
+
+            const repIds = cloudReports.map((r) => r.id);
+            if (repIds.length > 0) {
+              const { data: cloudValues } = await supabase
+                .from('daily_report_values')
+                .select('*')
+                .in('report_id', repIds);
+
+              if (cloudValues) {
+                const rawValues = localStorage.getItem(STORAGE_KEYS.VALUES);
+                let allValues: DailyReportValue[] = rawValues ? JSON.parse(rawValues) : [];
+                cloudValues.forEach((cVal) => {
+                  const vIdx = allValues.findIndex(
+                    (v) =>
+                      v.id === cVal.id ||
+                      (v.report_id === cVal.report_id && v.indicator_group_id === cVal.indicator_group_id)
+                  );
+                  if (vIdx >= 0) allValues[vIdx] = cVal;
+                  else allValues.push(cVal);
+                });
+                localStorage.setItem(STORAGE_KEYS.VALUES, JSON.stringify(allValues));
+              }
+            }
+          }
+        } catch (err) {
+          console.warn('Supabase fetch weekly aggregate fallback to local:', err);
+        }
+      }
+
+      const [allClasses, allCampuses, allProfiles, indicators, rawBoardingReports] = await Promise.all([
+        this.getClasses(),
+        this.getCampuses(),
+        this.getProfiles(),
+        this.getIndicatorGroups(),
+        this.getBoardingReports(),
+      ]);
+
+      const rawReports = localStorage.getItem(STORAGE_KEYS.REPORTS);
+      const reports: DailyReport[] = rawReports ? JSON.parse(rawReports) : [];
+      const rawValues = localStorage.getItem(STORAGE_KEYS.VALUES);
+      const allValues: DailyReportValue[] = rawValues ? JSON.parse(rawValues) : [];
+
+      const allIndicator = indicators.find((i) => i.code === 'ALL') || indicators[0];
+      const boardingIndicator = indicators.find(
+        (i) => i.id === 'ig_boarding' || i.id === 'ig_boarding_half' || i.code.includes('BOARDING') || i.name.toLowerCase().includes('bán trú')
+      );
+
+      // Lọc các lớp active
+      let targetClasses = allClasses.filter((c) => c.active);
+      if (campusId && campusId !== 'all') {
+        targetClasses = targetClasses.filter((c) => c.campus_id === campusId);
+      }
+      if (classId && classId !== 'all') {
+        const cLower = String(classId).trim().toLowerCase();
+        targetClasses = targetClasses.filter((c) => c.id === classId || c.class_name.toLowerCase() === cLower);
+      }
+
+      // Sắp xếp lớp theo khối và tên
+      targetClasses.sort((a, b) => {
+        if (a.grade !== b.grade) return (a.grade || 0) - (b.grade || 0);
+        return a.class_name.localeCompare(b.class_name, undefined, { numeric: true });
+      });
+
+      const dayNames = ['Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu'];
+
+      // Xây dựng dữ liệu tuần cho từng lớp
+      const classesSummary: ClassWeeklySummary[] = targetClasses.map((cls) => {
+        const teacher = allProfiles.find((p) => p.id === cls.homeroom_teacher_id) || null;
+        const teacherName = resolveTeacherName(cls.class_name, teacher?.full_name);
+        const campusObj = allCampuses.find((cp) => cp.id === cls.campus_id);
+        const campusName = campusObj?.name || 'Phân hiệu chính';
+
+        const validClassKeys = new Set([
+          cls.id,
+          cls.class_name,
+          cls.id.toLowerCase(),
+          cls.class_name.toLowerCase(),
+          cls.class_name.replace(/^lớp\s*/i, '').toLowerCase(),
+        ]);
+
+        const daysData: WeeklyDayData[] = weekDates.map((dateStr, idx) => {
+          const dayOfWeek = idx + 1; // 1 = Mon ... 5 = Fri
+          const dayLabel = `${dayNames[idx]} (${formatDayMonthVN(dateStr)})`;
+
+          // Tìm báo cáo sĩ số ngày của lớp
+          const rep = reports.find(
+            (r) =>
+              (validClassKeys.has(r.class_id) || validClassKeys.has(String(r.class_id).toLowerCase())) &&
+              String(r.report_date).split('T')[0].trim() === dateStr
+          );
+
+          // Tìm báo cáo ăn bán trú
+          const boardingRep = rawBoardingReports.find(
+            (br) =>
+              (validClassKeys.has(br.class_id) || validClassKeys.has(String(br.class_id).toLowerCase())) &&
+              String(br.date).split('T')[0].trim() === dateStr
+          );
+
+          if (rep && (rep.status as string) !== 'NOT_REPORTED') {
+            const repVals = allValues.filter((v) => v.report_id === rep.id);
+            const valAll = repVals.find(
+              (v) => v.indicator_group_id === allIndicator?.id || v.indicator_group_id === 'ig_all' || indicators.find((i) => i.id === v.indicator_group_id)?.code === 'ALL'
+            );
+            const valBoarding = repVals.find(
+              (v) =>
+                v.indicator_group_id === boardingIndicator?.id ||
+                v.indicator_group_id === 'ig_boarding' ||
+                v.indicator_group_id === 'ig_boarding_half' ||
+                indicators.find((i) => i.id === v.indicator_group_id)?.code.includes('BOARDING') ||
+                indicators.find((i) => i.id === v.indicator_group_id)?.name.toLowerCase().includes('bán trú')
+            );
+
+            const total = valAll ? Number(valAll.total_count) || 0 : 0;
+            const absent = valAll ? Number(valAll.absent_count) || 0 : 0;
+            const present = valAll ? Number(valAll.present_count) || Math.max(0, total - absent) : Math.max(0, total - absent);
+
+            const rate = total > 0 ? Math.round((present / total) * 1000) / 10 : 100;
+            const absentRate = total > 0 ? Math.round((absent / total) * 1000) / 10 : 0;
+
+            const bTotal = valBoarding ? Number(valBoarding.total_count) || 0 : (boardingRep?.total_students || 0);
+            const bAbsent = valBoarding ? Number(valBoarding.absent_count) || 0 : (boardingRep?.absent_count || 0);
+            const bPresent = valBoarding ? Number(valBoarding.present_count) || Math.max(0, bTotal - bAbsent) : (boardingRep?.lunch_count || Math.max(0, bTotal - bAbsent));
+            const bMeals = boardingRep ? (boardingRep.total_meals || boardingRep.lunch_count || 0) : bPresent;
+
+            const isEarlyCheck = checkIsReportEarly(rep, settings.early_report_deadline || DEFAULT_EARLY_REPORT_DEADLINE);
+
+            return {
+              date: dateStr,
+              dayOfWeek,
+              dayLabel,
+              isReported: true,
+              total,
+              present,
+              absent,
+              rate,
+              absentRate,
+              boardingTotal: bTotal,
+              boardingPresent: bPresent,
+              boardingAbsent: bAbsent,
+              boardingMeals: bMeals,
+              reportedTime: isEarlyCheck.timeStr,
+              isEarly: isEarlyCheck.isEarly,
+              absentStudents: rep.absent_students || [],
+            };
+          }
+
+          return {
+            date: dateStr,
+            dayOfWeek,
+            dayLabel,
+            isReported: false,
+            total: 0,
+            present: 0,
+            absent: 0,
+            rate: 0,
+            absentRate: 0,
+            boardingTotal: 0,
+            boardingPresent: 0,
+            boardingAbsent: 0,
+            boardingMeals: 0,
+            absentStudents: [],
+          };
+        });
+
+        const reportedDays = daysData.filter((d) => d.isReported);
+        const totalSessionsReported = reportedDays.length;
+        const totalEnrollment = reportedDays.length > 0 ? Math.round(reportedDays.reduce((acc, d) => acc + d.total, 0) / reportedDays.length) : 0;
+        const sumPresent = reportedDays.reduce((acc, d) => acc + d.present, 0);
+        const sumAbsent = reportedDays.reduce((acc, d) => acc + d.absent, 0);
+        const totalWeekStudentDays = sumPresent + sumAbsent;
+        const avgPresentRate = totalWeekStudentDays > 0 ? Math.round((sumPresent / totalWeekStudentDays) * 1000) / 10 : (totalSessionsReported > 0 ? 100 : 0);
+        const totalBoardingMeals = reportedDays.reduce((acc, d) => acc + d.boardingMeals, 0);
+        const earlyReportsCount = reportedDays.filter((d) => d.isEarly).length;
+
+        const absentStudentsAllWeek: {
+          studentId?: string;
+          studentName: string;
+          date: string;
+          dayLabel: string;
+          reason?: string;
+          address?: string;
+        }[] = [];
+
+        reportedDays.forEach((d) => {
+          (d.absentStudents || []).forEach((st) => {
+            absentStudentsAllWeek.push({
+              studentId: st.id,
+              studentName: st.full_name,
+              date: d.date,
+              dayLabel: d.dayLabel,
+              reason: st.reason || 'Nghỉ học',
+              address: cleanStudentAddress(st.address) || '-',
+            });
+          });
+        });
+
+        return {
+          classItem: cls,
+          teacherName,
+          campusName,
+          days: daysData,
+          totalSessionsReported,
+          totalEnrollment,
+          sumPresent,
+          sumAbsent,
+          avgPresentRate,
+          totalBoardingMeals,
+          earlyReportsCount,
+          absentStudentsAllWeek,
+        };
+      });
+
+      // Xây dựng dữ liệu theo từng phân hiệu
+      const campusesSummary: CampusWeeklySummary[] = allCampuses.map((campus) => {
+        const campusClasses = classesSummary.filter((c) => c.classItem.campus_id === campus.id);
+        const totalClasses = campusClasses.length;
+        const totalStudents = campusClasses.reduce((acc, c) => acc + c.totalEnrollment, 0);
+
+        const dayAverages = weekDates.map((dateStr, idx) => {
+          const dayLabel = `${dayNames[idx]} (${formatDayMonthVN(dateStr)})`;
+          let total = 0;
+          let present = 0;
+          let absent = 0;
+          let boardingMeals = 0;
+
+          campusClasses.forEach((cls) => {
+            const dayData = cls.days.find((d) => d.date === dateStr);
+            if (dayData && dayData.isReported) {
+              total += dayData.total;
+              present += dayData.present;
+              absent += dayData.absent;
+              boardingMeals += dayData.boardingMeals;
+            }
+          });
+
+          const rate = total > 0 ? Math.round((present / total) * 1000) / 10 : 0;
+          return {
+            date: dateStr,
+            dayLabel,
+            total,
+            present,
+            absent,
+            rate,
+            boardingMeals,
+          };
+        });
+
+        const totalWeeklyAbsent = campusClasses.reduce((acc, c) => acc + c.sumAbsent, 0);
+        const totalWeeklyPresent = campusClasses.reduce((acc, c) => acc + c.sumPresent, 0);
+        const totalCampStudentDays = totalWeeklyPresent + totalWeeklyAbsent;
+        const avgPresentRate = totalCampStudentDays > 0 ? Math.round((totalWeeklyPresent / totalCampStudentDays) * 1000) / 10 : 0;
+        const totalWeeklyBoardingMeals = campusClasses.reduce((acc, c) => acc + c.totalBoardingMeals, 0);
+
+        return {
+          campus,
+          totalClasses,
+          totalStudents,
+          classes: campusClasses,
+          dayAverages,
+          avgPresentRate,
+          totalWeeklyAbsent,
+          totalWeeklyBoardingMeals,
+        };
+      });
+
+      // Tổng hợp toàn trường
+      const totalClasses = classesSummary.length;
+      const totalStudents = classesSummary.reduce((acc, c) => acc + c.totalEnrollment, 0);
+      const fullyReportedClassesCount = classesSummary.filter((c) => c.totalSessionsReported === 5).length;
+      const totalWeeklyAbsent = classesSummary.reduce((acc, c) => acc + c.sumAbsent, 0);
+      const totalWeeklyPresent = classesSummary.reduce((acc, c) => acc + c.sumPresent, 0);
+      const totalAllStudentDays = totalWeeklyPresent + totalWeeklyAbsent;
+      const avgPresentRate = totalAllStudentDays > 0 ? Math.round((totalWeeklyPresent / totalAllStudentDays) * 1000) / 10 : 0;
+      const totalBoardingMeals = classesSummary.reduce((acc, c) => acc + c.totalBoardingMeals, 0);
+
+      const dayTotals = weekDates.map((dateStr, idx) => {
+        const dayLabel = `${dayNames[idx]} (${formatDayMonthVN(dateStr)})`;
+        let total = 0;
+        let present = 0;
+        let absent = 0;
+        let boardingMeals = 0;
+        let reportedCount = 0;
+
+        classesSummary.forEach((cls) => {
+          const dayData = cls.days.find((d) => d.date === dateStr);
+          if (dayData && dayData.isReported) {
+            total += dayData.total;
+            present += dayData.present;
+            absent += dayData.absent;
+            boardingMeals += dayData.boardingMeals;
+            reportedCount++;
+          }
+        });
+
+        const rate = total > 0 ? Math.round((present / total) * 1000) / 10 : 0;
+        return {
+          date: dateStr,
+          dayLabel,
+          total,
+          present,
+          absent,
+          rate,
+          boardingMeals,
+          reportedCount,
+        };
+      });
+
+      const avgDailyPresent = Math.round(totalWeeklyPresent / 5);
+      const avgDailyAbsent = Math.round(totalWeeklyAbsent / 5);
+
+      const aggregateResult: SchoolWeeklyAggregate = {
+        weekNumber,
+        startDate: weekInfo.startDate,
+        endDate: weekInfo.endDate,
+        label: weekInfo.label,
+        isCurrent,
+        classesSummary,
+        campusesSummary,
+        schoolTotals: {
+          totalClasses,
+          totalStudents,
+          avgDailyPresent,
+          avgDailyAbsent,
+          avgPresentRate,
+          totalWeeklyAbsent,
+          totalBoardingMeals,
+          fullyReportedClassesCount,
+          dayTotals,
+        },
+      };
+
+      setCached(CACHE_KEY, aggregateResult, 20000);
+      return aggregateResult;
+    });
   },
 
   // --- 9.1 Quản lý Ngày Nghỉ Học Sinh (Không xếp loại những ngày nghỉ) ---

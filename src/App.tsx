@@ -9,6 +9,7 @@ import { LoginPage } from './pages/LoginPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { AttendanceInputPage } from './pages/AttendanceInputPage';
 import { DailyReportPage } from './pages/DailyReportPage';
+import { WeeklyReportPage } from './pages/WeeklyReportPage';
 import { MonthlyReportPage } from './pages/MonthlyReportPage';
 import { AttendanceRankingPage } from './pages/AttendanceRankingPage';
 import { ChartsPage } from './pages/ChartsPage';
@@ -210,6 +211,19 @@ const AppContent: React.FC = () => {
 
             {(currentPath === '/reports/daily' || currentPath === '/daily-report' || currentPath === '/reports') && (
               <DailyReportPage onNavigate={handleNavigate} />
+            )}
+
+            {currentPath.startsWith('/reports/weekly') && (
+              <WeeklyReportPage
+                initialView={
+                  currentPath.includes('view=campus')
+                    ? 'campus'
+                    : currentPath.includes('view=class')
+                    ? 'class'
+                    : 'school'
+                }
+                onNavigate={handleNavigate}
+              />
             )}
 
             {currentPath === '/reports/monthly' && (

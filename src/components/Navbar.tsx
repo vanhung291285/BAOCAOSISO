@@ -26,6 +26,7 @@ import {
   Sparkles,
   LayoutDashboard,
   CalendarRange,
+  CalendarDays,
   Users,
   Utensils,
   GraduationCap,
@@ -429,6 +430,58 @@ export const Navbar: React.FC<NavbarProps> = ({ currentPath, onNavigate, onToggl
               <Calendar className="w-4 h-4 text-blue-600" />
               <span>Báo cáo theo ngày</span>
             </button>
+            <div className="space-y-0.5">
+              <button
+                onClick={() => handleNav('/reports/weekly')}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition-colors ${
+                  currentPath.startsWith('/reports/weekly')
+                    ? 'bg-blue-50 text-blue-800 font-bold'
+                    : 'text-slate-700 hover:bg-slate-100'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <CalendarDays className="w-4 h-4 text-blue-600" />
+                  <span>Báo cáo theo tuần</span>
+                </div>
+                <span className="text-[10px] bg-blue-100 text-blue-800 font-bold px-1.5 py-0.2 rounded">
+                  Tuần
+                </span>
+              </button>
+              {currentPath.startsWith('/reports/weekly') && (
+                <div className="ml-7 pl-2 border-l border-blue-200 space-y-0.5 py-1">
+                  <button
+                    onClick={() => handleNav('/reports/weekly?view=school')}
+                    className={`w-full text-left py-1 px-2 rounded text-[11px] font-semibold ${
+                      currentPath === '/reports/weekly' || currentPath === '/reports/weekly?view=school'
+                        ? 'text-blue-700 font-bold bg-blue-50'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    • Tổng hợp theo trường
+                  </button>
+                  <button
+                    onClick={() => handleNav('/reports/weekly?view=campus')}
+                    className={`w-full text-left py-1 px-2 rounded text-[11px] font-semibold ${
+                      currentPath === '/reports/weekly?view=campus'
+                        ? 'text-blue-700 font-bold bg-blue-50'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    • Từng phân hiệu
+                  </button>
+                  <button
+                    onClick={() => handleNav('/reports/weekly?view=class')}
+                    className={`w-full text-left py-1 px-2 rounded text-[11px] font-semibold ${
+                      currentPath === '/reports/weekly?view=class'
+                        ? 'text-blue-700 font-bold bg-blue-50'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    • {isGVCN && assignedClass ? `Lớp ${assignedClass.class_name}` : 'Từng lớp học'}
+                  </button>
+                </div>
+              )}
+            </div>
             <button
               onClick={() => handleNav('/reports/monthly')}
               className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold transition-colors ${

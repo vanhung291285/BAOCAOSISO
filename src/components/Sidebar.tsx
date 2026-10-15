@@ -23,6 +23,8 @@ import {
   Sparkles,
   Utensils,
   GraduationCap,
+  CalendarDays,
+  ChevronDown,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -77,6 +79,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
       path: '/reports/daily',
       icon: Calendar,
       allowed: true,
+    },
+    {
+      id: 'weekly-report',
+      label: 'Báo cáo theo tuần',
+      path: '/reports/weekly',
+      icon: CalendarDays,
+      allowed: true,
+      subItems: [
+        { id: 'weekly-school', label: 'Tổng hợp theo trường', path: '/reports/weekly?view=school' },
+        { id: 'weekly-campus', label: 'Từng phân hiệu', path: '/reports/weekly?view=campus' },
+        {
+          id: 'weekly-class',
+          label: isGVCN && assignedClass ? `Lớp ${assignedClass.class_name}` : 'Từng lớp học',
+          path: '/reports/weekly?view=class',
+        },
+      ],
     },
     {
       id: 'monthly-report',
@@ -174,14 +192,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
   ];
 
+  const [weeklyExpanded, setWeeklyExpanded] = React.useState<boolean>(true);
+
   const isItemActive = (path: string) => {
     if (path === '/reports/daily') {
       return currentPath === '/reports/daily' || currentPath === '/daily-report' || currentPath === '/reports';
     }
+    if (path === '/reports/weekly') {
+      return currentPath.startsWith('/reports/weekly');
+    }
     return currentPath === path;
   };
 
-  const renderNavGroup = (title: string, items: typeof mainNavItems) => {
+  const renderNavGroup = (title: string, items: any[]) => {
     const visibleItems = items.filter((item) => item.allowed);
     if (visibleItems.length === 0) return null;
 
@@ -196,39 +219,97 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {visibleItems.map((item) => {
             const Icon = item.icon;
             const active = isItemActive(item.path);
+            const hasSub = item.subItems && item.subItems.length > 0;
 
             return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => onNavigate(item.path)}
-                title={collapsed ? item.label : undefined}
-                className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold transition-all duration-150 relative group ${
-                  active
-                    ? 'bg-blue-600 text-white shadow-sm shadow-blue-600/20 font-bold'
-                    : item.highlight
-                    ? 'bg-blue-50 text-blue-700 hover:bg-blue-100 font-bold'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
-                } ${collapsed ? 'justify-center px-2' : ''}`}
-              >
-                <Icon
-                  className={`w-4 h-4 shrink-0 transition-transform group-hover:scale-105 ${
-                    active
-                      ? 'text-white'
+              <div key={item.id} className="space-y-0.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (hasSub && !collapsed) {
+                      setWeeklyExpanded(!weeklyExpanded);
+                    }
+                    onNavigate(item.path);
+                  }}
+                  title={collapsed ? item.label : undefined}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition-all duration-150 relative group cursor-pointer ${
+                    active && !hasSub
+                      ? 'bg-blue-600 text-white shadow-sm shadow-blue-600/20 font-bold'
+                      : active && hasSub
+                      ? 'bg-blue-50/90 text-blue-900 border border-blue-200/80 font-bold'
                       : item.highlight
-                      ? 'text-blue-600'
-                      : 'text-slate-500 group-hover:text-slate-800'
-                  }`}
-                />
-                {!collapsed && <span className="truncate">{item.label}</span>}
+                      ? 'bg-blue-50 text-blue-700 hover:bg-blue-100 font-bold'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
+                  } ${collapsed ? 'justify-center px-2' : ''}`}
+                >
+                  <div className="flex items-center gap-3 truncate">
+                    <Icon
+                      className={`w-4 h-4 shrink-0 transition-transform group-hover:scale-105 ${
+                        active
+                          ? 'text-blue-600'
+                          : item.highlight
+                          ? 'text-blue-600'
+                          : 'text-slate-500 group-hover:text-slate-800'
+                      }`}
+                    />
+                    {!collapsed && <span className="truncate">{item.label}</span>}
+                  </div>
 
-                {/* Tooltip for collapsed state */}
-                {collapsed && (
-                  <div className="absolute left-full ml-2 px-2.5 py-1 bg-slate-900 text-white text-xs rounded-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-150 whitespace-nowrap z-50 shadow-lg pointer-events-none">
-                    {item.label}
+                  {hasSub && !collapsed && (
+                    <span
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setWeeklyExpanded(!weeklyExpanded);
+                      }}
+                      className="p-0.5 rounded hover:bg-blue-100/60 text-slate-400 hover:text-blue-700 transition-transform"
+                    >
+                      <ChevronDown
+                        className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                          weeklyExpanded ? 'rotate-180' : ''
+                        }`}
+                      />
+                    </span>
+                  )}
+
+                  {/* Tooltip for collapsed state */}
+                  {collapsed && (
+                    <div className="absolute left-full ml-2 px-2.5 py-1 bg-slate-900 text-white text-xs rounded-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-150 whitespace-nowrap z-50 shadow-lg pointer-events-none">
+                      {item.label}
+                    </div>
+                  )}
+                </button>
+
+                {/* Sub-items when expanded */}
+                {hasSub && !collapsed && weeklyExpanded && (
+                  <div className="ml-4 pl-3 border-l-2 border-blue-100 space-y-0.5 py-0.5 animate-in fade-in duration-150">
+                    {item.subItems.map((sub: any) => {
+                      const isSubActive =
+                        currentPath === sub.path ||
+                        (sub.id === 'weekly-school' &&
+                          (currentPath === '/reports/weekly' || currentPath === '/reports/weekly?view=school'));
+                      return (
+                        <button
+                          key={sub.id}
+                          type="button"
+                          onClick={() => onNavigate(sub.path)}
+                          className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-colors cursor-pointer text-left ${
+                            isSubActive
+                              ? 'bg-blue-600 text-white font-bold shadow-xs'
+                              : 'text-slate-600 hover:text-blue-700 hover:bg-blue-50/60'
+                          }`}
+                        >
+                          <span
+                            className={`w-1.5 h-1.5 rounded-full ${
+                              isSubActive ? 'bg-white' : 'bg-slate-300'
+                            }`}
+                          />
+                          <span className="truncate">{sub.label}</span>
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
-              </button>
+              </div>
             );
           })}
         </div>
