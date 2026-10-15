@@ -688,7 +688,15 @@ export const WeeklyReportPage: React.FC<WeeklyReportPageProps> = ({
                             </td>
 
                             <td className="py-2.5 px-2 text-center">
-                              {isExcellent ? (
+                              {cls.totalSessionsReported === 0 ? (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200" title="Lớp chưa gửi báo cáo ngày nào trong tuần này">
+                                  Chưa nộp
+                                </span>
+                              ) : cls.totalSessionsReported < 5 ? (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-300" title={`Lớp mới nộp ${cls.totalSessionsReported}/5 ngày học. Cần báo bổ sung để được xét thi đua.`}>
+                                  Thiếu {5 - cls.totalSessionsReported} ngày ({cls.totalSessionsReported}/5)
+                                </span>
+                              ) : isExcellent ? (
                                 <span className="inline-flex items-center gap-1 text-[10px] font-extrabold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
                                   Xuất sắc
                                 </span>
@@ -743,6 +751,21 @@ export const WeeklyReportPage: React.FC<WeeklyReportPageProps> = ({
                       </tr>
                     </tfoot>
                   </table>
+                </div>
+
+                {/* Note on how attendance % is calculated when classes forgot to report */}
+                <div className="p-3 bg-amber-50/80 border-t border-amber-200/80 flex items-start gap-2.5 text-xs text-amber-900">
+                  <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  <div className="space-y-0.5">
+                    <span className="font-bold">Quy tắc tính tỉ lệ % chuyên cần khi có lớp quên báo cáo:</span>
+                    <p className="text-[11px] text-amber-800 leading-relaxed">
+                      • Các ngày lớp quên báo cáo được đánh dấu dấu gạch ngang <strong className="text-slate-800">(-)</strong> và không tự ý tính là vắng cả lớp hay có mặt đủ.
+                      <br />
+                      • Tỉ lệ % chuyên cần trung bình được tính chuẩn xác bằng: <strong className="text-slate-900">(Tổng lượt HS có mặt / Tổng lượt sĩ số của các ngày ĐÃ BÁO CÁO) × 100%</strong>.
+                      <br />
+                      • Lớp nộp thiếu báo cáo (dưới 5/5 ngày) sẽ được cảnh báo <span className="font-bold text-amber-900 bg-amber-100 px-1.5 py-0.2 rounded">Thiếu ngày</span> và không đủ điều kiện xét Xuất sắc. GVCN có thể vào mục <button type="button" onClick={() => onNavigate?.('/attendance')} className="font-bold text-blue-700 underline cursor-pointer">Báo cáo sĩ số</button>, chọn lại ngày đã quên để gửi bổ sung bất cứ lúc nào.
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>
