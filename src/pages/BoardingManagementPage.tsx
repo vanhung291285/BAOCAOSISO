@@ -12,6 +12,7 @@ import {
   DailyReportValue,
 } from '../types';
 import { MonthlyBoardingSheet } from '../components/MonthlyBoardingSheet';
+import { AIBoardingMealForecastTab } from '../components/AIBoardingMealForecastTab';
 import { DateNavigator } from '../components/DateNavigator';
 import { getTodayDateStr, formatDateVN } from '../utils/schoolWeeks';
 import {
@@ -70,7 +71,7 @@ interface BoardingManagementPageProps {
   initialTab?: TabType;
 }
 
-type TabType = 'daily-attendance' | 'monthly-sheet' | 'students-list' | 'kitchen-report' | 'rules-info';
+type TabType = 'daily-attendance' | 'monthly-sheet' | 'students-list' | 'kitchen-report' | 'rules-info' | 'ai-forecast';
 
 export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ onNavigate, initialTab }) => {
   const { classes, campuses, students, settings, refreshAll, addStudent, updateStudent, deleteStudent, deleteStudentsByClass, importStudents } = useSchool();
@@ -1333,6 +1334,22 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
           >
             <Info className="w-4 h-4" />
             <span>Quy định bán trú</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('ai-forecast')}
+            className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-extrabold transition-all whitespace-nowrap cursor-pointer ${
+              activeTab === 'ai-forecast'
+                ? 'bg-amber-400 text-slate-950 shadow-md shadow-black/10'
+                : 'bg-amber-400/20 text-amber-200 hover:text-white hover:bg-amber-400/30 border border-amber-300/30'
+            }`}
+          >
+            <Sparkles className="w-4 h-4 text-amber-300" />
+            <span>AI Dự Báo Suất Ăn & Thực Phẩm</span>
+            <span className="px-1.5 py-0.2 bg-amber-500/40 text-amber-100 text-[10px] font-black rounded-full border border-amber-300/40">
+              AI
+            </span>
           </button>
         </div>
       </div>
@@ -2745,6 +2762,11 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
             </ul>
           </div>
         </div>
+      )}
+
+      {/* TAB 6: AI MEAL FORECAST & INGREDIENT OPTIMIZER */}
+      {activeTab === 'ai-forecast' && (
+        <AIBoardingMealForecastTab />
       )}
 
       {/* ========================================================================= */}

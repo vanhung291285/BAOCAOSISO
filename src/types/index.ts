@@ -195,6 +195,7 @@ export interface BoardingMealSummaryRow {
 export interface DailyReport {
   id: string;
   class_id: string;
+  school_year_id?: string;
   report_date: string; // YYYY-MM-DD
   created_by: string; // Profile ID
   status: 'DRAFT' | 'SUBMITTED' | 'LOCKED';

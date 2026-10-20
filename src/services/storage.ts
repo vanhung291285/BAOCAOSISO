@@ -3123,6 +3123,17 @@ export const StorageService = {
     return { report, values };
   },
 
+  async getAllDailyReports(): Promise<DailyReport[]> {
+    ensureInitialized();
+    const rawReports = localStorage.getItem(STORAGE_KEYS.REPORTS);
+    const reports: DailyReport[] = rawReports ? JSON.parse(rawReports) : [];
+    return reports;
+  },
+
+  async getDailyReports(): Promise<DailyReport[]> {
+    return this.getAllDailyReports();
+  },
+
   async getDailyReport(
     classId: string,
     reportDate: string
@@ -3901,8 +3912,15 @@ export const StorageService = {
           
           cloudReports.forEach((cRep) => {
             const idx = reports.findIndex((r) => r.id === cRep.id || (r.class_id === cRep.class_id && r.report_date === cRep.report_date));
-            if (idx >= 0) reports[idx] = cRep;
-            else reports.push(cRep);
+            if (idx >= 0) {
+              const localTs = new Date(reports[idx].updated_at || reports[idx].created_at || 0).getTime();
+              const cloudTs = new Date(cRep.updated_at || cRep.created_at || 0).getTime();
+              if (cloudTs >= localTs) {
+                reports[idx] = cRep;
+              }
+            } else {
+              reports.push(cRep);
+            }
           });
           localStorage.setItem(STORAGE_KEYS.REPORTS, JSON.stringify(reports));
 
@@ -4898,8 +4916,15 @@ export const StorageService = {
                   (String(r.class_id).toLowerCase() === String(cRep.class_id).toLowerCase() &&
                     String(r.report_date).split('T')[0] === cleanDate)
               );
-              if (idx >= 0) reports[idx] = repObj;
-              else reports.push(repObj);
+              if (idx >= 0) {
+                const localTs = new Date(reports[idx].updated_at || reports[idx].created_at || 0).getTime();
+                const cloudTs = new Date(repObj.updated_at || repObj.created_at || 0).getTime();
+                if (cloudTs >= localTs) {
+                  reports[idx] = repObj;
+                }
+              } else {
+                reports.push(repObj);
+              }
             });
             localStorage.setItem(STORAGE_KEYS.REPORTS, JSON.stringify(reports));
 

@@ -3,7 +3,8 @@ import { useSchool } from '../contexts/SchoolContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useNotifications } from '../contexts/NotificationContext';
 import { StorageService, subscribeRealtime } from '../services/storage';
-import { ClassReportRow, ReportStatus, ClassAttendanceRank } from '../types';
+import { ClassReportRow, ReportStatus, ClassAttendanceRank, DailyReport } from '../types';
+import { AIPredictiveService } from '../services/aiPredictiveService';
 import { DateNavigator } from '../components/DateNavigator';
 import { CampusSelector } from '../components/CampusSelector';
 import {
@@ -53,10 +54,11 @@ import { formatDateVN } from '../utils/schoolWeeks';
 interface DashboardPageProps {
   onNavigate: (path: string) => void;
   onSelectClassForInput?: (classId: string, date: string) => void;
+  onOpenAIAssistant?: () => void;
 }
 
-export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSelectClassForInput }) => {
-  const { settings, classes, indicators, campuses } = useSchool();
+export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSelectClassForInput, onOpenAIAssistant }) => {
+  const { settings, classes, indicators, campuses, students, activeYear } = useSchool();
   const { currentUser, isAdmin, isBGH, isGVCN } = useAuth();
   const { sendBGHManualReminder } = useNotifications();
 
@@ -111,6 +113,20 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSele
 
   const boardingHalf = indicators.find((i) => i.code === 'BOARDING_HALF' && i.enabled);
   const nonBoarding = indicators.find((i) => (i.code === 'NON_BOARDING' || i.name.toLowerCase().includes('ngoại trú')) && i.enabled);
+
+  // Quick AI Dropout Early Warning Summary
+  const [recentReports, setRecentReports] = useState<DailyReport[]>([]);
+  useEffect(() => {
+    StorageService.getDailyReports().then(setRecentReports).catch(() => {});
+  }, []);
+
+  const aiRisks = useMemo(() => {
+    return AIPredictiveService.calculateDropoutRisk(students, classes, recentReports, activeYear?.id);
+  }, [students, classes, recentReports, activeYear?.id]);
+
+  const criticalRisks = useMemo(() => {
+    return aiRisks.filter((r) => r.riskLevel === 'CRITICAL' || r.riskLevel === 'HIGH');
+  }, [aiRisks]);
 
   const loadData = async (dateStr: string, campusId: string) => {
     try {
@@ -564,6 +580,67 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSele
                 {aggregateData.unreportedClasses === 0 ? 'Hoàn thành 100%' : `Còn ${aggregateData.unreportedClasses} lớp`}
               </span>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* AI DROPOUT EARLY WARNING WIDGET */}
+      {criticalRisks.length > 0 && (
+        <div className="bg-gradient-to-r from-indigo-950 via-slate-900 to-blue-950 rounded-2xl p-4 sm:p-5 text-white border border-indigo-500/30 shadow-lg relative overflow-hidden">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-indigo-500/20 border border-indigo-400/30 text-amber-300 flex items-center justify-center shrink-0">
+                <Sparkles className="w-5 h-5 animate-pulse" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-rose-500/30 text-rose-300 border border-rose-400/40">
+                    CẢNH BÁO SỚM NGHỈ HỌC AI
+                  </span>
+                  <span className="text-[10px] text-indigo-300 font-semibold flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    Gemini 3.8 Flash
+                  </span>
+                </div>
+                <h3 className="font-black text-sm sm:text-base mt-1 tracking-tight">
+                  Phát hiện <strong className="text-rose-400">{criticalRisks.length} học sinh</strong> có biểu hiện vắng ngắt quãng / nguy cơ bỏ học
+                </h3>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => onNavigate('/ai-dropout-prediction')}
+              className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl text-xs font-black transition-all shadow-md active:scale-95 shrink-0 cursor-pointer"
+            >
+              <span>Xem phân tích & Lập kế hoạch vận động</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 mt-3 pt-3 border-t border-white/10">
+            {criticalRisks.slice(0, 3).map((item) => (
+              <div
+                key={item.student.id}
+                onClick={() => onNavigate('/ai-dropout-prediction')}
+                className="bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl p-2.5 flex items-center justify-between gap-2 cursor-pointer transition-colors"
+                title="Nhấp để xem phân tích tâm lý và kế hoạch vận động chi tiết"
+              >
+                <div className="min-w-0">
+                  <div className="text-xs font-extrabold text-white truncate">{item.student.full_name}</div>
+                  <div className="text-[11px] text-slate-300 truncate">
+                    Lớp {item.classItem?.class_name} • {item.student.address || item.student.village || 'Bản xa'}
+                  </div>
+                </div>
+                <div className="text-right shrink-0">
+                  <span className={`text-[10px] font-black px-2 py-0.5 rounded-md ${
+                    item.riskLevel === 'CRITICAL' ? 'bg-rose-500 text-white' : 'bg-amber-500 text-slate-950 font-bold'
+                  }`}>
+                    {item.riskScore}% Rủi ro
+                  </span>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}

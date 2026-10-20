@@ -25,6 +25,8 @@ import {
   GraduationCap,
   CalendarDays,
   ChevronDown,
+  Bot,
+  Mic,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -32,6 +34,7 @@ interface SidebarProps {
   onNavigate: (path: string) => void;
   collapsed: boolean;
   onToggleCollapse: () => void;
+  onOpenAIAssistant?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -39,6 +42,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onNavigate,
   collapsed,
   onToggleCollapse,
+  onOpenAIAssistant,
 }) => {
   const { currentUser, isGVCN, isBGH, isAdmin, logout } = useAuth();
   const { settings, classes } = useSchool();
@@ -124,6 +128,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
       path: '/charts',
       icon: BarChart3,
       allowed: true,
+    },
+    {
+      id: 'ai-predictive',
+      label: 'AI Dự báo bỏ học',
+      path: '/ai-dropout-prediction',
+      icon: Sparkles,
+      allowed: true,
+      highlight: true,
+    },
+    {
+      id: 'ai-boarding-forecast',
+      label: 'AI Dự báo suất ăn',
+      path: '/boarding/ai-forecast',
+      icon: Utensils,
+      allowed: true,
+      highlight: true,
     },
   ];
 
@@ -327,6 +347,39 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <div className="flex-1 overflow-y-auto overflow-x-hidden p-3 space-y-4 custom-scrollbar">
         {renderNavGroup('Điều hướng chính', mainNavItems)}
         {renderNavGroup('Báo cáo & Thống kê', reportNavItems)}
+
+        {/* AI Smart Assistant Trigger Card */}
+        {onOpenAIAssistant && (
+          <div className="pt-1">
+            <button
+              type="button"
+              onClick={onOpenAIAssistant}
+              className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-2xl bg-gradient-to-r from-indigo-900 via-blue-900 to-indigo-950 text-white shadow-sm hover:shadow-indigo-500/25 hover:scale-[1.01] active:scale-95 transition-all cursor-pointer border border-indigo-400/30 group ${
+                collapsed ? 'justify-center px-2' : ''
+              }`}
+              title="Trợ lý ảo AI Tra cứu & Báo cáo (NLP & Giọng nói)"
+            >
+              <div className="w-7 h-7 rounded-xl bg-gradient-to-tr from-amber-400 to-indigo-500 text-slate-950 flex items-center justify-center shrink-0 shadow-xs">
+                <Bot className="w-4 h-4 text-slate-950 group-hover:rotate-12 transition-transform" />
+              </div>
+              {!collapsed && (
+                <div className="flex-1 text-left min-w-0">
+                  <div className="text-xs font-black leading-tight flex items-center justify-between">
+                    <span>Trợ lý ảo AI</span>
+                    <span className="text-[9px] bg-emerald-400/20 text-emerald-300 font-bold px-1.5 py-0.2 rounded-full border border-emerald-400/30">
+                      NLP & Voice
+                    </span>
+                  </div>
+                  <div className="text-[10px] text-blue-200 mt-0.5 truncate flex items-center gap-1">
+                    <Mic className="w-3 h-3 text-amber-300 shrink-0" />
+                    <span>Tra cứu nhanh bằng giọng nói</span>
+                  </div>
+                </div>
+              )}
+            </button>
+          </div>
+        )}
+
         {(isBGH || isAdmin) && renderNavGroup('Quản lý hệ thống', managementNavItems)}
         {isAdmin && renderNavGroup('Cấu hình', settingsNavItems)}
         {renderNavGroup('Cá nhân', accountNavItems)}
