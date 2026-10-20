@@ -369,7 +369,7 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
           );
           if (classReps.length > 0) {
             // Sort by report_date descending to get the newest
-            classReps.sort((a: any, b: any) => b.report_date.localeCompare(a.report_date));
+            classReps.sort((a: any, b: any) => (b.report_date || '').localeCompare(a.report_date || ''));
             const latestRep = classReps[0];
             const allVal = vals.find(
               (v: any) => v.report_id === latestRep.id && (v.indicator_group_id === 'ig_all' || v.indicator_group_id === 'all')

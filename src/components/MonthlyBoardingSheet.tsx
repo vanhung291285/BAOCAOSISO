@@ -2462,7 +2462,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
 
             {/* Mobile Scroll Helpers & Tips */}
             <div className="flex flex-wrap items-center justify-between md:justify-end gap-1.5 text-[11px] text-slate-500 w-full md:w-auto">
-              <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5">
+              <div className="flex items-center gap-1 overflow-x-auto custom-scrollbar-slate py-0.5">
                 <button
                   type="button"
                   onClick={() => handleScrollToDate()}

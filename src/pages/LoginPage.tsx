@@ -96,7 +96,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
   const sortedClasses = useMemo(() => {
     return [...classes].sort((a, b) => {
       if (a.grade !== b.grade) return (a.grade || 0) - (b.grade || 0);
-      return a.class_name.localeCompare(b.class_name, undefined, { numeric: true });
+      return (a.class_name || '').localeCompare(b.class_name || '', undefined, { numeric: true });
     });
   }, [classes]);
 

@@ -2007,7 +2007,7 @@ export const StorageService = {
       }
     }
 
-    return list.filter((r) => r.class_id === classId).sort((a, b) => b.date.localeCompare(a.date));
+    return list.filter((r) => r.class_id === classId).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   },
 
   async getBoardingReportsByClassAndMonth(classId: string, monthStr: string): Promise<BoardingDailyReport[]> {
@@ -2090,7 +2090,7 @@ export const StorageService = {
           records: Array.isArray(recs) ? recs : [],
         };
       })
-      .sort((a, b) => a.date.localeCompare(b.date));
+      .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
   },
 
   async getDailyReportsByMonth(classId: string, monthStr: string): Promise<DailyReport[]> {
@@ -2173,7 +2173,7 @@ export const StorageService = {
           absent_students: Array.isArray(parsedAbsent) ? parsedAbsent : undefined,
         };
       })
-      .sort((a, b) => a.report_date.localeCompare(b.report_date));
+      .sort((a, b) => (a.report_date || '').localeCompare(b.report_date || ''));
   },
 
   async saveBoardingReportsBulk(reports: BoardingDailyReport[], savedBy?: Profile): Promise<void> {
@@ -2824,7 +2824,7 @@ export const StorageService = {
     if (campusId && campusId !== 'all') {
       activeClasses = activeClasses.filter((c) => c.campus_id === campusId);
     }
-    activeClasses.sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0) || a.class_name.localeCompare(b.class_name));
+    activeClasses.sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0) || (a.class_name || '').localeCompare(b.class_name || ''));
 
     let sumBoarding = 0;
     let sumBreakfast = 0;
@@ -4987,7 +4987,7 @@ export const StorageService = {
       // Sắp xếp lớp theo khối và tên
       targetClasses.sort((a, b) => {
         if (a.grade !== b.grade) return (a.grade || 0) - (b.grade || 0);
-        return a.class_name.localeCompare(b.class_name, undefined, { numeric: true });
+        return (a.class_name || '').localeCompare(b.class_name || '', undefined, { numeric: true });
       });
 
       const dayNames = ['Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu'];

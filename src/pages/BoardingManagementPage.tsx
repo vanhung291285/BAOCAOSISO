@@ -1270,7 +1270,7 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
         </div>
 
         {/* Tab Navigation Navigation Bar */}
-        <div className="flex items-center gap-1 sm:gap-2 mt-6 pt-4 border-t border-white/15 overflow-x-auto no-scrollbar">
+        <div className="flex items-center gap-1 sm:gap-2 mt-6 pt-4 border-t border-white/15 overflow-x-auto custom-scrollbar pb-1">
           <button
             type="button"
             onClick={() => setActiveTab('daily-attendance')}

@@ -99,7 +99,7 @@ export const AIPredictiveService = {
     const relevantReports = reports
       .filter((r) => !schoolYearId || !r.school_year_id || r.school_year_id === schoolYearId)
       .filter((r) => r.status === 'SUBMITTED' || r.status === 'LOCKED')
-      .sort((a, b) => a.report_date.localeCompare(b.report_date));
+      .sort((a, b) => (a.report_date || '').localeCompare(b.report_date || ''));
 
     // Tập hợp tất cả các ngày học đã có báo cáo
     const reportedDates = Array.from(new Set(relevantReports.map((r) => r.report_date))).sort();
@@ -164,7 +164,7 @@ export const AIPredictiveService = {
       });
 
       // Sắp xếp ngày vắng từ gần nhất đến xa nhất
-      absences.sort((a, b) => b.date.localeCompare(a.date));
+      absences.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
 
       const totalDaysAbsent = absences.length;
       const absentRate = (totalDaysAbsent / totalSchoolDays) * 100;

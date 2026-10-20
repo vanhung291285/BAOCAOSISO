@@ -1914,7 +1914,7 @@ export const AttendanceRankingPage: React.FC<AttendanceRankingPageProps> = ({ on
                 ) : (
                   <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden max-h-56 overflow-y-auto">
                     {offDaysList
-                      .sort((a, b) => a.date.localeCompare(b.date))
+                      .sort((a, b) => (a.date || '').localeCompare(b.date || ''))
                       .map((day) => (
                         <div
                           key={day.id}
