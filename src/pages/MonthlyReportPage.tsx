@@ -31,6 +31,7 @@ import {
   RefreshCw,
   ArrowLeft,
 } from 'lucide-react';
+import { isStudentInClass } from '../utils/studentUtils';
 import { exportMonthlyBoardingExcel } from '../utils/exportBoardingExcel';
 import { DEFAULT_BOARDING_STUDENTS_SEED } from '../utils/boardingRules';
 import { isValidStudentAddress, cleanStudentAddress } from '../utils/studentUtils';
@@ -249,32 +250,21 @@ export const MonthlyReportPage: React.FC<MonthlyReportPageProps> = ({ onNavigate
           rows: cData.rows,
         });
 
-        const matchStudentClass = (sClassId: string | undefined, c: ClassItem) => {
-          const normS = String(sClassId || '').trim().toLowerCase();
-          const cleanS = normS.replace(/^c_/, '').replace(/^lớp\s*/i, '');
-          const validKeys = [c.id, c.class_name, (c as any)?.code]
-            .filter(Boolean)
-            .flatMap((k) => [
-              String(k).trim().toLowerCase(),
-              String(k).replace(/^c_/, '').trim().toLowerCase(),
-              String(k).replace(/^lớp\s*/i, '').trim().toLowerCase(),
-            ]);
-          return validKeys.includes(normS) || validKeys.includes(cleanS);
-        };
+        const reportedTotalAvg = cData.summary.totalDaysReported > 0
+          ? Math.round(cData.summary.sumTotalAll / cData.summary.totalDaysReported)
+          : 0;
+        const rosterTotal = students.filter((s) => isStudentInClass(s.class_id, cls.id, cls.class_name)).length;
+        const clsTotal = reportedTotalAvg > 0
+          ? reportedTotalAvg
+          : (rosterTotal > 0 ? rosterTotal : 35);
 
-        const rosterTotal = students.filter((s) => matchStudentClass(s.class_id, cls)).length;
-        const clsTotal = rosterTotal > 0
-          ? rosterTotal
-          : (cData.summary.totalDaysReported > 0
-              ? Math.round(cData.summary.sumTotalAll / cData.summary.totalDaysReported)
-              : 35);
-
-        const rosterBoarding = students.filter((s) => matchStudentClass(s.class_id, cls) && (s.isBoarding === true || (s as any).is_boarding === true)).length;
-        const clsBoarding = rosterBoarding > 0
-          ? rosterBoarding
-          : (cData.summary.totalDaysReported > 0
-              ? Math.round(cData.summary.sumTotalBoarding / cData.summary.totalDaysReported)
-              : 0);
+        const reportedBoardingAvg = cData.summary.totalDaysReported > 0
+          ? Math.round(cData.summary.sumTotalBoarding / cData.summary.totalDaysReported)
+          : 0;
+        const rosterBoarding = students.filter((s) => isStudentInClass(s.class_id, cls.id, cls.class_name) && (s.isBoarding === true || (s as any).is_boarding === true)).length;
+        const clsBoarding = reportedBoardingAvg > 0
+          ? reportedBoardingAvg
+          : (rosterBoarding > 0 ? rosterBoarding : 0);
         const clsNgoaiTru = Math.max(0, clsTotal - clsBoarding);
 
         summaryRows.push({
