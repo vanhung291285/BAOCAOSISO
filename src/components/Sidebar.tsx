@@ -344,7 +344,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       }`}
     >
       {/* Navigation Groups */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden p-3 space-y-4 custom-scrollbar">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden p-3 space-y-4 custom-scrollbar-slate">
         {renderNavGroup('Điều hướng chính', mainNavItems)}
         {renderNavGroup('Báo cáo & Thống kê', reportNavItems)}
 
