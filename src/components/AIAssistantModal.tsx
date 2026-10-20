@@ -228,6 +228,11 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({ isOpen, onCl
         }),
       });
 
+      const contentType = res.headers.get('content-type');
+      if (!res.ok || !contentType || !contentType.includes('application/json')) {
+        throw new Error('Static hosting fallback');
+      }
+
       const data = await res.json();
       const aiData = data.data || {};
 
@@ -243,13 +248,29 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({ isOpen, onCl
 
       setMessages((prev) => [...prev, aiMsg]);
     } catch (err) {
-      console.error(err);
+      console.warn('Using client-side assistant fallback:', err);
+      const lowerText = text.toLowerCase();
+      let replyText = 'Dạ tôi đã ghi nhận câu hỏi của thầy cô về công tác quản lý sĩ số và bán trú.';
+      if (lowerText.includes('sĩ số') || lowerText.includes('vắng')) {
+        replyText = `Thầy/cô có thể kiểm tra danh sách học sinh vắng trong mục "Chấm báo ăn ngày" hoặc "Danh sách HS bán trú". Số liệu chuyên cần đang được cập nhật thời gian thực từ báo cáo của giáo viên chủ nhiệm.`;
+      } else if (lowerText.includes('bán trú') || lowerText.includes('suất ăn')) {
+        replyText = `Mục "Sổ chấm cơm tháng" và "Báo cáo nhà bếp" tự động tính toán suất ăn và định lượng gạo, thực phẩm dựa trên số liệu báo cáo của các lớp bán trú.`;
+      } else if (lowerText.includes('báo cáo') || lowerText.includes('thống kê')) {
+        replyText = `Thầy/cô có thể xem tổng hợp báo cáo chi tiết theo ngày, tuần hoặc tháng ngay tại trang tổng quan và xuất file Excel khi cần thiết.`;
+      }
+
       const errorMsg: ChatMessage = {
         id: `ai_${Date.now()}`,
         sender: 'ai',
-        text: 'Xin lỗi thầy/cô, hệ thống AI đang bận xử lý hoặc gặp gián đoạn kết nối. Thầy/cô vui lòng thử lại sau giây lát!',
+        text: replyText,
         timestamp: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
+        suggestedQuestions: [
+          'Xem danh sách HS vắng hôm nay',
+          'Kiểm tra định lượng nhà bếp',
+          'Báo cáo sĩ số cần chú ý'
+        ]
       };
+
       setMessages((prev) => [...prev, errorMsg]);
     } finally {
       setIsLoading(false);
