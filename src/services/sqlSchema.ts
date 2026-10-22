@@ -70,6 +70,7 @@ CREATE TABLE IF NOT EXISTS public.school_settings (
     allow_gvcn_report_friday BOOLEAN DEFAULT true,
     allow_gvcn_report_saturday BOOLEAN DEFAULT false,
     boarding_sheet_title TEXT DEFAULT 'SỔ CHẤM ĂN HỌC SINH BÁN TRÚ',
+    grade_names JSONB DEFAULT '{"1": "Khối 1", "2": "Khối 2", "3": "Khối 3", "4": "Khối 4", "5": "Khối 5", "6": "Khối 6", "7": "Khối 7", "8": "Khối 8", "9": "Khối 9", "10": "Khối 10", "11": "Khối 11", "12": "Khối 12"}'::jsonb,
     created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
 );
@@ -387,6 +388,10 @@ BEGIN
 
     BEGIN
         ALTER TABLE public.school_settings ADD COLUMN boarding_sheet_title TEXT DEFAULT 'SỔ CHẤM ĂN HỌC SINH BÁN TRÚ';
+    EXCEPTION WHEN duplicate_column THEN END;
+
+    BEGIN
+        ALTER TABLE public.school_settings ADD COLUMN grade_names JSONB DEFAULT '{"1": "Khối 1", "2": "Khối 2", "3": "Khối 3", "4": "Khối 4", "5": "Khối 5", "6": "Khối 6", "7": "Khối 7", "8": "Khối 8", "9": "Khối 9", "10": "Khối 10", "11": "Khối 11", "12": "Khối 12"}'::jsonb;
     EXCEPTION WHEN duplicate_column THEN END;
 
     BEGIN
@@ -1126,7 +1131,8 @@ export const generateFullDatabaseSqlScript = (): string => {
     auto_reminder_time, reminder_message_template,
     friday_breakfast, friday_lunch, friday_dinner,
     saturday_breakfast, saturday_lunch, saturday_dinner,
-    allow_gvcn_report_friday, allow_gvcn_report_saturday, boarding_sheet_title
+    allow_gvcn_report_friday, allow_gvcn_report_saturday, boarding_sheet_title,
+    grade_names
 ) VALUES (
     ${escapeSql(s.id || 'school_01')}, ${escapeSql(s.school_name)}, ${escapeSql(s.short_name)}, ${escapeSql(s.department_name)}, ${escapeSql(s.sub_department_name)},
     ${escapeSql(s.address)}, ${escapeSql(s.commune)}, ${escapeSql(s.province)}, ${escapeSql(s.phone)}, ${escapeSql(s.email)}, ${escapeSql(s.website)}, ${escapeSql(s.student_results_url || '')}, ${escapeSql(s.logo_url)},
@@ -1145,12 +1151,54 @@ export const generateFullDatabaseSqlScript = (): string => {
     ${escapeSql(Boolean(s.saturday_dinner))},
     ${escapeSql(s.allow_gvcn_report_friday !== undefined ? Boolean(s.allow_gvcn_report_friday) : true)},
     ${escapeSql(Boolean(s.allow_gvcn_report_saturday))},
-    ${escapeSql(s.boarding_sheet_title || 'SỔ CHẤM ĂN HỌC SINH BÁN TRÚ')}
+    ${escapeSql(s.boarding_sheet_title || 'SỔ CHẤM ĂN HỌC SINH BÁN TRÚ')},
+    ${escapeSql(JSON.stringify(s.grade_names || { '1': 'Khối 1', '2': 'Khối 2', '3': 'Khối 3', '4': 'Khối 4', '5': 'Khối 5', '6': 'Khối 6', '7': 'Khối 7', '8': 'Khối 8', '9': 'Khối 9', '10': 'Khối 10', '11': 'Khối 11', '12': 'Khối 12' }))}::jsonb
 ) ON CONFLICT (id) DO UPDATE SET
     school_name = EXCLUDED.school_name,
     short_name = EXCLUDED.short_name,
+    department_name = EXCLUDED.department_name,
+    sub_department_name = EXCLUDED.sub_department_name,
+    address = EXCLUDED.address,
+    commune = EXCLUDED.commune,
+    province = EXCLUDED.province,
+    phone = EXCLUDED.phone,
+    email = EXCLUDED.email,
+    website = EXCLUDED.website,
+    student_results_url = EXCLUDED.student_results_url,
+    logo_url = EXCLUDED.logo_url,
     principal_name = EXCLUDED.principal_name,
+    principal_title = EXCLUDED.principal_title,
     reporter_name = EXCLUDED.reporter_name,
+    reporter_title = EXCLUDED.reporter_title,
+    report_title = EXCLUDED.report_title,
+    footer_text = EXCLUDED.footer_text,
+    developer_name = EXCLUDED.developer_name,
+    developer_contact = EXCLUDED.developer_contact,
+    primary_color = EXCLUDED.primary_color,
+    input_mode = EXCLUDED.input_mode,
+    enable_campuses = EXCLUDED.enable_campuses,
+    week1_start_date = EXCLUDED.week1_start_date,
+    school_days_per_week = EXCLUDED.school_days_per_week,
+    ranking_threshold_excellent = EXCLUDED.ranking_threshold_excellent,
+    ranking_threshold_good = EXCLUDED.ranking_threshold_good,
+    ranking_threshold_fair = EXCLUDED.ranking_threshold_fair,
+    enable_early_report_bonus = EXCLUDED.enable_early_report_bonus,
+    early_report_deadline = EXCLUDED.early_report_deadline,
+    early_report_bonus_points = EXCLUDED.early_report_bonus_points,
+    early_report_max_bonus = EXCLUDED.early_report_max_bonus,
+    enable_auto_reminder = EXCLUDED.enable_auto_reminder,
+    auto_reminder_time = EXCLUDED.auto_reminder_time,
+    reminder_message_template = EXCLUDED.reminder_message_template,
+    friday_breakfast = EXCLUDED.friday_breakfast,
+    friday_lunch = EXCLUDED.friday_lunch,
+    friday_dinner = EXCLUDED.friday_dinner,
+    saturday_breakfast = EXCLUDED.saturday_breakfast,
+    saturday_lunch = EXCLUDED.saturday_lunch,
+    saturday_dinner = EXCLUDED.saturday_dinner,
+    allow_gvcn_report_friday = EXCLUDED.allow_gvcn_report_friday,
+    allow_gvcn_report_saturday = EXCLUDED.allow_gvcn_report_saturday,
+    boarding_sheet_title = EXCLUDED.boarding_sheet_title,
+    grade_names = EXCLUDED.grade_names,
     updated_at = timezone('utc'::text, now());\n\n`;
     }
 

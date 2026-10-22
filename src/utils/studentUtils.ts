@@ -120,14 +120,25 @@ export function isStudentInClass(
   targetClassName?: string | undefined | null
 ): boolean {
   if (!studentClassId || !targetClassId) return false;
+  
   const s = String(studentClassId).trim().toLowerCase();
-  const sClean = s.replace(/^c_/, '').replace(/^lớp\s*/i, '').trim();
+  
+  // Normalize class name for comparison
+  const normalize = (val: string) => {
+    return String(val)
+      .trim()
+      .toLowerCase()
+      .replace(/^c_/, '')
+      .replace(/^lớp\s*/i, '');
+  };
 
+  const sNorm = normalize(s);
   const targets = [targetClassId, targetClassName].filter(Boolean) as string[];
+  
   for (const t of targets) {
-    const tLower = String(t).trim().toLowerCase();
-    const tClean = tLower.replace(/^c_/, '').replace(/^lớp\s*/i, '').trim();
-    if (s === tLower || sClean === tClean || s === tClean || sClean === tLower) {
+    const tNorm = normalize(t);
+    // Exact match after normalization or if the target matches the raw class ID
+    if (s === tNorm || sNorm === tNorm || s === String(t).trim().toLowerCase()) {
       return true;
     }
   }

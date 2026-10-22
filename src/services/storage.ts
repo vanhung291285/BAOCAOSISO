@@ -58,6 +58,21 @@ import {
 } from '../utils/studentUtils';
 import { DEFAULT_BOARDING_STUDENTS_SEED, getMealScheduleForDate } from '../utils/boardingRules';
 
+export const DEFAULT_GRADE_NAMES: Record<string, string> = {
+  '1': 'Khối 1',
+  '2': 'Khối 2',
+  '3': 'Khối 3',
+  '4': 'Khối 4',
+  '5': 'Khối 5',
+  '6': 'Khối 6',
+  '7': 'Khối 7',
+  '8': 'Khối 8',
+  '9': 'Khối 9',
+  '10': 'Khối 10',
+  '11': 'Khối 11',
+  '12': 'Khối 12',
+};
+
 const STORAGE_KEYS = {
   SETTINGS: 'sso_school_settings_v1',
   YEARS: 'sso_school_years_v1',
@@ -475,6 +490,7 @@ export function getInitialData() {
     allow_gvcn_report_friday: true,
     allow_gvcn_report_saturday: false,
     boarding_sheet_title: 'SỔ CHẤM ĂN HỌC SINH BÁN TRÚ',
+    grade_names: { ...DEFAULT_GRADE_NAMES },
     created_at: now,
     updated_at: now,
   };
@@ -725,6 +741,13 @@ export const StorageService = {
       s.allow_gvcn_report_saturday = false;
       s.boarding_sheet_title = 'SỔ CHẤM ĂN HỌC SINH BÁN TRÚ';
       needsSave = true;
+    }
+    if (s) {
+      const mergedGrades = { ...DEFAULT_GRADE_NAMES, ...(s.grade_names || {}) };
+      if (!s.grade_names || Object.keys(DEFAULT_GRADE_NAMES).some((k) => !s.grade_names?.[k])) {
+        s.grade_names = mergedGrades;
+        needsSave = true;
+      }
     }
 
     if (s) {

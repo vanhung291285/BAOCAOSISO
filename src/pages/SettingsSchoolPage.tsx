@@ -34,6 +34,9 @@ import {
   Moon,
   FileSpreadsheet,
   Calculator,
+  Layers,
+  GraduationCap,
+  BookOpen,
 } from 'lucide-react';
 
 export const SettingsSchoolPage: React.FC = () => {
@@ -52,6 +55,53 @@ export const SettingsSchoolPage: React.FC = () => {
   const [formData, setFormData] = useState<Partial<SchoolSettings>>(settings || {});
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isSavingGrades, setIsSavingGrades] = useState(false);
+  const [savedGradesSuccess, setSavedGradesSuccess] = useState(false);
+
+  // Preset applying handlers for grade names
+  const handleApplyGradePreset = (type: 'PRIMARY' | 'SECONDARY' | 'COMBINED' | 'SHORT' | 'CLASS') => {
+    const current = { ...(formData.grade_names || {}) };
+    if (type === 'PRIMARY') {
+      current['1'] = 'Khối 1';
+      current['2'] = 'Khối 2';
+      current['3'] = 'Khối 3';
+      current['4'] = 'Khối 4';
+      current['5'] = 'Khối 5';
+    } else if (type === 'SECONDARY') {
+      current['6'] = 'Khối 6';
+      current['7'] = 'Khối 7';
+      current['8'] = 'Khối 8';
+      current['9'] = 'Khối 9';
+    } else if (type === 'COMBINED') {
+      for (let i = 1; i <= 9; i++) {
+        current[i.toString()] = `Khối ${i}`;
+      }
+    } else if (type === 'SHORT') {
+      for (let i = 1; i <= 12; i++) {
+        current[i.toString()] = `K${i}`;
+      }
+    } else if (type === 'CLASS') {
+      for (let i = 1; i <= 12; i++) {
+        current[i.toString()] = `Lớp ${i}`;
+      }
+    }
+    setFormData({ ...formData, grade_names: current });
+  };
+
+  const handleSaveGradesOnly = async () => {
+    setIsSavingGrades(true);
+    try {
+      await updateSchoolSettings({
+        grade_names: formData.grade_names,
+      });
+      setSavedGradesSuccess(true);
+      setTimeout(() => setSavedGradesSuccess(false), 3500);
+    } catch (err) {
+      console.error('Lỗi khi lưu tên khối lớp:', err);
+    } finally {
+      setIsSavingGrades(false);
+    }
+  };
 
   useEffect(() => {
     if (settings) {
@@ -1102,6 +1152,228 @@ export const SettingsSchoolPage: React.FC = () => {
                 className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs font-semibold bg-white"
               />
             </div>
+          </div>
+        </div>
+
+        {/* CARD: CẤU HÌNH TÊN CÁC KHỐI LỚP (TIỂU HỌC & TRUNG HỌC CƠ SỞ) */}
+        <div className="bg-white rounded-2xl p-6 border border-slate-200/90 shadow-xs space-y-6">
+          <div className="pb-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-black text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                <Layers className="w-4 h-4 text-indigo-700" />
+                <span>CẤU HÌNH TÊN CÁC KHỐI LỚP (TIỂU HỌC & TRUNG HỌC CƠ SỞ)</span>
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Tùy chỉnh tên hiển thị cho các khối lớp trong toàn bộ hệ thống (Hỗ trợ cấp Tiểu học từ Lớp 1 - 5, cấp THCS từ Lớp 6 - 9 và mở rộng).
+              </p>
+            </div>
+            <div className="flex items-center gap-2 self-start sm:self-auto">
+              <span className="text-[11px] font-bold text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
+                Cấp Tiểu học (1-5)
+              </span>
+              <span className="text-[11px] font-bold text-indigo-800 bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-200">
+                Cấp THCS (6-9)
+              </span>
+            </div>
+          </div>
+
+          {/* Quick Preset Buttons */}
+          <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 space-y-2">
+            <div className="text-[11px] font-bold text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+              <span>Áp dụng nhanh mẫu cấu hình tên khối:</span>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => handleApplyGradePreset('PRIMARY')}
+                className="px-3 py-1.5 rounded-lg text-xs font-bold bg-white text-emerald-800 border border-emerald-300 hover:bg-emerald-50 transition-colors shadow-2xs"
+              >
+                Mẫu chuẩn Tiểu học (Khối 1 - 5)
+              </button>
+              <button
+                type="button"
+                onClick={() => handleApplyGradePreset('SECONDARY')}
+                className="px-3 py-1.5 rounded-lg text-xs font-bold bg-white text-indigo-800 border border-indigo-300 hover:bg-indigo-50 transition-colors shadow-2xs"
+              >
+                Mẫu chuẩn THCS (Khối 6 - 9)
+              </button>
+              <button
+                type="button"
+                onClick={() => handleApplyGradePreset('COMBINED')}
+                className="px-3 py-1.5 rounded-lg text-xs font-bold bg-white text-purple-800 border border-purple-300 hover:bg-purple-50 transition-colors shadow-2xs"
+              >
+                Mẫu Liên cấp Tiểu học & THCS (Khối 1 - 9)
+              </button>
+              <button
+                type="button"
+                onClick={() => handleApplyGradePreset('CLASS')}
+                className="px-3 py-1.5 rounded-lg text-xs font-bold bg-white text-blue-800 border border-blue-300 hover:bg-blue-50 transition-colors shadow-2xs"
+              >
+                Dạng "Lớp 1", "Lớp 2"...
+              </button>
+              <button
+                type="button"
+                onClick={() => handleApplyGradePreset('SHORT')}
+                className="px-3 py-1.5 rounded-lg text-xs font-bold bg-white text-slate-700 border border-slate-300 hover:bg-slate-100 transition-colors shadow-2xs"
+              >
+                Dạng viết tắt "K1", "K2"...
+              </button>
+            </div>
+          </div>
+
+          {/* Group 1: CẤP TIỂU HỌC VIỆT NAM (KHỐI 1 ĐẾN KHỐI 5) */}
+          <div className="p-4 rounded-2xl bg-emerald-50/50 border border-emerald-200/90 space-y-3">
+            <div className="flex items-center justify-between pb-2 border-b border-emerald-100">
+              <div className="flex items-center gap-2">
+                <BookOpen className="w-4 h-4 text-emerald-600" />
+                <span className="text-xs font-black text-emerald-950 uppercase tracking-wide">
+                  CẤP TIỂU HỌC VIỆT NAM (5 KHỐI: LỚP 1 - LỚP 5)
+                </span>
+              </div>
+              <span className="text-[11px] font-semibold text-emerald-700">
+                Dành cho trường Tiểu học hoặc Liên cấp
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3 pt-1">
+              {[1, 2, 3, 4, 5].map((grade) => (
+                <div key={grade} className="bg-white p-3 rounded-xl border border-emerald-200/80 shadow-2xs">
+                  <label className="block text-xs font-bold text-emerald-900 uppercase tracking-wider mb-1">
+                    Khối {grade}
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.grade_names?.[grade.toString()] || `Khối ${grade}`}
+                    onChange={(e) => {
+                      setFormData({
+                        ...formData,
+                        grade_names: {
+                          ...(formData.grade_names || {}),
+                          [grade.toString()]: e.target.value,
+                        },
+                      });
+                    }}
+                    placeholder={`Khối ${grade}`}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white"
+                  />
+                  <div className="text-[10px] text-slate-400 mt-1">
+                    Mặc định: Khối {grade}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Group 2: CẤP TRUNG HỌC CƠ SỞ (KHỐI 6 ĐẾN KHỐI 9) */}
+          <div className="p-4 rounded-2xl bg-indigo-50/50 border border-indigo-200/90 space-y-3">
+            <div className="flex items-center justify-between pb-2 border-b border-indigo-100">
+              <div className="flex items-center gap-2">
+                <GraduationCap className="w-4 h-4 text-indigo-600" />
+                <span className="text-xs font-black text-indigo-950 uppercase tracking-wide">
+                  CẤP TRUNG HỌC CƠ SỞ (4 KHỐI: LỚP 6 - LỚP 9)
+                </span>
+              </div>
+              <span className="text-[11px] font-semibold text-indigo-700">
+                Dành cho trường THCS hoặc PTDTBT
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 pt-1">
+              {[6, 7, 8, 9].map((grade) => (
+                <div key={grade} className="bg-white p-3 rounded-xl border border-indigo-200/80 shadow-2xs">
+                  <label className="block text-xs font-bold text-indigo-900 uppercase tracking-wider mb-1">
+                    Khối {grade}
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.grade_names?.[grade.toString()] || `Khối ${grade}`}
+                    onChange={(e) => {
+                      setFormData({
+                        ...formData,
+                        grade_names: {
+                          ...(formData.grade_names || {}),
+                          [grade.toString()]: e.target.value,
+                        },
+                      });
+                    }}
+                    placeholder={`Khối ${grade}`}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white"
+                  />
+                  <div className="text-[10px] text-slate-400 mt-1">
+                    Mặc định: Khối {grade}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Group 3: CẤP THPT MỞ RỘNG (KHỐI 10, 11, 12) */}
+          <div className="p-4 rounded-2xl bg-purple-50/50 border border-purple-200/90 space-y-3">
+            <div className="flex items-center justify-between pb-2 border-b border-purple-100">
+              <div className="flex items-center gap-2">
+                <School className="w-4 h-4 text-purple-600" />
+                <span className="text-xs font-black text-purple-950 uppercase tracking-wide">
+                  CẤP THPT MỞ RỘNG (3 KHỐI: LỚP 10 - LỚP 12)
+                </span>
+              </div>
+              <span className="text-[11px] font-semibold text-purple-700">
+                Dành cho trường THPT hoặc Liên cấp 2-3
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+              {[10, 11, 12].map((grade) => (
+                <div key={grade} className="bg-white p-3 rounded-xl border border-purple-200/80 shadow-2xs">
+                  <label className="block text-xs font-bold text-purple-900 uppercase tracking-wider mb-1">
+                    Khối {grade}
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.grade_names?.[grade.toString()] || `Khối ${grade}`}
+                    onChange={(e) => {
+                      setFormData({
+                        ...formData,
+                        grade_names: {
+                          ...(formData.grade_names || {}),
+                          [grade.toString()]: e.target.value,
+                        },
+                      });
+                    }}
+                    placeholder={`Khối ${grade}`}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 bg-white"
+                  />
+                  <div className="text-[10px] text-slate-400 mt-1">
+                    Mặc định: Khối {grade}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Dedicated Save Action Bar for Grade Names */}
+          <div className="pt-3 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 bg-slate-50/60 -mx-6 -mb-6 p-4 rounded-b-2xl">
+            <div className="flex items-center gap-2">
+              {savedGradesSuccess ? (
+                <span className="text-xs font-bold text-emerald-700 flex items-center gap-1.5 animate-in fade-in">
+                  <CheckCircle className="w-4 h-4 text-emerald-600" />
+                  <span>Đã lưu & đồng bộ tên các khối lớp thành công!</span>
+                </span>
+              ) : (
+                <span className="text-[11px] text-slate-600 font-medium">
+                  * Tên khối này tự động hiển thị trên menu lọc, bảng quản lý lớp học, biểu mẫu báo cáo và file Excel.
+                </span>
+              )}
+            </div>
+            <button
+              type="button"
+              disabled={isSavingGrades}
+              onClick={handleSaveGradesOnly}
+              className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-black text-xs flex items-center justify-center gap-2 shadow-sm transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
+            >
+              <Save className="w-4 h-4" />
+              <span>{isSavingGrades ? 'Đang lưu tên khối...' : 'LƯU & ĐỒNG BỘ TÊN CÁC KHỐI LỚP'}</span>
+            </button>
           </div>
         </div>
 

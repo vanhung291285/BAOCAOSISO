@@ -24,7 +24,7 @@ import {
 } from 'lucide-react';
 import { SchoolYear, ClassItem, Profile } from '../types';
 import { resolveTeacherName, DEFAULT_CLASS_TEACHER_MAP } from '../utils/exportAttendanceStandardExcel';
-import { StorageService } from '../services/storage';
+import { StorageService, subscribeRealtime } from '../services/storage';
 
 interface LoginPageProps {
   onLoginSuccess: (targetPath?: string) => void;
@@ -41,6 +41,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
     classes,
     years,
     activeYear,
+    refreshAll,
     setActiveSchoolYear,
     saveSchoolYear,
     deleteSchoolYear,
@@ -76,6 +77,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
   const [isSavingYear, setIsSavingYear] = useState(false);
 
   // Mặc định luôn là thẻ GVCN, tên lớp là "Chọn tên lớp" (rỗng), không tự động điền tài khoản/mật khẩu quản trị
+  // Mặc định luôn là thẻ GVCN, tên lớp là "Chọn tên lớp" (rỗng), không tự động điền tài khoản/mật khẩu quản trị
   useEffect(() => {
     setActiveTab('GVCN');
     setSelectedClassId('');
@@ -92,33 +94,98 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
     } catch {}
   }, []);
 
+  // Tải dữ liệu mới nhất (lớp học, tài khoản giáo viên, cấu hình trường) khi vào màn hình đăng nhập
+  // và lắng nghe Realtime để đồng bộ ngay lập tức khi admin cấu hình lớp/GVCN ở tab khác
+  useEffect(() => {
+    refreshAll?.().catch(console.error);
+    reloadUsers?.().catch(console.error);
+
+    const unsubscribe = subscribeRealtime((event) => {
+      if (
+        event?.table === 'classes' ||
+        event?.table === 'profiles' ||
+        event?.table === 'school_settings' ||
+        event?.table === 'settings' ||
+        event?.table === 'all'
+      ) {
+        refreshAll?.().catch(console.error);
+        reloadUsers?.().catch(console.error);
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [refreshAll, reloadUsers]);
+
   // Sorted classes by grade
   const sortedClasses = useMemo(() => {
-    return [...classes].sort((a, b) => {
-      if (a.grade !== b.grade) return (a.grade || 0) - (b.grade || 0);
-      return (a.class_name || '').localeCompare(b.class_name || '', undefined, { numeric: true });
-    });
+    return [...classes]
+      .filter((c) => c.active !== false)
+      .sort((a, b) => {
+        if (a.grade !== b.grade) return (a.grade || 0) - (b.grade || 0);
+        return (a.class_name || '').localeCompare(b.class_name || '', undefined, { numeric: true });
+      });
   }, [classes]);
+
+  // Danh sách các khối lớp lấy động từ cấu hình lớp học thực tế (hỗ trợ Tiểu học 1-5, THCS 6-9, THPT, v.v.)
+  const distinctGrades = useMemo(() => {
+    const gradesSet = new Set<number>();
+    sortedClasses.forEach((c) => {
+      if (typeof c.grade === 'number' && !isNaN(c.grade) && c.grade > 0) {
+        gradesSet.add(c.grade);
+      }
+    });
+    if (gradesSet.size === 0) return [1, 2, 3, 4, 5, 6, 7, 8, 9];
+    return Array.from(gradesSet).sort((a, b) => a - b);
+  }, [sortedClasses]);
+
+  const otherClasses = useMemo(() => {
+    return sortedClasses.filter((c) => !c.grade || isNaN(c.grade) || c.grade <= 0);
+  }, [sortedClasses]);
 
   // Current selected class item
   const currentClass = useMemo(() => {
     return classes.find((c) => c.id === selectedClassId) || null;
   }, [classes, selectedClassId]);
 
-  // Helper tìm kiếm giáo viên tương ứng trong allUsers
+  // Helper tìm kiếm giáo viên tương ứng trong allUsers hoặc từ cấu hình lớp
   const findMatchedTeacher = useCallback(
     (cls: ClassItem | null): Profile | null => {
       if (!cls) return null;
 
-      // 1. Theo homeroom_teacher_id của lớp
+      // 1. Theo homeroom_teacher_id của lớp trong allUsers
       if (cls.homeroom_teacher_id) {
         const t = allUsers.find((u) => u.id === cls.homeroom_teacher_id);
         if (t) return t;
+
+        // Nếu homeroom_teacher_id là một họ tên người thực tế (không phải id kỹ thuật)
+        if (
+          cls.homeroom_teacher_id.includes(' ') &&
+          !cls.homeroom_teacher_id.startsWith('u_') &&
+          !cls.homeroom_teacher_id.startsWith('teacher_') &&
+          !cls.homeroom_teacher_id.startsWith('cls_')
+        ) {
+          const tByName = allUsers.find(
+            (u) => u.full_name.trim().toLowerCase() === cls.homeroom_teacher_id!.trim().toLowerCase()
+          );
+          if (tByName) return tByName;
+
+          return {
+            id: `teacher_${cls.id}`,
+            full_name: cls.homeroom_teacher_id.trim(),
+            email: `gvcn_${cls.class_name.toLowerCase().replace(/[^a-z0-9]/g, '')}@xadung.edu.vn`,
+            role: 'GVCN',
+            active: true,
+            assigned_class_id: cls.id,
+            created_at: new Date().toISOString(),
+          };
+        }
       }
 
-      // 2. Theo assigned_class_id của giáo viên
+      // 2. Theo assigned_class_id của giáo viên trong allUsers
       const tByClassId = allUsers.find(
-        (u) => u.role === 'GVCN' && u.assigned_class_id === cls.id
+        (u) => (u.role === 'GVCN' || !u.role || (u.role as string) === 'TEACHER') && u.assigned_class_id === cls.id
       );
       if (tByClassId) return tByClassId;
 
@@ -127,18 +194,20 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       const tByEmail = allUsers.find(
         (u) =>
           u.role === 'GVCN' &&
-          (u.email.toLowerCase().includes(cleanName) ||
-            (u as any).assigned_class_name?.trim().toLowerCase() === cleanName)
+          ((u as any).assigned_class_name?.trim().toLowerCase() === cleanName ||
+            u.email.toLowerCase().includes(`_${cleanName}@`) ||
+            u.email.toLowerCase().includes(`.${cleanName}@`))
       );
       if (tByEmail) return tByEmail;
 
-      // 4. Theo tên chuẩn giáo viên trong DEFAULT_CLASS_TEACHER_MAP
-      const resolvedStandardName = resolveTeacherName(cls.class_name);
-      if (resolvedStandardName) {
+      // 4. Theo tên giáo viên chuẩn trong DEFAULT_CLASS_TEACHER_MAP nếu trùng với user trong allUsers
+      const cleanCls = cls.class_name.replace(/^Lớp\s+/i, '').trim().toUpperCase();
+      const defaultName = DEFAULT_CLASS_TEACHER_MAP[cleanCls];
+      if (defaultName) {
         const tByName = allUsers.find(
           (u) =>
             u.role === 'GVCN' &&
-            u.full_name.trim().toLowerCase() === resolvedStandardName.trim().toLowerCase()
+            u.full_name.trim().toLowerCase() === defaultName.trim().toLowerCase()
         );
         if (tByName) return tByName;
       }
@@ -152,8 +221,36 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
   const resolvedTeacherName = useMemo(() => {
     if (!currentClass) return '';
     const matched = findMatchedTeacher(currentClass);
-    return resolveTeacherName(currentClass.class_name, matched?.full_name);
-  }, [currentClass, findMatchedTeacher]);
+    if (matched && matched.full_name && matched.full_name.trim()) {
+      return matched.full_name.trim();
+    }
+
+    // Nếu homeroom_teacher_id là một tên đầy đủ bằng chữ
+    if (
+      currentClass.homeroom_teacher_id &&
+      currentClass.homeroom_teacher_id.includes(' ') &&
+      !currentClass.homeroom_teacher_id.startsWith('u_') &&
+      !currentClass.homeroom_teacher_id.startsWith('teacher_') &&
+      !currentClass.homeroom_teacher_id.startsWith('cls_')
+    ) {
+      return currentClass.homeroom_teacher_id.trim();
+    }
+
+    // Nếu homeroom_teacher_id trỏ tới một user ID trong allUsers
+    if (currentClass.homeroom_teacher_id) {
+      const u = allUsers.find((user) => user.id === currentClass.homeroom_teacher_id);
+      if (u && u.full_name) return u.full_name.trim();
+    }
+
+    // Nếu có trong bảng mẫu mặc định THCS (6A1-9D10)
+    const cleanCls = currentClass.class_name.replace(/^Lớp\s+/i, '').trim().toUpperCase();
+    if (DEFAULT_CLASS_TEACHER_MAP[cleanCls]) {
+      return DEFAULT_CLASS_TEACHER_MAP[cleanCls];
+    }
+
+    // Nếu lớp mới chưa phân công GVCN (như 1A1 mới tạo): để trống để giao diện hiển thị "Chưa phân công GVCN"
+    return '';
+  }, [currentClass, findMatchedTeacher, allUsers]);
 
   // Xử lý khi GVCN chọn lớp: tự động gắn và hiển thị đúng GVCN
   const handleClassChange = (classId: string) => {
@@ -283,15 +380,37 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
   const handleDirectAttendanceFromAlert = async () => {
     if (!urgentAttendanceReminder) return;
     const targetClassId = urgentAttendanceReminder.class_id || selectedClassId;
-    let teacher = allUsers.find(
-      (u) =>
-        u.role === 'GVCN' &&
-        (u.assigned_class_id === targetClassId ||
-          (targetClassId &&
-            classes.some((c) => c.id === targetClassId && c.homeroom_teacher_id === u.id)))
+    const targetClass = classes.find(
+      (c) => c.id === targetClassId || c.class_name === urgentAttendanceReminder.class_name
     );
+    let teacher = findMatchedTeacher(targetClass || null);
+    if (!teacher && targetClassId) {
+      teacher = allUsers.find(
+        (u) =>
+          u.role === 'GVCN' &&
+          (u.assigned_class_id === targetClassId ||
+            classes.some((c) => c.id === targetClassId && c.homeroom_teacher_id === u.id))
+      );
+    }
     if (!teacher && selectedTeacherId) {
       teacher = allUsers.find((u) => u.id === selectedTeacherId);
+    }
+    if (!teacher && targetClass) {
+      const teacherId = targetClass.homeroom_teacher_id || `teacher_${targetClass.id}`;
+      const teacherFullName =
+        resolvedTeacherName ||
+        (targetClass.homeroom_teacher_id && targetClass.homeroom_teacher_id.includes(' ')
+          ? targetClass.homeroom_teacher_id
+          : `GVCN Lớp ${targetClass.class_name}`);
+      teacher = {
+        id: teacherId,
+        full_name: teacherFullName,
+        email: `gvcn_${targetClass.class_name.toLowerCase().replace(/[^a-z0-9]/g, '')}@xadung.edu.vn`,
+        role: 'GVCN',
+        active: true,
+        assigned_class_id: targetClass.id,
+        created_at: new Date().toISOString(),
+      };
     }
     if (!teacher) {
       teacher = allUsers.find((u) => u.role === 'GVCN');
@@ -300,7 +419,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
     if (teacher) {
       setIsSubmitting(true);
       try {
-        await switchUser(teacher.id);
+        await switchUser(teacher.id, teacher);
         if (urgentAttendanceReminder) {
           await markAsRead(urgentAttendanceReminder.id);
         }
@@ -745,11 +864,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                         className="w-full bg-transparent text-xs sm:text-[13.5px] font-semibold text-slate-800 focus:outline-hidden cursor-pointer appearance-none pr-6"
                       >
                         <option value="">Chọn tên lớp</option>
-                        {[6, 7, 8, 9].map((grade) => {
+                        {distinctGrades.map((grade) => {
                           const grp = sortedClasses.filter((c) => c.grade === grade);
                           if (grp.length === 0) return null;
+                          const gradeLabel = settings?.grade_names?.[grade.toString()] || `Khối ${grade}`;
                           return (
-                            <optgroup key={grade} label={`Khối ${grade}`}>
+                            <optgroup key={grade} label={gradeLabel}>
                               {grp.map((c) => (
                                 <option key={c.id} value={c.id}>
                                   Lớp {c.class_name}
@@ -758,6 +878,15 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                             </optgroup>
                           );
                         })}
+                        {otherClasses.length > 0 && (
+                          <optgroup label="Khối khác">
+                            {otherClasses.map((c) => (
+                              <option key={c.id} value={c.id}>
+                                Lớp {c.class_name}
+                              </option>
+                            ))}
+                          </optgroup>
+                        )}
                       </select>
                       <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-0 top-1/2 -translate-y-1/2 pointer-events-none" />
                     </div>
@@ -807,8 +936,14 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                           <div className="text-xs sm:text-[13.5px] font-bold text-slate-800 truncate">
                             GVCN: {resolvedTeacherName || 'Chưa phân công'}
                           </div>
-                          <span className="shrink-0 text-[10px] font-extrabold uppercase px-1.5 py-0.5 rounded-md bg-emerald-100 text-emerald-800 border border-emerald-200">
-                            Đúng GVCN
+                          <span
+                            className={`shrink-0 text-[10px] font-extrabold uppercase px-1.5 py-0.5 rounded-md border ${
+                              resolvedTeacherName
+                                ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                                : 'bg-amber-100 text-amber-800 border-amber-200'
+                            }`}
+                          >
+                            {resolvedTeacherName ? 'Đúng GVCN' : 'Chưa phân công'}
                           </span>
                         </>
                       ) : (

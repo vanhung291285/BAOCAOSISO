@@ -35,7 +35,7 @@ import {
 } from 'lucide-react';
 
 export const ClassesManagementPage: React.FC = () => {
-  const { classes, campuses, activeYear, addClass, updateClass, batchUpdateClasses, createTeacherAndAssign, deleteClass, toggleLockClass, students, addStudent, updateStudent, deleteStudent, deleteStudentsByClass, importStudents } = useSchool();
+  const { settings, classes, campuses, activeYear, addClass, updateClass, batchUpdateClasses, createTeacherAndAssign, deleteClass, toggleLockClass, students, addStudent, updateStudent, deleteStudent, deleteStudentsByClass, importStudents } = useSchool();
   const { allUsers, currentUser, isAdmin, isBGH, reloadUsers } = useAuth();
 
   // Filter & Search states
@@ -241,13 +241,32 @@ export const ClassesManagementPage: React.FC = () => {
     const assigned = classes.filter((c) => !!c.homeroom_teacher_id).length;
     const unassigned = total - assigned;
     const locked = classes.filter((c) => !!c.is_locked).length;
-    const byGrade = {
-      6: classes.filter((c) => c.grade === 6).length,
-      7: classes.filter((c) => c.grade === 7).length,
-      8: classes.filter((c) => c.grade === 8).length,
-      9: classes.filter((c) => c.grade === 9).length,
-    };
+    const byGrade: Record<number, number> = {};
+    for (let g = 1; g <= 12; g++) {
+      byGrade[g] = classes.filter((c) => c.grade === g).length;
+    }
     return { total, assigned, unassigned, locked, byGrade };
+  }, [classes]);
+
+  // Available grade tabs (dynamically showing Primary, Secondary, etc.)
+  const availableGrades = useMemo(() => {
+    const activeGradeNumbers = new Set<number>();
+    classes.forEach((c) => {
+      if (c.grade >= 1 && c.grade <= 12) activeGradeNumbers.add(c.grade);
+    });
+
+    const hasPrimary = Array.from(activeGradeNumbers).some((g) => g <= 5);
+    const hasSecondary = Array.from(activeGradeNumbers).some((g) => g >= 6 && g <= 9);
+
+    if (hasPrimary) {
+      [1, 2, 3, 4, 5].forEach((g) => activeGradeNumbers.add(g));
+    }
+    if (hasSecondary || !hasPrimary) {
+      [6, 7, 8, 9].forEach((g) => activeGradeNumbers.add(g));
+    }
+
+    const sorted = Array.from(activeGradeNumbers).sort((a, b) => a - b);
+    return ['ALL' as const, ...sorted];
   }, [classes]);
 
   // Filtered classes
@@ -477,8 +496,8 @@ export const ClassesManagementPage: React.FC = () => {
       const rawClassName = parts[0].toUpperCase();
       const rawTeacherName = parts.length > 1 ? parts[1] : '';
 
-      // Match grade from class name: 6A1 -> 6, 7A3 -> 7...
-      const gradeMatch = rawClassName.match(/^(\d)/);
+      // Match grade from class name: 1A1 -> 1, 5B -> 5, 6A1 -> 6, 10A1 -> 10...
+      const gradeMatch = rawClassName.match(/^(\d{1,2})/);
       const grade = gradeMatch ? parseInt(gradeMatch[1], 10) : 6;
 
       // Find or create teacher if name provided
@@ -600,14 +619,19 @@ export const ClassesManagementPage: React.FC = () => {
             <span>{stats.total}</span>
             <span className="text-xs font-bold text-slate-500">lớp</span>
           </div>
-          <div className="text-[11px] text-slate-500 mt-1.5 flex items-center gap-1.5">
-            <span>K6: <strong>{stats.byGrade[6]}</strong></span>
-            <span>•</span>
-            <span>K7: <strong>{stats.byGrade[7]}</strong></span>
-            <span>•</span>
-            <span>K8: <strong>{stats.byGrade[8]}</strong></span>
-            <span>•</span>
-            <span>K9: <strong>{stats.byGrade[9]}</strong></span>
+          <div className="text-[11px] text-slate-500 mt-1.5 flex flex-wrap items-center gap-1.5">
+            {Object.keys(stats.byGrade)
+              .map(Number)
+              .filter((g) => stats.byGrade[g] > 0)
+              .map((g, idx, arr) => (
+                <span key={g} className="flex items-center gap-1">
+                  <span>{settings?.grade_names?.[g.toString()] || `K${g}`}: <strong>{stats.byGrade[g]}</strong></span>
+                  {idx < arr.length - 1 && <span className="text-slate-300">•</span>}
+                </span>
+              ))}
+            {Object.values(stats.byGrade).every((cnt) => cnt === 0) && (
+              <span>Chưa có dữ liệu lớp</span>
+            )}
           </div>
         </div>
 
@@ -712,7 +736,7 @@ export const ClassesManagementPage: React.FC = () => {
       <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
         {/* Grade tabs */}
         <div className="flex flex-wrap items-center gap-1.5">
-          {(['ALL', 6, 7, 8, 9] as const).map((g) => (
+          {availableGrades.map((g) => (
             <button
               key={g}
               onClick={() => setSelectedGrade(g)}
@@ -724,7 +748,7 @@ export const ClassesManagementPage: React.FC = () => {
             >
               {g === 'ALL'
                 ? `Tất cả (${classes.length})`
-                : `Khối ${g} (${classes.filter((c) => c.grade === g).length})`}
+                : `${settings?.grade_names?.[g.toString()] || `Khối ${g}`} (${classes.filter((c) => c.grade === g).length})`}
             </button>
           ))}
         </div>
@@ -815,7 +839,7 @@ export const ClassesManagementPage: React.FC = () => {
                           <div className="flex items-center gap-2">
                             <span className="font-black text-sm text-slate-900">{c.class_name}</span>
                             <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700">
-                              K{c.grade}
+                              {settings?.grade_names?.[c.grade.toString()] || `K${c.grade}`}
                             </span>
                           </div>
                         )}
@@ -829,13 +853,30 @@ export const ClassesManagementPage: React.FC = () => {
                             onChange={(e) => handleInlineChange(c.id, 'grade', Number(e.target.value))}
                             className="px-2 py-1 text-xs font-bold border border-blue-400 bg-white rounded-lg"
                           >
-                            <option value={6}>Khối 6</option>
-                            <option value={7}>Khối 7</option>
-                            <option value={8}>Khối 8</option>
-                            <option value={9}>Khối 9</option>
+                            <optgroup label="Cấp Tiểu học (1 - 5)">
+                              {[1, 2, 3, 4, 5].map((g) => (
+                                <option key={g} value={g}>
+                                  {settings?.grade_names?.[g.toString()] || `Khối ${g}`}
+                                </option>
+                              ))}
+                            </optgroup>
+                            <optgroup label="Cấp THCS (6 - 9)">
+                              {[6, 7, 8, 9].map((g) => (
+                                <option key={g} value={g}>
+                                  {settings?.grade_names?.[g.toString()] || `Khối ${g}`}
+                                </option>
+                              ))}
+                            </optgroup>
+                            <optgroup label="Cấp THPT (10 - 12)">
+                              {[10, 11, 12].map((g) => (
+                                <option key={g} value={g}>
+                                  {settings?.grade_names?.[g.toString()] || `Khối ${g}`}
+                                </option>
+                              ))}
+                            </optgroup>
                           </select>
                         ) : (
-                          <span className="font-semibold text-slate-700">Khối {c.grade}</span>
+                          <span className="font-semibold text-slate-700">{settings?.grade_names?.[c.grade.toString()] || `Khối ${c.grade}`}</span>
                         )}
                       </td>
 
@@ -1025,12 +1066,29 @@ export const ClassesManagementPage: React.FC = () => {
                   <select
                     value={formGrade}
                     onChange={(e) => setFormGrade(Number(e.target.value))}
-                    className="w-full px-3 py-2 text-sm font-semibold border border-slate-300 rounded-xl focus:outline-hidden"
+                    className="w-full px-3 py-2 text-sm font-semibold border border-slate-300 rounded-xl focus:outline-hidden bg-white"
                   >
-                    <option value={6}>Khối 6</option>
-                    <option value={7}>Khối 7</option>
-                    <option value={8}>Khối 8</option>
-                    <option value={9}>Khối 9</option>
+                    <optgroup label="Cấp Tiểu học (1 - 5)">
+                      {[1, 2, 3, 4, 5].map((g) => (
+                        <option key={g} value={g}>
+                          {settings?.grade_names?.[g.toString()] || `Khối ${g}`}
+                        </option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="Cấp THCS (6 - 9)">
+                      {[6, 7, 8, 9].map((g) => (
+                        <option key={g} value={g}>
+                          {settings?.grade_names?.[g.toString()] || `Khối ${g}`}
+                        </option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="Cấp THPT (10 - 12)">
+                      {[10, 11, 12].map((g) => (
+                        <option key={g} value={g}>
+                          {settings?.grade_names?.[g.toString()] || `Khối ${g}`}
+                        </option>
+                      ))}
+                    </optgroup>
                   </select>
                 </div>
 
