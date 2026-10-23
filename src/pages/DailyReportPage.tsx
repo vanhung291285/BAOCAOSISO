@@ -15,7 +15,7 @@ import {
   resolveTeacherName,
 } from '../utils/exportAttendanceStandardExcel';
 import { DEFAULT_BOARDING_STUDENTS_SEED } from '../utils/boardingRules';
-import { isValidStudentAddress, cleanStudentAddress, isStudentInClass, matchClassReport } from '../utils/studentUtils';
+import { isValidStudentAddress, cleanStudentAddress, isStudentInClass } from '../utils/studentUtils';
 import {
   Printer,
   Download,
@@ -145,7 +145,7 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
 
   // Danh sách các lớp theo phân hiệu được chọn
   const displayClasses = useMemo(() => {
-    let list = classes.filter((c) => c.active !== false);
+    let list = classes.filter((c) => c.active);
     if (selectedCampusId !== 'all') {
       list = list.filter((c) => c.campus_id === selectedCampusId);
     }
@@ -520,9 +520,7 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
   const displayDailyRows = useMemo(() => {
     if (!reportData) return [];
     if (selectedClassFilter === 'all') return reportData.rows;
-    return reportData.rows.filter(
-      (r) => r.classItem.id === selectedClassFilter || matchClassReport(r.classItem.id, selectedClassFilter, r.classItem.class_name)
-    );
+    return reportData.rows.filter((r) => r.classItem.id === selectedClassFilter);
   }, [reportData, selectedClassFilter]);
 
   // Rows hiển thị khi xem theo tháng của lớp

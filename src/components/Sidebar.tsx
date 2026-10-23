@@ -74,14 +74,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
       allowed: true,
       highlight: true,
     },
-    {
-      id: 'ai-teacher-assistant',
-      label: isGVCN && assignedClass ? `Trợ lý AI (${assignedClass.class_name})` : 'Trợ lý AI GVCN',
-      path: '/ai-teacher-assistant',
-      icon: Sparkles,
-      allowed: true,
-      highlight: true,
-    },
   ];
 
   const reportNavItems = [

@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { SchoolSettings, SchoolYear, Campus, ClassItem, IndicatorGroup, Student } from '../types';
-import { StorageService, subscribeRealtime, buildDefaultClasses, buildDefaultCampuses } from '../services/storage';
+import { StorageService, subscribeRealtime } from '../services/storage';
 
 interface SchoolContextType {
   settings: SchoolSettings | null;
@@ -67,27 +67,15 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   });
   const [campuses, setCampuses] = useState<Campus[]>(() => {
     if (typeof window !== 'undefined') {
-      try {
-        const raw = localStorage.getItem('sso_campuses_v1');
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-        }
-      } catch {}
+      try { const raw = localStorage.getItem('sso_campuses_v1'); if (raw) return JSON.parse(raw); } catch {}
     }
-    return buildDefaultCampuses();
+    return [];
   });
   const [classes, setClasses] = useState<ClassItem[]>(() => {
     if (typeof window !== 'undefined') {
-      try {
-        const raw = localStorage.getItem('sso_classes_v1');
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-        }
-      } catch {}
+      try { const raw = localStorage.getItem('sso_classes_v1'); if (raw) return JSON.parse(raw); } catch {}
     }
-    return buildDefaultClasses();
+    return [];
   });
   const [indicators, setIndicators] = useState<IndicatorGroup[]>(() => {
     if (typeof window !== 'undefined') {
@@ -105,33 +93,25 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const refreshAll = useCallback(async () => {
     try {
-      // 1. Tải song song siêu tốc toàn bộ danh mục trường, lớp, cơ sở, năm học, chỉ tiêu (Local-first 0ms)
-      const [cData, sData, yData, clData, iData] = await Promise.all([
-        StorageService.getCampuses(),
+      const cData = await StorageService.getCampuses(); // Call this first to ensure it seeds settings if necessary
+      const [sData, yData, clData, iData, stData] = await Promise.all([
         StorageService.getSettings(),
         StorageService.getSchoolYears(),
         StorageService.getClasses(),
         StorageService.getIndicatorGroups(),
+        StorageService.getStudents(),
       ]);
-      setCampuses(cData);
       setSettings(sData);
       setYears(yData);
       const curYear = yData.find((y) => y.is_active) || yData[0] || null;
       setActiveYear(curYear);
+      setCampuses(cData);
       setClasses(clData);
       setIndicators(iData);
+      setStudents(stData);
     } catch (err) {
-      console.error('Failed to load fast school context data:', err);
+      console.error('Failed to load school context data:', err);
     }
-
-    // 2. Tải danh sách học sinh chạy ngầm độc lập trong nền, TUYỆT ĐỐI không chặn hiển thị danh sách lớp
-    StorageService.getStudents()
-      .then((stData) => {
-        setStudents(stData);
-      })
-      .catch((err) => {
-        console.warn('Background student loading warning:', err);
-      });
   }, []);
 
   useEffect(() => {

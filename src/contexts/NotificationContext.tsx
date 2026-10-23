@@ -3,7 +3,6 @@ import { AppNotification } from '../types';
 import { StorageService, subscribeRealtime } from '../services/storage';
 import { useAuth } from './AuthContext';
 import { getTodayDateStr } from '../utils/schoolWeeks';
-import { safeGetItem, safeSetItem } from '../utils/safeStorage';
 import {
   playNotificationChime,
   testNotificationChime,
@@ -61,15 +60,14 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   // Lớp đang theo dõi cảnh báo trên thiết bị này (kể cả khi chưa đăng nhập)
   const [monitoredClassId, setMonitoredClassIdState] = useState<string>(() => {
     if (typeof window === 'undefined') return '';
-    return safeGetItem('sso_device_alert_class_id') || safeGetItem('sso_saved_class_id') || '';
+    return localStorage.getItem('sso_device_alert_class_id') || localStorage.getItem('sso_saved_class_id') || '';
   });
 
-  const setMonitoredClassId = useCallback((classId: any) => {
-    const cleanId = typeof classId === 'string' ? classId.trim() : (classId && typeof classId === 'object' && 'id' in classId ? String((classId as any).id) : String(classId || ''));
-    setMonitoredClassIdState(cleanId);
+  const setMonitoredClassId = useCallback((classId: string) => {
+    setMonitoredClassIdState(classId);
     if (typeof window !== 'undefined') {
-      safeSetItem('sso_device_alert_class_id', cleanId);
-      safeSetItem('sso_saved_class_id', cleanId);
+      localStorage.setItem('sso_device_alert_class_id', classId);
+      localStorage.setItem('sso_saved_class_id', classId);
     }
   }, []);
 
@@ -78,7 +76,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     if (currentUser?.role === 'GVCN' && currentUser.assigned_class_id) {
       setMonitoredClassId(currentUser.assigned_class_id);
       if (typeof window !== 'undefined') {
-        safeSetItem('sso_saved_teacher_id', currentUser.id);
+        localStorage.setItem('sso_saved_teacher_id', currentUser.id);
       }
     }
   }, [currentUser, setMonitoredClassId]);
@@ -127,9 +125,9 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       } else {
         // KHI CHƯA ĐĂNG NHẬP: Lấy thông báo theo lớp/giáo viên được lưu trên thiết bị này
         const savedClass = (typeof window !== 'undefined'
-          ? safeGetItem('sso_device_alert_class_id') || safeGetItem('sso_saved_class_id')
+          ? localStorage.getItem('sso_device_alert_class_id') || localStorage.getItem('sso_saved_class_id')
           : null) || monitoredClassId || undefined;
-        const savedTeacher = typeof window !== 'undefined' ? safeGetItem('sso_saved_teacher_id') || undefined : undefined;
+        const savedTeacher = typeof window !== 'undefined' ? localStorage.getItem('sso_saved_teacher_id') || undefined : undefined;
         const list = await StorageService.getNotifications(savedTeacher, savedClass);
         setNotifications(list);
       }
@@ -232,8 +230,8 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     }
 
     // KHI CHƯA ĐĂNG NHẬP:
-    const targetClass = monitoredClassId || (typeof window !== 'undefined' ? safeGetItem('sso_device_alert_class_id') || safeGetItem('sso_saved_class_id') : null);
-    const targetTeacher = typeof window !== 'undefined' ? safeGetItem('sso_saved_teacher_id') : null;
+    const targetClass = monitoredClassId || (typeof window !== 'undefined' ? localStorage.getItem('sso_device_alert_class_id') || localStorage.getItem('sso_saved_class_id') : null);
+    const targetTeacher = typeof window !== 'undefined' ? localStorage.getItem('sso_saved_teacher_id') : null;
 
     if (targetClass || targetTeacher) {
       const match = notifications.find(

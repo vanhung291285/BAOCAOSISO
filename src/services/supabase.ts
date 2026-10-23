@@ -48,17 +48,14 @@ export function getSupabaseCredentials(): { url: string; anonKey: string } {
   const envUrl = (import.meta as any).env?.VITE_SUPABASE_URL || '';
   const envKey = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || '';
 
-  const DEFAULT_SUPABASE_URL = 'https://jzycmjynzkhevuxyjngv.supabase.co';
-  const DEFAULT_SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6eWNtanluemtoZXZ1eHlqbmd2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIxOTUzODksImV4cCI6MjA4Nzc3MTM4OX0.k9bRVlYvcCKqhDGZspPajyT128e1CfQCcL2Swr76Ayw';
-
   let rawUrl = (localUrl || envUrl).trim();
   let rawKey = (localKey || envKey).trim();
 
-  if (rawUrl.includes('YOUR_SUPABASE') || rawUrl.includes('placeholder') || !rawUrl) {
-    rawUrl = DEFAULT_SUPABASE_URL;
+  if (rawUrl.includes('YOUR_SUPABASE') || rawUrl.includes('placeholder')) {
+    rawUrl = '';
   }
-  if (rawKey.includes('YOUR_SUPABASE') || rawKey.includes('placeholder') || !rawKey) {
-    rawKey = DEFAULT_SUPABASE_KEY;
+  if (rawKey.includes('YOUR_SUPABASE') || rawKey.includes('placeholder')) {
+    rawKey = '';
   }
 
   // Remove trailing slashes

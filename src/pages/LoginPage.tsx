@@ -94,9 +94,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
     } catch {}
   }, []);
 
-  // Lắng nghe Realtime để đồng bộ ngay lập tức khi admin cấu hình lớp/GVCN ở tab khác
+  // Tải dữ liệu mới nhất (lớp học, tài khoản giáo viên, cấu hình trường) khi vào màn hình đăng nhập
+  // và lắng nghe Realtime để đồng bộ ngay lập tức khi admin cấu hình lớp/GVCN ở tab khác
   useEffect(() => {
-    let debounceTimer: any = null;
+    refreshAll?.().catch(console.error);
+    reloadUsers?.().catch(console.error);
+
     const unsubscribe = subscribeRealtime((event) => {
       if (
         event?.table === 'classes' ||
@@ -105,16 +108,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
         event?.table === 'settings' ||
         event?.table === 'all'
       ) {
-        if (debounceTimer) clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(() => {
-          refreshAll?.().catch(console.error);
-          reloadUsers?.().catch(console.error);
-        }, 300);
+        refreshAll?.().catch(console.error);
+        reloadUsers?.().catch(console.error);
       }
     });
 
     return () => {
-      if (debounceTimer) clearTimeout(debounceTimer);
       unsubscribe();
     };
   }, [refreshAll, reloadUsers]);
