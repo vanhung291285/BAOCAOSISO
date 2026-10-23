@@ -23,6 +23,7 @@ import { SettingsSupabasePage } from './pages/SettingsSupabasePage';
 import { ProfilePage } from './pages/ProfilePage';
 import { BoardingManagementPage } from './pages/BoardingManagementPage';
 import { AIPredictiveDropoutPage } from './pages/AIPredictiveDropoutPage';
+import { AITeacherAssistantPage } from './pages/AITeacherAssistantPage';
 import { AIAssistantModal } from './components/AIAssistantModal';
 import {
   School,
@@ -248,6 +249,10 @@ const AppContent: React.FC = () => {
 
                 {currentPath === '/ai-dropout-prediction' && (
                   <AIPredictiveDropoutPage onNavigate={handleNavigate} />
+                )}
+
+                {(currentPath === '/ai-teacher-assistant' || currentPath === '/ai-assistant-gvcn') && (
+                  <AITeacherAssistantPage onNavigate={handleNavigate} />
                 )}
 
                 {currentPath === '/classes' && (isAdmin || isBGH ? <ClassesManagementPage /> : <DashboardPage onNavigate={handleNavigate} onSelectClassForInput={handleSelectClassForInput} />)}

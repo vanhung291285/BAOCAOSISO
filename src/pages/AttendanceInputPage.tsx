@@ -1509,6 +1509,18 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
             {onNavigate && (
               <button
                 type="button"
+                onClick={() => onNavigate('/ai-teacher-assistant')}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black text-purple-950 bg-gradient-to-r from-purple-100 to-indigo-100 hover:from-purple-200 hover:to-indigo-200 border border-purple-300 shadow-2xs transition-all active:scale-95 cursor-pointer"
+                title="Mở Trợ lý AI tổng hợp báo cáo BGH và gợi ý nhận xét học sinh định kỳ"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-purple-600 animate-pulse" />
+                <span>Trợ lý AI GVCN</span>
+              </button>
+            )}
+
+            {onNavigate && (
+              <button
+                type="button"
                 onClick={() => onNavigate('/reports/boarding-monthly')}
                 className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-emerald-900 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 transition-colors cursor-pointer"
                 title="Mở toàn bộ Sổ chấm cơm bán trú theo tháng của lớp"

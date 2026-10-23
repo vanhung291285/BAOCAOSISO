@@ -440,9 +440,37 @@ export function subscribeRealtime(callback: (event: { table: string; payload?: a
 }
 
 // ----------------------------------------------------
-// INITIAL SEED DATA BUILDER (MẶC ĐỊNH RỖNG ĐỂ CẤU HÌNH TỪ ĐẦU)
+// INITIAL SEED DATA BUILDER (MẶC ĐỊNH SẴN CÁC LỚP TOÀN TRƯỜNG ĐỂ TRUY CẬP TỨC THÌ 0MS)
 // ----------------------------------------------------
 export const STORAGE_CLEAN_VERSION_KEY = 'sso_clean_state_v4_clean_blank_slate';
+
+export function buildDefaultCampuses(): Campus[] {
+  const now = new Date().toISOString();
+  return [
+    { id: 'c_1', name: 'Phân hiệu chính', active: true, created_at: now },
+    { id: 'c_2', name: 'Phân hiệu Suối Lư', active: true, created_at: now },
+    { id: 'c_3', name: 'Phân hiệu Nà Sản', active: true, created_at: now },
+  ];
+}
+
+export function buildDefaultClasses(): ClassItem[] {
+  const now = new Date().toISOString();
+  const entries = Object.entries(DEFAULT_CLASS_TEACHER_MAP);
+  return entries.map(([className, _teacherName], index) => {
+    const gradeMatch = className.match(/^(\d+)/);
+    const grade = gradeMatch ? parseInt(gradeMatch[1], 10) : 6;
+    return {
+      id: `c_${className.toLowerCase()}`,
+      class_name: className,
+      grade,
+      school_year_id: 'year_2026_2027',
+      sort_order: index + 1,
+      active: true,
+      campus_id: 'c_1',
+      created_at: now,
+    };
+  });
+}
 
 export function getInitialData() {
   const now = new Date().toISOString();
@@ -501,7 +529,7 @@ export function getInitialData() {
     { id: 'year_2026_2027', name: '2026-2027', is_active: true, is_locked: false, created_at: now },
   ];
 
-  const campuses: Campus[] = [];
+  const campuses: Campus[] = buildDefaultCampuses();
 
   const indicators: IndicatorGroup[] = [
     {
@@ -532,7 +560,7 @@ export function getInitialData() {
     },
   ];
 
-  const classes: ClassItem[] = [];
+  const classes: ClassItem[] = buildDefaultClasses();
 
   const profiles: Profile[] = [
     {
@@ -624,6 +652,9 @@ export function ensureInitialized() {
 // STORAGE SERVICE CRUD & FULL SUPABASE PERSISTENCE API
 // ----------------------------------------------------
 export const StorageService = {
+  buildDefaultCampuses,
+  buildDefaultClasses,
+
   // --- 1. School Settings ---
   async getSettings(): Promise<SchoolSettings> {
     ensureInitialized();
@@ -869,20 +900,46 @@ export const StorageService = {
   // --- 2. School Years ---
   async getSchoolYears(): Promise<SchoolYear[]> {
     ensureInitialized();
+    const CACHE_KEY = 'school_years_list';
+    const cached = getCached<SchoolYear[]>(CACHE_KEY);
+    if (cached && cached.length > 0) return cached;
+
+    const raw = localStorage.getItem(STORAGE_KEYS.YEARS);
+    let years: SchoolYear[] = [];
+    if (raw) {
+      try { years = JSON.parse(raw); } catch {}
+    }
+    if (!years || years.length === 0) {
+      years = getInitialData().years;
+      try { localStorage.setItem(STORAGE_KEYS.YEARS, JSON.stringify(years)); } catch {}
+    }
+    setCached(CACHE_KEY, years, 60000);
+
     const supabase = getSupabaseClient();
     if (supabase && isSupabaseConnected()) {
-      try {
-        const { data, error } = await supabase.from('school_years').select('*').order('created_at', { ascending: true });
-        if (!error && data && data.length > 0) {
-          localStorage.setItem(STORAGE_KEYS.YEARS, JSON.stringify(data));
-          return data;
+      (async () => {
+        try {
+          const fetchPromise = supabase.from('school_years').select('*').order('created_at', { ascending: true });
+          const timeoutPromise = new Promise<{ data: null; error: Error }>((_, reject) =>
+            setTimeout(() => reject(new Error('School years cloud fetch timeout')), 3500)
+          );
+          const { data, error } = (await Promise.race([fetchPromise, timeoutPromise])) as any;
+          if (!error && data && data.length > 0) {
+            const currentStr = localStorage.getItem(STORAGE_KEYS.YEARS) || '';
+            const newStr = JSON.stringify(data);
+            if (currentStr !== newStr) {
+              localStorage.setItem(STORAGE_KEYS.YEARS, newStr);
+              setCached(CACHE_KEY, data, 60000);
+              notifyRealtimeChange('school_years', data);
+            }
+          }
+        } catch (err) {
+          // Cloud fetch failed or timed out; local cache remains active
         }
-      } catch (err) {
-        console.warn('Supabase fetch school_years fallback to local', err);
-      }
+      })();
     }
-    const raw = localStorage.getItem(STORAGE_KEYS.YEARS);
-    return raw ? JSON.parse(raw) : [];
+
+    return years;
   },
 
   async saveSchoolYear(year: SchoolYear): Promise<void> {
@@ -966,46 +1023,48 @@ export const StorageService = {
   // --- 3. Campuses ---
   async getCampuses(): Promise<Campus[]> {
     ensureInitialized();
-    const supabase = getSupabaseClient();
-    if (supabase && isSupabaseConnected()) {
-      try {
-        const { data, error } = await supabase.from('campuses').select('*').order('created_at', { ascending: true });
-        if (!error && data && data.length > 0) {
-          localStorage.setItem(STORAGE_KEYS.CAMPUSES, JSON.stringify(data));
-          return data;
-        }
-      } catch (err) {
-        console.warn('Supabase fetch campuses fallback to local', err);
-      }
-    }
+    const CACHE_KEY = 'campuses_list';
+    const cached = getCached<Campus[]>(CACHE_KEY);
+    if (cached && cached.length > 0) return cached;
+
     const raw = localStorage.getItem(STORAGE_KEYS.CAMPUSES);
-    const campuses = raw ? JSON.parse(raw) : [];
+    let campuses: Campus[] = [];
+    if (raw) {
+      try { campuses = JSON.parse(raw); } catch {}
+    }
 
     // Auto-seed requested campuses if none exist
-    if (campuses.length === 0) {
-      const defaultCampuses = [
-        { id: 'c_1', name: 'Phân hiệu chính', active: true, created_at: new Date().toISOString() },
-        { id: 'c_2', name: 'Phân hiệu Suối Lư', active: true, created_at: new Date().toISOString() },
-        { id: 'c_3', name: 'Phân hiệu Nà Sản', active: true, created_at: new Date().toISOString() },
-      ];
-      localStorage.setItem(STORAGE_KEYS.CAMPUSES, JSON.stringify(defaultCampuses));
-      
-      const settings = JSON.parse(localStorage.getItem(STORAGE_KEYS.SETTINGS) || '{}');
-      if (settings && !settings.enable_campuses) {
-        settings.enable_campuses = true;
-        localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
-      }
+    if (!campuses || campuses.length === 0) {
+      campuses = buildDefaultCampuses();
+      try {
+        localStorage.setItem(STORAGE_KEYS.CAMPUSES, JSON.stringify(campuses));
+      } catch {}
+    }
 
-      const classesRaw = localStorage.getItem(STORAGE_KEYS.CLASSES);
-      if (classesRaw) {
-        let classes = JSON.parse(classesRaw);
-        classes = classes.map((c: any, i: number) => ({
-          ...c,
-          campus_id: c.campus_id || defaultCampuses[i % defaultCampuses.length].id
-        }));
-        localStorage.setItem(STORAGE_KEYS.CLASSES, JSON.stringify(classes));
-      }
-      return defaultCampuses;
+    setCached(CACHE_KEY, campuses, 60000);
+
+    const supabase = getSupabaseClient();
+    if (supabase && isSupabaseConnected()) {
+      (async () => {
+        try {
+          const fetchPromise = supabase.from('campuses').select('*').order('created_at', { ascending: true });
+          const timeoutPromise = new Promise<{ data: null; error: Error }>((_, reject) =>
+            setTimeout(() => reject(new Error('Campuses cloud fetch timeout')), 3500)
+          );
+          const { data, error } = (await Promise.race([fetchPromise, timeoutPromise])) as any;
+          if (!error && data && data.length > 0) {
+            const currentStr = localStorage.getItem(STORAGE_KEYS.CAMPUSES) || '';
+            const newStr = JSON.stringify(data);
+            if (currentStr !== newStr) {
+              localStorage.setItem(STORAGE_KEYS.CAMPUSES, newStr);
+              setCached(CACHE_KEY, data, 60000);
+              notifyRealtimeChange('campuses', data);
+            }
+          }
+        } catch (err) {
+          // Cloud fetch failed or timed out; local cache remains active
+        }
+      })();
     }
 
     return campuses;
@@ -1153,7 +1212,7 @@ export const StorageService = {
     ensureInitialized();
     const CACHE_KEY = 'classes_list';
     const cached = getCached<ClassItem[]>(CACHE_KEY);
-    if (cached) return cached;
+    if (cached && cached.length > 0) return cached;
 
     return coalesceRequest(CACHE_KEY, async () => {
       const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
@@ -1164,28 +1223,48 @@ export const StorageService = {
         return collator.compare(a.class_name, b.class_name);
       };
 
-      // 1. Read local storage first
+      // 1. Read local storage first (0ms instant access)
       const raw = localStorage.getItem(STORAGE_KEYS.CLASSES);
-      let localData: ClassItem[] = raw ? JSON.parse(raw) : [];
-      if (localData.length > 0) {
-        localData.sort(sortFn);
-        setCached(CACHE_KEY, localData, 60000);
+      let localData: ClassItem[] = [];
+      if (raw) {
+        try { localData = JSON.parse(raw); } catch {}
       }
 
-      // 2. Fetch fresh data from Supabase if connected
+      // If local storage is empty, initialize immediately with default classes
+      if (!localData || localData.length === 0) {
+        localData = buildDefaultClasses();
+        try {
+          localStorage.setItem(STORAGE_KEYS.CLASSES, JSON.stringify(localData));
+        } catch {}
+      }
+
+      localData.sort(sortFn);
+      setCached(CACHE_KEY, localData, 60000);
+
+      // 2. Fetch fresh data from Supabase in background (Stale-While-Revalidate)
       const supabase = getSupabaseClient();
       if (supabase && isSupabaseConnected()) {
-        try {
-          const { data: cloudData, error } = await supabase.from('classes').select('*').order('sort_order', { ascending: true });
-          if (!error && cloudData && cloudData.length > 0) {
-            cloudData.sort(sortFn);
-            localStorage.setItem(STORAGE_KEYS.CLASSES, JSON.stringify(cloudData));
-            setCached(CACHE_KEY, cloudData, 60000);
-            return cloudData;
+        (async () => {
+          try {
+            const fetchPromise = supabase.from('classes').select('*').order('sort_order', { ascending: true });
+            const timeoutPromise = new Promise<{ data: null; error: Error }>((_, reject) =>
+              setTimeout(() => reject(new Error('Classes cloud fetch timeout')), 3500)
+            );
+            const { data: cloudData, error } = (await Promise.race([fetchPromise, timeoutPromise])) as any;
+            if (!error && cloudData && cloudData.length > 0) {
+              cloudData.sort(sortFn);
+              const currentRaw = localStorage.getItem(STORAGE_KEYS.CLASSES) || '';
+              const newRaw = JSON.stringify(cloudData);
+              if (currentRaw !== newRaw) {
+                localStorage.setItem(STORAGE_KEYS.CLASSES, newRaw);
+                setCached(CACHE_KEY, cloudData, 60000);
+                notifyRealtimeChange('classes', cloudData);
+              }
+            }
+          } catch (err) {
+            // Cloud fetch failed or timed out; local cache remains active
           }
-        } catch (err) {
-          console.warn('Supabase fetch classes fallback to local', err);
-        }
+        })();
       }
 
       return localData;
@@ -3057,26 +3136,17 @@ export const StorageService = {
     ensureInitialized();
     const CACHE_KEY = 'profiles_list';
     const cached = getCached<Profile[]>(CACHE_KEY);
-    if (cached) return cached;
+    if (cached && cached.length > 0) return cached;
 
     return coalesceRequest(CACHE_KEY, async () => {
-      let data: Profile[] | null = null;
-      const supabase = getSupabaseClient();
-      if (supabase && isSupabaseConnected()) {
-        try {
-          const { data: cloudData, error } = await supabase.from('profiles').select('*').order('created_at', { ascending: true });
-          if (!error && cloudData && cloudData.length > 0) {
-            localStorage.setItem(STORAGE_KEYS.PROFILES, JSON.stringify(cloudData));
-            data = cloudData;
-          }
-        } catch (err) {
-          console.warn('Supabase fetch profiles fallback to local', err);
-        }
+      const raw = localStorage.getItem(STORAGE_KEYS.PROFILES);
+      let data: Profile[] = [];
+      if (raw) {
+        try { data = JSON.parse(raw); } catch {}
       }
-
-      if (!data) {
-        const raw = localStorage.getItem(STORAGE_KEYS.PROFILES);
-        data = raw ? JSON.parse(raw) : getInitialData().profiles;
+      if (!data || data.length === 0) {
+        data = getInitialData().profiles;
+        try { localStorage.setItem(STORAGE_KEYS.PROFILES, JSON.stringify(data)); } catch {}
       }
 
       let modified = false;
@@ -3088,10 +3158,42 @@ export const StorageService = {
         return p;
       });
       if (modified) {
-        localStorage.setItem(STORAGE_KEYS.PROFILES, JSON.stringify(list));
+        try { localStorage.setItem(STORAGE_KEYS.PROFILES, JSON.stringify(list)); } catch {}
       }
 
       setCached(CACHE_KEY, list, 60000);
+
+      // Background revalidation from Supabase
+      const supabase = getSupabaseClient();
+      if (supabase && isSupabaseConnected()) {
+        (async () => {
+          try {
+            const fetchPromise = supabase.from('profiles').select('*').order('created_at', { ascending: true });
+            const timeoutPromise = new Promise<{ data: null; error: Error }>((_, reject) =>
+              setTimeout(() => reject(new Error('Profiles cloud fetch timeout')), 3500)
+            );
+            const { data: cloudData, error } = (await Promise.race([fetchPromise, timeoutPromise])) as any;
+            if (!error && cloudData && cloudData.length > 0) {
+              let cList = cloudData.map((p: Profile) => {
+                if (p.role === 'ADMIN' && p.email !== 'admin@db.edu.vn') {
+                  p.email = 'admin@db.edu.vn';
+                }
+                return p;
+              });
+              const currentStr = localStorage.getItem(STORAGE_KEYS.PROFILES) || '';
+              const newStr = JSON.stringify(cList);
+              if (currentStr !== newStr) {
+                localStorage.setItem(STORAGE_KEYS.PROFILES, newStr);
+                setCached(CACHE_KEY, cList, 60000);
+                notifyRealtimeChange('profiles', cList);
+              }
+            }
+          } catch (err) {
+            // Background fetch error handled gracefully
+          }
+        })();
+      }
+
       return list;
     });
   },
