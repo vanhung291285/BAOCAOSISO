@@ -7,7 +7,7 @@ import { AbsentStudent, DailyReport, DailyReportValue, Student, BoardingDailyRep
 import { DateNavigator } from '../components/DateNavigator';
 import { getTodayDateStr, formatDateVN } from '../utils/schoolWeeks';
 import { buildDefaultMealRecords, getMealScheduleForDate } from '../utils/boardingRules';
-import { isValidStudentAddress, cleanStudentAddress, isStudentInClass } from '../utils/studentUtils';
+import { isValidStudentAddress, cleanStudentAddress, isStudentInClass, matchClassReport, normalizeClassKey } from '../utils/studentUtils';
 import {
   CheckCircle2,
   RotateCcw,
@@ -91,8 +91,11 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
   // Find GVCN's assigned class by profile's assigned_class_id OR class's homeroom_teacher_id
   const myAssignedClass = useMemo(() => {
     if (!isGVCN || !currentUser) return null;
+    const aId = currentUser.assigned_class_id;
     return (
-      classes.find((c) => currentUser.assigned_class_id && c.id === currentUser.assigned_class_id) ||
+      classes.find((c) => aId && c.id === aId) ||
+      classes.find((c) => aId && c.class_name === aId) ||
+      classes.find((c) => aId && matchClassReport(aId, c)) ||
       classes.find((c) => currentUser.id && c.homeroom_teacher_id === currentUser.id) ||
       null
     );
@@ -101,11 +104,17 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
   // Selected class ID
   const [selectedClassId, setSelectedClassId] = useState<string>(() => {
     if (isGVCN) {
-      if (currentUser?.assigned_class_id) return currentUser.assigned_class_id;
+      if (currentUser?.assigned_class_id) {
+        const found = classes.find((c) => matchClassReport(currentUser.assigned_class_id, c));
+        if (found) return found.id;
+        return currentUser.assigned_class_id;
+      }
       const found = classes.find((c) => currentUser?.id && c.homeroom_teacher_id === currentUser.id);
       if (found) return found.id;
     }
     if (initialClassId) {
+      const found = classes.find((c) => matchClassReport(initialClassId, c));
+      if (found) return found.id;
       return initialClassId;
     }
     const firstActive = classes.find((c) => c.active && !c.is_locked);
@@ -121,9 +130,10 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
 
   useEffect(() => {
     if (initialClassId && initialClassId !== selectedClassId && (!isGVCN || !myAssignedClass)) {
-      setSelectedClassId(initialClassId);
+      const canonical = classes.find((c) => matchClassReport(initialClassId, c))?.id || initialClassId;
+      setSelectedClassId(canonical);
     }
-  }, [initialClassId, isGVCN, myAssignedClass, selectedClassId]);
+  }, [initialClassId, isGVCN, myAssignedClass, selectedClassId, classes]);
 
   // Keep selectedClassId in sync with teacher's assigned class
   useEffect(() => {
@@ -135,9 +145,10 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
     }
   }, [isGVCN, myAssignedClass, classes, selectedClassId]);
 
-  // Get active selected class
+  // Get active selected class with tolerant matching
   const selectedClass = useMemo(() => {
-    return classes.find((c) => c.id === selectedClassId) || null;
+    if (!selectedClassId) return null;
+    return classes.find((c) => matchClassReport(selectedClassId, c)) || null;
   }, [classes, selectedClassId]);
 
   // Campus info for selected class
@@ -1106,8 +1117,9 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
         };
       });
 
+      const targetClassId = selectedClass?.id || selectedClassId;
       await StorageService.saveDailyReport(
-        selectedClassId,
+        targetClassId,
         selectedDate,
         currentUser,
         cleanedValues,
