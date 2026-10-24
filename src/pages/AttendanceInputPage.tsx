@@ -5,9 +5,9 @@ import { useNotifications } from '../contexts/NotificationContext';
 import { StorageService } from '../services/storage';
 import { AbsentStudent, DailyReport, DailyReportValue, Student, BoardingDailyReport } from '../types';
 import { DateNavigator } from '../components/DateNavigator';
-import { getTodayDateStr, formatDateVN } from '../utils/schoolWeeks';
+import { getTodayDateStr, formatDateVN, addDaysToDateStr } from '../utils/schoolWeeks';
 import { buildDefaultMealRecords, getMealScheduleForDate } from '../utils/boardingRules';
-import { isValidStudentAddress, cleanStudentAddress, isStudentInClass } from '../utils/studentUtils';
+import { isValidStudentAddress, cleanStudentAddress, isStudentInClass, matchClassReport, normalizeClassKey } from '../utils/studentUtils';
 import {
   CheckCircle2,
   RotateCcw,
@@ -91,8 +91,11 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
   // Find GVCN's assigned class by profile's assigned_class_id OR class's homeroom_teacher_id
   const myAssignedClass = useMemo(() => {
     if (!isGVCN || !currentUser) return null;
+    const aId = currentUser.assigned_class_id;
     return (
-      classes.find((c) => currentUser.assigned_class_id && c.id === currentUser.assigned_class_id) ||
+      classes.find((c) => aId && c.id === aId) ||
+      classes.find((c) => aId && c.class_name === aId) ||
+      classes.find((c) => aId && matchClassReport(aId, c)) ||
       classes.find((c) => currentUser.id && c.homeroom_teacher_id === currentUser.id) ||
       null
     );
@@ -101,11 +104,17 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
   // Selected class ID
   const [selectedClassId, setSelectedClassId] = useState<string>(() => {
     if (isGVCN) {
-      if (currentUser?.assigned_class_id) return currentUser.assigned_class_id;
+      if (currentUser?.assigned_class_id) {
+        const found = classes.find((c) => matchClassReport(currentUser.assigned_class_id, c));
+        if (found) return found.id;
+        return currentUser.assigned_class_id;
+      }
       const found = classes.find((c) => currentUser?.id && c.homeroom_teacher_id === currentUser.id);
       if (found) return found.id;
     }
     if (initialClassId) {
+      const found = classes.find((c) => matchClassReport(initialClassId, c));
+      if (found) return found.id;
       return initialClassId;
     }
     const firstActive = classes.find((c) => c.active && !c.is_locked);
@@ -121,9 +130,10 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
 
   useEffect(() => {
     if (initialClassId && initialClassId !== selectedClassId && (!isGVCN || !myAssignedClass)) {
-      setSelectedClassId(initialClassId);
+      const canonical = classes.find((c) => matchClassReport(initialClassId, c))?.id || initialClassId;
+      setSelectedClassId(canonical);
     }
-  }, [initialClassId, isGVCN, myAssignedClass, selectedClassId]);
+  }, [initialClassId, isGVCN, myAssignedClass, selectedClassId, classes]);
 
   // Keep selectedClassId in sync with teacher's assigned class
   useEffect(() => {
@@ -135,9 +145,10 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
     }
   }, [isGVCN, myAssignedClass, classes, selectedClassId]);
 
-  // Get active selected class
+  // Get active selected class with tolerant matching
   const selectedClass = useMemo(() => {
-    return classes.find((c) => c.id === selectedClassId) || null;
+    if (!selectedClassId) return null;
+    return classes.find((c) => matchClassReport(selectedClassId, c)) || null;
   }, [classes, selectedClassId]);
 
   // Campus info for selected class
@@ -1106,8 +1117,9 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
         };
       });
 
+      const targetClassId = selectedClass?.id || selectedClassId;
       await StorageService.saveDailyReport(
-        selectedClassId,
+        targetClassId,
         selectedDate,
         currentUser,
         cleanedValues,
@@ -1365,11 +1377,11 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
   }, [absentStudents]);
 
   return (
-    <div className="max-w-5xl mx-auto pb-4 sm:pb-6 animate-in fade-in duration-200">
+    <div className="min-h-screen bg-slate-50 text-slate-800 pb-24 sm:pb-28 -mx-3 sm:-mx-6 -mt-4 sm:-mt-6">
       {/* Toast Notification */}
       {toastMessage && (
         <div
-          className={`fixed top-20 right-4 z-50 flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-lg border text-sm font-medium transition-all ${
+          className={`fixed top-16 right-4 z-50 flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-lg border text-sm font-medium transition-all ${
             toastMessage.type === 'success'
               ? 'bg-emerald-50 text-emerald-800 border-emerald-200 shadow-emerald-900/10'
               : toastMessage.type === 'error'
@@ -1388,74 +1400,51 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
         </div>
       )}
 
-      {/* Top Header Card */}
-      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-4 sm:p-6 mb-5 relative overflow-hidden">
-        <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-blue-600 via-emerald-500 to-amber-500" />
-        
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-100">
-          <div>
-            <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-              <button
-                type="button"
-                onClick={handleExit}
-                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-extrabold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-300 transition-all cursor-pointer shrink-0 shadow-2xs active:scale-95"
-                title={isGVCN ? "Thoát về cửa sổ đăng nhập" : "Thoát quay về Bảng điều khiển"}
-              >
-                <ArrowLeft className="w-3.5 h-3.5 text-slate-700" />
-                <span>Thoát</span>
-              </button>
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200 shadow-2xs">
-                <FileText className="w-3.5 h-3.5" />
-                PHIẾU ĐIỂM DANH & BÁO CÁO SĨ SỐ HẰNG NGÀY
-              </span>
-              {selectedCampus && (
-                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200">
-                  {selectedCampus.name}
-                </span>
-              )}
-            </div>
+      {/* 1. HÀNG 1: STICKY HEADER (Tên lớp bên trái, Trạng thái bên phải trên cùng 1 dòng) */}
+      <header className="bg-blue-900 text-white px-3 sm:px-4 py-2 sticky top-0 z-30 shadow-md">
+        <div className="max-w-5xl mx-auto flex items-center justify-between gap-2">
+          {/* Trái: Nút Thoát + Tên Lớp */}
+          <div className="flex items-center gap-2 min-w-0">
+            <button
+              type="button"
+              onClick={handleExit}
+              className="p-1.5 rounded-lg bg-blue-800/80 hover:bg-blue-700 active:scale-95 text-blue-100 hover:text-white transition-all cursor-pointer shrink-0"
+              title={isGVCN ? "Thoát về cửa sổ đăng nhập" : "Thoát quay về Bảng điều khiển"}
+            >
+              <ArrowLeft className="w-4 h-4" />
+            </button>
 
-            <div className="flex items-center gap-3 sm:gap-4 my-1">
-              <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight leading-tight">
-                <div>Báo cáo điểm</div>
-                <div>danh:</div>
-              </h1>
-              <div className="bg-blue-50 border border-blue-200 rounded-2xl px-3.5 sm:px-4 py-1 sm:py-1.5 text-center shadow-2xs min-w-[70px]">
-                <div className="text-[10px] sm:text-xs font-bold text-blue-600 uppercase tracking-wider leading-none">
-                  Lớp
-                </div>
-                <div className="text-lg sm:text-2xl font-black text-blue-800 leading-tight">
-                  {selectedClass?.class_name || '...'}
-                </div>
+            {/* Tên lớp / Bộ chọn lớp */}
+            {isGVCN && (myAssignedClass || currentUser?.assigned_class_id) ? (
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span className="text-base sm:text-lg font-black text-white tracking-tight truncate">
+                  Lớp {selectedClass?.class_name || myAssignedClass?.class_name || '...'}
+                </span>
+                <span className="text-[10px] font-bold text-blue-200 bg-blue-800/70 px-1.5 py-0.5 rounded border border-blue-700/60 shrink-0">
+                  GVCN
+                </span>
               </div>
-            </div>
+            ) : (
+              <div className="relative flex items-center">
+                <span className="text-xs sm:text-sm font-bold text-blue-200 mr-1.5 hidden xs:inline">Lớp:</span>
+                <select
+                  value={selectedClassId}
+                  onChange={(e) => setSelectedClassId(e.target.value)}
+                  className="bg-blue-800 text-white font-black text-xs sm:text-sm rounded-lg px-2 py-1 pr-6 border border-blue-700 focus:outline-none appearance-none cursor-pointer max-w-[150px] sm:max-w-xs truncate"
+                >
+                  {classes.map((cls) => (
+                    <option key={cls.id} value={cls.id} className="text-slate-800 bg-white">
+                      {cls.class_name} {cls.campus_id ? `(${campuses.find((c) => c.id === cls.campus_id)?.name || ''})` : ''}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="w-3.5 h-3.5 text-blue-200 absolute right-1.5 pointer-events-none" />
+              </div>
+            )}
           </div>
 
-          {/* Status Badge & Controls */}
-          <div className="flex items-center gap-2 self-start md:self-auto flex-wrap">
-            {isLoadingReport ? (
-              <span className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-slate-100 text-slate-500 border border-slate-200">
-                <div className="w-3.5 h-3.5 border-2 border-slate-400 border-t-transparent rounded-full animate-spin" />
-                Đang tải...
-              </span>
-            ) : isLocked ? (
-              <span className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-extrabold bg-slate-100 text-slate-700 border border-slate-300 shadow-2xs">
-                <Lock className="w-4 h-4 text-slate-600" />
-                Báo cáo đã khóa
-              </span>
-            ) : existingReport ? (
-              <span className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-extrabold bg-emerald-50 text-emerald-800 border-2 border-emerald-300 shadow-2xs">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600 stroke-[2.5]" />
-                Đã nộp {existingReport.reported_time ? `(${existingReport.reported_time})` : ''}
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-extrabold bg-amber-50 text-amber-900 border-2 border-amber-300 shadow-2xs">
-                <Clock className="w-4 h-4 text-amber-600" />
-                Chưa nộp báo cáo
-              </span>
-            )}
-
-            {/* Chuông nhắc nhở & Thử âm thanh */}
+          {/* Phải: Trạng thái & Chuông thử */}
+          <div className="flex items-center gap-1.5 shrink-0">
             <button
               type="button"
               onClick={async () => {
@@ -1463,232 +1452,190 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                 await testSound();
                 setTimeout(() => setIsPlayingSoundTest(false), 1200);
               }}
-              title="Bấm để thử âm thanh chuông báo và rung điện thoại"
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all border shadow-2xs active:scale-95 cursor-pointer ${
+              title="Thử chuông báo và rung điện thoại"
+              className={`p-1.5 rounded-lg text-xs transition-all border shrink-0 ${
                 isPlayingSoundTest
-                  ? 'bg-emerald-100 text-emerald-900 border-emerald-300 ring-2 ring-emerald-400'
+                  ? 'bg-emerald-500 text-white border-emerald-400'
                   : isAudioBlocked
-                  ? 'bg-amber-100 text-amber-900 border-amber-300 animate-bounce'
-                  : 'bg-slate-50 text-slate-700 hover:bg-slate-100 border-slate-300'
+                  ? 'bg-amber-500 text-white border-amber-400 animate-pulse'
+                  : 'bg-blue-800 text-blue-200 hover:text-white border-blue-700'
               }`}
             >
-              <Volume2 className="w-3.5 h-3.5 text-blue-600" />
-              <span>
-                {isPlayingSoundTest
-                  ? 'Đang reo...'
-                  : isAudioBlocked
-                  ? 'Bật chuông'
-                  : 'Thử chuông'}
-              </span>
+              <Volume2 className="w-3.5 h-3.5" />
             </button>
 
-            {onNavigate && (
-              <button
-                type="button"
-                onClick={() => onNavigate('/boarding')}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-amber-950 bg-amber-400 hover:bg-amber-300 border border-amber-500/50 shadow-2xs transition-all active:scale-95 cursor-pointer"
-                title="Mở phần chấm báo ăn bán trú hằng ngày của lớp"
-              >
-                <Utensils className="w-3.5 h-3.5 text-amber-950" />
-                <span>Báo ăn lớp</span>
-              </button>
-            )}
-
-            {onNavigate && (
-              <button
-                type="button"
-                onClick={() => onNavigate('/reports/boarding-monthly')}
-                className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-emerald-900 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 transition-colors cursor-pointer"
-                title="Mở toàn bộ Sổ chấm cơm bán trú theo tháng của lớp"
-              >
-                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
-                <span>Sổ chấm cơm</span>
-              </button>
-            )}
-
-            {/* Quick Prominent School Links */}
-            <a
-              href={settings?.website || 'https://thcsxadung.db.edu.vn/'}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hidden lg:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-blue-900 bg-blue-50/90 hover:bg-blue-600 hover:text-white border border-blue-200 shadow-2xs transition-all active:scale-95 cursor-pointer group"
-              title="Mở Trang thông tin điện tử nhà trường (https://thcsxadung.db.edu.vn/)"
-            >
-              <Globe className="w-3.5 h-3.5 text-blue-600 group-hover:text-white shrink-0" />
-              <span>Trang TTĐT</span>
-              <ExternalLink className="w-3 h-3 text-blue-400 group-hover:text-white shrink-0" />
-            </a>
-
-            <a
-              href={settings?.student_results_url || 'https://kqht.db.edu.vn/'}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hidden xl:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-emerald-900 bg-emerald-50/90 hover:bg-emerald-600 hover:text-white border border-emerald-200 shadow-2xs transition-all active:scale-95 cursor-pointer group"
-              title="Mở Trang tra cứu kết quả học tập (https://kqht.db.edu.vn/)"
-            >
-              <GraduationCap className="w-3.5 h-3.5 text-emerald-600 group-hover:text-white shrink-0" />
-              <span>Tra cứu KQHT</span>
-              <ExternalLink className="w-3 h-3 text-emerald-400 group-hover:text-white shrink-0" />
-            </a>
-
-            {onNavigate && (
-              <button
-                type="button"
-                onClick={() => onNavigate('/dashboard')}
-                className="hidden md:inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors border border-slate-200"
-              >
-                <ArrowLeft className="w-3.5 h-3.5" />
-                Tổng quan
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Prominent School Links Banner */}
-        <div className="mt-3.5 pt-3 border-t border-slate-100 flex flex-wrap sm:flex-nowrap items-center justify-between gap-2.5 bg-gradient-to-r from-blue-50/90 via-indigo-50/40 to-emerald-50/90 p-2.5 sm:p-3 rounded-xl border border-blue-100/80 shadow-2xs">
-          <div className="flex items-center gap-2 text-xs font-extrabold text-slate-800 shrink-0">
-            <Sparkles className="w-4 h-4 text-amber-500 fill-amber-400 animate-pulse shrink-0" />
-            <span className="uppercase tracking-wider text-[11px] text-blue-950 font-extrabold">
-              Liên kết nổi bật nhà trường:
-            </span>
-          </div>
-          <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap w-full sm:w-auto">
-            <a
-              href={settings?.website || 'https://thcsxadung.db.edu.vn/'}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-extrabold text-blue-900 bg-white hover:bg-blue-600 hover:text-white border border-blue-300 hover:border-blue-600 shadow-2xs hover:shadow-md transition-all active:scale-95 group cursor-pointer"
-              title="Mở Trang thông tin điện tử nhà trường (https://thcsxadung.db.edu.vn/)"
-            >
-              <Globe className="w-4 h-4 text-blue-600 group-hover:text-white shrink-0" />
-              <span>Trang thông tin điện tử</span>
-              <ExternalLink className="w-3.5 h-3.5 text-blue-400 group-hover:text-white shrink-0 ml-0.5" />
-            </a>
-
-            <a
-              href={settings?.student_results_url || 'https://kqht.db.edu.vn/'}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-extrabold text-emerald-950 bg-white hover:bg-emerald-600 hover:text-white border border-emerald-300 hover:border-emerald-600 shadow-2xs hover:shadow-md transition-all active:scale-95 group cursor-pointer"
-              title="Mở Trang tra cứu kết quả học tập của trường (https://kqht.db.edu.vn/)"
-            >
-              <GraduationCap className="w-4 h-4 text-emerald-600 group-hover:text-white shrink-0" />
-              <span>Tra cứu kết quả học tập</span>
-              <ExternalLink className="w-3.5 h-3.5 text-emerald-400 group-hover:text-white shrink-0 ml-0.5" />
-            </a>
-          </div>
-        </div>
-
-        {/* Quick Switcher between Báo cáo Sĩ số & Báo ăn của lớp (Tối ưu tuyệt đối cho điện thoại) */}
-        <div className="mt-3.5 pt-3 border-t border-slate-100 flex items-center gap-2">
-          <button
-            type="button"
-            onClick={handleExit}
-            className="py-2 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-black text-xs sm:text-sm text-center transition-all flex items-center justify-center gap-1.5 cursor-pointer border border-slate-300 shrink-0 shadow-2xs active:scale-95"
-            title={isGVCN ? "Thoát về cửa sổ đăng nhập" : "Thoát quay về Bảng điều khiển"}
-          >
-            <ArrowLeft className="w-4 h-4 text-slate-700 shrink-0" />
-            <span>Thoát</span>
-          </button>
-          <div className="flex-1 py-2 px-2.5 sm:px-3 rounded-xl bg-blue-600 text-white font-black text-xs sm:text-sm text-center shadow-xs flex items-center justify-center gap-1.5 min-w-0">
-            <ClipboardList className="w-4 h-4 shrink-0" />
-            <span className="truncate">1. Điểm danh sĩ số</span>
-          </div>
-          <button
-            type="button"
-            onClick={() => onNavigate && onNavigate('/boarding')}
-            className="flex-1 py-2 px-2.5 sm:px-3 rounded-xl bg-amber-50 text-amber-900 border border-amber-300 hover:bg-amber-100 font-bold text-xs sm:text-sm text-center transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs active:scale-95 min-w-0"
-            title="Mở giao diện Chấm báo ăn bán trú hằng ngày của lớp"
-          >
-            <Utensils className="w-4 h-4 text-amber-600 shrink-0" />
-            <span className="truncate">2. Báo ăn của lớp</span>
-          </button>
-        </div>
-
-        {/* Date & Class Controls */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-4">
-          {/* Date Navigator */}
-          <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-              <Calendar className="w-3.5 h-3.5 text-blue-600" />
-              Ngày điểm danh
-            </label>
-            <DateNavigator
-              selectedDate={selectedDate}
-              onChangeDate={(d) => setSelectedDate(d)}
-            />
-            {currentMealSchedule && (
-              <div className="mt-1.5 flex items-center gap-1.5 text-[11px]">
-                <Utensils className={`w-3 h-3 ${currentMealSchedule.isMealDay ? 'text-amber-600' : 'text-slate-400'} shrink-0`} />
-                <span className="font-bold text-slate-700">{currentMealSchedule.dayName}:</span>
-                <span className={`${currentMealSchedule.isMealDay ? 'text-emerald-700 font-bold' : 'text-slate-500 font-medium'}`}>
-                  {currentMealSchedule.note}
-                </span>
-              </div>
-            )}
-          </div>
-
-          {/* Class Selector */}
-          <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-              <School className="w-3.5 h-3.5 text-blue-600" />
-              Lớp học
-            </label>
-            {isGVCN && (myAssignedClass || currentUser?.assigned_class_id) ? (
-              <div className="flex items-center justify-between p-2.5 rounded-xl bg-blue-50/50 border border-blue-200 shadow-2xs">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center font-black text-sm shadow-xs">
-                    {selectedClass?.class_name || myAssignedClass?.class_name}
-                  </div>
-                  <div>
-                    <div className="text-sm font-black text-slate-900">
-                      Lớp {selectedClass?.class_name || myAssignedClass?.class_name}
-                    </div>
-                    <div className="text-[11px] text-slate-600 font-medium">GVCN: {currentUser?.full_name}</div>
-                  </div>
-                </div>
-                <span className="text-[11px] font-bold text-blue-700 bg-white px-2.5 py-1 rounded-lg border border-blue-200 shadow-2xs">
-                  Lớp chủ nhiệm
-                </span>
-              </div>
+            {isLoadingReport ? (
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-800 text-blue-200 border border-blue-700">
+                <div className="w-2.5 h-2.5 border-2 border-white border-t-transparent rounded-full animate-spin mr-1" />
+                <span>Tải...</span>
+              </span>
+            ) : isLocked ? (
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-slate-700 text-white shadow-xs gap-1 border border-slate-600">
+                <Lock className="w-3 h-3" />
+                <span>Đã khóa</span>
+              </span>
+            ) : existingReport ? (
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-emerald-600 text-white shadow-xs gap-1 border border-emerald-500">
+                <CheckCircle2 className="w-3 h-3 stroke-[3]" />
+                <span>Đã nộp{existingReport.reported_time ? ` (${existingReport.reported_time})` : ''}</span>
+              </span>
             ) : (
-              <div className="relative">
-                <select
-                  value={selectedClassId}
-                  onChange={(e) => setSelectedClassId(e.target.value)}
-                  className="w-full appearance-none bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 pr-9 text-sm font-bold text-slate-800 shadow-xs focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                >
-                  {classes.map((cls) => (
-                    <option key={cls.id} value={cls.id}>
-                      {cls.class_name} {cls.campus_id ? `(${campuses.find((c) => c.id === cls.campus_id)?.name || ''})` : ''}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-              </div>
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-amber-500 text-white shadow-xs gap-1 border border-amber-400">
+                <span>⚠️ Chưa nộp</span>
+              </span>
             )}
           </div>
         </div>
+      </header>
 
-        {/* Lock Alert Banner */}
+      {/* 2. HÀNG 2: COMPACT TOOLBAR (Cụm chọn ngày + Thanh chuyển tab dạng Slider nhỏ gọn) */}
+      <div className="bg-white border-b border-slate-200 px-3 py-2 sm:px-4 shadow-2xs">
+        <div className="max-w-5xl mx-auto space-y-1.5">
+          {/* Cụm chọn ngày siêu gọn gàng */}
+          <div className="flex items-center justify-between gap-1.5">
+            <button
+              type="button"
+              onClick={() => setSelectedDate(addDaysToDateStr(selectedDate, -1))}
+              className="px-2.5 py-1 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 active:bg-slate-300 rounded-lg shrink-0 transition-colors cursor-pointer border border-slate-200"
+              title="Xem ngày trước"
+            >
+              ◀ Ngày trước
+            </button>
+
+            <div className="relative flex-1 text-center cursor-pointer py-0.5 px-2 rounded-lg hover:bg-blue-50/50 transition-colors group">
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={(e) => e.target.value && setSelectedDate(e.target.value)}
+                className="absolute inset-0 opacity-0 w-full h-full cursor-pointer z-10"
+                title="Chạm để mở lịch chọn ngày"
+              />
+              <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                <Calendar className="w-3.5 h-3.5 text-blue-900 group-hover:scale-110 transition-transform" />
+                <span className="text-xs sm:text-sm font-black text-blue-900 tracking-tight">
+                  {formatDateVN(selectedDate)}
+                </span>
+                {currentMealSchedule && (
+                  <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full hidden xs:inline-block ${currentMealSchedule.isMealDay ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-slate-100 text-slate-600'}`}>
+                    {currentMealSchedule.note}
+                  </span>
+                )}
+                {selectedDate !== getTodayDateStr() && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedDate(getTodayDateStr());
+                    }}
+                    className="relative z-20 text-[10px] font-bold text-blue-700 bg-blue-100 hover:bg-blue-200 px-1.5 py-0.5 rounded cursor-pointer transition-colors"
+                    title="Về ngày hôm nay"
+                  >
+                    Hôm nay
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setSelectedDate(addDaysToDateStr(selectedDate, 1))}
+              className="px-2.5 py-1 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 active:bg-slate-300 rounded-lg shrink-0 transition-colors cursor-pointer border border-slate-200"
+              title="Xem ngày sau"
+            >
+              Ngày sau ▶
+            </button>
+          </div>
+
+          {/* Thanh chuyển tab dạng Slider nhỏ gọn & Menu tiện ích rút gọn */}
+          <div className="flex items-center gap-1.5 pt-0.5">
+            {/* Segmented Control trượt nhỏ gọn */}
+            <div className="flex-1 bg-slate-200/80 p-0.5 rounded-lg flex gap-0.5 shadow-inner">
+              <button
+                type="button"
+                className="flex-1 py-1 text-[11px] sm:text-xs font-bold rounded-md bg-white text-blue-900 shadow-2xs text-center flex items-center justify-center gap-1 cursor-default transition-all"
+              >
+                <ClipboardList className="w-3 h-3 text-blue-900 shrink-0" />
+                <span className="truncate">1. Điểm danh</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => onNavigate && onNavigate('/boarding')}
+                className="flex-1 py-1 text-[11px] sm:text-xs font-bold rounded-md text-slate-600 hover:text-slate-900 hover:bg-slate-100 text-center flex items-center justify-center gap-1 cursor-pointer transition-all"
+              >
+                <Utensils className="w-3 h-3 text-slate-600 shrink-0" />
+                <span className="truncate">2. Báo ăn</span>
+              </button>
+              {onNavigate && (
+                <button
+                  type="button"
+                  onClick={() => onNavigate('/ai-teacher-assistant')}
+                  className="py-1 px-2 text-[11px] sm:text-xs font-bold rounded-md text-purple-700 hover:text-purple-900 hover:bg-purple-100 text-center flex items-center justify-center gap-1 cursor-pointer transition-all shrink-0"
+                  title="Mở Trợ lý AI tổng hợp báo cáo và gợi ý nhận xét"
+                >
+                  <Sparkles className="w-3 h-3 text-purple-600 shrink-0 animate-pulse" />
+                  <span className="hidden xs:inline">Trợ lý AI</span>
+                </button>
+              )}
+            </div>
+
+            {/* Menu tiện ích rút gọn (Trang TTĐT, Tra cứu KQHT, Sổ cơm) */}
+            <div className="flex items-center gap-1 shrink-0 overflow-x-auto text-[10px]">
+              <a
+                href={settings?.website || 'https://thcsxadung.db.edu.vn/'}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-1.5 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold inline-flex items-center gap-0.5 border border-slate-200 cursor-pointer"
+                title="Trang thông tin điện tử trường"
+              >
+                <Globe className="w-3 h-3 text-blue-700" />
+                <span className="hidden sm:inline">TTĐT</span>
+              </a>
+              <a
+                href={settings?.student_results_url || 'https://kqht.db.edu.vn/'}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-1.5 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold inline-flex items-center gap-0.5 border border-slate-200 cursor-pointer"
+                title="Tra cứu kết quả học tập"
+              >
+                <GraduationCap className="w-3 h-3 text-emerald-700" />
+                <span className="hidden sm:inline">KQHT</span>
+              </a>
+              {onNavigate && (
+                <button
+                  type="button"
+                  onClick={() => onNavigate('/reports/boarding-monthly')}
+                  className="px-1.5 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold inline-flex items-center gap-0.5 border border-slate-200 cursor-pointer"
+                  title="Sổ chấm cơm tháng"
+                >
+                  <FileSpreadsheet className="w-3 h-3 text-amber-700" />
+                  <span className="hidden sm:inline">Sổ cơm</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 3. KHU VỰC NỘI DUNG CHÍNH (ĐƯA SỐ LIỆU LÊN TRÊN CÙNG) */}
+      <main className="max-w-5xl mx-auto px-3 sm:px-4 pt-3 space-y-3.5">
+        {/* Banner thông báo khi báo cáo bị khóa */}
         {isLocked && (
-          <div className="mt-4 p-3.5 rounded-xl bg-slate-100 border border-slate-300 flex items-center gap-3 text-sm text-slate-700">
-            <Lock className="w-5 h-5 text-slate-500 flex-shrink-0" />
+          <div className="p-2.5 rounded-xl bg-slate-100 border border-slate-300 flex items-center gap-2.5 text-xs text-slate-700">
+            <Lock className="w-4 h-4 text-slate-500 shrink-0" />
             <div className="flex-1">
-              <span className="font-bold text-slate-900">Báo cáo lớp này đã khóa.</span> Không thể chỉnh sửa hoặc xóa dữ liệu. Liên hệ Quản trị viên/BGH nếu cần cập nhật.
+              <span className="font-bold text-slate-900">Báo cáo lớp này đã khóa.</span> Không thể chỉnh sửa dữ liệu.
             </div>
             {onNavigate && (
               <button
                 type="button"
                 onClick={() => onNavigate('/dashboard')}
-                className="text-xs font-bold text-blue-600 hover:text-blue-800 underline whitespace-nowrap"
+                className="text-xs font-bold text-blue-900 hover:underline whitespace-nowrap"
               >
                 Về bảng điều khiển
               </button>
             )}
           </div>
         )}
-      </div>
 
       {/* Main Indicators Form Cards - PHÂN BIỆT MÀU SẮC RÕ RÀNG TỪNG KHU VỰC */}
       <div className="space-y-4 mb-5">
@@ -2528,86 +2475,83 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
         </div>
       </div>
 
-      {/* Bottom Sticky Action Bar - Cố định thanh CẬP NHẬT BÁO CÁO sát đáy như hình gốc */}
-      <div className="sticky bottom-0 z-30 -mx-3 sm:mx-0 bg-white/95 backdrop-blur-md rounded-t-2xl sm:rounded-2xl border-t sm:border border-slate-200/90 shadow-[0_-8px_20px_-6px_rgba(0,0,0,0.12)] sm:shadow-xl p-3 sm:p-4 flex flex-col gap-2.5 transition-all">
-        {/* Row 1: Reset nhầm & Lần gửi gần nhất */}
-        <div className="flex items-center justify-between gap-3 min-h-[32px]">
-          <div>
-            {existingReport && !isLocked ? (
+      </main>
+
+      {/* 4. Sticky Footer Action (Cố định nút Gửi báo cáo ở đáy màn hình di động) */}
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 p-3 sm:p-4 shadow-lg z-40">
+        <div className="max-w-5xl mx-auto flex flex-col gap-2">
+          {/* Validation Error Notice if invalid */}
+          {!isLocked && !isValid && validationResult.error && (
+            <div className="px-3 py-1.5 rounded-xl bg-amber-50 border border-amber-300 text-amber-900 text-xs font-semibold flex items-center gap-2 animate-in fade-in duration-150">
+              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+              <span className="leading-snug">{validationResult.error}</span>
+            </div>
+          )}
+
+          <div className="flex items-center gap-3">
+            {/* Status display on desktop/tablet */}
+            <div className="text-xs text-slate-500 hidden sm:flex items-center gap-1.5 shrink-0">
+              <span>Trạng thái:</span>
+              {isLocked ? (
+                <strong className="text-slate-600 font-bold">Đã khóa sổ</strong>
+              ) : existingReport ? (
+                <strong className="text-emerald-700 font-bold">
+                  Đã nộp ({existingReport.reported_time || formatDateVN(existingReport.updated_at.split('T')[0])})
+                </strong>
+              ) : (
+                <strong className="text-amber-600 font-bold">Chưa nộp báo cáo</strong>
+              )}
+            </div>
+
+            {/* Reset nhầm button if submitted & not locked */}
+            {existingReport && !isLocked && (
               <button
                 type="button"
                 onClick={() => setShowResetConfirm(true)}
                 disabled={isSaving}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-rose-200 bg-rose-50/90 text-rose-700 font-bold text-xs hover:bg-rose-100 transition-colors disabled:opacity-50 active:scale-95 cursor-pointer shadow-2xs"
+                className="inline-flex items-center gap-1 px-3 py-2.5 rounded-xl border border-rose-200 bg-rose-50 text-rose-700 font-bold text-xs hover:bg-rose-100 transition-colors disabled:opacity-50 active:scale-95 cursor-pointer shadow-2xs shrink-0"
                 title="Bấm nếu trước đó báo nhầm để đưa về trạng thái chưa báo"
               >
                 <RotateCcw className="w-3.5 h-3.5 text-rose-600 stroke-[2.5]" />
-                <span>Reset nhầm</span>
+                <span className="hidden xs:inline">Reset nhầm</span>
               </button>
-            ) : (
-              <span className="text-[11px] sm:text-xs text-slate-500 font-medium">
-                {isLocked ? 'Báo cáo đã khóa sổ' : 'Kiểm tra thông tin trước khi gửi'}
-              </span>
             )}
-          </div>
 
-          <div className="text-xs sm:text-sm text-slate-600 font-normal text-right">
+            {/* Nút gửi báo cáo chính - Xanh ngọc lục bảo Emerald-600 Mobile First */}
             {isLocked ? (
-              <span className="text-slate-600 font-semibold">Đã khóa</span>
-            ) : existingReport ? (
-              <span>
-                Lần gửi gần nhất: <span className="text-slate-700 font-semibold">{existingReport.reported_time || formatDateVN(existingReport.updated_at.split('T')[0])}</span>
-              </span>
+              <div className="w-full h-11 sm:h-12 flex items-center justify-center gap-2 rounded-xl bg-slate-100 text-slate-500 font-bold text-sm sm:text-base border border-slate-200 select-none">
+                <Lock className="w-4 h-4" />
+                <span>Báo cáo đã khóa</span>
+              </div>
             ) : (
-              <span className="text-slate-400 italic">Chưa gửi báo cáo hôm nay</span>
+              <button
+                type="button"
+                onClick={handleSubmit}
+                disabled={!isValid || isSaving}
+                className={`w-full bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold py-3 px-4 rounded-xl shadow-md transition-all flex items-center justify-center gap-2 text-base ${
+                  isValid && !isSaving
+                    ? 'cursor-pointer shadow-emerald-700/25 active:scale-[0.99]'
+                    : 'bg-slate-300 text-slate-500 cursor-not-allowed shadow-none'
+                }`}
+              >
+                {isSaving ? (
+                  <>
+                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>ĐANG LƯU BÁO CÁO...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>🚀 {existingReport ? 'CẬP NHẬT BÁO CÁO NGAY' : 'GỬI BÁO CÁO NGAY'}</span>
+                  </>
+                )}
+              </button>
             )}
           </div>
-        </div>
 
-        {/* Validation Error Notice if invalid */}
-        {!isLocked && !isValid && validationResult.error && (
-          <div className="px-3 py-2 rounded-xl bg-amber-50 border border-amber-300 text-amber-900 text-xs font-semibold flex items-center gap-2 animate-in fade-in duration-150">
-            <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-            <span className="leading-snug">{validationResult.error}</span>
+          {/* Subtitle - Thông tin nhà phát triển */}
+          <div className="text-center text-[11px] text-slate-400 font-medium">
+            <span>Ứng dụng phát triển bởi: <strong className="text-slate-600 font-bold">Vũ Văn Hùng</strong> - <a href="tel:0984246993" className="font-bold text-blue-900 hover:underline">0984246993</a></span>
           </div>
-        )}
-
-        {/* Row 2: Nút CẬP NHẬT BÁO CÁO / GỬI BÁO CÁO (Full-width như hình gốc) */}
-        <div>
-          {isLocked ? (
-            <div className="w-full h-11 sm:h-12 flex items-center justify-center gap-2 rounded-xl sm:rounded-2xl bg-slate-100 text-slate-500 font-bold text-sm sm:text-base border border-slate-200 select-none">
-              <Lock className="w-4 h-4" />
-              Báo cáo đã khóa
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={handleSubmit}
-              disabled={!isValid || isSaving}
-              className={`w-full h-11 sm:h-12 flex items-center justify-center gap-2 px-6 rounded-xl sm:rounded-2xl font-black text-sm sm:text-base text-white tracking-wide transition-all active:scale-[0.99] cursor-pointer shadow-md ${
-                isValid && !isSaving
-                  ? 'bg-[#00875a] hover:bg-[#00744e] active:bg-[#006041] shadow-emerald-700/25'
-                  : 'bg-slate-300 text-slate-500 cursor-not-allowed shadow-none'
-              }`}
-            >
-              {isSaving ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  <span>Đang lưu báo cáo...</span>
-                </>
-              ) : (
-                <>
-                  <CheckCircle2 className="w-5 h-5 text-white stroke-[2.2]" />
-                  <span>{existingReport ? 'CẬP NHẬT BÁO CÁO' : 'GỬI BÁO CÁO'}</span>
-                </>
-              )}
-            </button>
-          )}
-        </div>
-
-        {/* Caption dưới nút gửi báo cáo - Ứng dụng được phát triển bởi Vũ Văn Hùng-SĐT: 0984246993 */}
-        <div className="text-center text-[11px] text-slate-500 font-medium pt-0.5">
-          <span>Ứng dụng được phát triển bởi: <strong className="text-slate-800 font-bold">Vũ Văn Hùng</strong> - <a href="tel:0984246993" className="font-bold text-blue-700 hover:underline">SĐT: 0984246993</a></span>
         </div>
       </div>
 
