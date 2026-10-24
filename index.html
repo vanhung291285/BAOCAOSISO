@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0, viewport-fit=cover" />
-    <title>Hệ thống báo cáo sí số - Trường PTDTBT THCS Xa Dung</title>
+    <title>Sổ Báo Cáo Sĩ Số - Trường PTDTBT THCS Xa Dung</title>
     <meta name="description" content="Hệ thống báo cáo sĩ số học sinh hằng ngày dành cho GVCN và Ban Giám Hiệu, tự động tổng hợp báo cáo toàn trường, hỗ trợ bán trú, nội trú và xuất biểu mẫu Excel." />
     <meta property="og:title" content="Sổ Báo Cáo Sĩ Số - Trường PTDTBT THCS Xa Dung" />
     <meta property="og:description" content="Hệ thống báo cáo sĩ số học sinh hằng ngày dành cho GVCN và Ban Giám Hiệu, tự động tổng hợp báo cáo toàn trường, hỗ trợ bán trú, nội trú và xuất biểu mẫu Excel." />
@@ -24,7 +24,60 @@
     <link rel="manifest" href="/manifest.webmanifest" />
 
     <script>
-      // Gracefully ignore harmless WebSocket HMR disconnect errors in sandbox environment
+      // Gracefully mock HMR WebSocket in sandboxed Cloud Run / AI Studio environment where WebSockets are not supported
+      (function () {
+        const NativeWebSocket = window.WebSocket;
+        window.WebSocket = function (url, protocols) {
+          if (protocols === 'vite-hmr' || protocols === 'vite-ping' || (typeof url === 'string' && (url.includes('token=') || url.includes('vite')))) {
+            const listeners = {};
+            const fakeSocket = {
+              readyState: 1, // OPEN
+              OPEN: 1,
+              CONNECTING: 0,
+              CLOSING: 2,
+              CLOSED: 3,
+              binaryType: 'blob',
+              bufferedAmount: 0,
+              extensions: '',
+              protocol: protocols || '',
+              url: String(url),
+              addEventListener: function (type, cb) {
+                listeners[type] = listeners[type] || [];
+                listeners[type].push(cb);
+                if (type === 'open') {
+                  setTimeout(() => {
+                    try { cb({ type: 'open', target: fakeSocket }); } catch (_) {}
+                  }, 0);
+                }
+              },
+              removeEventListener: function (type, cb) {
+                if (!listeners[type]) return;
+                listeners[type] = listeners[type].filter((fn) => fn !== cb);
+              },
+              send: function () {},
+              close: function () {
+                fakeSocket.readyState = 3;
+                if (listeners['close']) {
+                  listeners['close'].forEach((cb) => {
+                    try { cb({ wasClean: true, code: 1000, target: fakeSocket }); } catch (_) {}
+                  });
+                }
+              },
+            };
+            return fakeSocket;
+          }
+          return new NativeWebSocket(url, protocols);
+        };
+        if (NativeWebSocket) {
+          window.WebSocket.prototype = NativeWebSocket.prototype;
+          window.WebSocket.CONNECTING = NativeWebSocket.CONNECTING ?? 0;
+          window.WebSocket.OPEN = NativeWebSocket.OPEN ?? 1;
+          window.WebSocket.CLOSING = NativeWebSocket.CLOSING ?? 2;
+          window.WebSocket.CLOSED = NativeWebSocket.CLOSED ?? 3;
+        }
+      })();
+
+      // Gracefully ignore harmless WebSocket disconnect errors
       window.addEventListener('error', function (e) {
         if (e.message && (e.message.includes('WebSocket') || e.message.includes('ws://') || e.message.includes('wss://'))) {
           e.stopImmediatePropagation();
