@@ -19,12 +19,13 @@ import {
   getMealScheduleForDate,
   buildDefaultMealRecords,
 } from '../utils/boardingRules';
-import { resolveStudentGender, inferGenderFromName, cleanStudentAddress, isStudentInClass } from '../utils/studentUtils';
+import { resolveStudentGender, inferGenderFromName, cleanStudentAddress, isStudentInClass, isStudentBoarding } from '../utils/studentUtils';
 import { isSupabaseConnected } from '../services/supabase';
 import {
   parseStudentExcelData,
   recomputeStudentsWithBoardingColumn,
   ParseExcelRosterResult,
+  removeVietnameseAccents,
 } from '../utils/studentExcelParser';
 import {
   Utensils,
@@ -163,12 +164,12 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
 
   // Boarding students belonging to selected class (strictly isBoarding === true or is_boarding === true)
   const classBoardingStudents = useMemo(() => {
-    return classStudents.filter((s) => s.isBoarding === true || (s as any).is_boarding === true);
+    return classStudents.filter((s) => isStudentBoarding(s));
   }, [classStudents]);
 
   // Day students belonging to selected class
   const classDayStudents = useMemo(() => {
-    return classStudents.filter((s) => s.isBoarding === false || (s as any).is_boarding === false);
+    return classStudents.filter((s) => !isStudentBoarding(s));
   }, [classStudents]);
 
   // Day Meal Schedule
@@ -301,14 +302,12 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
         existingAttendanceReport.report.absent_students.forEach((ab) => {
           if (ab.id) {
             absentMap.set(ab.id, { reason: ab.reason });
-          } else if (ab.full_name) {
+          }
+          if (ab.full_name) {
             const norm = ab.full_name.trim().toLowerCase();
-            const sameCount = classBoardingStudents.filter(
-              (s) => s.full_name.trim().toLowerCase() === norm
-            ).length;
-            if (sameCount === 1) {
-              absentMap.set(norm, { reason: ab.reason });
-            }
+            const noAcc = removeVietnameseAccents(ab.full_name);
+            absentMap.set(norm, { reason: ab.reason });
+            absentMap.set(noAcc, { reason: ab.reason });
           }
         });
       }
@@ -317,10 +316,6 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
       const recordById = new Map<string, BoardingMealRecord>();
       const recordByName = new Map<string, BoardingMealRecord>();
 
-      // QUY TẮC BẢO VỆ ĐỒNG BỘ NGUYÊN TẮC:
-      // Nếu GVCN CHƯA NỘP hoặc VỪA RESET BÁO CÁO SĨ SỐ NGÀY HÔM ĐÓ (isDailySubmitted = false),
-      // TẤT CẢ các bản ghi báo ăn cũ (hoặc tự động tạo) của ngày đó ĐỀU BỊ BỎ QUA (validRep = null)!
-      // Tránh việc reset báo cáo sĩ số mà sổ báo ăn vẫn lưu vết tích chấm ăn của ngày cũ/sau.
       const validRep = isDailySubmitted ? rep : null;
 
       if (validRep && validRep.records && validRep.records.length > 0) {
@@ -333,7 +328,10 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
         if (Array.isArray(recs)) {
           recs.forEach((r) => {
             if (r.student_id) recordById.set(r.student_id, r);
-            if (r.student_name) recordByName.set(r.student_name.trim().toLowerCase(), r);
+            if (r.student_name) {
+              recordByName.set(r.student_name.trim().toLowerCase(), r);
+              recordByName.set(removeVietnameseAccents(r.student_name), r);
+            }
           });
         }
       } else {
@@ -344,9 +342,73 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
       // Strictly map 1-to-1 over classBoardingStudents: mealRecords.length will always equal classBoardingStudents.length
       const syncedRecords: BoardingMealRecord[] = classBoardingStudents.map((st) => {
         const normName = st.full_name.trim().toLowerCase();
-        // Ưu tiên khớp chuẩn tuyệt đối theo ID học sinh để học sinh trùng tên không bị ghi đè dữ liệu của nhau
-        const sameNameCount = classBoardingStudents.filter((s) => s.full_name.trim().toLowerCase() === normName).length;
-        const existing = validRep ? (recordById.get(st.id) || (sameNameCount === 1 ? recordByName.get(normName) : undefined)) : undefined;
+        const noAccName = removeVietnameseAccents(st.full_name);
+
+        const isAbsentInDaily = Boolean(
+          absentMap.has(st.id) ||
+          absentMap.has(normName) ||
+          absentMap.has(noAccName)
+        );
+        const absentInfo = absentMap.get(st.id) || absentMap.get(normName) || absentMap.get(noAccName);
+
+        const existing = validRep ? (recordById.get(st.id) || recordByName.get(normName) || recordByName.get(noAccName)) : undefined;
+
+        if (isDailySubmitted) {
+          if (isAbsentInDaily) {
+            // Học sinh BÁO VẮNG trong Báo cáo sĩ số ngày -> Bắt buộc vắng ăn (không chấm cơm)
+            return {
+              id: existing?.id || `meal_${selectedClassId}_${selectedDate}_${st.id}`,
+              class_id: selectedClassId,
+              date: selectedDate,
+              student_id: st.id,
+              student_name: st.full_name,
+              gender: st.gender || existing?.gender,
+              village: st.village || existing?.village,
+              breakfast: false,
+              lunch: false,
+              dinner: false,
+              is_absent: true,
+              absent_reason: absentInfo?.reason || 'Vắng theo báo cáo sĩ số',
+              notes: existing?.notes || '',
+            };
+          } else {
+            // Học sinh CÓ MẶT (KHÔNG BÁO VẮNG) trong Báo cáo sĩ số ngày:
+            // Tự động đảm bảo được chấm ăn theo lịch quy định của ngày đó nếu chưa có bản ghi hoặc từng bị đánh dấu vắng
+            const hasAnyMeal = existing && (existing.breakfast || existing.lunch || existing.dinner);
+            const wasAbsentInRecord = existing && existing.is_absent;
+
+            if (!existing || wasAbsentInRecord || !hasAnyMeal) {
+              return {
+                id: existing?.id || `meal_${selectedClassId}_${selectedDate}_${st.id}`,
+                class_id: selectedClassId,
+                date: selectedDate,
+                student_id: st.id,
+                student_name: st.full_name,
+                gender: st.gender || existing?.gender,
+                village: st.village || existing?.village,
+                breakfast: mealSchedule.breakfastAllowed,
+                lunch: mealSchedule.lunchAllowed,
+                dinner: mealSchedule.dinnerAllowed,
+                is_absent: false,
+                absent_reason: undefined,
+                notes: existing?.notes || '',
+              };
+            }
+
+            return {
+              ...existing,
+              id: existing.id || `meal_${selectedClassId}_${selectedDate}_${st.id}`,
+              class_id: selectedClassId,
+              date: selectedDate,
+              student_id: st.id,
+              student_name: st.full_name,
+              gender: st.gender || existing.gender,
+              village: st.village || existing.village,
+              is_absent: false,
+              absent_reason: undefined,
+            };
+          }
+        }
 
         if (existing) {
           return {
@@ -361,32 +423,6 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
           };
         }
 
-        // NGUYÊN TẮC BẢO VỆ DỮ LIỆU:
-        // Nếu GVCN CHƯA NỘP hoặc QUÊN BÁO CÁO SĨ SỐ NGÀY (isDailySubmitted = false):
-        // Tuyệt đối KHÔNG tự động chấm ăn (tất cả các bữa = false, is_absent = false, tổng suất = 0)
-        // Tránh tình trạng lớp không báo sĩ số mà sổ chấm ăn vẫn tự động chấm sinh ra số liệu ảo cho nhà bếp!
-        if (!isDailySubmitted) {
-          return {
-            id: `meal_${selectedClassId}_${selectedDate}_${st.id}`,
-            class_id: selectedClassId,
-            date: selectedDate,
-            student_id: st.id,
-            student_name: st.full_name,
-            gender: st.gender,
-            village: st.village,
-            breakfast: false,
-            lunch: false,
-            dinner: false,
-            is_absent: false,
-            absent_reason: undefined,
-            notes: '',
-          };
-        }
-
-        const isAbsentInDaily = absentMap.has(st.id) || (sameNameCount === 1 && absentMap.has(normName));
-        const absentInfo = absentMap.get(st.id) || (sameNameCount === 1 ? absentMap.get(normName) : undefined);
-        const isAbsent = Boolean(isAbsentInDaily);
-
         return {
           id: `meal_${selectedClassId}_${selectedDate}_${st.id}`,
           class_id: selectedClassId,
@@ -395,11 +431,11 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
           student_name: st.full_name,
           gender: st.gender,
           village: st.village,
-          breakfast: !isAbsent && mealSchedule.breakfastAllowed,
-          lunch: !isAbsent && mealSchedule.lunchAllowed,
-          dinner: !isAbsent && mealSchedule.dinnerAllowed,
-          is_absent: isAbsent,
-          absent_reason: isAbsent ? (absentInfo?.reason || 'Vắng theo báo cáo sĩ số') : undefined,
+          breakfast: false,
+          lunch: false,
+          dinner: false,
+          is_absent: false,
+          absent_reason: undefined,
           notes: '',
         };
       });
@@ -838,8 +874,9 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
   // Toggle Boarding Status for single student
   const handleToggleStudentBoarding = async (st: Student) => {
     try {
-      const nextVal = st.isBoarding === false ? true : false;
-      await updateStudent(st.id, { isBoarding: nextVal });
+      const currentVal = isStudentBoarding(st);
+      const nextVal = !currentVal;
+      await updateStudent(st.id, { isBoarding: nextVal, is_boarding: nextVal });
       showToast(`Đã ${nextVal ? 'chuyển sang' : 'bỏ'} diện bán trú: ${st.full_name}`);
     } catch (e) {
       console.error(e);
@@ -2411,13 +2448,13 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
                             type="button"
                             onClick={() => handleToggleStudentBoarding(st)}
                             className={`px-2.5 py-1 rounded-xl text-xs font-extrabold transition-all cursor-pointer flex items-center justify-center gap-1 mx-auto ${
-                              (st.isBoarding === true || (st as any).is_boarding === true)
+                              isStudentBoarding(st)
                                 ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200 border border-emerald-300 shadow-2xs'
                                 : 'bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-300 shadow-2xs'
                             }`}
                             title="Bấm để chuyển đổi giữa Bán trú (chấm ăn) và Ngoại trú (không chấm ăn)"
                           >
-                            {(st.isBoarding === true || (st as any).is_boarding === true) ? (
+                            {isStudentBoarding(st) ? (
                               <>
                                 <Utensils className="w-3.5 h-3.5 text-emerald-600" />
                                 <span>Bán trú</span>

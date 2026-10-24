@@ -1,4 +1,5 @@
 import { BoardingMealRecord, Student, SchoolSettings } from '../types';
+import { removeVietnameseAccents } from './studentExcelParser';
 
 export interface DayMealSchedule {
   dayOfWeek: number; // 0 = Chủ nhật, 1 = Thứ 2, ..., 6 = Thứ 7
@@ -222,11 +223,8 @@ export function buildDefaultMealRecords(
 
   return boardingStudents.map((st) => {
     // Check if student is marked absent in daily report
-    // Check by unique student id first. Only match by name if the class has a SINGLE student with that name
     const normName = st.full_name.trim().toLowerCase();
-    const sameNameCount = boardingStudents.filter(
-      (s) => s.full_name.trim().toLowerCase() === normName
-    ).length;
+    const noAccName = removeVietnameseAccents(st.full_name);
 
     let isMarkedAbsent = false;
     let absentReason = '';
@@ -235,9 +233,12 @@ export function buildDefaultMealRecords(
       if (st.id && absentStudentsMap.has(st.id)) {
         isMarkedAbsent = true;
         absentReason = absentStudentsMap.get(st.id)?.reason || 'Vắng học trong ngày';
-      } else if (sameNameCount === 1 && absentStudentsMap.has(normName)) {
+      } else if (absentStudentsMap.has(normName)) {
         isMarkedAbsent = true;
         absentReason = absentStudentsMap.get(normName)?.reason || 'Vắng học trong ngày';
+      } else if (absentStudentsMap.has(noAccName)) {
+        isMarkedAbsent = true;
+        absentReason = absentStudentsMap.get(noAccName)?.reason || 'Vắng học trong ngày';
       }
     }
 

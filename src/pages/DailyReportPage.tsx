@@ -15,7 +15,7 @@ import {
   resolveTeacherName,
 } from '../utils/exportAttendanceStandardExcel';
 import { DEFAULT_BOARDING_STUDENTS_SEED } from '../utils/boardingRules';
-import { isValidStudentAddress, cleanStudentAddress, isStudentInClass, matchClassReport } from '../utils/studentUtils';
+import { isValidStudentAddress, cleanStudentAddress, isStudentInClass, matchClassReport, isStudentBoarding } from '../utils/studentUtils';
 import {
   Printer,
   Download,
@@ -645,7 +645,7 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
               ? Math.round(cData.summary.sumTotalAll / cData.summary.totalDaysReported) 
               : 35);
 
-        const rosterBoarding = students.filter((s) => isStudentInClass(s.class_id, cls.id, cls.class_name) && (s.isBoarding === true || (s as any).is_boarding === true)).length;
+        const rosterBoarding = students.filter((s) => isStudentInClass(s.class_id, cls.id, cls.class_name) && isStudentBoarding(s)).length;
         const clsBoarding = rosterBoarding > 0 
           ? rosterBoarding 
           : (cData.summary.totalDaysReported > 0 
@@ -1397,7 +1397,7 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
                             ? Math.round(monthlyData.summary.sumTotalAll / monthlyData.summary.totalDaysReported) 
                             : 35);
 
-                      const rosterBoarding = classRoster.filter((s) => s.isBoarding === true || (s as any).is_boarding === true).length;
+                      const rosterBoarding = classRoster.filter((s) => isStudentBoarding(s)).length;
                       const curBoarding = rosterBoarding > 0 
                         ? rosterBoarding 
                         : (monthlyData.summary.totalDaysReported > 0 

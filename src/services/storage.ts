@@ -56,6 +56,7 @@ import {
   isStudentInClass,
   matchClassReport,
   normalizeClassKey,
+  isStudentBoarding,
   DEFAULT_BOARDING_STUDENTS_SEED_NAMES,
 } from '../utils/studentUtils';
 import { DEFAULT_BOARDING_STUDENTS_SEED, getMealScheduleForDate } from '../utils/boardingRules';
@@ -1513,6 +1514,8 @@ export const StorageService = {
             const matchedLocalId = localNameClassMap.get(classStudentKey);
             const localMatch = localMap.get(mapped.id) || (matchedLocalId ? localMap.get(matchedLocalId) : undefined);
 
+            const finalBoarding = isStudentBoarding(mapped) || isStudentBoarding(localMatch);
+
             const mergedStudent: import('../types').Student = {
               ...mapped,
               ...(localMatch || {}),
@@ -1526,8 +1529,8 @@ export const StorageService = {
               address: cleanStudentAddress(localMatch?.address || localMatch?.village || mapped.address || mapped.village),
               village: cleanStudentAddress(localMatch?.village || localMatch?.address || mapped.village || mapped.address),
               notes: localMatch?.notes || mapped.notes,
-              isBoarding: mapped.isBoarding !== undefined ? mapped.isBoarding : (localMatch?.isBoarding !== undefined ? localMatch.isBoarding : false),
-              is_boarding: mapped.isBoarding !== undefined ? mapped.isBoarding : (localMatch?.isBoarding !== undefined ? localMatch.isBoarding : false),
+              isBoarding: finalBoarding,
+              is_boarding: finalBoarding,
             };
 
             cloudActiveMap.set(mapped.id, mergedStudent);
@@ -1657,9 +1660,7 @@ export const StorageService = {
 
     const list = await this.getStudents();
     const finalGender = resolveStudentGender(student.gender, student.full_name);
-    const bVal = student.isBoarding !== undefined 
-      ? Boolean(student.isBoarding) 
-      : ((student as any).is_boarding !== undefined ? Boolean((student as any).is_boarding) : false);
+    const bVal = isStudentBoarding(student);
     const studentToSave = { ...student, gender: finalGender, isBoarding: bVal, is_boarding: bVal };
 
     let idx = list.findIndex((s) => s.id === student.id);
@@ -1903,9 +1904,7 @@ export const StorageService = {
     for (const student of students) {
       if (!student || !student.id) continue;
       const finalGender = resolveStudentGender(student.gender, student.full_name);
-      const bVal = student.isBoarding !== undefined 
-        ? Boolean(student.isBoarding) 
-        : ((student as any).is_boarding !== undefined ? Boolean((student as any).is_boarding) : false);
+      const bVal = isStudentBoarding(student);
       const sCopy = { ...student, gender: finalGender, isBoarding: bVal, is_boarding: bVal };
       studentsToSave.push(sCopy);
 
@@ -1926,7 +1925,7 @@ export const StorageService = {
       birth_date: s.birth_date || '',
       ethnicity: s.ethnicity || '',
       notes: s.notes || '',
-      is_boarding: s.isBoarding !== undefined ? Boolean(s.isBoarding) : (s.is_boarding !== undefined ? Boolean(s.is_boarding) : false),
+      is_boarding: isStudentBoarding(s),
     });
 
     const supabase = getSupabaseClient();

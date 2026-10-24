@@ -7,7 +7,8 @@ import { AbsentStudent, DailyReport, DailyReportValue, Student, BoardingDailyRep
 import { DateNavigator } from '../components/DateNavigator';
 import { getTodayDateStr, formatDateVN, addDaysToDateStr } from '../utils/schoolWeeks';
 import { buildDefaultMealRecords, getMealScheduleForDate } from '../utils/boardingRules';
-import { isValidStudentAddress, cleanStudentAddress, isStudentInClass, matchClassReport, normalizeClassKey } from '../utils/studentUtils';
+import { isValidStudentAddress, cleanStudentAddress, isStudentInClass, matchClassReport, normalizeClassKey, isStudentBoarding } from '../utils/studentUtils';
+import { removeVietnameseAccents } from '../utils/studentExcelParser';
 import {
   CheckCircle2,
   RotateCcw,
@@ -298,7 +299,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                 ig.name.toLowerCase().includes('bán trú') ||
                 ig.name.toLowerCase().includes('ăn trưa')
               ) {
-                const expBoarding = classStudents.filter((s) => s.isBoarding === true);
+                const expBoarding = classStudents.filter((s) => isStudentBoarding(s));
                 const rosterBoarding = expBoarding.length > 0 ? expBoarding.length : (classStudents.length > 0 ? classStudents.length : 25);
                 newVals[ig.id] = {
                   total: rosterBoarding,
@@ -324,7 +325,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
           const enrolledCount = classStudents.length;
 
           const defaultTotal = enrolledCount > 0 ? enrolledCount : 35;
-          const expBoarding = classStudents.filter((s) => s.isBoarding === true || (s as any).is_boarding === true);
+          const expBoarding = classStudents.filter((s) => isStudentBoarding(s));
           const boardingStudentsCount = expBoarding.length;
 
           const boardingTotal = boardingStudentsCount;
@@ -442,8 +443,8 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
   const syncIndicatorsWithAbsentStudents = useCallback(
     (studentsList: AbsentStudent[]) => {
       const totalAbsent = studentsList.length;
-      const bAbsent = studentsList.filter((s) => s.isBoarding).length;
-      const ntAbsent = studentsList.filter((s) => !s.isBoarding).length;
+      const bAbsent = studentsList.filter((s) => isStudentBoarding(s)).length;
+      const ntAbsent = studentsList.filter((s) => !isStudentBoarding(s)).length;
 
       setFormValues((prev) => {
         const next = { ...prev };
@@ -950,8 +951,8 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
     const ntPresent = ntVal ? Number(ntVal.present) || 0 : 0;
     const ntAbsent = ntVal ? Number(ntVal.absent) || 0 : 0;
 
-    const listBoardingCount = absentStudents.filter((s) => s.isBoarding).length;
-    const listNgoaiTruCount = absentStudents.filter((s) => !s.isBoarding).length;
+    const listBoardingCount = absentStudents.filter((s) => isStudentBoarding(s)).length;
+    const listNgoaiTruCount = absentStudents.filter((s) => !isStudentBoarding(s)).length;
 
     // RÀNG BUỘC 1: Khi tổng sĩ số báo CÓ MẶT ĐỦ (mainAbsent === 0)
     if (mainAbsent === 0) {
@@ -1140,7 +1141,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
 
         // Lấy đúng học sinh BÁN TRÚ của lớp (chỉ những em có isBoarding === true, loại bỏ tuyệt đối học sinh ngoại trú)
         const rawBoardingStudents = students.filter((s) => {
-          const isBoarding = s.isBoarding === true || (s as any).is_boarding === true;
+          const isBoarding = isStudentBoarding(s);
           if (!isBoarding) return false;
           const sCls = String(s.class_id || '').trim().toLowerCase();
           const sClsClean = sCls.replace(/^c_/, '').replace(/^lớp\s*/i, '');
@@ -1182,25 +1183,18 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
             ? enteredBoardingTotal
             : classBoardingStudents.length;
 
-        // Nếu danh sách học sinh roster vượt quá sĩ số đã báo cáo, giới hạn danh sách đúng bằng số đã báo cáo
-        if (enteredBoardingTotal !== undefined && enteredBoardingTotal >= 0 && classBoardingStudents.length > enteredBoardingTotal) {
-          classBoardingStudents = classBoardingStudents.slice(0, enteredBoardingTotal);
-        }
-
         if (classBoardingStudents.length > 0 || finalBoardingCount > 0) {
           const absentMap = new Map<string, { reason?: string }>();
           if (absentStudents) {
             absentStudents.forEach((ab) => {
               if (ab.id) {
                 absentMap.set(ab.id, { reason: ab.reason });
-              } else if (ab.full_name) {
+              }
+              if (ab.full_name) {
                 const norm = ab.full_name.trim().toLowerCase();
-                const sameCount = classBoardingStudents.filter(
-                  (s) => s.full_name.trim().toLowerCase() === norm
-                ).length;
-                if (sameCount === 1) {
-                  absentMap.set(norm, { reason: ab.reason });
-                }
+                const noAcc = removeVietnameseAccents(ab.full_name);
+                absentMap.set(norm, { reason: ab.reason });
+                absentMap.set(noAcc, { reason: ab.reason });
               }
             });
           }
@@ -1365,11 +1359,11 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
   }, [classStudents, absentStudents]);
 
   const boardingAbsentCount = useMemo(() => {
-    return absentStudents.filter((s) => s.isBoarding).length;
+    return absentStudents.filter((s) => isStudentBoarding(s)).length;
   }, [absentStudents]);
 
   const nonBoardingAbsentCount = useMemo(() => {
-    return absentStudents.filter((s) => !s.isBoarding).length;
+    return absentStudents.filter((s) => !isStudentBoarding(s)).length;
   }, [absentStudents]);
 
   const allAbsentNamed = useMemo(() => {
@@ -1909,9 +1903,9 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
             i.name.toLowerCase().includes('ăn trưa')
         );
 
-        const expBoarding = classStudents.filter((s) => s.isBoarding === true || (s as any).is_boarding === true);
+        const expBoarding = classStudents.filter((s) => isStudentBoarding(s));
         const rosterBoardingCount = expBoarding.length;
-        const rosterAbsentBoarding = absentStudents.filter((s) => s.isBoarding === true || (s as any).is_boarding === true).length;
+        const rosterAbsentBoarding = absentStudents.filter((s) => isStudentBoarding(s)).length;
 
         const pTotal = classStudents.length > 0 ? classStudents.length : (primaryInd ? Number(formValues[primaryInd.id]?.total) || 0 : 0);
         const pAbsent = primaryInd ? Number(formValues[primaryInd.id]?.absent) || absentStudents.length : absentStudents.length;
@@ -2160,7 +2154,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                     key={st.id}
                     type="button"
                     disabled={isMarked}
-                    onClick={() => handleAddAbsentStudent(st.full_name, addressSuffix || '', 'Ốm', !!st.isBoarding, st.id)}
+                    onClick={() => handleAddAbsentStudent(st.full_name, addressSuffix || '', 'Ốm', isStudentBoarding(st), st.id)}
                     className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all shadow-2xs ${
                       isMarked
                         ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 opacity-70 cursor-default'
@@ -2169,7 +2163,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                     title={
                       isMarked
                         ? 'Đã có trong danh sách vắng'
-                        : `Bấm để ghi nhận vắng: ${st.full_name}${addressSuffix ? ` (${addressSuffix})` : ''} (${st.isBoarding ? 'Bán trú' : 'Ngoại trú'})`
+                        : `Bấm để ghi nhận vắng: ${st.full_name}${addressSuffix ? ` (${addressSuffix})` : ''} (${isStudentBoarding(st) ? 'Bán trú' : 'Ngoại trú'})`
                     }
                   >
                     {isMarked ? (
@@ -2183,7 +2177,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                         ({addressSuffix || `#${duplicateIndex}`})
                       </span>
                     )}
-                    {st.isBoarding ? (
+                    {isStudentBoarding(st) ? (
                       <span className="text-[10px] text-emerald-700 font-black bg-emerald-50 px-1 rounded border border-emerald-200">BT</span>
                     ) : (
                       <span className="text-[10px] text-amber-700 font-black bg-amber-50 px-1 rounded border border-amber-200">NT</span>
@@ -2220,7 +2214,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                     <span className="text-xs font-black text-slate-900">
                       Học sinh vắng #{index + 1}
                     </span>
-                    {st.isBoarding ? (
+                    {isStudentBoarding(st) ? (
                       <span className="text-[10px] font-black text-emerald-800 bg-emerald-100 border border-emerald-300 px-2 py-0.5 rounded-full">
                         🍽️ Bán trú
                       </span>
@@ -2244,7 +2238,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                                 id: selectedSt.id,
                                 full_name: selectedSt.full_name,
                                 address: cleanStudentAddress(selectedSt.address || selectedSt.village),
-                                isBoarding: !!selectedSt.isBoarding,
+                                isBoarding: isStudentBoarding(selectedSt),
                               });
                             }
                           }}
@@ -2254,7 +2248,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                           <option value="">+ Chọn từ DS lớp ({classStudents.length} HS)...</option>
                           {classStudents.map((cs) => (
                             <option key={cs.id} value={cs.id}>
-                              {cs.full_name} {cs.isBoarding ? '• [Bán trú]' : '• [Ngoại trú]'} {cs.address ? `- ${cs.address}` : cs.village ? `- ${cs.village}` : ''}
+                              {cs.full_name} {isStudentBoarding(cs) ? '• [Bán trú]' : '• [Ngoại trú]'} {cs.address ? `- ${cs.address}` : cs.village ? `- ${cs.village}` : ''}
                             </option>
                           ))}
                         </select>
@@ -2365,19 +2359,19 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                           }
                         }}
                         className={`flex items-center gap-2 px-2.5 sm:px-3 py-2 rounded-xl border-2 cursor-pointer select-none transition-all ${
-                          st.isBoarding
+                          isStudentBoarding(st)
                             ? 'bg-emerald-50 border-emerald-500 text-emerald-950 shadow-xs ring-2 ring-emerald-500/20'
                             : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
                         }`}
                       >
                         <div
                           className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-all ${
-                            st.isBoarding
+                            isStudentBoarding(st)
                               ? 'bg-emerald-600 border-emerald-600 text-white shadow-2xs'
                               : 'bg-white border-slate-300'
                           }`}
                         >
-                          {st.isBoarding && <Check className="w-3 h-3 stroke-[3]" />}
+                          {isStudentBoarding(st) && <Check className="w-3 h-3 stroke-[3]" />}
                         </div>
                         <div className="flex flex-col min-w-0">
                           <span className="text-xs sm:text-sm font-black whitespace-normal leading-tight text-emerald-950">
@@ -2385,7 +2379,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                           </span>
                           <span
                             className={`text-[10px] truncate font-bold ${
-                              st.isBoarding ? 'text-emerald-700' : 'text-slate-400'
+                              isStudentBoarding(st) ? 'text-emerald-700' : 'text-slate-400'
                             }`}
                           >
                             Báo ăn
@@ -2401,19 +2395,19 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                           }
                         }}
                         className={`flex items-center gap-2 px-2.5 sm:px-3 py-2 rounded-xl border-2 cursor-pointer select-none transition-all ${
-                          !st.isBoarding
+                          !isStudentBoarding(st)
                             ? 'bg-amber-50 border-amber-500 text-amber-950 shadow-xs ring-2 ring-amber-500/20'
                             : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
                         }`}
                       >
                         <div
                           className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-all ${
-                            !st.isBoarding
+                            !isStudentBoarding(st)
                               ? 'bg-amber-600 border-amber-600 text-white shadow-2xs'
                               : 'bg-white border-slate-300'
                           }`}
                         >
-                          {!st.isBoarding && <Check className="w-3 h-3 stroke-[3]" />}
+                          {!isStudentBoarding(st) && <Check className="w-3 h-3 stroke-[3]" />}
                         </div>
                         <div className="flex items-center min-w-0">
                           <span className="text-xs sm:text-sm font-black whitespace-normal leading-tight text-amber-950">

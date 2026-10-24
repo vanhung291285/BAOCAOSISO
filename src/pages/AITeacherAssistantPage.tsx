@@ -5,7 +5,7 @@ import { StorageService, subscribeRealtime } from '../services/storage';
 import { Student, ClassItem, DailyReport, DailyReportValue, BoardingDailyReport, Profile } from '../types';
 import { getTodayDateStr, formatDateVN, formatDayMonthVN, getSchoolWeekFromDate, getSchoolWeekInfo, DEFAULT_WEEK1_START_DATE } from '../utils/schoolWeeks';
 import { resolveTeacherName, DEFAULT_CLASS_TEACHER_MAP } from '../utils/exportAttendanceStandardExcel';
-import { matchClassReport } from '../utils/studentUtils';
+import { matchClassReport, isStudentBoarding } from '../utils/studentUtils';
 import { aiTeacherAssistantService } from '../services/aiTeacherAssistantService';
 import ExcelJS from 'exceljs';
 import {
@@ -439,7 +439,7 @@ export const AITeacherAssistantPage: React.FC<AITeacherAssistantPageProps> = ({
       });
 
       // Calculate Boarding Metrics
-      let bCount = studentsOfClass.filter((s) => s.isBoarding || s.is_boarding).length;
+      let bCount = studentsOfClass.filter((s) => isStudentBoarding(s)).length;
       let totBf = 0,
         totLu = 0,
         totDi = 0;

@@ -4,7 +4,7 @@ import { useSchool } from '../contexts/SchoolContext';
 import { useAuth } from '../contexts/AuthContext';
 import { ClassItem, Profile, Student } from '../types';
 import { parseStudentExcelData, removeVietnameseAccents } from '../utils/studentExcelParser';
-import { isValidStudentAddress, cleanStudentAddress, isStudentInClass } from '../utils/studentUtils';
+import { isValidStudentAddress, cleanStudentAddress, isStudentInClass, isStudentBoarding } from '../utils/studentUtils';
 import {
   Layers,
   Plus,
@@ -1460,7 +1460,7 @@ export const ClassesManagementPage: React.FC = () => {
                       Danh Sách Học Sinh Của Lớp ({rosterStudents.length})
                     </h4>
                     <span className="text-[11px] text-slate-500 font-medium">
-                      (Bán trú: <strong className="text-emerald-700 font-bold">{rosterStudents.filter((s) => s.isBoarding === true || (s as any).is_boarding === true).length}</strong> • Ngoại trú: <strong className="text-amber-700 font-bold">{rosterStudents.filter((s) => s.isBoarding === false || (s as any).is_boarding === false).length}</strong>)
+                      (Bán trú: <strong className="text-emerald-700 font-bold">{rosterStudents.filter((s) => isStudentBoarding(s)).length}</strong> • Ngoại trú: <strong className="text-amber-700 font-bold">{rosterStudents.filter((s) => !isStudentBoarding(s)).length}</strong>)
                     </span>
                   </div>
                   {rosterStudents.length > 0 && (
@@ -1502,6 +1502,7 @@ export const ClassesManagementPage: React.FC = () => {
                       <tbody className="divide-y divide-slate-100">
                         {rosterStudents.map((student, sIdx) => {
                           const isEditing = editingStudentId === student.id;
+                          const isBoarding = isStudentBoarding(student);
                           return (
                             <tr key={student.id} className="hover:bg-slate-50 transition-colors">
                               <td className="py-2 px-4 text-center font-bold text-slate-400">{sIdx + 1}</td>
@@ -1534,19 +1535,19 @@ export const ClassesManagementPage: React.FC = () => {
                                 <button
                                   type="button"
                                   onClick={async () => {
-                                    const nextVal = student.isBoarding === false ? true : false;
-                                    await updateStudent(student.id, { isBoarding: nextVal });
+                                    const nextVal = !isBoarding;
+                                    await updateStudent(student.id, { isBoarding: nextVal, is_boarding: nextVal });
                                     setSuccessToast(`Đã chuyển ${student.full_name} sang diện: ${nextVal ? 'Bán trú' : 'Ngoại trú'}`);
                                     setTimeout(() => setSuccessToast(''), 2500);
                                   }}
                                   className={`px-2.5 py-0.5 rounded-lg text-[11px] font-extrabold transition-all cursor-pointer ${
-                                    (student.isBoarding === true || (student as any).is_boarding === true)
+                                    isBoarding
                                       ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200'
                                       : 'bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200'
                                   }`}
                                   title="Bấm để chuyển đổi giữa Bán trú (chấm ăn) và Ngoại trú (không chấm ăn)"
                                 >
-                                  {(student.isBoarding === true || (student as any).is_boarding === true) ? '✓ Bán trú' : '🏠 Ngoại trú'}
+                                  {isBoarding ? '✓ Bán trú' : '🏠 Ngoại trú'}
                                 </button>
                               </td>
                               <td className="py-2 px-4 text-center">

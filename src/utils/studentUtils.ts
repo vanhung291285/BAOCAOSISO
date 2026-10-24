@@ -243,5 +243,31 @@ export function matchClassReport(
   return false;
 }
 
+/**
+ * Kiểm tra xem học sinh có thuộc diện Bán trú hay không.
+ * Tương thích linh hoạt với cả camelCase (isBoarding) và snake_case (is_boarding),
+ * và các dạng dữ liệu boolean, number (1/0), hay string ("true"/"1"/"có"/"bán trú"/"bt").
+ */
+export function isStudentBoarding(s?: any): boolean {
+  if (!s) return false;
+  const val = s.isBoarding ?? s.is_boarding ?? s.boarding;
+  if (val === true || val === 1) return true;
+  if (val === false || val === 0) return false;
+  if (typeof val === 'string') {
+    const trimmed = val.trim().toLowerCase();
+    return (
+      trimmed === 'true' ||
+      trimmed === '1' ||
+      trimmed === 'có' ||
+      trimmed === 'co' ||
+      trimmed === 'bán trú' ||
+      trimmed === 'ban tru' ||
+      trimmed === 'bt'
+    );
+  }
+  return false;
+}
+
+
 
 
