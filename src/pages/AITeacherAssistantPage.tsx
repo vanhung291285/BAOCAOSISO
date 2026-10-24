@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useSchool } from '../contexts/SchoolContext';
 import { useAuth } from '../contexts/AuthContext';
-import { StorageService } from '../services/storage';
-import { Student, ClassItem, DailyReport, DailyReportValue, BoardingDailyReport } from '../types';
+import { StorageService, subscribeRealtime } from '../services/storage';
+import { Student, ClassItem, DailyReport, DailyReportValue, BoardingDailyReport, Profile } from '../types';
 import { getTodayDateStr, formatDateVN, formatDayMonthVN, getSchoolWeekFromDate, getSchoolWeekInfo, DEFAULT_WEEK1_START_DATE } from '../utils/schoolWeeks';
 import { resolveTeacherName, DEFAULT_CLASS_TEACHER_MAP } from '../utils/exportAttendanceStandardExcel';
 import { matchClassReport } from '../utils/studentUtils';
+import { aiTeacherAssistantService } from '../services/aiTeacherAssistantService';
 import ExcelJS from 'exceljs';
 import {
   Sparkles,
@@ -59,7 +60,42 @@ export const AITeacherAssistantPage: React.FC<AITeacherAssistantPageProps> = ({
   initialClassId,
 }) => {
   const { classes, settings, activeYear } = useSchool();
-  const { currentUser, isGVCN, isAdmin, isBGH } = useAuth();
+  const { currentUser, allUsers, isGVCN, isAdmin, isBGH } = useAuth();
+
+  // Danh sách hồ sơ giáo viên toàn trường (đồng bộ theo thời gian thực)
+  const [profiles, setProfiles] = useState<Profile[]>(allUsers || []);
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadProfiles = async () => {
+      try {
+        const list = await StorageService.getProfiles();
+        if (isMounted && list && list.length > 0) {
+          setProfiles(list);
+        }
+      } catch (err) {
+        console.warn('Failed to load profiles in AITeacherAssistantPage:', err);
+      }
+    };
+    loadProfiles();
+
+    const unsubscribe = subscribeRealtime((event) => {
+      if (event.table === 'profiles' || event.table === 'classes' || event.table === 'all_reset') {
+        loadProfiles();
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (allUsers && allUsers.length > 0 && profiles.length === 0) {
+      setProfiles(allUsers);
+    }
+  }, [allUsers, profiles.length]);
 
   // Active Tab: 'REPORT' (Tổng hợp báo cáo BGH) | 'REMARKS' (Viết nhận xét học sinh)
   const [activeTab, setActiveTab] = useState<'REPORT' | 'REMARKS'>('REPORT');
@@ -70,6 +106,23 @@ export const AITeacherAssistantPage: React.FC<AITeacherAssistantPageProps> = ({
     if (isGVCN && currentUser?.assigned_class_id) return currentUser.assigned_class_id;
     return 'c_6a11'; // Mặc định lớp 6A11 như mô tả người dùng
   });
+
+  // Tự động chuyển về đúng lớp của GVCN khi đăng nhập
+  useEffect(() => {
+    if (isGVCN && currentUser) {
+      const userClass = classes.find(
+        (c) =>
+          (currentUser.assigned_class_id &&
+            (c.id === currentUser.assigned_class_id ||
+              c.class_name === currentUser.assigned_class_id ||
+              matchClassReport(currentUser.assigned_class_id, c))) ||
+          (currentUser.id && c.homeroom_teacher_id === currentUser.id)
+      );
+      if (userClass && userClass.id !== selectedClassId) {
+        setSelectedClassId(userClass.id);
+      }
+    }
+  }, [isGVCN, currentUser, classes]);
 
   // Period Selection for Report: 'WEEK' | 'MONTH'
   const [periodType, setPeriodType] = useState<'WEEK' | 'MONTH'>('WEEK');
@@ -172,10 +225,100 @@ export const AITeacherAssistantPage: React.FC<AITeacherAssistantPageProps> = ({
     );
   }, [classes, selectedClassId]);
 
-  // Resolved Teacher Name
+  // Đồng bộ tên Giáo viên Chủ nhiệm (GVCN) chuẩn xác từ hệ thống tài khoản & phân công lớp
+  const getTeacherForClass = useCallback(
+    (cls: ClassItem | null | undefined): string => {
+      if (!cls) return '';
+
+      // 1. Nếu người dùng hiện tại đang đăng nhập là GVCN của chính lớp này
+      if (isGVCN && currentUser) {
+        const isUserClass =
+          currentUser.assigned_class_id === cls.id ||
+          currentUser.assigned_class_id === cls.class_name ||
+          matchClassReport(currentUser.assigned_class_id, cls) ||
+          cls.homeroom_teacher_id === currentUser.id;
+        if (isUserClass && currentUser.full_name && currentUser.full_name.trim()) {
+          return currentUser.full_name.trim();
+        }
+      }
+
+      const activeProfiles = profiles.length > 0 ? profiles : allUsers;
+
+      // 2. Tra cứu theo homeroom_teacher_id của lớp
+      if (cls.homeroom_teacher_id) {
+        // 2a. Nếu homeroom_teacher_id là ID người dùng trong danh sách tài khoản
+        const matchedById = activeProfiles.find((p) => p.id === cls.homeroom_teacher_id);
+        if (matchedById && matchedById.full_name && matchedById.full_name.trim()) {
+          return matchedById.full_name.trim();
+        }
+        // 2b. Nếu homeroom_teacher_id đã là họ tên đầy đủ bằng chữ (không phải mã ID)
+        const rawHt = cls.homeroom_teacher_id.trim();
+        if (
+          rawHt.includes(' ') &&
+          !rawHt.startsWith('u_') &&
+          !rawHt.startsWith('teacher_') &&
+          !rawHt.startsWith('cls_') &&
+          !rawHt.startsWith('c_')
+        ) {
+          return rawHt;
+        }
+      }
+
+      // 3. Tra cứu profile có vai trò GVCN được phân công lớp này (assigned_class_id)
+      const teacherByAssigned = activeProfiles.find(
+        (p) =>
+          p.role === 'GVCN' &&
+          p.full_name &&
+          p.full_name.trim() &&
+          (p.assigned_class_id === cls.id ||
+            p.assigned_class_id === cls.class_name ||
+            matchClassReport(p.assigned_class_id, cls))
+      );
+      if (teacherByAssigned) {
+        return teacherByAssigned.full_name.trim();
+      }
+
+      // 4. Tra cứu theo email hoặc assigned_class_name
+      const cleanName = cls.class_name.trim().toLowerCase();
+      const teacherByEmail = activeProfiles.find(
+        (p) =>
+          p.role === 'GVCN' &&
+          p.full_name &&
+          p.full_name.trim() &&
+          (((p as any).assigned_class_name?.trim().toLowerCase() === cleanName) ||
+            p.email?.toLowerCase().includes(`_${cleanName}@`) ||
+            p.email?.toLowerCase().includes(`.${cleanName}@`))
+      );
+      if (teacherByEmail) {
+        return teacherByEmail.full_name.trim();
+      }
+
+      // 5. Tra cứu người dùng trong hệ thống có tên trùng với DEFAULT_CLASS_TEACHER_MAP
+      const cleanCls = cls.class_name.replace(/^Lớp\s+/i, '').trim().toUpperCase();
+      const defaultTeacher = DEFAULT_CLASS_TEACHER_MAP[cleanCls];
+      if (defaultTeacher) {
+        const matchedUser = activeProfiles.find(
+          (p) =>
+            p.role === 'GVCN' &&
+            p.full_name &&
+            p.full_name.trim().toLowerCase() === defaultTeacher.trim().toLowerCase()
+        );
+        if (matchedUser) {
+          return matchedUser.full_name.trim();
+        }
+        return defaultTeacher;
+      }
+
+      // 6. Fallback qua resolveTeacherName
+      return resolveTeacherName(cls.class_name, cls.homeroom_teacher_id) || 'Chưa phân công GVCN';
+    },
+    [isGVCN, currentUser, profiles, allUsers]
+  );
+
+  // Resolved Teacher Name đồng bộ
   const teacherName = useMemo(() => {
-    return resolveTeacherName(currentClass.class_name);
-  }, [currentClass.class_name]);
+    return getTeacherForClass(currentClass);
+  }, [currentClass, getTeacherForClass]);
 
   // Period Label String
   const currentPeriodLabel = useMemo(() => {
@@ -346,32 +489,27 @@ export const AITeacherAssistantPage: React.FC<AITeacherAssistantPageProps> = ({
     loadClassData();
   }, [loadClassData]);
 
-  // Generate Report via AI API
+  // Generate Report via AI Service (supports both Server API and Vercel Static Fallback)
   const handleGenerateAIReport = async () => {
     setIsGeneratingReport(true);
     setCopiedReport(false);
     try {
-      const response = await fetch('/api/ai/class-report-summary', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          className: currentClass.class_name,
-          teacherName,
-          schoolName: settings?.school_name || 'Trường PTDTBT THCS Xa Dung',
-          periodType,
-          periodLabel: currentPeriodLabel,
-          attendanceStats: attendanceData,
-          boardingStats: boardingData,
-          absentDetails: absentStudentsList,
-          specialNotes: specialNotesList,
-          tone: reportTone,
-        }),
+      const data = await aiTeacherAssistantService.generateClassReport({
+        className: currentClass.class_name,
+        teacherName,
+        schoolName: settings?.school_name || 'Trường PTDTBT THCS Xa Dung',
+        periodType,
+        periodLabel: currentPeriodLabel,
+        attendanceStats: attendanceData,
+        boardingStats: boardingData,
+        absentDetails: absentStudentsList,
+        specialNotes: specialNotesList,
+        tone: reportTone,
       });
 
-      const resData = await response.json();
-      if (resData?.data) {
-        setGeneratedReport(resData.data);
-        setEditableDocText(resData.data.fullDocumentText || '');
+      if (data) {
+        setGeneratedReport(data);
+        setEditableDocText(data.fullDocumentText || '');
       }
     } catch (err) {
       console.error('Failed to generate AI report:', err);
@@ -380,7 +518,7 @@ export const AITeacherAssistantPage: React.FC<AITeacherAssistantPageProps> = ({
     }
   };
 
-  // Generate Student Remarks via AI API
+  // Generate Student Remarks via AI Service (supports both Server API and Vercel Static Fallback)
   const handleGenerateStudentRemarks = async () => {
     setIsGeneratingRemarks(true);
     setCopiedAllRemarks(false);
@@ -399,19 +537,14 @@ export const AITeacherAssistantPage: React.FC<AITeacherAssistantPageProps> = ({
         };
       });
 
-      const response = await fetch('/api/ai/student-periodic-remarks', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          className: currentClass.class_name,
-          periodType: remarksPeriod === 'WEEK' ? 'Theo Tuần' : remarksPeriod === 'MONTH' ? 'Theo Tháng' : 'Theo Học kỳ',
-          studentsData: studentsToEvaluate,
-        }),
+      const data = await aiTeacherAssistantService.generateStudentRemarks({
+        className: currentClass.class_name,
+        periodType: remarksPeriod === 'WEEK' ? 'Theo Tuần' : remarksPeriod === 'MONTH' ? 'Theo Tháng' : 'Theo Học kỳ',
+        studentsData: studentsToEvaluate,
       });
 
-      const resData = await response.json();
-      if (resData?.data?.remarks) {
-        setStudentRemarks(resData.data.remarks);
+      if (data?.remarks) {
+        setStudentRemarks(data.remarks);
       }
     } catch (err) {
       console.error('Failed to generate student remarks:', err);
@@ -594,7 +727,7 @@ export const AITeacherAssistantPage: React.FC<AITeacherAssistantPageProps> = ({
               })
               .map((c) => (
                 <option key={c.id} value={c.id}>
-                  Lớp {c.class_name} ({resolveTeacherName(c.class_name)})
+                  Lớp {c.class_name} ({getTeacherForClass(c)})
                 </option>
               ))}
           </select>

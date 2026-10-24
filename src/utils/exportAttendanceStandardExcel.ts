@@ -86,13 +86,18 @@ export function resolveTeacherName(
     name = teacherOrName.full_name.trim();
   }
 
-  // Nếu tên hợp lệ (không phải placeholder rỗng / generic)
+  // Nếu tên hợp lệ (không phải placeholder rỗng / generic / raw ID)
   if (
     name &&
     !name.startsWith('GVCN') &&
     !name.startsWith('GVCN Lớp') &&
     name !== '-' &&
-    name.toLowerCase() !== 'chưa phân công'
+    name.toLowerCase() !== 'chưa phân công' &&
+    !name.startsWith('u_') &&
+    !name.startsWith('teacher_') &&
+    !name.startsWith('cls_') &&
+    !name.startsWith('c_') &&
+    !name.startsWith('usr_')
   ) {
     return name;
   }
