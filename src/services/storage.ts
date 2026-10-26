@@ -3501,7 +3501,7 @@ export const StorageService = {
     valuesByGroup: Record<string, { total: number; present: number; absent: number }>,
     notes?: string,
     absent_students?: import('../types').AbsentStudent[]
-  ): Promise<{ report: DailyReport; values: DailyReportValue[] }> {
+  ): Promise<{ report: DailyReport; values: DailyReportValue[]; syncedOnline?: boolean }> {
     ensureInitialized();
 
     // Guard: Prevent saving empty report where total is 0
@@ -3616,8 +3616,11 @@ export const StorageService = {
 
     // PERSIST DIRECTLY TO SUPABASE WITH FULL FK PROTECTION & ROBUST TIMEOUT
     let effectiveReportId = reportId;
+    let syncedOnline = false;
+    const isNetworkOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
+
     const supabase = getSupabaseClient();
-    if (supabase && isSupabaseConnected()) {
+    if (isNetworkOnline && supabase && isSupabaseConnected()) {
       try {
         const upsertPromise = (async () => {
           // 1. Đảm bảo profile người tạo tồn tại trên Supabase để tránh lỗi FK created_by
@@ -3710,6 +3713,7 @@ export const StorageService = {
           }
 
           // 3. Chuẩn bị và đẩy daily_report_values với report_id chính xác
+          let valuesSynced = true;
           if (newValues.length > 0) {
             const cloudValKeyMap = new Map<string, string>();
             try {
@@ -3750,7 +3754,12 @@ export const StorageService = {
 
             if (valErr) {
               console.error('Supabase upsert daily_report_values error:', valErr);
+              valuesSynced = false;
             }
+          }
+
+          if (!repErr && valuesSynced) {
+            syncedOnline = true;
           }
         })();
 
@@ -3761,6 +3770,7 @@ export const StorageService = {
         ]);
       } catch (err) {
         console.error('Supabase sync report error:', err);
+        syncedOnline = false;
       }
     }
 
@@ -3824,7 +3834,61 @@ export const StorageService = {
 
     notifyRealtimeChange('daily_reports', { reportId: effectiveReportId, classId: canonicalClassId, rawClassId: classId, reportDate: cleanReportDate });
     notifyRealtimeChange('daily_report_values', { reportId: effectiveReportId, classId: canonicalClassId, rawClassId: classId, reportDate: cleanReportDate });
-    return { report, values: newValues };
+    return { report, values: newValues, syncedOnline: isNetworkOnline && syncedOnline };
+  },
+
+  /**
+   * Quét và tự động đồng bộ tất cả các báo cáo lưu tạm offline ở local storage lên Supabase
+   */
+  async syncOfflineReports(): Promise<{ syncedDailyCount: number; syncedBoardingCount: number }> {
+    ensureInitialized();
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      return { syncedDailyCount: 0, syncedBoardingCount: 0 };
+    }
+    const supabase = getSupabaseClient();
+    if (!supabase || !isSupabaseConnected()) {
+      return { syncedDailyCount: 0, syncedBoardingCount: 0 };
+    }
+
+    let syncedDailyCount = 0;
+    let syncedBoardingCount = 0;
+
+    try {
+      const rawReports = localStorage.getItem(STORAGE_KEYS.REPORTS);
+      const reports: DailyReport[] = rawReports ? JSON.parse(rawReports) : [];
+      const rawValues = localStorage.getItem(STORAGE_KEYS.VALUES);
+      const allValues: DailyReportValue[] = rawValues ? JSON.parse(rawValues) : [];
+
+      if (reports.length > 0) {
+        for (const rep of reports) {
+          try {
+            const { error: repErr } = await supabase.from('daily_reports').upsert(rep, { onConflict: 'class_id,report_date' });
+            if (!repErr) {
+              syncedDailyCount++;
+              const vals = allValues.filter((v) => v.report_id === rep.id);
+              if (vals.length > 0) {
+                await supabase.from('daily_report_values').upsert(vals, { onConflict: 'report_id,indicator_group_id' });
+              }
+            }
+          } catch {}
+        }
+      }
+
+      const rawBoarding = localStorage.getItem(STORAGE_KEYS.BOARDING_REPORTS);
+      const boardingReports: BoardingDailyReport[] = rawBoarding ? JSON.parse(rawBoarding) : [];
+      if (boardingReports.length > 0) {
+        for (const brep of boardingReports) {
+          try {
+            const { error: bErr } = await supabase.from('boarding_reports').upsert(brep, { onConflict: 'class_id,date' });
+            if (!bErr) syncedBoardingCount++;
+          } catch {}
+        }
+      }
+    } catch (e) {
+      console.warn('syncOfflineReports error:', e);
+    }
+
+    return { syncedDailyCount, syncedBoardingCount };
   },
 
   async lockReport(reportId: string, locked: boolean, adminUser: Profile): Promise<void> {
