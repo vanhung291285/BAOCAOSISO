@@ -67,6 +67,38 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
   const [isPlayingSoundTest, setIsPlayingSoundTest] = useState(false);
   const [isExportingBoarding, setIsExportingBoarding] = useState(false);
   const [showPostSubmitModal, setShowPostSubmitModal] = useState(false);
+  const [isOnline, setIsOnline] = useState<boolean>(() => {
+    return typeof navigator !== 'undefined' ? navigator.onLine : true;
+  });
+  const [submitSyncStatus, setSubmitSyncStatus] = useState<{
+    isOnline: boolean;
+    syncedCloud: boolean;
+  } | null>(null);
+
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      setToastMessage({
+        text: '🟢 Đã kết nối lại Internet! Đang tự động đồng bộ báo cáo lưu tạm lên máy chủ...',
+        type: 'success',
+      });
+      StorageService.syncOfflineReports().catch(console.warn);
+    };
+    const handleOffline = () => {
+      setIsOnline(false);
+      setToastMessage({
+        text: '⚠️ Thiết bị hiện Ngoại tuyến (Không có kết nối Internet). Dữ liệu sẽ lưu tạm trên máy.',
+        type: 'info',
+      });
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
 
   const handleExit = () => {
     if (isGVCN) {
@@ -1128,7 +1160,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
       });
 
       const targetClassId = selectedClass?.id || selectedClassId;
-      await StorageService.saveDailyReport(
+      const saveRes = await StorageService.saveDailyReport(
         targetClassId,
         selectedDate,
         currentUser,
@@ -1136,6 +1168,14 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
         notes,
         resolvedAbsentStudents
       );
+
+      const isCurrentlyOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
+      const isCloudSynced = Boolean(isCurrentlyOnline && saveRes?.syncedOnline);
+
+      setSubmitSyncStatus({
+        isOnline: isCurrentlyOnline,
+        syncedCloud: isCloudSynced,
+      });
 
       // Tự động đồng bộ báo ăn sang Sổ chấm cơm bán trú (biểu xử lý) ngay lập tức
       try {
@@ -1250,10 +1290,17 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
         console.warn('Auto sync boarding report error:', syncErr);
       }
 
-      setToastMessage({
-        text: existingReport ? 'Đã cập nhật báo cáo thành công!' : 'Đã gửi báo cáo thành công!',
-        type: 'success',
-      });
+      if (isCurrentlyOnline && isCloudSynced) {
+        setToastMessage({
+          text: existingReport ? 'Đã cập nhật & đồng bộ trực tuyến thành công!' : 'Đã gửi & đồng bộ trực tuyến thành công!',
+          type: 'success',
+        });
+      } else {
+        setToastMessage({
+          text: '⚠️ Đã lưu báo cáo tạm thời trên máy (Ngoại tuyến). Báo cáo sẽ tự đồng bộ khi có Internet.',
+          type: 'info',
+        });
+      }
 
       // Đối với GVCN, mở modal xác nhận để có thể thoát ngay về cửa sổ đăng nhập
       if (isGVCN) {
@@ -1403,6 +1450,18 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
         </div>
       )}
 
+      {/* Offline Alert Banner */}
+      {!isOnline && (
+        <div className="bg-amber-500 text-slate-950 px-3.5 py-2 text-xs font-black shadow-sm flex items-center justify-between gap-2 border-b border-amber-600 sticky top-0 z-40">
+          <div className="flex items-center gap-2 max-w-5xl mx-auto w-full">
+            <AlertTriangle className="w-4 h-4 text-slate-950 shrink-0" />
+            <span>
+              <strong>CHẾ ĐỘ NGOẠI TUYẾN (KHÔNG CÓ MẠNG INTERNET):</strong> Báo cáo sẽ được lưu tạm trên thiết bị. Bạn cần bật mạng Wi-Fi/4G và mở ứng dụng để tự động truyền báo cáo lên Ban Giám Hiệu.
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* 1. HÀNG 1: STICKY HEADER (Tên lớp bên trái, Trạng thái bên phải trên cùng 1 dòng) */}
       <header className="bg-blue-900 text-white px-3 sm:px-4 py-2 sticky top-0 z-30 shadow-md">
         <div className="max-w-5xl mx-auto flex items-center justify-between gap-2">
@@ -1466,6 +1525,13 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
             >
               <Volume2 className="w-3.5 h-3.5" />
             </button>
+
+            {!isOnline && (
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-black bg-amber-400 text-slate-950 shadow-xs gap-1 border border-amber-300 animate-pulse">
+                <AlertTriangle className="w-3 h-3" />
+                <span>Ngoại tuyến</span>
+              </span>
+            )}
 
             {isLoadingReport ? (
               <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-800 text-blue-200 border border-blue-700">
@@ -2758,30 +2824,78 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
         </div>
       )}
 
-      {/* Modal xác nhận sau khi nộp báo cáo thành công (dành cho GVCN) */}
+      {/* Modal xác nhận sau khi nộp báo cáo thành công hoặc lưu tạm ngoại tuyến (dành cho GVCN) */}
       {showPostSubmitModal && (
-        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
-          <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-slate-200 text-center animate-in zoom-in-95">
-            <div className="w-14 h-14 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto mb-3 shadow-inner">
-              <CheckCircle2 className="w-8 h-8 stroke-[2.5]" />
-            </div>
+        <div className="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-white rounded-3xl max-w-sm sm:max-w-md w-full p-6 shadow-2xl border border-slate-200 text-center animate-in zoom-in-95 space-y-4">
+            {/* Visual Status Indicator & Header */}
+            {submitSyncStatus?.syncedCloud ? (
+              <>
+                <div className="w-16 h-16 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto shadow-inner ring-4 ring-emerald-50 border border-emerald-200">
+                  <CheckCircle2 className="w-9 h-9 stroke-[2.5]" />
+                </div>
 
-            <h3 className="text-base sm:text-lg font-black text-slate-900 tracking-tight">
-              ĐÃ GỬI BÁO CÁO THÀNH CÔNG!
-            </h3>
-            
-            <p className="text-xs text-slate-600 mt-1.5 leading-relaxed">
-              Báo cáo sĩ số lớp <strong>{selectedClass?.class_name || ''}</strong> ngày <strong>{formatDateVN(selectedDate)}</strong> đã được ghi nhận vào hệ thống.
-            </p>
+                <div>
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-300 text-xs font-black mb-1">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                    Đã đồng bộ trực tuyến
+                  </span>
+                  <h3 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight">
+                    ĐÃ GỬI BÁO CÁO THÀNH CÔNG!
+                  </h3>
+                </div>
 
-            <div className="mt-5 space-y-2">
+                <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+                  Báo cáo sĩ số lớp <strong>{selectedClass?.class_name || ''}</strong> ngày <strong>{formatDateVN(selectedDate)}</strong> đã được ghi nhận và đồng bộ trực tuyến lên máy chủ Ban Giám Hiệu.
+                </p>
+              </>
+            ) : (
+              <>
+                <div className="w-16 h-16 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center mx-auto shadow-inner ring-4 ring-amber-50 border border-amber-300">
+                  <AlertTriangle className="w-9 h-9 stroke-[2.5]" />
+                </div>
+
+                <div>
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-100 text-amber-900 border border-amber-300 text-xs font-black mb-1">
+                    ⚠️ Ngoại tuyến - Đã lưu tạm trên máy
+                  </span>
+                  <h3 className="text-base sm:text-lg font-black text-amber-950 tracking-tight">
+                    ĐÃ LƯU BÁO CÁO CỤC BỘ TẠI MÁY
+                  </h3>
+                </div>
+
+                <div className="text-xs text-slate-700 space-y-2 text-left bg-amber-50/90 p-3.5 rounded-2xl border border-amber-200/90">
+                  <p className="font-semibold text-amber-950">
+                    Báo cáo sĩ số lớp <strong>{selectedClass?.class_name || ''}</strong> ngày <strong>{formatDateVN(selectedDate)}</strong> đã được lưu an toàn trên thiết bị của Thầy/Cô.
+                  </p>
+                  <p className="text-amber-900 font-bold flex items-start gap-1.5 leading-snug">
+                    <span className="text-rose-600 font-extrabold text-sm shrink-0">⚠️</span>
+                    <span><strong>LƯU Ý QUAN TRỌNG:</strong> Do thiết bị hiện <strong>không có kết nối Internet (Ngoại tuyến)</strong>, báo cáo này <strong>CHƯA ĐƯỢC GỬI TRUYỀN TỚI BAN GIÁM HIỆU</strong>.</span>
+                  </p>
+                  <div className="pt-2 border-t border-amber-200/80 text-[11px] text-slate-700 space-y-1">
+                    <p className="font-bold text-slate-900">💡 Hướng dẫn xử lý:</p>
+                    <ol className="list-decimal list-inside space-y-1 text-slate-800 font-medium">
+                      <li>Bật Wi-Fi hoặc 4G/5G khi có mạng.</li>
+                      <li>Mở lại ứng dụng để hệ thống tự động truyền báo cáo lên máy chủ cho Ban Giám Hiệu.</li>
+                    </ol>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* Action Buttons */}
+            <div className="pt-2 space-y-2">
               <button
                 type="button"
                 onClick={() => {
                   setShowPostSubmitModal(false);
                   logout();
                 }}
-                className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-[#003B5C] via-[#005B82] to-[#00897B] hover:opacity-95 text-white font-black text-xs sm:text-sm uppercase tracking-wider shadow-md shadow-teal-900/20 active:scale-[0.99] transition-all cursor-pointer flex items-center justify-center gap-2"
+                className={`w-full py-3 px-4 rounded-xl font-black text-xs sm:text-sm uppercase tracking-wider shadow-md active:scale-[0.99] transition-all cursor-pointer flex items-center justify-center gap-2 ${
+                  submitSyncStatus?.syncedCloud
+                    ? 'bg-gradient-to-r from-[#003B5C] via-[#005B82] to-[#00897B] text-white shadow-teal-900/20 hover:opacity-95'
+                    : 'bg-amber-600 hover:bg-amber-700 text-white shadow-amber-900/20'
+                }`}
               >
                 <ArrowLeft className="w-4 h-4" />
                 <span>Thoát về cửa sổ đăng nhập</span>
