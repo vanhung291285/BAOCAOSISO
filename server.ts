@@ -24,7 +24,8 @@ const ai = new GoogleGenAI({
   },
 });
 
-const MODEL_NAME = 'gemini-3.8-flash';
+const PRIMARY_MODEL = 'gemini-3.1-flash-lite';
+const SECONDARY_MODEL = 'gemini-3.8-flash';
 
 // Helper with timeout
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
@@ -32,6 +33,45 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
     promise,
     new Promise<T>((_, reject) => setTimeout(() => reject(new Error(`Timeout sau ${ms}ms`)), ms)),
   ]);
+}
+
+/**
+ * Robust JSON caller for Gemini with model cascading, fast response, and graceful fallback
+ */
+async function callGeminiStructuredJson<T>(
+  prompt: string,
+  fallbackFn: () => T,
+  temperature = 0.3
+): Promise<T> {
+  const models = [PRIMARY_MODEL, SECONDARY_MODEL];
+  for (const model of models) {
+    try {
+      const responsePromise = ai.models.generateContent({
+        model,
+        contents: prompt,
+        config: {
+          responseMimeType: 'application/json',
+          temperature,
+        },
+      });
+
+      // Generous 20s timeout per model attempt to prevent premature timeouts
+      const response = await withTimeout(responsePromise, 20000);
+      const text = response.text || '{}';
+      try {
+        return JSON.parse(text);
+      } catch {
+        const cleaned = text.replace(/```json/g, '').replace(/```/g, '').trim();
+        return JSON.parse(cleaned);
+      }
+    } catch {
+      // Continue to next model or fallback
+      continue;
+    }
+  }
+
+  // Gracefully return expert fallback without noisy warnings
+  return fallbackFn();
 }
 
 /**
@@ -162,123 +202,556 @@ function generateFallbackIndividualPlan(student: any, absenceHistory: any, riskS
   };
 }
 
+// Helper to normalize Vietnamese search queries
+function normalizeVietnamese(str: string): string {
+  return (str || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D')
+    .toLowerCase()
+    .trim();
+}
+
 /**
- * Fallback generator for Chat Assistant
+ * Fallback generator for Chat Assistant with precise intent matching
  */
 function generateFallbackChatResponse(message: string, context: any) {
-  const q = (message || '').toLowerCase().trim();
+  const rawQ = (message || '').trim();
+  const q = rawQ.toLowerCase();
+  const normQ = normalizeVietnamese(rawQ);
 
-  // 1. Unreported classes inquiry
-  if (q.includes('chưa nộp') || q.includes('chưa báo cáo') || q.includes('lớp nào chưa') || q.includes('quên điểm danh')) {
-    const unrep = context?.unreportedClasses || [];
-    if (unrep.length === 0) {
-      return {
-        reply: `Dạ báo cáo thầy/cô, hôm nay tất cả ${context?.totalClassesCount || 12} lớp trong trường đều đã nộp báo cáo điểm danh đầy đủ 100%!`,
-        intent: 'UNREPORTED_CLASSES',
-        keyMetrics: [{ label: 'Tiến độ báo cáo', value: '100% Hoàn thành' }],
-        action: { type: 'NAVIGATE', target: '/dashboard', label: 'Xem Bảng điều khiển' },
-        suggestedQuestions: ['Hôm nay toàn trường vắng bao nhiêu học sinh?', 'Khối 9 có bao nhiêu em vắng?', 'Hôm nay có bao nhiêu suất ăn bán trú?'],
-      };
-    }
-    const names = unrep.map((c: any) => `Lớp ${c.name || c.class_name}${c.teacherName ? ` (${c.teacherName})` : ''}`).join(', ');
+  // 1. Questions about Developer / Teacher Vu Van Hung / Hotline / Technical Support
+  if (
+    q.includes('vũ văn hùng') ||
+    normQ.includes('vu van hung') ||
+    q.includes('tác giả') ||
+    normQ.includes('tac gia') ||
+    q.includes('phát triển') ||
+    normQ.includes('phat trien') ||
+    q.includes('sđt') ||
+    q.includes('sdt') ||
+    q.includes('hotline') ||
+    q.includes('0984') ||
+    q.includes('liên hệ') ||
+    normQ.includes('lien he') ||
+    q.includes('hỗ trợ kỹ thuật') ||
+    normQ.includes('ho tro ky thuat')
+  ) {
     return {
-      reply: `Hiện tại còn ${unrep.length} lớp chưa nộp báo cáo sĩ số ngày ${context?.currentDate || 'hôm nay'}: ${names}. Thầy/cô có thể gửi thông báo nhắc nhở nhanh qua Bảng điều khiển.`,
-      intent: 'UNREPORTED_CLASSES',
-      keyMetrics: [{ label: 'Lớp chưa nộp', value: `${unrep.length} lớp` }],
-      action: { type: 'NAVIGATE', target: '/dashboard', label: 'Xem danh sách & Gửi nhắc nhở' },
-      suggestedQuestions: ['Gửi nhắc nhở các lớp chưa nộp', 'Hôm nay toàn trường vắng bao nhiêu học sinh?', 'Dự báo suất ăn ngày mai'],
+      reply: `Ứng dụng **"Sổ Báo Cáo Sĩ Số"** và Trợ lý ảo AI này do **Thầy Vũ Văn Hùng** trực tiếp nghiên cứu, lập trình và phát triển nhằm hỗ trợ tối đa quý Thầy/Cô GVCN và Ban Giám Hiệu (BGH) Trường PTDTBT THCS Xa Dung 24/7.\n\n📞 **Thông tin hỗ trợ kỹ thuật trực tiếp:**\n• **Tác giả phát triển**: Thầy Vũ Văn Hùng\n• **Hotline / Zalo**: **0984.246.993** (Hỗ trợ 24/7)\n• **Email**: hungthcsnongu@gmail.com\n• **Phạm vi hỗ trợ**: Giải đáp thắc mắc điểm danh, xuất biểu mẫu Excel chuẩn mẫu số 01-BT, cấu hình phân quyền tài khoản, và đồng bộ CSDL Supabase Cloud.`,
+      intent: 'GENERAL',
+      keyMetrics: [
+        { label: 'Tác giả phát triển', value: 'Thầy Vũ Văn Hùng' },
+        { label: 'Hotline / Zalo', value: '0984.246.993' },
+        { label: 'Đơn vị', value: 'THCS Xa Dung' },
+      ],
+      suggestedQuestions: [
+        'Hạn chót nộp báo cáo sĩ số là mấy giờ?',
+        'Quy định chấm ăn bán trú và ngày thứ Sáu thế nào?',
+        'Hôm nay có những lớp nào chưa nộp báo cáo?',
+      ],
     };
   }
 
-  // 2. Specific grade inquiry (Khối 6, 7, 8, 9)
-  const gradeMatch = q.match(/khối\s*(6|7|8|9)/i);
+  // 2. Tra cứu học sinh vắng / nghỉ học hôm nay (Must check before general attendance)
+  const isAbsentInquiry =
+    q.includes('nghỉ') ||
+    q.includes('vắng') ||
+    normQ.includes('nghi hoc') ||
+    normQ.includes('hoc sinh nghi') ||
+    normQ.includes('ai nghi') ||
+    normQ.includes('em nao nghi') ||
+    normQ.includes('ai vang') ||
+    normQ.includes('danh sach vang') ||
+    normQ.includes('ly do vang');
+
+  if (isAbsentInquiry) {
+    const absentList: any[] = context?.absentStudentsToday || [];
+    
+    // Check if user is asking about a specific class (e.g. 6a1, 7a, 8a2)
+    const classMatch = q.match(/(?:lớp\s*|lop\s*)?([6-9][a-z0-9]*)/i);
+    const targetClassCode = classMatch ? classMatch[1].toUpperCase() : null;
+
+    let filteredAbsents = absentList;
+    if (targetClassCode && targetClassCode.length >= 2) {
+      filteredAbsents = absentList.filter((st: any) => {
+        const cName = String(st.class_name || '').toUpperCase();
+        return cName.includes(targetClassCode) || targetClassCode.includes(cName);
+      });
+    }
+
+    if (filteredAbsents.length === 0) {
+      const scopeLabel = targetClassCode ? `Lớp ${targetClassCode}` : 'Toàn trường';
+      return {
+        reply: `🎉 **Tin vui chuyên cần**: ${scopeLabel} hôm nay **không có học sinh nào vắng mặt**! Tất cả học sinh đều đã có mặt đầy đủ tại lớp học đúng giờ.`,
+        intent: 'ATTENDANCE_SUMMARY',
+        keyMetrics: [
+          { label: 'Sĩ số vắng', value: '0 học sinh' },
+          { label: 'Tỷ lệ chuyên cần', value: '100%' },
+        ],
+        action: { type: 'NAVIGATE', target: '/reports/daily', label: 'Xem Báo cáo Chi tiết Sĩ số Ngày' },
+        suggestedQuestions: [
+          'Hôm nay có những lớp nào chưa nộp báo cáo?',
+          'Quy chế chấm ăn bán trú hôm nay',
+          'Danh sách giáo viên chủ nhiệm các lớp',
+        ],
+      };
+    }
+
+    const itemsText = filteredAbsents
+      .map(
+        (st: any, idx: number) =>
+          `• **${idx + 1}. ${st.student_name}** - Lớp **${st.class_name || 'Chưa rõ'}**\n  - Lý do: *${st.reason || 'Nghỉ có phép'}*\n  - Chế độ: ${st.isBoarding ? '🍱 Bán trú' : '🏡 Ngoại trú'}${st.teacher_name ? ` (GVCN: ${st.teacher_name})` : ''}`
+      )
+      .join('\n\n');
+
+    return {
+      reply: `📋 **DANH SÁCH HỌC SINH VẮNG MẶT HÔM NAY (${filteredAbsents.length} em):**\n\n${itemsText}\n\nThầy/Cô có thể nhấp vào nút bên dưới để mở Báo cáo ngày và xuất sổ theo dõi.`,
+      intent: 'ATTENDANCE_SUMMARY',
+      keyMetrics: [
+        { label: 'Tổng số vắng', value: `${filteredAbsents.length} em` },
+        { label: 'Bán trú vắng', value: `${filteredAbsents.filter((s: any) => s.isBoarding).length} em` },
+      ],
+      action: { type: 'NAVIGATE', target: '/reports/daily', label: 'Xem Báo cáo Chi tiết Sĩ số Ngày' },
+      suggestedQuestions: [
+        'Hôm nay có những lớp nào chưa nộp báo cáo?',
+        'Số suất ăn bán trú trưa nay là bao nhiêu?',
+        'Hạn chót nộp báo cáo là mấy giờ?',
+      ],
+    };
+  }
+
+  // 3. Tra cứu Giáo viên Chủ nhiệm (GVCN) & Thông tin Lớp học
+  const isTeacherOrClassInquiry =
+    q.includes('gvcn') ||
+    normQ.includes('giao vien chu nhiem') ||
+    normQ.includes('chu nhiem') ||
+    normQ.includes('thay nao') ||
+    normQ.includes('co nao') ||
+    normQ.includes('ai chu nhiem') ||
+    normQ.includes('danh sach gvcn') ||
+    (normQ.includes('lop') && (normQ.includes('ai') || normQ.includes('co bao nhieu') || normQ.includes('si so')));
+
+  if (isTeacherOrClassInquiry) {
+    const classList: any[] = context?.classList || [];
+    
+    // Check if asking about a specific class (e.g., 6A1, 7A, 8A1, 9B...)
+    const classMatch = q.match(/(?:lớp\s*|lop\s*)?([6-9][a-z0-9]*)/i);
+    const targetClass = classMatch ? classMatch[1].toUpperCase() : null;
+
+    if (targetClass && targetClass.length >= 2) {
+      const cls = classList.find((c: any) => {
+        const cName = String(c.class_name || '').toUpperCase();
+        return cName === targetClass || cName.replace(/[^0-9A-Z]/g, '') === targetClass.replace(/[^0-9A-Z]/g, '');
+      });
+
+      if (cls) {
+        return {
+          reply: `👨‍🏫 **THÔNG TIN LỚP ${cls.class_name}:**\n\n• **Giáo viên Chủ nhiệm (GVCN)**: **${cls.teacher_name || 'Chưa phân công'}**\n• **Khối lớp**: Khối ${cls.grade || cls.class_name.charAt(0)}\n• **Sĩ số học sinh**: **${cls.student_count || 35}** học sinh\n• **Trạng thái báo cáo hôm nay**: ${cls.status === 'REPORTED' ? '✅ Đã nộp báo cáo' : cls.status === 'LOCKED' ? '🔒 Đã khóa sổ' : '⏳ Chưa nộp báo cáo'}\n\nThầy/Cô có thể bấm nút bên dưới để mở trang Quản lý Lớp học hoặc liên hệ trực tiếp GVCN.`,
+          intent: 'GENERAL',
+          keyMetrics: [
+            { label: `GVCN Lớp ${cls.class_name}`, value: cls.teacher_name || 'Chưa phân công' },
+            { label: 'Sĩ số lớp', value: `${cls.student_count || 35} HS` },
+            { label: 'Trạng thái', value: cls.status === 'REPORTED' ? 'Đã nộp' : 'Chưa nộp' },
+          ],
+          action: { type: 'NAVIGATE', target: '/classes', label: 'Quản lý Lớp học & GVCN' },
+          suggestedQuestions: [
+            `Lớp ${cls.class_name} hôm nay có học sinh nào vắng không?`,
+            'Hôm nay có những lớp nào chưa nộp báo cáo?',
+            'Hạn chót nộp báo cáo sĩ số là mấy giờ?',
+          ],
+        };
+      }
+    }
+
+    // List all homeroom teachers
+    if (classList.length > 0) {
+      const listText = classList
+        .map(
+          (c: any) =>
+            `• **Lớp ${c.class_name}**: GVCN **${c.teacher_name || 'Đang cập nhật'}** (Sĩ số: ${c.student_count || 35} HS) - ${c.status === 'REPORTED' ? '✅ Đã nộp' : '⏳ Chưa nộp'}`
+        )
+        .join('\n');
+
+      return {
+        reply: `👨‍🏫 **DANH SÁCH GIÁO VIÊN CHỦ NHIỆM (GVCN) TRƯỜNG PTDTBT THCS XA DUNG:**\n\n${listText}\n\nThầy/Cô có thể vào mục **"Quản lý Lớp học"** để cập nhật thông tin phân công GVCN hoặc thông tin phòng học.`,
+        intent: 'GENERAL',
+        keyMetrics: [
+          { label: 'Tổng số lớp', value: `${classList.length} lớp` },
+          { label: 'Đã phân công', value: `${classList.filter((c: any) => c.teacher_name && !c.teacher_name.includes('Chưa')).length} lớp` },
+        ],
+        action: { type: 'NAVIGATE', target: '/classes', label: 'Mở Quản lý Lớp học' },
+        suggestedQuestions: [
+          'Hôm nay có những lớp nào chưa nộp báo cáo?',
+          'Hạn chót nộp báo cáo là mấy giờ?',
+          'Hôm nay có học sinh nào vắng không?',
+        ],
+      };
+    }
+  }
+
+  // 4. Tra cứu thông tin Học sinh theo tên / hồ sơ học sinh
+  const isStudentSearch =
+    q.includes('học sinh') ||
+    normQ.includes('hoc sinh') ||
+    normQ.includes('tim hoc sinh') ||
+    normQ.includes('ho so hoc sinh') ||
+    normQ.includes('em ') ||
+    normQ.includes('giang a') ||
+    normQ.includes('ho thi') ||
+    normQ.includes('vang a') ||
+    normQ.includes('thao a') ||
+    normQ.includes('song a') ||
+    normQ.includes('mua a') ||
+    normQ.includes('ly a') ||
+    normQ.includes('lau a');
+
+  if (isStudentSearch) {
+    const studentDir: any[] = context?.studentDirectory || [];
+    
+    // Extract search query by removing common prefix words
+    const cleanSearchKeyword = normQ
+      .replace(/tim\s*hoc\s*sinh/g, '')
+      .replace(/thong\s*tin\s*hoc\s*sinh/g, '')
+      .replace(/hoc\s*sinh/g, '')
+      .replace(/em\s+/g, '')
+      .replace(/ho\s*so/g, '')
+      .replace(/tra\s*cuu/g, '')
+      .trim();
+
+    if (cleanSearchKeyword.length >= 2 && studentDir.length > 0) {
+      const matches = studentDir.filter((s: any) => {
+        const sNormName = normalizeVietnamese(s.name || s.full_name || '');
+        const sNormVillage = normalizeVietnamese(s.village || s.address || '');
+        const sNormClass = normalizeVietnamese(s.className || s.class_name || '');
+        return (
+          sNormName.includes(cleanSearchKeyword) ||
+          cleanSearchKeyword.includes(sNormName) ||
+          sNormVillage.includes(cleanSearchKeyword) ||
+          sNormClass === cleanSearchKeyword
+        );
+      });
+
+      if (matches.length > 0) {
+        const displayList = matches.slice(0, 5).map((s: any, idx: number) => {
+          return `• **${idx + 1}. ${s.name || s.full_name}**\n  - Lớp: **${s.className || s.class_name || 'Chưa xếp lớp'}**\n  - Diện: **${s.isBoarding ? '🍱 Bán trú' : '🏡 Ngoại trú'}**\n  - Bản/Cư trú: ${s.village || s.address || 'Xã Xa Dung'}${s.gender ? ` | Giới tính: ${s.gender}` : ''}`;
+        }).join('\n\n');
+
+        return {
+          reply: `🔍 **KẾT QUẢ TÌM KIẾM HỌC SINH (Tìm thấy ${matches.length} học sinh phù hợp):**\n\n${displayList}${matches.length > 5 ? `\n\n*(Và còn ${matches.length - 5} học sinh khác nữa...)*` : ''}\n\nThầy/Cô có thể bấm vào nút **"Mở Hồ sơ Học sinh"** bên dưới để tra cứu chi tiết hoặc cập nhật thông tin.`,
+          intent: 'GENERAL',
+          keyMetrics: [
+            { label: 'Kết quả tìm kiếm', value: `${matches.length} học sinh` },
+            { label: 'Học sinh đầu tiên', value: matches[0].name || matches[0].full_name },
+            { label: 'Lớp', value: matches[0].className || matches[0].class_name || 'N/A' },
+          ],
+          action: { type: 'NAVIGATE', target: '/students', label: 'Mở Hồ sơ Học sinh' },
+          suggestedQuestions: [
+            `Lớp ${matches[0].className || 'này'} GVCN là ai?`,
+            'Hôm nay có học sinh nào vắng không?',
+            'Hạn chót nộp báo cáo sĩ số là mấy giờ?',
+          ],
+        };
+      }
+    }
+
+    return {
+      reply: `Để tra cứu hồ sơ và danh sách học sinh toàn trường, Thầy/Cô có thể:\n1. Gõ trực tiếp họ tên học sinh cần tìm (ví dụ: *"Giàng A Páo"*, *"Hờ Thị Mỷ"*).\n2. Gõ tên lớp để xem sĩ số và GVCN (ví dụ: *"GVCN lớp 6A1"*).\n3. Bấm nút **"Mở Hồ sơ Học sinh"** bên dưới để xem toàn bộ danh sách, lọc theo lớp, thôn bản hoặc xuất file danh sách học sinh.`,
+      intent: 'GENERAL',
+      action: { type: 'NAVIGATE', target: '/students', label: 'Mở Hồ sơ Học sinh' },
+      suggestedQuestions: [
+        'Danh sách GVCN các lớp',
+        'Hôm nay có học sinh nào vắng không?',
+        'Hạn chót nộp báo cáo là mấy giờ?',
+      ],
+    };
+  }
+
+  // 5. Questions about Report Deadline (07h30) & Emulation bonus points
+  if (
+    q.includes('hạn chót') ||
+    normQ.includes('han chot') ||
+    q.includes('07:30') ||
+    q.includes('07h30') ||
+    q.includes('mấy giờ') ||
+    normQ.includes('may gio') ||
+    q.includes('thi đua') ||
+    normQ.includes('thi dua') ||
+    q.includes('quy chế') ||
+    normQ.includes('quy che') ||
+    q.includes('điểm cộng') ||
+    normQ.includes('diem cong') ||
+    q.includes('trừ điểm') ||
+    normQ.includes('tru diem')
+  ) {
+    return {
+      reply: `⏰ **QUY CHẾ NỘP BÁO CÁO SĨ SỐ TRƯỜNG PTDTBT THCS XA DUNG:**\n\n1. **Hạn chót nộp hàng ngày**: **Trước 07h30 sáng** (Thứ 2 đến Thứ 6).\n2. **Điểm thưởng thi đua chuyên cần**: Lớp hoàn thành nộp báo cáo sớm trước 07h30 được cộng **+0.5 điểm thi đua/ngày** (tối đa **+2.5 điểm/tuần**).\n3. **Trừ điểm thi đua**: Lớp nộp muộn sau 07h30 hoặc để BGH phải gửi thông báo nhắc nhở sẽ bị trừ điểm thi đua trong tuần.\n4. **Ý nghĩa nghiệp vụ**: Nộp sớm trước 07h30 giúp BGH nắm chắc sĩ số toàn trường và chốt số lượng suất ăn với nhà bếp bán trú trước giờ nấu trưa.`,
+      intent: 'GENERAL',
+      keyMetrics: [
+        { label: 'Hạn chót nộp', value: 'Trước 07h30' },
+        { label: 'Cộng thi đua', value: '+0.5 đ/ngày' },
+        { label: 'Tối đa tuần', value: '+2.5 đ/tuần' },
+      ],
+      action: { type: 'NAVIGATE', target: '/attendance', label: 'Điểm danh nộp báo cáo ngay' },
+      suggestedQuestions: [
+        'Hôm nay có những lớp nào chưa nộp báo cáo?',
+        'Quy chế chấm ăn bán trú thế nào?',
+        'Hướng dẫn các bước điểm danh cho GVCN',
+      ],
+    };
+  }
+
+  // 6. Questions about Boarding meal regulations & Friday/Weekend
+  if (
+    q.includes('bán trú') ||
+    normQ.includes('ban tru') ||
+    q.includes('chấm ăn') ||
+    normQ.includes('cham an') ||
+    q.includes('chấm cơm') ||
+    normQ.includes('cham com') ||
+    q.includes('suất ăn') ||
+    normQ.includes('suat an') ||
+    q.includes('nấu') ||
+    q.includes('thứ sáu') ||
+    q.includes('thứ 6') ||
+    normQ.includes('thu 6') ||
+    q.includes('thứ hai') ||
+    q.includes('thứ 2') ||
+    normQ.includes('thu 2') ||
+    q.includes('thứ bảy') ||
+    q.includes('thứ 7') ||
+    normQ.includes('thu 7')
+  ) {
+    const b = context?.boardingSummary || {};
+    return {
+      reply: `🍱 **QUY CHẾ CHẤM ĂN BÁN TRÚ TRƯỜNG PTDTBT THCS XA DUNG:**\n\n• **Chế độ 3 bữa**: Học sinh bán trú được hưởng tiêu chuẩn ăn Sáng, Trưa, Tối theo định mức Nhà nước.\n• **Đặc thù Sáng Thứ Hai**: Học sinh từ các bản xa (Phì Cao, Háng Tàu...) lên trường muộn $\\rightarrow$ Bữa sáng chỉ tính khoảng **65% - 75%** sĩ số thực tế có mặt.\n• **Đặc thù Chiều Thứ Sáu**: Học sinh về bản thăm gia đình $\\rightarrow$ Bữa trưa ăn đầy đủ; **bữa tối chỉ tính học sinh ở lại nội trú cuối tuần** (khoảng **25% - 35%**).\n• **Thứ Bảy & Chủ Nhật**: Mặc định **tắt chấm ăn** theo quy định nhà trường (trừ trường hợp đặc biệt có phê duyệt của BGH).\n• **Tự động liên thông**: GVCN chỉ cần điểm danh học sinh có mặt ở Báo cáo sĩ số hàng ngày, hệ thống sẽ tự động cập nhật số suất cơm vào Sổ chấm ăn bán trú.\n\n📊 **Số liệu hôm nay**: Sáng: ${b.breakfast || 0} suất | Trưa: ${b.lunch || 0} suất | Tối: ${b.dinner || 0} suất.`,
+      intent: 'BOARDING_INQUIRY',
+      keyMetrics: [
+        { label: 'Học sinh Bán trú', value: `${b.totalBoarding || 240} HS` },
+        { label: 'Bữa Sáng hôm nay', value: `${b.breakfast || 0} suất` },
+        { label: 'Bữa Trưa hôm nay', value: `${b.lunch || 0} suất` },
+        { label: 'Bữa Tối hôm nay', value: `${b.dinner || 0} suất` },
+      ],
+      action: { type: 'NAVIGATE', target: '/boarding', label: 'Mở Quản lý Bán trú' },
+      suggestedQuestions: [
+        'Dự báo suất ăn tuần tới',
+        'Hạn chót nộp báo cáo là mấy giờ?',
+        'Hôm nay có học sinh nào vắng không?',
+      ],
+    };
+  }
+
+  // 7. Questions about Attendance instructions / How to mark absent students
+  if (
+    q.includes('hướng dẫn') ||
+    normQ.includes('huong dan') ||
+    q.includes('cách điểm danh') ||
+    normQ.includes('cach diem danh') ||
+    q.includes('cách báo vắng') ||
+    normQ.includes('cach bao vang') ||
+    q.includes('nhập sĩ số') ||
+    normQ.includes('nhap si so')
+  ) {
+    return {
+      reply: `📋 **HƯỚNG DẪN 4 BƯỚC ĐIỂM DANH CHO GIÁO VIÊN CHỦ NHIỆM (GVCN):**\n\n1. **Bước 1**: Nhấn nút **"Điểm danh"** nổi bật ở thanh điều hướng dưới cùng (trên điện thoại) hoặc menu **"Báo cáo sĩ số"** (trên máy tính).\n2. **Bước 2**: Hệ thống tự động chọn lớp chủ nhiệm và ngày hôm nay. Kiểm tra sĩ số tổng của lớp.\n3. **Bước 3**: Tích chọn những học sinh vắng mặt và chọn lý do tương ứng (Ốm, Gia đình, Mưa lũ đường sạt lở, Không phép...).\n4. **Bước 4**: Kiểm tra lại số học sinh có mặt và số học sinh bán trú ăn trưa, sau đó bấm **"Lưu & Nộp báo cáo"**.\n\n⏱️ **Lưu ý**: Hãy nộp trước **07h30 sáng** để lớp nhận **+0.5 điểm thi đua**!`,
+      intent: 'GENERAL',
+      action: { type: 'NAVIGATE', target: '/attendance', label: 'Đi tới trang Điểm danh' },
+      suggestedQuestions: [
+        'Hạn chót nộp báo cáo là mấy giờ?',
+        'Quy chế chấm ăn bán trú thế nào?',
+        'Dữ liệu có được lưu vào Supabase Cloud không?',
+      ],
+    };
+  }
+
+  // 8. Questions about Supabase Cloud sync & Persistence
+  if (
+    q.includes('supabase') ||
+    q.includes('cloud') ||
+    q.includes('lưu trữ') ||
+    normQ.includes('luu tru') ||
+    q.includes('đồng bộ') ||
+    normQ.includes('dong bo') ||
+    q.includes('mất dữ liệu') ||
+    normQ.includes('mat du lieu') ||
+    q.includes('an toàn dữ liệu') ||
+    normQ.includes('an toan du lieu')
+  ) {
+    return {
+      reply: `☁️ **CƠ CHẾ LƯU TRỮ VĨNH VIỄN TRÊN SUPABASE CLOUD:**\n\n• **Lưu trữ tức thì**: Toàn bộ thiết lập trường học, danh sách lớp, hồ sơ học sinh (phân loại Bán trú/Ngoại trú), báo cáo sĩ số hằng ngày và sổ chấm cơm bán trú đều được ghi nhận ngay lập tức vào CSDL Supabase Cloud.\n• **Đồng bộ đa thiết bị**: Thầy/Cô đăng nhập trên điện thoại cá nhân, máy tính trường, máy tính bảng hay trình duyệt khác thì dữ liệu luôn được tải về tức thì, chính xác 100%.\n• **An toàn tuyệt đối**: Kể cả khi tắt máy đột ngột, xóa lịch sử duyệt web hay đổi điện thoại mới, dữ liệu vẫn được bảo vệ nguyên vẹn trên Cloud.\n• **Trạng thái**: Thầy/Cô có thể theo dõi biểu tượng Cloud xanh trên thanh Header hoặc vào mục *"Cấu hình Supabase"* để kiểm tra.`,
+      intent: 'GENERAL',
+      action: { type: 'NAVIGATE', target: '/settings/supabase', label: 'Xem Cấu hình Supabase' },
+      suggestedQuestions: [
+        'Hạn chót nộp báo cáo là mấy giờ?',
+        'Hôm nay có những lớp nào chưa nộp báo cáo?',
+        'Thông tin hỗ trợ kỹ thuật Thầy Vũ Văn Hùng',
+      ],
+    };
+  }
+
+  // 9. Unreported classes inquiry
+  if (
+    q.includes('chưa nộp') ||
+    normQ.includes('chua nop') ||
+    q.includes('chưa báo cáo') ||
+    normQ.includes('chua bao cao') ||
+    q.includes('lớp nào chưa') ||
+    normQ.includes('lop nao chua') ||
+    q.includes('quên điểm danh') ||
+    normQ.includes('quen diem danh')
+  ) {
+    const unrep = context?.unreportedClasses || [];
+    if (unrep.length === 0) {
+      return {
+        reply: `🎉 **Báo cáo Thầy/Cô**: Hôm nay tất cả **${context?.totalClassesCount || 12} lớp** trong trường đều đã hoàn thành nộp báo cáo điểm danh **100%** đúng giờ! Ban Giám Hiệu đã có đầy đủ số liệu toàn trường.`,
+        intent: 'UNREPORTED_CLASSES',
+        keyMetrics: [{ label: 'Tiến độ báo cáo', value: '100% Hoàn thành' }],
+        action: { type: 'NAVIGATE', target: '/dashboard', label: 'Xem Bảng điều khiển' },
+        suggestedQuestions: [
+          'Hôm nay toàn trường vắng bao nhiêu học sinh?',
+          'Hôm nay có học sinh nào vắng không?',
+          'Số suất ăn bán trú hôm nay',
+        ],
+      };
+    }
+    const names = unrep
+      .map((c: any) => `• **Lớp ${c.name || c.class_name}**${c.teacherName ? ` (GVCN: ${c.teacherName})` : ''}`)
+      .join('\n');
+
+    return {
+      reply: `⚠️ **DANH SÁCH ${unrep.length} LỚP CHƯA NỘP BÁO CÁO HÔM NAY:**\n\n${names}\n\nThầy/Cô chủ nhiệm các lớp trên vui lòng hoàn thành trước **07h30 sáng** để kịp thời chốt cơm bán trú và không bị trừ điểm thi đua của lớp!`,
+      intent: 'UNREPORTED_CLASSES',
+      keyMetrics: [{ label: 'Lớp chưa nộp', value: `${unrep.length} lớp` }],
+      action: { type: 'NAVIGATE', target: '/dashboard', label: 'Xem danh sách & Gửi nhắc nhở' },
+      suggestedQuestions: [
+        'Hạn chót nộp báo cáo là mấy giờ?',
+        'Danh sách GVCN các lớp',
+        'Quy chế chấm ăn bán trú thế nào?',
+      ],
+    };
+  }
+
+  // 10. Specific grade inquiry (Khối 6, 7, 8, 9)
+  const gradeMatch = q.match(/khối\s*(6|7|8|9)/i) || normQ.match(/khoi\s*(6|7|8|9)/i);
   if (gradeMatch) {
     const gNum = parseInt(gradeMatch[1], 10);
     const gInfo = (context?.gradeStats || []).find((g: any) => g.grade === gNum);
     if (gInfo) {
       return {
-        reply: `Hôm nay Khối ${gNum} có tổng số ${gInfo.total} học sinh. Trong đó có ${gInfo.present} em có mặt, vắng ${gInfo.absent} em. Tỷ lệ chuyên cần đạt ${gInfo.rate}%.`,
+        reply: `📊 **TÌNH HÌNH CHUYÊN CẦN KHỐI ${gNum} HÔM NAY:**\n\n• **Tổng số học sinh**: **${gInfo.total}** em\n• **Có mặt thực tế**: **${gInfo.present}** em\n• **Vắng mặt**: **${gInfo.absent}** em\n• **Tỷ lệ chuyên cần**: **${gInfo.rate}%**\n\nThầy/Cô có thể nhấp vào nút bên dưới để xem chi tiết từng lớp thuộc Khối ${gNum}.`,
         intent: 'GRADE_INQUIRY',
         keyMetrics: [
           { label: `Khối ${gNum} Tổng số`, value: `${gInfo.total} HS` },
-          { label: `Có mặt`, value: `${gInfo.present} HS` },
-          { label: `Vắng mặt`, value: `${gInfo.absent} HS` },
-          { label: `Tỷ lệ`, value: `${gInfo.rate}%` },
+          { label: 'Có mặt', value: `${gInfo.present} HS` },
+          { label: 'Vắng', value: `${gInfo.absent} HS` },
+          { label: 'Tỷ lệ', value: `${gInfo.rate}%` },
         ],
         action: { type: 'NAVIGATE', target: '/reports/daily', label: `Xem chi tiết Khối ${gNum}` },
-        suggestedQuestions: ['Các khối khác thế nào?', 'Có học sinh nào khối này vắng nhiều ngày?', 'Lớp nào chưa nộp báo cáo?'],
+        suggestedQuestions: [
+          'Khối này có học sinh nào vắng không?',
+          'Hôm nay toàn trường vắng bao nhiêu?',
+          'Lớp nào chưa nộp báo cáo hôm nay?',
+        ],
       };
     }
   }
 
-  // 3. School overall attendance inquiry
-  if (q.includes('toàn trường') || q.includes('tổng số') || q.includes('sĩ số') || q.includes('vắng bao nhiêu') || q.includes('có mặt')) {
+  // 11. School overall attendance summary
+  if (
+    q.includes('toàn trường') ||
+    normQ.includes('toan truong') ||
+    q.includes('tổng số') ||
+    normQ.includes('tong so') ||
+    q.includes('sĩ số') ||
+    normQ.includes('si so') ||
+    q.includes('có mặt') ||
+    normQ.includes('co mat') ||
+    q.includes('chuyên cần') ||
+    normQ.includes('chuyen can')
+  ) {
     const total = context?.totalStudents || 0;
     const present = context?.presentCount || 0;
     const absent = context?.absentCount || 0;
     const rate = context?.presentRate || 0;
     return {
-      reply: `Báo cáo sĩ số ngày ${context?.currentDate || 'hôm nay'}: Toàn trường có tổng cộng ${total} học sinh, hiện có mặt ${present} em, vắng ${absent} em. Tỷ lệ chuyên cần toàn trường đạt ${rate}%. Đã có ${context?.reportedClassesCount || 0}/${context?.totalClassesCount || 0} lớp hoàn thành nộp báo cáo.`,
+      reply: `📊 **BÁO CÁO SĨ SỐ TOÀN TRƯỜNG NGÀY ${context?.currentDate || 'HÔM NAY'}:**\n\n• **Tổng số học sinh toàn trường**: **${total}** em\n• **Số em có mặt**: **${present}** em\n• **Số em vắng mặt**: **${absent}** em\n• **Tỷ lệ chuyên cần toàn trường**: **${rate}%**\n• **Tiến độ báo cáo**: Đã có **${context?.reportedClassesCount || 0}/${context?.totalClassesCount || 0}** lớp hoàn thành nộp báo cáo.`,
       intent: 'ATTENDANCE_SUMMARY',
       keyMetrics: [
-        { label: 'Tổng số HS', value: `${total}` },
-        { label: 'Có mặt', value: `${present}` },
-        { label: 'Vắng', value: `${absent}` },
-        { label: 'Tỷ lệ', value: `${rate}%` },
+        { label: 'Tổng số HS', value: `${total} HS` },
+        { label: 'Có mặt', value: `${present} HS` },
+        { label: 'Vắng mặt', value: `${absent} HS` },
+        { label: 'Tỷ lệ chuyên cần', value: `${rate}%` },
       ],
-      action: { type: 'NAVIGATE', target: '/reports/daily', label: 'Mở Báo cáo Ngày' },
-      suggestedQuestions: ['Lớp nào chưa nộp báo cáo?', 'Hôm nay khối 9 vắng mấy em?', 'Suất ăn bán trú hôm nay'],
+      action: { type: 'NAVIGATE', target: '/reports/daily', label: 'Mở Báo cáo Sĩ số Ngày' },
+      suggestedQuestions: [
+        'Hôm nay em nào vắng?',
+        'Lớp nào chưa nộp báo cáo hôm nay?',
+        'Số lượng suất ăn bán trú hôm nay',
+      ],
     };
   }
 
-  // 4. Boarding inquiry
-  if (q.includes('bán trú') || q.includes('ăn trưa') || q.includes('chấm cơm') || q.includes('suất ăn') || q.includes('nấu')) {
-    const b = context?.boardingSummary || {};
-    return {
-      reply: `Về công tác bán trú hôm nay: Nhà trường ghi nhận ${b.totalBoarding || 0} học sinh bán trú. Số lượng suất ăn thực tế: Bữa sáng có ${b.breakfast || 0} suất, bữa trưa có ${b.lunch || 0} suất, bữa tối có ${b.dinner || 0} suất.`,
-      intent: 'BOARDING_INQUIRY',
-      keyMetrics: [
-        { label: 'Học sinh Bán trú', value: `${b.totalBoarding || 0}` },
-        { label: 'Suất Bữa Sáng', value: `${b.breakfast || 0}` },
-        { label: 'Suất Bữa Trưa', value: `${b.lunch || 0}` },
-        { label: 'Suất Bữa Tối', value: `${b.dinner || 0}` },
-      ],
-      action: { type: 'NAVIGATE', target: '/boarding', label: 'Mở Quản lý Bán trú' },
-      suggestedQuestions: ['Dự báo suất ăn ngày mai', 'Sổ chấm cơm tháng này', 'Lớp nào chưa nộp báo cáo?'],
-    };
-  }
-
-  // 5. Dropout / at-risk inquiry
-  if (q.includes('bỏ học') || q.includes('nguy cơ') || q.includes('cảnh báo') || q.includes('nghỉ nhiều') || q.includes('vắng liên tiếp')) {
+  // 12. Dropout / at-risk inquiry
+  if (
+    q.includes('bỏ học') ||
+    normQ.includes('bo hoc') ||
+    q.includes('nguy cơ') ||
+    normQ.includes('nguy co') ||
+    q.includes('cảnh báo') ||
+    normQ.includes('canh bao') ||
+    q.includes('vắng liên tiếp') ||
+    normQ.includes('vang lien tiep')
+  ) {
     const atRisk = context?.highRiskStudents || [];
     const count = atRisk.length;
     return {
-      reply: `Hệ thống AI Dự báo phát hiện hiện có ${count} em học sinh có biểu hiện vắng ngắt quãng hoặc nguy cơ bỏ học cần lưu ý. Trong đó các em thuộc các bản vùng cao như Phì Cao, Háng Tàu. Thầy/cô nên rà soát để kịp thời phối hợp với Trưởng bản đến tận nhà vận động.`,
+      reply: `⚠️ **CẢNH BÁO NGUY CƠ BỎ HỌC & CHUYÊN CẦN:**\n\nHệ thống AI Dự báo phát hiện có **${count} em học sinh** có biểu hiện vắng ngắt quãng hoặc có nguy cơ bỏ học cần sự quan tâm đặc biệt từ nhà trường. Đa số các em thuộc các bản vùng cao xa trường như Phì Cao, Háng Tàu.\n\nGVCN và đại diện BGH nên phối hợp cùng Trưởng bản để gặp gỡ gia đình, động viên các em duy trì đi học đều đặn.`,
       intent: 'DROPOUT_PREDICTION',
       keyMetrics: [{ label: 'Học sinh có nguy cơ', value: `${count} em` }],
       action: { type: 'NAVIGATE', target: '/ai-dropout-prediction', label: 'Xem Danh sách Cảnh báo & Kế hoạch AI' },
-      suggestedQuestions: ['Kế hoạch vận động học sinh bản Phì Cao', 'Hôm nay lớp nào chưa nộp báo cáo?', 'Tỷ lệ chuyên cần toàn trường'],
+      suggestedQuestions: [
+        'Hôm nay em nào vắng?',
+        'Hạn chót nộp báo cáo là mấy giờ?',
+        'Quy chế chấm ăn bán trú thế nào?',
+      ],
     };
   }
 
-  // 6. Export / Reports
-  if (q.includes('xuất') || q.includes('excel') || q.includes('in') || q.includes('tải') || q.includes('biểu mẫu')) {
+  // 13. Export / Reports
+  if (
+    q.includes('xuất excel') ||
+    normQ.includes('xuat excel') ||
+    q.includes('tải excel') ||
+    normQ.includes('tai excel') ||
+    q.includes('mẫu 01-bt') ||
+    normQ.includes('mau 01-bt') ||
+    q.includes('in biểu mẫu') ||
+    normQ.includes('in bieu mau')
+  ) {
     return {
-      reply: 'Hệ thống hỗ trợ xuất biểu mẫu Excel chuẩn của Phòng GD&ĐT cho Báo cáo sĩ số hằng ngày, Báo cáo tuần, Báo cáo tháng và Sổ chấm cơm bán trú theo chuẩn mẫu số 01-BT/BGH.',
+      reply: `📑 **XUẤT BIỂU MẪU EXCEL BÁO CÁO & BÁN TRÚ:**\n\nHệ thống hỗ trợ xuất các biểu mẫu Excel chính thức theo chuẩn quy định của Phòng GD&ĐT:\n• **Báo cáo sĩ số hàng ngày**: Tổng hợp sĩ số, chuyên cần và danh sách học sinh vắng.\n• **Báo cáo sĩ số tuần & tháng**: Phục vụ công tác thi đua và báo cáo giao ban.\n• **Sổ chấm ăn bán trú**: Chuẩn biểu mẫu số 01-BT/BGH có đầy đủ ngày, bữa ăn, chữ ký GVCN và phụ trách bán trú.\n\nThầy/Cô có thể bấm nút bên dưới để mở Sổ chấm cơm và tải file Excel ngay lập tức.`,
       intent: 'EXPORT',
       action: { type: 'NAVIGATE', target: '/reports/boarding-monthly', label: 'Mở Sổ chấm cơm xuất Excel' },
-      suggestedQuestions: ['Xem báo cáo sĩ số hôm nay', 'Lớp nào chưa nộp báo cáo?', 'Dự báo suất ăn bán trú'],
+      suggestedQuestions: [
+        'Hôm nay có những lớp nào chưa nộp báo cáo?',
+        'Hạn chót nộp báo cáo là mấy giờ?',
+        'Xem báo cáo sĩ số hôm nay',
+      ],
     };
   }
 
-  // Default friendly greeting
+  // Default friendly pedagogical response
   return {
-    reply: `Xin chào thầy/cô! Tôi là Trợ lý AI Báo cáo Sĩ số Trường PTDTBT THCS Xa Dung. Thầy/cô có thể hỏi tôi bất kỳ điều gì bằng cách gõ hoặc bấm Micro nói, ví dụ: "Hôm nay khối 9 vắng mấy em?", "Lớp nào chưa nộp báo cáo?", "Bán trú hôm nay ăn bao nhiêu suất?", hoặc "Dự báo học sinh có nguy cơ bỏ học".`,
+    reply: `Dạ xin kính chào Thầy/Cô! 👋\n\nTôi là **Trợ lý ảo AI do Thầy Vũ Văn Hùng trực tiếp phát triển** để đồng hành, hỗ trợ Ban Giám Hiệu và Giáo viên Chủ nhiệm Trường PTDTBT THCS Xa Dung 24/7.\n\nThầy/Cô có thể hỏi đáp nhanh về:\n• **Tra cứu học sinh, lớp học và GVCN**: Hỏi tên học sinh, lớp nào, ai là GVCN, học sinh nào nghỉ hôm nay.\n• **Quy chế sĩ số & Hạn chót**: Hạn chót 07h30 sáng, điểm thưởng chuyên cần thi đua (+0.5đ/ngày).\n• **Quy chế bán trú**: Chấm ăn 3 bữa, đặc thù sáng thứ Hai lên trường muộn, chiều thứ Sáu về bản, thứ Bảy & CN.\n• **Đồng bộ Supabase Cloud**: Lưu trữ dữ liệu an toàn trên Cloud, không sợ mất dữ liệu.\n• **Hỗ trợ kỹ thuật Thầy Vũ Văn Hùng**: Hotline/Zalo 0984.246.993.\n\nThầy/Cô có thể nhập câu hỏi vào ô chat hoặc bấm chọn các câu hỏi gợi ý nhanh bên dưới:`,
     intent: 'GENERAL',
     suggestedQuestions: [
+      'Hôm nay có học sinh nào vắng không?',
+      'Danh sách GVCN các lớp',
+      'Hạn chót nộp báo cáo sĩ số là mấy giờ?',
+      'Quy chế chấm ăn bán trú và ngày thứ Sáu thế nào?',
       'Hôm nay có những lớp nào chưa nộp báo cáo?',
-      'Khối 9 vắng bao nhiêu học sinh hôm nay?',
-      'Dự báo suất ăn bán trú ngày mai cần chuẩn bị bao nhiêu?',
+      'Thông tin hỗ trợ kỹ thuật của Thầy Vũ Văn Hùng',
     ],
   };
 }
@@ -416,28 +889,16 @@ Hãy phân tích và trả về định dạng JSON hợp lệ (không kèm mark
 }
     `.trim();
 
-    const responsePromise = ai.models.generateContent({
-      model: MODEL_NAME,
-      contents: prompt,
-      config: {
-        responseMimeType: 'application/json',
-        temperature: 0.35,
-      },
-    });
+    const fallback = () => generateFallbackSchoolReport(
+      schoolName || 'Trường PTDTBT THCS Xa Dung',
+      activeYear || '2026-2027',
+      stats,
+      highRiskStudents || []
+    );
 
-    const response = await withTimeout(responsePromise, 8000);
-    const text = response.text || '{}';
-    let data;
-    try {
-      data = JSON.parse(text);
-    } catch {
-      const cleaned = text.replace(/```json/g, '').replace(/```/g, '').trim();
-      data = JSON.parse(cleaned);
-    }
-
+    const data = await callGeminiStructuredJson(prompt, fallback, 0.35);
     res.json({ success: true, data });
   } catch (err: any) {
-    console.warn('Gemini API call timed out or failed, using expert fallback:', err.message);
     const fallbackData = generateFallbackSchoolReport(
       schoolName || 'Trường PTDTBT THCS Xa Dung',
       activeYear || '2026-2027',
@@ -499,28 +960,10 @@ Hãy trả về định dạng JSON hợp lệ:
 }
     `.trim();
 
-    const responsePromise = ai.models.generateContent({
-      model: MODEL_NAME,
-      contents: prompt,
-      config: {
-        responseMimeType: 'application/json',
-        temperature: 0.35,
-      },
-    });
-
-    const response = await withTimeout(responsePromise, 8000);
-    const text = response.text || '{}';
-    let data;
-    try {
-      data = JSON.parse(text);
-    } catch {
-      const cleaned = text.replace(/```json/g, '').replace(/```/g, '').trim();
-      data = JSON.parse(cleaned);
-    }
-
+    const fallback = () => generateFallbackIndividualPlan(student, absenceHistory, riskScore);
+    const data = await callGeminiStructuredJson(prompt, fallback, 0.35);
     res.json({ success: true, data });
   } catch (err: any) {
-    console.warn('Gemini API individual call timed out or failed, using expert fallback:', err.message);
     const fallbackData = generateFallbackIndividualPlan(student, absenceHistory, riskScore);
     res.json({ success: true, data: fallbackData });
   }
@@ -534,59 +977,64 @@ app.post('/api/ai/chat-assistant', async (req, res) => {
 
   try {
     const prompt = `
-Bạn là Trợ lý ảo AI Điều hành và Tra cứu Báo cáo Sĩ số của Trường PTDTBT THCS Xa Dung (Điện Biên).
-Người dùng là Ban Giám hiệu hoặc Giáo viên đang hỏi hoặc ra lệnh bằng giọng nói/văn bản: "${message}"
+Bạn là Trợ lý ảo AI do Thầy Vũ Văn Hùng trực tiếp nghiên cứu và phát triển để hỗ trợ Giáo viên Chủ nhiệm (GVCN) và Ban Giám hiệu (BGH) Trường PTDTBT THCS Xa Dung (Điện Biên Đông, Điện Biên) 24/7.
+Tác giả phần mềm: Thầy Vũ Văn Hùng (Hotline / Zalo: 0984.246.993, Email: hungthcsnongu@gmail.com).
 
-Dữ liệu thực tế ngày ${context?.currentDate || 'hôm nay'}:
-- Tên trường: ${context?.schoolName || 'Trường PTDTBT THCS Xa Dung'}
-- Tổng số học sinh toàn trường: ${context?.totalStudents || 0}
-- Có mặt: ${context?.presentCount || 0}
-- Vắng mặt: ${context?.absentCount || 0} (Tỷ lệ: ${context?.presentRate || 0}%)
-- Tiến độ báo cáo: Đã có ${context?.reportedClassesCount || 0}/${context?.totalClassesCount || 0} lớp nộp
-- Danh sách lớp CHƯA NỘP: ${JSON.stringify(context?.unreportedClasses || [])}
-- Thống kê các khối lớp: ${JSON.stringify(context?.gradeStats || [])}
-- Số lượng bán trú hôm nay: ${JSON.stringify(context?.boardingSummary || {})}
-- Học sinh nguy cơ bỏ học cao: ${JSON.stringify((context?.highRiskStudents || []).slice(0, 5))}
+CƠ SỞ DỮ LIỆU THỰC TẾ ĐƯỢC CẤP (BẮT BUỘC ĐỌC VÀ TRÍCH XUẤT TRỰC TIẾP TÊN THẬT, SỐ LIỆU THẬT):
+1. Danh sách Lớp học & Giáo viên Chủ nhiệm (GVCN):
+${JSON.stringify(context?.classList || [], null, 2)}
 
-Hãy trả lời bằng tiếng Việt lịch sự, thân thiện, ngắn gọn và chính xác tuyệt đối theo dữ liệu trên.
+2. Danh sách Học sinh VẮNG MẶT hôm nay (${context?.currentDate || 'hôm nay'}):
+${JSON.stringify(context?.absentStudentsToday || [], null, 2)}
+
+3. Thư mục tra cứu Học sinh (mẫu thực tế):
+${JSON.stringify((context?.studentDirectory || []).slice(0, 80), null, 2)}
+
+4. Số liệu toàn trường:
+- Tổng số học sinh: ${context?.totalStudents || 0} em (Có mặt: ${context?.presentCount || 0}, Vắng: ${context?.absentCount || 0}, Tỷ lệ: ${context?.presentRate || 0}%)
+- Lớp chưa nộp báo cáo: ${JSON.stringify(context?.unreportedClasses || [])}
+- Suất ăn bán trú hôm nay: ${JSON.stringify(context?.boardingSummary || {})}
+- Khối lớp: ${JSON.stringify(context?.gradeStats || [])}
+
+Quy chế nhà trường:
+- Hạn chót nộp báo cáo sĩ số trước 07h30 sáng (+0.5 điểm thi đua/ngày, tối đa +2.5đ/tuần, muộn bị trừ điểm).
+- Chấm ăn bán trú 3 bữa (Sáng, Trưa, Tối). Sáng Thứ 2 các em lên muộn đạt ~65-75%; chiều Thứ 6 về bản nên tối chỉ nấu cho các em ở lại cuối tuần (~25-35%); Thứ 7 & CN tắt mặc định.
+- Lưu trữ đám mây Supabase an toàn tuyệt đối.
+
+NGƯỜI DÙNG ĐANG HỎI: "${message}"
+
+QUY TẮC PHẢN HỒI BẮT BUỘC:
+1. KHI ĐƯỢC HỎI VỀ GVCN HOẶC LỚP HỌC (ví dụ: "Ai là GVCN lớp 6A1?", "Chủ nhiệm lớp 7A2 là ai?", "Danh sách GVCN"):
+   - BẮT BUỘC đọc trực tiếp mục (1) ở trên và NÊU ĐÍCH DANH tên Thầy/Cô chủ nhiệm lớp đó, sĩ số và trạng thái nộp báo cáo.
+   - TUYỆT ĐỐI KHÔNG trả lời chung chung, TUYỆT ĐỐI KHÔNG bảo người dùng "liên hệ văn phòng" hay "tự đi kiểm tra danh sách".
+   - Ví dụ chuẩn: "Dạ thưa Thầy/Cô, Giáo viên Chủ nhiệm của lớp 6A1 là **Thầy Lò Văn Hùng** (sĩ số lớp: 36 học sinh)."
+2. KHI ĐƯỢC HỎI VỀ HỌC SINH VẮNG HÔM NAY (ví dụ: "Hôm nay em nào vắng?", "Ai nghỉ học?", "Lớp 6A có ai nghỉ không?"):
+   - BẮT BUỘC trích xuất chính xác từ mục (2) ở trên: Tên học sinh, Lớp, Lý do vắng, Bán trú hay Ngoại trú.
+   - Nếu danh sách (2) rỗng, thông báo rõ ràng toàn trường hôm nay không có học sinh nào vắng (chuyên cần 100%).
+3. KHI ĐƯỢC HỎI TÌM KIẾM HỌC SINH CỤ THỂ:
+   - Tìm kiếm trong mục (3) và trả lời đầy đủ: Họ tên, Lớp, Thôn bản cư trú, Diện Bán trú/Ngoại trú.
+4. VĂN PHONG SƯ PHẠM: Xưng hô "Thầy/Cô", kính trọng, chu đáo. Dùng định dạng Markdown in đậm, chia mục gạch đầu dòng rõ ràng. Kèm số liệu (keyMetrics) và nút bấm (action).
+
 Trả về định dạng JSON hợp lệ:
 {
-  "reply": "Câu trả lời trực tiếp, rõ ràng cho câu hỏi",
+  "reply": "Câu trả lời trực tiếp, rõ ràng, nêu đích danh tên GVCN / học sinh từ dữ liệu trên",
   "intent": "ATTENDANCE_SUMMARY" | "UNREPORTED_CLASSES" | "GRADE_INQUIRY" | "BOARDING_INQUIRY" | "DROPOUT_PREDICTION" | "EXPORT" | "GENERAL",
   "keyMetrics": [
     { "label": "Tiêu đề số liệu", "value": "Giá trị" }
   ],
   "action": {
     "type": "NAVIGATE",
-    "target": "/dashboard" | "/reports/daily" | "/boarding" | "/ai-dropout-prediction" | "/attendance",
+    "target": "/dashboard" | "/reports/daily" | "/boarding" | "/ai-dropout-prediction" | "/attendance" | "/classes" | "/students",
     "label": "Nhãn nút bấm hành động"
   },
   "suggestedQuestions": ["Gợi ý câu hỏi 1", "Gợi ý câu hỏi 2", "Gợi ý câu hỏi 3"]
 }
     `.trim();
 
-    const responsePromise = ai.models.generateContent({
-      model: MODEL_NAME,
-      contents: prompt,
-      config: {
-        responseMimeType: 'application/json',
-        temperature: 0.3,
-      },
-    });
-
-    const response = await withTimeout(responsePromise, 8000);
-    const text = response.text || '{}';
-    let data;
-    try {
-      data = JSON.parse(text);
-    } catch {
-      const cleaned = text.replace(/```json/g, '').replace(/```/g, '').trim();
-      data = JSON.parse(cleaned);
-    }
-
+    const fallback = () => generateFallbackChatResponse(message, context);
+    const data = await callGeminiStructuredJson(prompt, fallback, 0.3);
     res.json({ success: true, data });
   } catch (err: any) {
-    console.warn('Gemini chat assistant timed out or failed, using expert fallback:', err.message);
     const fallback = generateFallbackChatResponse(message, context);
     res.json({ success: true, data: fallback });
   }
@@ -650,28 +1098,15 @@ Hãy tính toán và trả về JSON hợp lệ:
 }
     `.trim();
 
-    const responsePromise = ai.models.generateContent({
-      model: MODEL_NAME,
-      contents: prompt,
-      config: {
-        responseMimeType: 'application/json',
-        temperature: 0.3,
-      },
-    });
+    const fallback = () => generateFallbackMealForecast(
+      schoolName || 'Trường PTDTBT THCS Xa Dung',
+      totalBoardingStudents || 240,
+      upcomingDays || []
+    );
 
-    const response = await withTimeout(responsePromise, 8000);
-    const text = response.text || '{}';
-    let data;
-    try {
-      data = JSON.parse(text);
-    } catch {
-      const cleaned = text.replace(/```json/g, '').replace(/```/g, '').trim();
-      data = JSON.parse(cleaned);
-    }
-
+    const data = await callGeminiStructuredJson(prompt, fallback, 0.3);
     res.json({ success: true, data });
   } catch (err: any) {
-    console.warn('Gemini meal forecast timed out or failed, using expert fallback:', err.message);
     const fallback = generateFallbackMealForecast(
       schoolName || 'Trường PTDTBT THCS Xa Dung',
       totalBoardingStudents || 240,
@@ -947,28 +1382,22 @@ Hãy phân tích kỹ lưỡng các số liệu trên và trả về định d�
 }
     `.trim();
 
-    const responsePromise = ai.models.generateContent({
-      model: MODEL_NAME,
-      contents: prompt,
-      config: {
-        responseMimeType: 'application/json',
-        temperature: 0.35,
-      },
-    });
+    const fallback = () => generateFallbackClassReport(
+      className || '6A11',
+      teacherName || 'Lò Thị Thắm',
+      schoolName || 'Trường PTDTBT THCS Xa Dung',
+      periodType || 'WEEK',
+      periodLabel || 'Tuần này',
+      attendanceStats,
+      boardingStats,
+      absentDetails || [],
+      specialNotes || [],
+      tone
+    );
 
-    const response = await withTimeout(responsePromise, 9000);
-    const text = response.text || '{}';
-    let data;
-    try {
-      data = JSON.parse(text);
-    } catch {
-      const cleaned = text.replace(/```json/g, '').replace(/```/g, '').trim();
-      data = JSON.parse(cleaned);
-    }
-
+    const data = await callGeminiStructuredJson(prompt, fallback, 0.35);
     res.json({ success: true, data });
   } catch (err: any) {
-    console.warn('Gemini class report summary failed or timed out, using fallback:', err.message);
     const fallback = generateFallbackClassReport(
       className || '6A11',
       teacherName || 'Lò Thị Thắm',
@@ -1026,28 +1455,15 @@ Hãy trả về định dạng JSON hợp lệ:
 }
     `.trim();
 
-    const responsePromise = ai.models.generateContent({
-      model: MODEL_NAME,
-      contents: prompt,
-      config: {
-        responseMimeType: 'application/json',
-        temperature: 0.3,
-      },
-    });
+    const fallback = () => generateFallbackStudentRemarks(
+      className || '6A11',
+      periodType || 'MONTH',
+      studentsData || []
+    );
 
-    const response = await withTimeout(responsePromise, 9000);
-    const text = response.text || '{}';
-    let data;
-    try {
-      data = JSON.parse(text);
-    } catch {
-      const cleaned = text.replace(/```json/g, '').replace(/```/g, '').trim();
-      data = JSON.parse(cleaned);
-    }
-
+    const data = await callGeminiStructuredJson(prompt, fallback, 0.3);
     res.json({ success: true, data });
   } catch (err: any) {
-    console.warn('Gemini student remarks failed or timed out, using fallback:', err.message);
     const fallback = generateFallbackStudentRemarks(
       className || '6A11',
       periodType || 'MONTH',

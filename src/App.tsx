@@ -24,6 +24,7 @@ import { ProfilePage } from './pages/ProfilePage';
 import { BoardingManagementPage } from './pages/BoardingManagementPage';
 import { AIPredictiveDropoutPage } from './pages/AIPredictiveDropoutPage';
 import { AITeacherAssistantPage } from './pages/AITeacherAssistantPage';
+import { TeacherAIAssistant } from './components/TeacherAIAssistant';
 import { AIAssistantModal } from './components/AIAssistantModal';
 import {
   School,
@@ -375,8 +376,8 @@ const AppContent: React.FC = () => {
             </nav>
           )}
 
-          {/* Global AI Assistant Modal */}
-          <AIAssistantModal
+          {/* Global Teacher AI Assistant (Thầy Vũ Văn Hùng) */}
+          <TeacherAIAssistant
             isOpen={isAIAssistantOpen}
             onClose={() => setIsAIAssistantOpen(false)}
             onNavigate={handleNavigate}

@@ -373,14 +373,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
               {!collapsed && (
                 <div className="flex-1 text-left min-w-0">
                   <div className="text-xs font-black leading-tight flex items-center justify-between">
-                    <span>Trợ lý ảo AI</span>
+                    <span>Trợ lý AI Thầy Hùng</span>
                     <span className="text-[9px] bg-emerald-400/20 text-emerald-300 font-bold px-1.5 py-0.2 rounded-full border border-emerald-400/30">
-                      NLP & Voice
+                      24/7
                     </span>
                   </div>
                   <div className="text-[10px] text-blue-200 mt-0.5 truncate flex items-center gap-1">
-                    <Mic className="w-3 h-3 text-amber-300 shrink-0" />
-                    <span>Tra cứu nhanh bằng giọng nói</span>
+                    <Sparkles className="w-3 h-3 text-amber-300 shrink-0" />
+                    <span>Hỗ trợ GVCN & BGH 24/7</span>
                   </div>
                 </div>
               )}

@@ -185,16 +185,16 @@ export const Navbar: React.FC<NavbarProps> = ({
               <span className="whitespace-nowrap">AI Dự báo bỏ học</span>
             </button>
 
-            {/* AI Natural Language Assistant (NLP & Voice) Button */}
+            {/* AI Natural Language Assistant (Teacher Vu Van Hung) Button */}
             {onOpenAIAssistant && (
               <button
                 type="button"
                 onClick={onOpenAIAssistant}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black bg-gradient-to-r from-indigo-700 via-blue-600 to-indigo-800 text-white shadow-xs hover:shadow-indigo-500/25 hover:scale-[1.02] active:scale-95 transition-all cursor-pointer border border-indigo-400/30 group shrink-0"
-                title="Trợ lý ảo AI tra cứu sĩ số và báo cáo bằng ngôn ngữ tự nhiên & giọng nói"
+                title="Trợ lý ảo AI do Thầy Vũ Văn Hùng trực tiếp phát triển hỗ trợ GVCN & BGH 24/7"
               >
                 <Bot className="w-3.5 h-3.5 text-amber-300 group-hover:rotate-12 transition-transform shrink-0" />
-                <span className="whitespace-nowrap">Trợ lý AI</span>
+                <span className="whitespace-nowrap">Trợ lý AI Thầy Hùng</span>
                 <Mic className="w-3 h-3 text-indigo-200 shrink-0" />
               </button>
             )}
@@ -591,9 +591,9 @@ export const Navbar: React.FC<NavbarProps> = ({
                 className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-black text-indigo-950 bg-gradient-to-r from-indigo-100 via-blue-50 to-indigo-100 border border-indigo-200/80 hover:bg-indigo-200 transition-colors shadow-2xs cursor-pointer"
               >
                 <Bot className="w-4 h-4 text-indigo-700" />
-                <span>Trợ lý ảo AI (NLP & Giọng nói)</span>
+                <span>Trợ lý ảo AI (Thầy Vũ Văn Hùng)</span>
                 <span className="ml-auto text-[9px] bg-indigo-600 text-white font-bold px-1.5 py-0.2 rounded-full">
-                  Gemini
+                  24/7
                 </span>
               </button>
             )}
