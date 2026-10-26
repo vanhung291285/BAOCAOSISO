@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { StorageService } from '../services/storage';
 import { ClassReportRow } from '../types';
 import { CampusSelector } from '../components/CampusSelector';
+import { Attendance4LevelsOverview } from '../components/Attendance4LevelsOverview';
 import {
   ResponsiveContainer,
   BarChart,
@@ -176,6 +177,9 @@ export const ChartsPage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* 4-Level Attendance Summary & Comparative Chart */}
+      <Attendance4LevelsOverview campusId={selectedCampusId} />
 
       {/* Grid of 4 Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

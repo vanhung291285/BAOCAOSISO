@@ -4278,18 +4278,18 @@ export const StorageService = {
         let present = val ? Number(val.present_count) || 0 : 0;
         let absent = val ? Number(val.absent_count) || 0 : 0;
 
-        // PHỤC HỒI DỮ LIỆU THÔNG MINH: Nếu GVCN đã báo thành công (có rep) nhưng bảng values bị thiếu hoặc bằng 0
-        if (isReported && total <= 0) {
+        // TỰ ĐỘNG CẬP NHẬT TRẠNG THÁI MẶC ĐỊNH SĨ SỐ CHUẨN KHI SANG NGÀY MỚI (CHƯA CÓ BÁO CÁO MỚI)
+        if (!isReported || total <= 0) {
           const isMain = ig.code === 'ALL' || ig.id === 'ig_all' || ig === indicators[0];
           const isBoarding = ig.code === 'BOARDING_HALF' || ig.code === 'BOARDING' || ig.id === 'ig_boarding_half' || ig.id === 'ig_boarding' || ig.name.toLowerCase().includes('bán trú');
           const isDay = ig.code === 'NON_BOARDING' || ig.code === 'DAY' || ig.id === 'ig_day' || ig.name.toLowerCase().includes('ngoại trú');
 
           if (isMain) {
             total = defaultTotal;
-            absent = absentList.length;
+            absent = isReported ? absentList.length : 0;
             present = Math.max(0, total - absent);
           } else if (isBoarding) {
-            const bAbsent = absentList.filter((s) => s.isBoarding === true || s.is_boarding === true).length;
+            const bAbsent = isReported ? absentList.filter((s) => s.isBoarding === true || s.is_boarding === true).length : 0;
             const bRoster = rosterStudents.filter((s) => s.isBoarding === true || (s as any).is_boarding === true).length;
             total = bRoster > 0 ? bRoster : Math.max(bAbsent, 0);
             absent = bAbsent;
@@ -4297,9 +4297,9 @@ export const StorageService = {
           } else if (isDay) {
             const bRoster = rosterStudents.filter((s) => s.isBoarding === true || (s as any).is_boarding === true).length;
             const bTotal = bRoster > 0 ? bRoster : 0;
-            const bAbsent = absentList.filter((s) => s.isBoarding === true || s.is_boarding === true).length;
+            const bAbsent = isReported ? absentList.filter((s) => s.isBoarding === true || s.is_boarding === true).length : 0;
             total = Math.max(0, defaultTotal - bTotal);
-            absent = Math.max(0, absentList.length - bAbsent);
+            absent = isReported ? Math.max(0, absentList.length - bAbsent) : 0;
             present = Math.max(0, total - absent);
           }
         }
@@ -5220,12 +5220,13 @@ export const StorageService = {
         }
       }
 
-      const [allClasses, allCampuses, allProfiles, indicators, rawBoardingReports] = await Promise.all([
+      const [allClasses, allCampuses, allProfiles, indicators, rawBoardingReports, allStudents] = await Promise.all([
         this.getClasses(),
         this.getCampuses(),
         this.getProfiles(),
         this.getIndicatorGroups(),
         this.getBoardingReports(),
+        this.getStudents(),
       ]);
 
       const rawReports = localStorage.getItem(STORAGE_KEYS.REPORTS);
@@ -5271,6 +5272,28 @@ export const StorageService = {
           cls.class_name.replace(/^lớp\s*/i, '').toLowerCase(),
         ]);
 
+        const classStudents = (allStudents || []).filter((s) => {
+          if (!s) return false;
+          const sClassId = String(s.class_id || '').trim().toLowerCase();
+          const sClassName = String(s.class_name || '').trim().toLowerCase();
+          const targetId = String(cls.id || '').trim().toLowerCase();
+          const targetName = String(cls.class_name || '').trim().toLowerCase();
+          const cleanName = targetName.replace(/^lớp\s*/i, '');
+          return (
+            sClassId === targetId ||
+            sClassId === targetName ||
+            sClassId === cleanName ||
+            sClassId === `c_${cleanName}` ||
+            sClassName === targetName ||
+            sClassName === cleanName
+          );
+        });
+
+        const defaultClassTotal =
+          classStudents.length > 0
+            ? classStudents.length
+            : ((cls as any).student_count && (cls as any).student_count > 0 ? (cls as any).student_count : 35);
+
         const daysData: WeeklyDayData[] = weekDates.map((dateStr, idx) => {
           const dayOfWeek = idx + 1; // 1 = Mon ... 5 = Fri
           const dayLabel = `${dayNames[idx]} (${formatDayMonthVN(dateStr)})`;
@@ -5303,7 +5326,10 @@ export const StorageService = {
                 indicators.find((i) => i.id === v.indicator_group_id)?.name.toLowerCase().includes('bán trú')
             );
 
-            const total = valAll ? Number(valAll.total_count) || 0 : 0;
+            let total = valAll ? Number(valAll.total_count) || 0 : 0;
+            if (total <= 0) {
+              total = defaultClassTotal;
+            }
             const absent = valAll ? Number(valAll.absent_count) || 0 : 0;
             const present = valAll ? Number(valAll.present_count) || Math.max(0, total - absent) : Math.max(0, total - absent);
 
@@ -5357,7 +5383,18 @@ export const StorageService = {
 
         const reportedDays = daysData.filter((d) => d.isReported);
         const totalSessionsReported = reportedDays.length;
-        const totalEnrollment = reportedDays.length > 0 ? Math.round(reportedDays.reduce((acc, d) => acc + d.total, 0) / reportedDays.length) : 0;
+        const reportedTotalCount = reportedDays.length > 0 && reportedDays.some((d) => d.total > 0)
+          ? Math.round(reportedDays.reduce((acc, d) => acc + d.total, 0) / reportedDays.length)
+          : 0;
+
+        const totalEnrollment = reportedTotalCount > 0
+          ? reportedTotalCount
+          : (classStudents.length > 0
+              ? classStudents.length
+              : ((cls as any).student_count && (cls as any).student_count > 0
+                  ? (cls as any).student_count
+                  : defaultClassTotal));
+
         const sumPresent = reportedDays.reduce((acc, d) => acc + d.present, 0);
         const sumAbsent = reportedDays.reduce((acc, d) => acc + d.absent, 0);
         const totalWeekStudentDays = sumPresent + sumAbsent;
@@ -5498,8 +5535,16 @@ export const StorageService = {
         };
       });
 
-      const avgDailyPresent = Math.round(totalWeeklyPresent / 5);
-      const avgDailyAbsent = Math.round(totalWeeklyAbsent / 5);
+      const reportedDatesSet = new Set<string>();
+      classesSummary.forEach((c) => {
+        c.days.forEach((d) => {
+          if (d.isReported) reportedDatesSet.add(d.date);
+        });
+      });
+      const activeReportedDaysCount = reportedDatesSet.size > 0 ? reportedDatesSet.size : 1;
+
+      const avgDailyPresent = Math.round(totalWeeklyPresent / activeReportedDaysCount);
+      const avgDailyAbsent = Math.round(totalWeeklyAbsent / activeReportedDaysCount);
 
       const aggregateResult: SchoolWeeklyAggregate = {
         weekNumber,
@@ -5527,7 +5572,289 @@ export const StorageService = {
     });
   },
 
-  // --- 9.1 Quản lý Ngày Nghỉ Học Sinh (Không xếp loại những ngày nghỉ) ---
+  // --- 9.1 Bổ sung Hệ thống tính toán Tỉ lệ chuyên cần theo 4 Cấp độ: Theo Ngày, Theo Tuần, Theo Tháng, Theo Học kỳ ---
+
+  /**
+   * 1. Calculate Daily Attendance Rate
+   */
+  async calculateDailyAttendance(dateStr?: string, classId?: string, campusId?: string) {
+    ensureInitialized();
+    const targetDate = dateStr || getTodayDateStr();
+    const dailyAgg = await this.getDailyAggregate(targetDate, campusId && campusId !== 'all' ? campusId : undefined);
+    let rows = dailyAgg.rows;
+    if (classId && classId !== 'all') {
+      const cLower = String(classId).trim().toLowerCase();
+      rows = rows.filter((r) => r.classItem.id === classId || r.classItem.class_name.toLowerCase() === cLower);
+    }
+
+    const reportedRows = rows.filter((r) => r.status !== 'NOT_REPORTED' && r.report);
+    const totalClasses = rows.length;
+    const reportedClasses = reportedRows.length;
+
+    let totalStudents = 0;
+    let totalPresent = 0;
+    let totalAbsent = 0;
+
+    if (reportedClasses > 0) {
+      reportedRows.forEach((r) => {
+        const mainVal = r.values['ig_all'] || Object.values(r.values)[0];
+        const total = mainVal ? mainVal.total : ((r.classItem as any).student_count || 35);
+        const absent = mainVal ? mainVal.absent : 0;
+        const present = mainVal ? mainVal.present : Math.max(0, total - absent);
+
+        totalStudents += total;
+        totalPresent += present;
+        totalAbsent += absent;
+      });
+    } else {
+      // Khi sang ngày mới chưa có bản ghi báo cáo mới: tự động nhận diện sĩ số chuẩn thực tế (ví dụ 36/36)
+      rows.forEach((r) => {
+        const mainVal = r.values['ig_all'] || Object.values(r.values)[0];
+        const total = (mainVal && mainVal.total > 0) ? mainVal.total : 35;
+        totalStudents += total;
+        totalPresent += total; // Mặc định đi học đủ
+        totalAbsent += 0;
+      });
+    }
+
+    const totalValidCount = totalPresent + totalAbsent;
+    const attendanceRate = totalValidCount > 0 ? Math.round((totalPresent / totalValidCount) * 1000) / 10 : 100;
+    const absentRate = totalValidCount > 0 ? Math.round((totalAbsent / totalValidCount) * 1000) / 10 : 0;
+
+    return {
+      date: targetDate,
+      totalStudents,
+      reportedClasses,
+      totalClasses,
+      totalPresent,
+      totalAbsent,
+      attendanceRate,
+      absentRate,
+      status: reportedClasses === totalClasses ? 'FULL' : reportedClasses > 0 ? 'PARTIAL' : 'EMPTY',
+    };
+  },
+
+  /**
+   * 2. Calculate Weekly Attendance Rate
+   */
+  async calculateWeeklyAttendance(weekNumber?: number, week1StartDate?: string, campusId?: string, classId?: string) {
+    ensureInitialized();
+    const settings = await this.getSchoolSettings();
+    const refStartDate = week1StartDate || settings.week1_start_date || DEFAULT_WEEK1_START_DATE;
+    let targetWeek = weekNumber;
+    if (!targetWeek) {
+      const today = getTodayDateStr();
+      const curr = getSchoolWeekFromDate(today, refStartDate);
+      targetWeek = curr.weekNumber || 1;
+    }
+
+    const weeklyAgg = await this.getWeeklyAggregate(targetWeek, refStartDate, campusId && campusId !== 'all' ? campusId : undefined, classId && classId !== 'all' ? classId : undefined);
+    
+    const totalStudents = weeklyAgg.schoolTotals.totalStudents;
+    const totalWeeklyPresent = weeklyAgg.classesSummary.reduce((acc, c) => acc + c.sumPresent, 0);
+    const totalWeeklyAbsent = weeklyAgg.classesSummary.reduce((acc, c) => acc + c.sumAbsent, 0);
+    const totalStudentDays = totalWeeklyPresent + totalWeeklyAbsent;
+
+    // Filter distinct reported dates in the week
+    const reportedDatesSet = new Set<string>();
+    weeklyAgg.classesSummary.forEach((c) => {
+      c.days.forEach((d) => {
+        if (d.isReported) reportedDatesSet.add(d.date);
+      });
+    });
+    const reportedDaysCount = reportedDatesSet.size;
+
+    const dailyAveragePresent = reportedDaysCount > 0 ? Math.round(totalWeeklyPresent / reportedDaysCount) : 0;
+    const dailyAverageAbsent = reportedDaysCount > 0 ? Math.round(totalWeeklyAbsent / reportedDaysCount) : 0;
+
+    const attendanceRate = totalStudentDays > 0 ? Math.round((totalWeeklyPresent / totalStudentDays) * 1000) / 10 : (reportedDaysCount > 0 ? 100 : 0);
+    const absentRate = totalStudentDays > 0 ? Math.round((totalWeeklyAbsent / totalStudentDays) * 1000) / 10 : 0;
+
+    return {
+      weekNumber: targetWeek,
+      startDate: weeklyAgg.startDate,
+      endDate: weeklyAgg.endDate,
+      label: weeklyAgg.label,
+      totalStudents,
+      reportedDaysCount,
+      totalPresent: totalWeeklyPresent,
+      totalAbsent: totalWeeklyAbsent,
+      dailyAveragePresent,
+      dailyAverageAbsent,
+      attendanceRate,
+      absentRate,
+    };
+  },
+
+  /**
+   * 3. Calculate Monthly Attendance Rate
+   */
+  async calculateMonthlyAttendance(month?: number, year?: number, campusId?: string, classId?: string) {
+    ensureInitialized();
+    const today = new Date();
+    const targetMonth = month || (today.getMonth() + 1);
+    const targetYear = year || today.getFullYear();
+
+    const startMonthStr = `${targetYear}-${String(targetMonth).padStart(2, '0')}-01`;
+    const lastDayNum = new Date(targetYear, targetMonth, 0).getDate();
+    const endMonthStr = `${targetYear}-${String(targetMonth).padStart(2, '0')}-${String(lastDayNum).padStart(2, '0')}`;
+
+    let classes = await this.getClasses();
+    if (campusId && campusId !== 'all') classes = classes.filter((c) => c.campus_id === campusId);
+    if (classId && classId !== 'all') {
+      const cLower = String(classId).trim().toLowerCase();
+      classes = classes.filter((c) => c.id === classId || c.class_name.toLowerCase() === cLower);
+    }
+
+    const rawReports = localStorage.getItem(STORAGE_KEYS.REPORTS);
+    const reports: DailyReport[] = rawReports ? JSON.parse(rawReports) : [];
+    const rawValues = localStorage.getItem(STORAGE_KEYS.VALUES);
+    const allValues: DailyReportValue[] = rawValues ? JSON.parse(rawValues) : [];
+    const indicators = await this.getIndicatorGroups();
+    const allIndicator = indicators.find((i) => i.code === 'ALL') || indicators[0];
+
+    const monthReports = reports.filter((r) => {
+      const rDate = String(r.report_date).split('T')[0].trim();
+      return rDate >= startMonthStr && rDate <= endMonthStr && (r.status as string) !== 'NOT_REPORTED';
+    });
+
+    const reportedDatesSet = new Set<string>();
+    let totalMonthlyPresent = 0;
+    let totalMonthlyAbsent = 0;
+
+    monthReports.forEach((rep) => {
+      const targetClass = classes.find((c) => 
+        c.id === rep.class_id || 
+        c.class_name.toLowerCase() === String(rep.class_id).toLowerCase()
+      );
+      if (!targetClass) return;
+
+      reportedDatesSet.add(String(rep.report_date).split('T')[0]);
+      const repVals = allValues.filter((v) => v.report_id === rep.id);
+      const valAll = repVals.find(
+        (v) => v.indicator_group_id === allIndicator?.id || v.indicator_group_id === 'ig_all' || indicators.find((i) => i.id === v.indicator_group_id)?.code === 'ALL'
+      );
+
+      const total = valAll ? Number(valAll.total_count) || targetClass.student_count || 35 : targetClass.student_count || 35;
+      const absent = valAll ? Number(valAll.absent_count) || 0 : 0;
+      const present = valAll ? Number(valAll.present_count) || Math.max(0, total - absent) : Math.max(0, total - absent);
+
+      totalMonthlyPresent += present;
+      totalMonthlyAbsent += absent;
+    });
+
+    const reportedDaysCount = reportedDatesSet.size;
+    const totalStudentDays = totalMonthlyPresent + totalMonthlyAbsent;
+    const totalStudents = reportedDaysCount > 0 && totalStudentDays > 0
+      ? Math.round(totalStudentDays / reportedDaysCount)
+      : classes.reduce((acc, c) => acc + (c.student_count || 35), 0);
+
+    const dailyAveragePresent = reportedDaysCount > 0 ? Math.round(totalMonthlyPresent / reportedDaysCount) : 0;
+    const dailyAverageAbsent = reportedDaysCount > 0 ? Math.round(totalMonthlyAbsent / reportedDaysCount) : 0;
+
+    const attendanceRate = totalStudentDays > 0 ? Math.round((totalMonthlyPresent / totalStudentDays) * 1000) / 10 : (reportedDaysCount > 0 ? 100 : 0);
+    const absentRate = totalStudentDays > 0 ? Math.round((totalMonthlyAbsent / totalStudentDays) * 1000) / 10 : 0;
+
+    return {
+      month: targetMonth,
+      year: targetYear,
+      monthLabel: `Tháng ${targetMonth}/${targetYear}`,
+      totalStudents,
+      reportedDaysCount,
+      totalPresent: totalMonthlyPresent,
+      totalAbsent: totalMonthlyAbsent,
+      dailyAveragePresent,
+      dailyAverageAbsent,
+      attendanceRate,
+      absentRate,
+    };
+  },
+
+  /**
+   * 4. Calculate Semester Attendance Rate
+   */
+  async calculateSemesterAttendance(semester?: 1 | 2, schoolYearId?: string, campusId?: string, classId?: string) {
+    ensureInitialized();
+    const settings = await this.getSchoolSettings();
+    const refStartDate = settings.week1_start_date || DEFAULT_WEEK1_START_DATE;
+    const targetSemester = semester || 1;
+
+    // Semester 1: Weeks 1 to 18; Semester 2: Weeks 19 to 37
+    const startWeek = targetSemester === 1 ? 1 : 19;
+    const endWeek = targetSemester === 1 ? 18 : 37;
+
+    let totalSemesterPresent = 0;
+    let totalSemesterAbsent = 0;
+    const reportedDatesSet = new Set<string>();
+
+    let classes = await this.getClasses();
+    if (campusId && campusId !== 'all') classes = classes.filter((c) => c.campus_id === campusId);
+    if (classId && classId !== 'all') {
+      const cLower = String(classId).trim().toLowerCase();
+      classes = classes.filter((c) => c.id === classId || c.class_name.toLowerCase() === cLower);
+    }
+    for (let w = startWeek; w <= endWeek; w++) {
+      const weeklyAgg = await this.getWeeklyAggregate(w, refStartDate, campusId && campusId !== 'all' ? campusId : undefined, classId && classId !== 'all' ? classId : undefined);
+      weeklyAgg.classesSummary.forEach((c) => {
+        c.days.forEach((d) => {
+          if (d.isReported) {
+            reportedDatesSet.add(d.date);
+            totalSemesterPresent += d.present;
+            totalSemesterAbsent += d.absent;
+          }
+        });
+      });
+    }
+
+    const reportedDaysCount = reportedDatesSet.size;
+    const totalStudentDays = totalSemesterPresent + totalSemesterAbsent;
+    const totalStudents = reportedDaysCount > 0 && totalStudentDays > 0
+      ? Math.round(totalStudentDays / reportedDaysCount)
+      : classes.reduce((acc, c) => acc + (c.student_count || 35), 0);
+
+    const dailyAveragePresent = reportedDaysCount > 0 ? Math.round(totalSemesterPresent / reportedDaysCount) : 0;
+    const dailyAverageAbsent = reportedDaysCount > 0 ? Math.round(totalSemesterAbsent / reportedDaysCount) : 0;
+
+    const attendanceRate = totalStudentDays > 0 ? Math.round((totalSemesterPresent / totalStudentDays) * 1000) / 10 : (reportedDaysCount > 0 ? 100 : 0);
+    const absentRate = totalStudentDays > 0 ? Math.round((totalSemesterAbsent / totalStudentDays) * 1000) / 10 : 0;
+
+    return {
+      semester: targetSemester,
+      semesterLabel: targetSemester === 1 ? 'Học kỳ I (Tuần 1 - 18)' : 'Học kỳ II (Tuần 19 - 37)',
+      totalStudents,
+      reportedDaysCount,
+      totalPresent: totalSemesterPresent,
+      totalAbsent: totalSemesterAbsent,
+      dailyAveragePresent,
+      dailyAverageAbsent,
+      attendanceRate,
+      absentRate,
+    };
+  },
+
+  /**
+   * Combined 4-Level Attendance Summary for Cards & Comparative Charts
+   */
+  async getAttendanceSummary4Levels(params?: {
+    dateStr?: string;
+    weekNumber?: number;
+    month?: number;
+    year?: number;
+    semester?: 1 | 2;
+    campusId?: string;
+    classId?: string;
+  }) {
+    const [daily, weekly, monthly, semester] = await Promise.all([
+      this.calculateDailyAttendance(params?.dateStr, params?.classId, params?.campusId),
+      this.calculateWeeklyAttendance(params?.weekNumber, undefined, params?.campusId, params?.classId),
+      this.calculateMonthlyAttendance(params?.month, params?.year, params?.campusId, params?.classId),
+      this.calculateSemesterAttendance(params?.semester || 1, undefined, params?.campusId, params?.classId),
+    ]);
+
+    return { daily, weekly, monthly, semester };
+  },
+
+  // --- 9.2 Quản lý Ngày Nghỉ Học Sinh (Không xếp loại những ngày nghỉ) ---
   async getOffDays(): Promise<SchoolOffDay[]> {
     ensureInitialized();
     const raw = localStorage.getItem(STORAGE_KEYS.OFF_DAYS);

@@ -7,6 +7,7 @@ import { ClassReportRow, ReportStatus, ClassAttendanceRank, DailyReport } from '
 import { AIPredictiveService } from '../services/aiPredictiveService';
 import { DateNavigator } from '../components/DateNavigator';
 import { CampusSelector } from '../components/CampusSelector';
+import { Attendance4LevelsOverview } from '../components/Attendance4LevelsOverview';
 import {
   Users,
   CheckCircle,
@@ -417,6 +418,9 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSele
           </div>
         </div>
       </div>
+
+      {/* 1.5. 4-LEVEL ATTENDANCE OVERVIEW (NGÀY - TUẦN - THÁNG - HỌC KỲ) */}
+      <Attendance4LevelsOverview campusId={selectedCampus} onNavigate={onNavigate} />
 
       {/* 2. FOUR BIG PRIMARY STAT CARDS (Specification 4: 👨‍🎓 TỔNG SỐ, 🟢 CÓ MẶT, 🔴 VẮNG, 📊 TỶ LỆ CHUYÊN CẦN) */}
       {aggregateData && (

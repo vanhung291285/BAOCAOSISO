@@ -3,6 +3,7 @@ import { useSchool } from '../contexts/SchoolContext';
 import { useAuth } from '../contexts/AuthContext';
 import { StorageService, subscribeRealtime } from '../services/storage';
 import { SchoolWeeklyAggregate, ClassWeeklySummary, CampusWeeklySummary } from '../types';
+import { Attendance4LevelsOverview } from '../components/Attendance4LevelsOverview';
 import {
   DEFAULT_WEEK1_START_DATE,
   getSchoolWeekInfo,
@@ -448,6 +449,13 @@ export const WeeklyReportPage: React.FC<WeeklyReportPageProps> = ({
           )}
         </div>
       </div>
+
+      {/* 4-Level Attendance Overview Cards & Comparison */}
+      <Attendance4LevelsOverview
+        campusId={selectedCampusId !== 'all' ? selectedCampusId : undefined}
+        classId={viewMode === 'class' ? selectedClassId : undefined}
+        onNavigate={onNavigate}
+      />
 
       {/* 4. Main View Content */}
       {isLoading ? (

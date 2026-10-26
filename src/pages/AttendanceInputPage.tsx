@@ -271,6 +271,8 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
         if (latestReport && latestValues.length > 0) {
           setInheritedReport({ report: latestReport, values: latestValues });
 
+          const enrolledCount = classStudents.length;
+
           // Lấy 100% số liệu sĩ số (Tổng số HS, Bán trú, Ngoại trú...) gần nhất của GVCN
           const newVals: Record<string, { total: number | ''; present: number | ''; absent: number | '' }> = {};
           latestValues.forEach((v) => {
@@ -282,33 +284,40 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
             };
           });
 
-          // Đối với các chỉ tiêu mới thêm chưa có trong báo cáo cũ:
+          // Tự động đồng bộ chuẩn theo danh sách học sinh thực tế của lớp (ví dụ 36 học sinh)
           enabledIndicators.forEach((ig, idx) => {
-            if (!newVals[ig.id] || Number(newVals[ig.id]?.total) === 0) {
-              if (idx === 0) {
-                const totalStds = classStudents.length > 0 ? classStudents.length : 35;
-                newVals[ig.id] = {
-                  total: totalStds,
-                  present: totalStds,
-                  absent: 0,
-                };
-              } else if (
-                ig.id === 'ig_boarding' ||
-                ig.id === 'ig_boarding_half' ||
-                ig.code.includes('BOARDING') ||
-                ig.name.toLowerCase().includes('bán trú') ||
-                ig.name.toLowerCase().includes('ăn trưa')
-              ) {
-                const expBoarding = classStudents.filter((s) => isStudentBoarding(s));
-                const rosterBoarding = expBoarding.length > 0 ? expBoarding.length : (classStudents.length > 0 ? classStudents.length : 25);
-                newVals[ig.id] = {
-                  total: rosterBoarding,
-                  present: rosterBoarding,
-                  absent: 0,
-                };
-              } else {
-                newVals[ig.id] = { total: 0, present: 0, absent: 0 };
-              }
+            const currentTotal = Number(newVals[ig.id]?.total || 0);
+            const isMain = idx === 0 || ig.code === 'ALL' || ig.id === 'ig_all';
+            const isBoarding = ig.id === 'ig_boarding' || ig.id === 'ig_boarding_half' || ig.code.includes('BOARDING') || ig.name.toLowerCase().includes('bán trú') || ig.name.toLowerCase().includes('ăn trưa');
+            const isDay = ig.id === 'ig_day' || ig.id === 'ig_ngoaitru' || ig.code.includes('NON_BOARDING') || ig.code.includes('DAY') || ig.name.toLowerCase().includes('ngoại trú');
+
+            if (isMain) {
+              const finalTotal = enrolledCount > 0 ? enrolledCount : (currentTotal > 0 ? currentTotal : 35);
+              newVals[ig.id] = {
+                total: finalTotal,
+                present: finalTotal,
+                absent: 0,
+              };
+            } else if (isBoarding) {
+              const expBoarding = classStudents.filter((s) => isStudentBoarding(s));
+              const rosterBoarding = expBoarding.length;
+              const finalBoarding = rosterBoarding > 0 ? rosterBoarding : (currentTotal > 0 ? currentTotal : 0);
+              newVals[ig.id] = {
+                total: finalBoarding,
+                present: finalBoarding,
+                absent: 0,
+              };
+            } else if (isDay) {
+              const expBoarding = classStudents.filter((s) => isStudentBoarding(s)).length;
+              const rosterDay = Math.max(0, enrolledCount - expBoarding);
+              const finalDay = enrolledCount > 0 ? rosterDay : (currentTotal > 0 ? currentTotal : 0);
+              newVals[ig.id] = {
+                total: finalDay,
+                present: finalDay,
+                absent: 0,
+              };
+            } else if (!newVals[ig.id]) {
+              newVals[ig.id] = { total: 0, present: 0, absent: 0 };
             }
           });
 
