@@ -1,10 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import {
-  SUPABASE_SQL_SCHEMA,
-  SUPABASE_STUDENTS_FIX_SQL,
-  SUPABASE_INSTANT_SYNC_REALTIME_SQL,
-  generateFullDatabaseSqlScript,
-} from '../services/sqlSchema';
+import { SUPABASE_SQL_SCHEMA, SUPABASE_STUDENTS_FIX_SQL, generateFullDatabaseSqlScript } from '../services/sqlSchema';
 import { StorageService, TableSyncStatus } from '../services/storage';
 import {
   getSupabaseCredentials,
@@ -35,17 +30,15 @@ import {
   Trash2,
   Share2,
   Users,
-  Zap,
 } from 'lucide-react';
 
 export const SettingsSupabasePage: React.FC = () => {
   const [copied, setCopied] = useState(false);
   const [copiedFull, setCopiedFull] = useState(false);
   const [copiedStudents, setCopiedStudents] = useState(false);
-  const [copiedInstant, setCopiedInstant] = useState(false);
   const [quickLinkCopied, setQuickLinkCopied] = useState(false);
   const [resetSuccess, setResetSuccess] = useState(false);
-  const [sqlViewMode, setSqlViewMode] = useState<'instant' | 'students' | 'full' | 'schema'>('instant');
+  const [sqlViewMode, setSqlViewMode] = useState<'students' | 'full' | 'schema'>('students');
 
   // Credentials
   const [supabaseUrl, setSupabaseUrl] = useState('');
@@ -329,12 +322,6 @@ export const SettingsSupabasePage: React.FC = () => {
     setTimeout(() => setCopied(false), 2500);
   };
 
-  const handleCopyInstantSql = () => {
-    navigator.clipboard.writeText(SUPABASE_INSTANT_SYNC_REALTIME_SQL);
-    setCopiedInstant(true);
-    setTimeout(() => setCopiedInstant(false), 2500);
-  };
-
   const handleCopyFullSql = () => {
     const fullSql = generateFullDatabaseSqlScript();
     navigator.clipboard.writeText(fullSql);
@@ -362,17 +349,13 @@ export const SettingsSupabasePage: React.FC = () => {
 
   const handleDownloadSqlFile = () => {
     const sqlText =
-      sqlViewMode === 'instant'
-        ? SUPABASE_INSTANT_SYNC_REALTIME_SQL
-        : sqlViewMode === 'students'
+      sqlViewMode === 'students'
         ? SUPABASE_STUDENTS_FIX_SQL
         : sqlViewMode === 'full'
         ? generateFullDatabaseSqlScript()
         : SUPABASE_SQL_SCHEMA;
     const filename =
-      sqlViewMode === 'instant'
-        ? 'supabase_instant_sync_realtime.sql'
-        : sqlViewMode === 'students'
+      sqlViewMode === 'students'
         ? 'fix_students_supabase.sql'
         : sqlViewMode === 'full'
         ? `supabase_full_dump_${new Date().toISOString().split('T')[0]}.sql`
@@ -403,9 +386,7 @@ export const SettingsSupabasePage: React.FC = () => {
   };
 
   const displayedSql =
-    sqlViewMode === 'instant'
-      ? SUPABASE_INSTANT_SYNC_REALTIME_SQL
-      : sqlViewMode === 'students'
+    sqlViewMode === 'students'
       ? SUPABASE_STUDENTS_FIX_SQL
       : sqlViewMode === 'full'
       ? generateFullDatabaseSqlScript()
@@ -808,17 +789,6 @@ export const SettingsSupabasePage: React.FC = () => {
             <div className="bg-slate-200 p-1 rounded-xl flex items-center gap-1 text-[11px] font-bold">
               <button
                 type="button"
-                onClick={() => setSqlViewMode('instant')}
-                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
-                  sqlViewMode === 'instant' ? 'bg-amber-500 text-slate-950 shadow-xs font-black' : 'text-slate-700 hover:text-slate-950'
-                }`}
-                title="Kịch bản tối ưu đồng bộ tức thì, RLS mở, Replica Identity Full & Realtime"
-              >
-                <Zap className="w-3.5 h-3.5 fill-current" />
-                <span>SQL Đồng Bộ Tức Thì (Khuyên Dùng)</span>
-              </button>
-              <button
-                type="button"
                 onClick={() => setSqlViewMode('students')}
                 className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
                   sqlViewMode === 'students' ? 'bg-white text-emerald-700 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900'
@@ -860,9 +830,7 @@ export const SettingsSupabasePage: React.FC = () => {
             <button
               type="button"
               onClick={
-                sqlViewMode === 'instant'
-                  ? handleCopyInstantSql
-                  : sqlViewMode === 'students'
+                sqlViewMode === 'students'
                   ? handleCopyStudentsSql
                   : sqlViewMode === 'full'
                   ? handleCopyFullSql
@@ -870,13 +838,13 @@ export const SettingsSupabasePage: React.FC = () => {
               }
               className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-xs transition-colors flex-shrink-0 cursor-pointer"
             >
-              {(sqlViewMode === 'instant' ? copiedInstant : sqlViewMode === 'students' ? copiedStudents : sqlViewMode === 'full' ? copiedFull : copied) ? (
+              {(sqlViewMode === 'students' ? copiedStudents : sqlViewMode === 'full' ? copiedFull : copied) ? (
                 <Check className="w-4 h-4" />
               ) : (
                 <Copy className="w-4 h-4" />
               )}
               <span>
-                {(sqlViewMode === 'instant' ? copiedInstant : sqlViewMode === 'students' ? copiedStudents : sqlViewMode === 'full' ? copiedFull : copied)
+                {(sqlViewMode === 'students' ? copiedStudents : sqlViewMode === 'full' ? copiedFull : copied)
                   ? 'ĐÃ SAO CHÉP SQL!'
                   : 'SAO CHÉP SQL'}
               </span>
