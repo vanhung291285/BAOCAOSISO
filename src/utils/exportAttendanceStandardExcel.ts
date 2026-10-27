@@ -549,39 +549,40 @@ export async function exportAttendanceDailyExcel(params: ExportAttendanceDailyEx
     });
 
     // Summary Row TỔNG CỘNG
-    const sumTotalAll = filteredRows.reduce((acc, r) => acc + (r.isReported ? r.totalAll : 0), 0);
-    const sumAbsentAll = filteredRows.reduce((acc, r) => acc + (r.isReported ? r.absentAll : 0), 0);
-    const sumPresentAll = sumTotalAll - sumAbsentAll;
+    const reportedRows = filteredRows.filter((r) => r.isReported);
+    const hasAnyReported = reportedRows.length > 0;
+    const reportedCount = reportedRows.length;
 
-    const sumTotalBoarding = filteredRows.reduce((acc, r) => acc + (r.isReported ? r.totalBoarding : 0), 0);
-    const sumAbsentBoarding = filteredRows.reduce((acc, r) => acc + (r.isReported ? r.absentBoarding : 0), 0);
-    const sumBaoAnBoarding = Math.max(0, sumTotalBoarding - sumAbsentBoarding);
-
+    const sumTotalAll = reportedRows.reduce((acc, r) => acc + (r.totalAll || 0), 0);
+    const sumTotalBoarding = reportedRows.reduce((acc, r) => acc + (r.totalBoarding || 0), 0);
     const sumTotalNgoaiTru = Math.max(0, sumTotalAll - sumTotalBoarding);
-    const sumAbsentNgoaiTru = Math.max(0, sumAbsentAll - sumAbsentBoarding);
+
+    const sumAbsentAll = reportedRows.reduce((acc, r) => acc + (r.absentAll || 0), 0);
+    const sumAbsentBoarding = reportedRows.reduce((acc, r) => acc + (r.absentBoarding || 0), 0);
+    const sumBaoAnBoarding = reportedRows.reduce((acc, r) => acc + (r.baoAnBoarding || 0), 0);
+    const sumAbsentNgoaiTru = reportedRows.reduce((acc, r) => acc + (r.absentNgoaiTru || 0), 0);
 
     const overallAbsentRate = sumTotalAll > 0 ? (sumAbsentAll / sumTotalAll) * 100 : 0;
-    const overallPresentRate = sumTotalAll > 0 ? (sumPresentAll / sumTotalAll) * 100 : 100;
-    const reportedCount = filteredRows.filter((r) => r.isReported).length;
+    const overallPresentRate = sumTotalAll > 0 ? ((sumTotalAll - sumAbsentAll) / sumTotalAll) * 100 : 0;
 
     ws.mergeCells(`A${currentRow}:B${currentRow}`);
     const sumLabel = ws.getCell(`A${currentRow}`);
-    sumLabel.value = 'TỔNG CỘNG';
-    sumLabel.font = { name: 'Times New Roman', size: 10.5, bold: true };
-    sumLabel.alignment = { horizontal: 'center', vertical: 'middle' };
+    sumLabel.value = `TỔNG CỘNG\n(Đã báo cáo: ${reportedCount}/${filteredRows.length} lớp)`;
+    sumLabel.font = { name: 'Times New Roman', size: 10, bold: true };
+    sumLabel.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
 
     const sumRow = ws.getRow(currentRow);
-    sumRow.getCell(3).value = sumTotalAll;
-    sumRow.getCell(4).value = sumAbsentAll;
-    sumRow.getCell(5).value = sumTotalBoarding;
-    sumRow.getCell(6).value = sumAbsentBoarding;
-    sumRow.getCell(7).value = sumBaoAnBoarding;
-    sumRow.getCell(8).value = sumTotalNgoaiTru;
-    sumRow.getCell(9).value = sumAbsentNgoaiTru;
-    sumRow.getCell(10).value = `Đã báo cáo: ${reportedCount}/${filteredRows.length} lớp`;
+    sumRow.getCell(3).value = hasAnyReported ? sumTotalAll : '-';
+    sumRow.getCell(4).value = hasAnyReported ? sumAbsentAll : '-';
+    sumRow.getCell(5).value = hasAnyReported ? sumTotalBoarding : '-';
+    sumRow.getCell(6).value = hasAnyReported ? sumAbsentBoarding : '-';
+    sumRow.getCell(7).value = hasAnyReported ? sumBaoAnBoarding : '-';
+    sumRow.getCell(8).value = hasAnyReported ? sumTotalNgoaiTru : '-';
+    sumRow.getCell(9).value = hasAnyReported ? sumAbsentNgoaiTru : '-';
+    sumRow.getCell(10).value = '-';
     sumRow.getCell(11).value = '-';
-    sumRow.getCell(12).value = `${overallAbsentRate.toFixed(2).replace('.', ',')}%`;
-    sumRow.getCell(13).value = `${overallPresentRate.toFixed(2).replace('.', ',')}%`;
+    sumRow.getCell(12).value = hasAnyReported ? `${overallAbsentRate.toFixed(2).replace('.', ',')}%` : '-';
+    sumRow.getCell(13).value = hasAnyReported ? `${overallPresentRate.toFixed(2).replace('.', ',')}%` : '-';
 
     for (let c = 1; c <= 13; c++) {
       const cell = sumRow.getCell(c);

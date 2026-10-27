@@ -4340,15 +4340,17 @@ export const StorageService = {
 
     indicators.forEach((ig) => {
       const t = totals[ig.id];
-      t.rate = t.total > 0 ? Math.round((t.absent / t.total) * 1000) / 10 : 0;
+      const validCount = t.present + t.absent;
+      t.rate = validCount > 0 ? Math.round((t.absent / validCount) * 1000) / 10 : 0;
     });
 
     const mainIndicator = indicators.find((i) => i.code === 'ALL') || indicators[0];
-    const mainSchoolTotal = totals[mainIndicator?.id]?.total || 0;
-    const mainSchoolPresent = totals[mainIndicator?.id]?.present || 0;
-    const mainSchoolAbsent = totals[mainIndicator?.id]?.absent || 0;
-    const mainSchoolRate = mainSchoolTotal > 0 ? Math.round((mainSchoolAbsent / mainSchoolTotal) * 1000) / 10 : 0;
-    const mainSchoolPresentRate = mainSchoolTotal > 0 ? Math.round((mainSchoolPresent / mainSchoolTotal) * 1000) / 10 : 0;
+    const mainSchoolTotal = reportedClasses > 0 ? (totals[mainIndicator?.id]?.total || 0) : 0;
+    const mainSchoolPresent = reportedClasses > 0 ? (totals[mainIndicator?.id]?.present || 0) : 0;
+    const mainSchoolAbsent = reportedClasses > 0 ? (totals[mainIndicator?.id]?.absent || 0) : 0;
+    const mainReportedCount = mainSchoolPresent + mainSchoolAbsent;
+    const mainSchoolRate = mainReportedCount > 0 ? Math.round((mainSchoolAbsent / mainReportedCount) * 1000) / 10 : 0;
+    const mainSchoolPresentRate = mainReportedCount > 0 ? Math.round((mainSchoolPresent / mainReportedCount) * 1000) / 10 : 0;
 
     return {
       date: cleanReportDate,
@@ -5595,27 +5597,17 @@ export const StorageService = {
     let totalPresent = 0;
     let totalAbsent = 0;
 
-    if (reportedClasses > 0) {
-      reportedRows.forEach((r) => {
-        const mainVal = r.values['ig_all'] || Object.values(r.values)[0];
-        const total = mainVal ? mainVal.total : ((r.classItem as any).student_count || 35);
-        const absent = mainVal ? mainVal.absent : 0;
-        const present = mainVal ? mainVal.present : Math.max(0, total - absent);
+    rows.forEach((r) => {
+      const mainVal = r.values['ig_all'] || Object.values(r.values)[0];
+      const total = (mainVal && mainVal.total > 0) ? mainVal.total : ((r.classItem as any).student_count || 35);
+      const isRep = r.status !== 'NOT_REPORTED' && r.report && (r.report.status === 'SUBMITTED' || r.report.status === 'LOCKED');
+      const absent = isRep && mainVal ? mainVal.absent : 0;
+      const present = isRep ? Math.max(0, total - absent) : 0;
 
-        totalStudents += total;
-        totalPresent += present;
-        totalAbsent += absent;
-      });
-    } else {
-      // Khi sang ngày mới chưa có bản ghi báo cáo mới: tự động nhận diện sĩ số chuẩn thực tế (ví dụ 36/36)
-      rows.forEach((r) => {
-        const mainVal = r.values['ig_all'] || Object.values(r.values)[0];
-        const total = (mainVal && mainVal.total > 0) ? mainVal.total : 35;
-        totalStudents += total;
-        totalPresent += total; // Mặc định đi học đủ
-        totalAbsent += 0;
-      });
-    }
+      totalStudents += total;
+      totalPresent += present;
+      totalAbsent += absent;
+    });
 
     const totalValidCount = totalPresent + totalAbsent;
     const attendanceRate = totalValidCount > 0 ? Math.round((totalPresent / totalValidCount) * 1000) / 10 : 100;

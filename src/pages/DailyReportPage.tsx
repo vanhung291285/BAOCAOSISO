@@ -1184,88 +1184,138 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
                   {/* Summary Row Theo Ngày */}
                   {displayDailyRows.length > 0 &&
                     (() => {
-                      const reportedRows = displayDailyRows.filter((r) => r.status !== 'NOT_REPORTED');
+                      const reportedRows = displayDailyRows.filter(
+                        (r) => r.status !== 'NOT_REPORTED' && r.report && (r.report.status === 'SUBMITTED' || r.report.status === 'LOCKED')
+                      );
+
+                      // 1. Cột định mức: Luôn hiển thị tổng sĩ số danh sách thực tế của toàn trường/phân hiệu
                       const sumTotalAll = displayDailyRows.reduce((acc, r) => {
                         const v = allIndicator ? r.values[allIndicator.id]?.total : 0;
                         return acc + (v ?? 0);
                       }, 0);
-
-                      const sumAbsentAll = displayDailyRows.reduce((acc, r) => {
-                        const v = allIndicator ? r.values[allIndicator.id]?.absent : 0;
-                        return acc + (v ?? 0);
-                      }, 0);
-
-                      const sumPresentAll = Math.max(0, sumTotalAll - sumAbsentAll);
 
                       const sumTotalBoarding = displayDailyRows.reduce((acc, r) => {
                         const v = boardingIndicator ? r.values[boardingIndicator.id]?.total : 0;
                         return acc + (v ?? 0);
                       }, 0);
 
-                      const sumAbsentBoarding = displayDailyRows.reduce((acc, r) => {
+                      const sumTotalNgoaiTru = Math.max(0, sumTotalAll - sumTotalBoarding);
+
+                      // 2. Các cột biến động (vắng, báo ăn): CHỈ CỘNG DỒN TỪ CÁC LỚP ĐÃ CÓ BÁO CÁO (SUBMITTED / LOCKED)
+                      // Khi chưa có lớp nào nộp báo cáo (0/14 lớp), vắng và báo ăn phải là 0, tuyệt đối không tự lấy bằng tổng sĩ số bán trú
+                      const sumAbsentAll = reportedRows.reduce((acc, r) => {
+                        const v = allIndicator ? r.values[allIndicator.id]?.absent : 0;
+                        return acc + (v ?? 0);
+                      }, 0);
+
+                      const sumAbsentBoarding = reportedRows.reduce((acc, r) => {
                         const v = boardingIndicator ? r.values[boardingIndicator.id]?.absent : 0;
                         return acc + (v ?? 0);
                       }, 0);
 
-                      const sumBaoAnBoarding = Math.max(0, sumTotalBoarding - sumAbsentBoarding);
+                      const sumBaoAnBoarding = reportedRows.reduce((acc, r) => {
+                        const boardingVal = boardingIndicator ? r.values[boardingIndicator.id] : null;
+                        const totalB = boardingVal?.total ?? 0;
+                        const absentB = boardingVal?.absent ?? 0;
+                        return acc + Math.max(0, totalB - absentB);
+                      }, 0);
 
-                      const sumTotalNgoaiTru = Math.max(0, sumTotalAll - sumTotalBoarding);
-                      const sumAbsentNgoaiTru = Math.max(0, sumAbsentAll - sumAbsentBoarding);
+                      const sumAbsentNgoaiTru = reportedRows.reduce((acc, r) => {
+                        const allVal = allIndicator ? r.values[allIndicator.id] : null;
+                        const boardingVal = boardingIndicator ? r.values[boardingIndicator.id] : null;
+                        const absentAll = allVal?.absent ?? 0;
+                        const absentBoarding = boardingVal?.absent ?? 0;
+                        return acc + Math.max(0, absentAll - absentBoarding);
+                      }, 0);
 
-                      const overallAbsentRate = sumTotalAll > 0 ? (sumAbsentAll / sumTotalAll) * 100 : 0;
-                      const overallPresentRate = sumTotalAll > 0 ? (sumPresentAll / sumTotalAll) * 100 : 0;
+                      // Tỉ lệ phần trăm tính theo số lớp đã nộp báo cáo (khi chưa có lớp nào báo cáo: vắng 0,00%, chuyên cần 100,00%)
+                      const reportedTotalAll = reportedRows.reduce((acc, r) => {
+                        const v = allIndicator ? r.values[allIndicator.id]?.total : 0;
+                        return acc + (v ?? 0);
+                      }, 0);
+
+                      const overallAbsentRate = reportedTotalAll > 0 ? (sumAbsentAll / reportedTotalAll) * 100 : 0;
+                      const overallPresentRate = reportedTotalAll > 0 ? ((reportedTotalAll - sumAbsentAll) / reportedTotalAll) * 100 : 100;
 
                       return (
                         <tr className="bg-slate-100 font-bold border-t-2 border-black">
-                          <td colSpan={2} className="border border-black py-2 px-2 text-center text-xs font-black">
-                            TỔNG CỘNG
+                          {/* 1 & 2. Cột Lớp + GVCN (colspan=2): Đặt cụm chữ trạng thái gọn gàng, không bị lệch sang cột khác */}
+                          <td colSpan={2} className="border border-black py-2 px-2 text-center align-middle">
+                            <div className="text-xs font-black uppercase text-black leading-tight">TỔNG CỘNG</div>
+                            <div className="text-[10px] font-semibold text-slate-700 print:text-black mt-0.5 whitespace-nowrap">
+                              Đã báo cáo: {reportedRows.length}/{displayDailyRows.length} lớp
+                            </div>
                           </td>
-                          <td className="border border-black py-2 px-1 text-xs font-bold text-black text-center">
+
+                          {/* 3. Học sinh toàn trường - Tổng số định mức thực tế */}
+                          <td className="border border-black py-2 px-1 text-xs font-bold text-black text-center align-middle">
                             {sumTotalAll}
                           </td>
+
+                          {/* 4. Học sinh toàn trường - Số vắng (chỉ cộng từ lớp đã nộp) */}
                           <td
-                            className={`border border-black py-2 px-1 text-xs font-bold text-center ${
+                            className={`border border-black py-2 px-1 text-xs font-bold text-center align-middle ${
                               sumAbsentAll > 0 ? 'text-red-700' : 'text-black'
                             }`}
                           >
                             {sumAbsentAll}
                           </td>
-                          <td className="border border-black py-2 px-1 text-xs font-bold text-black text-center">
+
+                          {/* 5. Học sinh bán trú - Tổng số định mức thực tế */}
+                          <td className="border border-black py-2 px-1 text-xs font-bold text-black text-center align-middle">
                             {sumTotalBoarding}
                           </td>
+
+                          {/* 6. Học sinh bán trú - Số vắng (chỉ cộng từ lớp đã nộp) */}
                           <td
-                            className={`border border-black py-2 px-1 text-xs font-bold text-center ${
+                            className={`border border-black py-2 px-1 text-xs font-bold text-center align-middle ${
                               sumAbsentBoarding > 0 ? 'text-red-700' : 'text-black'
                             }`}
                           >
                             {sumAbsentBoarding}
                           </td>
-                          <td className="border border-black py-2 px-1 text-xs font-bold text-blue-900 bg-blue-100/70 text-center">
+
+                          {/* 7. Học sinh bán trú - Báo ăn (chỉ cộng từ lớp đã nộp báo cáo, khi 0 lớp báo cáo sẽ hiển thị là 0) */}
+                          <td className="border border-black py-2 px-1 text-xs font-bold text-blue-900 bg-blue-100/70 text-center align-middle">
                             {sumBaoAnBoarding}
                           </td>
-                          <td className="border border-black py-2 px-1 text-xs font-bold text-black text-center">
+
+                          {/* 8. Học sinh ngoại trú - Tổng số định mức thực tế */}
+                          <td className="border border-black py-2 px-1 text-xs font-bold text-black text-center align-middle">
                             {sumTotalNgoaiTru}
                           </td>
+
+                          {/* 9. Học sinh ngoại trú - Số vắng (chỉ cộng từ lớp đã nộp) */}
                           <td
-                            className={`border border-black py-2 px-1 text-xs font-bold text-center ${
+                            className={`border border-black py-2 px-1 text-xs font-bold text-center align-middle ${
                               sumAbsentNgoaiTru > 0 ? 'text-red-700' : 'text-black'
                             }`}
                           >
                             {sumAbsentNgoaiTru}
                           </td>
-                          <td className="border border-black py-2 px-2 text-left text-[11px] font-semibold text-slate-700">
-                            Đã báo cáo: {reportedRows.length}/{displayDailyRows.length} lớp
-                          </td>
-                          <td className="border border-black py-2 px-2 text-center text-[11px] font-semibold text-slate-700">
+
+                          {/* 10. Tên học sinh nghỉ - Khớp chuẩn vị trí, dấu gạch ngang rõ ràng, không bị chèn chữ lệch cột */}
+                          <td className="border border-black py-2 px-2 text-center text-xs font-bold text-slate-400 align-middle">
                             -
                           </td>
-                          <td className="border border-black py-2 px-1 text-xs font-bold text-black text-center">
+
+                          {/* 11. Địa chỉ - Khớp chuẩn vị trí, dấu gạch ngang rõ ràng, không bị chèn chữ lệch cột */}
+                          <td className="border border-black py-2 px-2 text-center text-xs font-bold text-slate-400 align-middle">
+                            -
+                          </td>
+
+                          {/* 12. Tỉ lệ phần trăm vắng (%) */}
+                          <td className="border border-black py-2 px-1 text-xs font-bold text-center text-black align-middle">
                             {overallAbsentRate.toFixed(2).replace('.', ',')}%
                           </td>
-                          <td className="border border-black py-2 px-1 text-xs font-bold text-black text-center">
+
+                          {/* 13. Tỉ lệ phần trăm chuyên cần (%) */}
+                          <td className="border border-black py-2 px-1 text-xs font-bold text-center text-black align-middle">
                             {overallPresentRate.toFixed(2).replace('.', ',')}%
                           </td>
-                          <td className="border border-black py-2 px-1 text-center font-bold text-slate-400 print:hidden">
+
+                          {/* 14. Xử lý (chỉ hiển thị trên giao diện, ẩn khi in) */}
+                          <td className="border border-black py-2 px-1 text-center font-bold text-slate-400 print:hidden align-middle">
                             -
                           </td>
                         </tr>
@@ -1407,58 +1457,61 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
 
                       return (
                         <tr className="bg-slate-100 font-bold border-t-2 border-black">
-                          <td colSpan={2} className="border border-black py-2 px-2 text-center text-xs font-black">
-                            TỔNG CỘNG / TRUNG BÌNH THÁNG
+                          <td colSpan={2} className="border border-black py-2 px-2 text-center align-middle">
+                            <div className="text-xs font-black uppercase text-black leading-tight">TỔNG CỘNG / TRUNG BÌNH THÁNG</div>
+                            <div className="text-[10px] font-semibold text-slate-700 print:text-black mt-0.5 whitespace-nowrap">
+                              Đã nộp: {monthlyData.summary.totalDaysReported}/{monthlyData.rows.length} ngày
+                            </div>
                           </td>
-                          <td className="border border-black py-2 px-1 text-xs font-bold text-black text-center">
+                          <td className="border border-black py-2 px-1 text-xs font-bold text-black text-center align-middle">
                             {monthlyData.summary.totalDaysReported > 0
                               ? Math.round(monthlyData.summary.sumTotalAll / monthlyData.summary.totalDaysReported)
                               : '-'}
                           </td>
                           <td
-                            className={`border border-black py-2 px-1 text-xs font-bold text-center ${
+                            className={`border border-black py-2 px-1 text-xs font-bold text-center align-middle ${
                               monthlyData.summary.sumAbsentAll > 0 ? 'text-red-700' : 'text-black'
                             }`}
                           >
                             {monthlyData.summary.totalDaysReported > 0 ? monthlyData.summary.sumAbsentAll : '-'}
                           </td>
-                          <td className="border border-black py-2 px-1 text-xs font-bold text-black text-center">
+                          <td className="border border-black py-2 px-1 text-xs font-bold text-black text-center align-middle">
                             {monthlyData.summary.totalDaysReported > 0
                               ? Math.round(monthlyData.summary.sumTotalBoarding / monthlyData.summary.totalDaysReported)
                               : '-'}
                           </td>
                           <td
-                            className={`border border-black py-2 px-1 text-xs font-bold text-center ${
+                            className={`border border-black py-2 px-1 text-xs font-bold text-center align-middle ${
                               monthlyData.summary.sumAbsentBoarding > 0 ? 'text-red-700' : 'text-black'
                             }`}
                           >
                             {monthlyData.summary.totalDaysReported > 0 ? monthlyData.summary.sumAbsentBoarding : '-'}
                           </td>
-                          <td className="border border-black py-2 px-1 text-xs font-bold text-blue-900 bg-blue-100/70 text-center">
+                          <td className="border border-black py-2 px-1 text-xs font-bold text-blue-900 bg-blue-100/70 text-center align-middle">
                             {monthlyData.summary.totalDaysReported > 0 ? monthlyData.summary.sumBaoAnBoarding : '-'}
                           </td>
-                          <td className="border border-black py-2 px-1 text-xs font-bold text-black text-center">
+                          <td className="border border-black py-2 px-1 text-xs font-bold text-black text-center align-middle">
                             {monthlyData.summary.totalDaysReported > 0
                               ? Math.round(monthlyData.summary.sumTotalNgoaiTru / monthlyData.summary.totalDaysReported)
                               : '-'}
                           </td>
                           <td
-                            className={`border border-black py-2 px-1 text-xs font-bold text-center ${
+                            className={`border border-black py-2 px-1 text-xs font-bold text-center align-middle ${
                               monthlyData.summary.sumAbsentNgoaiTru > 0 ? 'text-red-700' : 'text-black'
                             }`}
                           >
                             {monthlyData.summary.totalDaysReported > 0 ? monthlyData.summary.sumAbsentNgoaiTru : '-'}
                           </td>
-                          <td className="border border-black py-2 px-2 text-left text-[11px] font-semibold text-slate-700">
-                            Đã nộp: {monthlyData.summary.totalDaysReported}/{monthlyData.rows.length} ngày
-                          </td>
-                          <td className="border border-black py-2 px-2 text-center text-[11px] font-semibold text-slate-700">
+                          <td className="border border-black py-2 px-2 text-center text-xs font-bold text-slate-400 align-middle">
                             -
                           </td>
-                          <td className="border border-black py-2 px-1 text-xs font-bold text-black text-center">
+                          <td className="border border-black py-2 px-2 text-center text-xs font-bold text-slate-400 align-middle">
+                            -
+                          </td>
+                          <td className="border border-black py-2 px-1 text-xs font-bold text-black text-center align-middle">
                             {monthlyData.summary.avgAbsentRate.toFixed(2).replace('.', ',')}%
                           </td>
-                          <td className="border border-black py-2 px-1 text-xs font-bold text-black text-center">
+                          <td className="border border-black py-2 px-1 text-xs font-bold text-black text-center align-middle">
                             {monthlyData.summary.avgPresentRate.toFixed(2).replace('.', ',')}%
                           </td>
                         </tr>
