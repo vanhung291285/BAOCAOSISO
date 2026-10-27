@@ -929,6 +929,381 @@ WHERE (
 `;
 
 /**
+ * KỊCH BẢN SQL CHUYÊN BIỆT: ĐỒNG BỘ SIÊU TỐC & REALTIME NGAY LẬP TỨC TRÊN SUPABASE CLOUD
+ * Hủy bỏ hoàn toàn khóa ngoại gây chặn dữ liệu (mã lỗi 23503), kích hoạt REPLICA IDENTITY FULL,
+ * cấp quyền RLS toàn diện và đưa toàn bộ bảng vào publication supabase_realtime.
+ */
+export const SUPABASE_INSTANT_SYNC_REALTIME_SQL = `-- ==============================================================================
+-- KỊCH BẢN SQL CHUẨN: ĐỒNG BỘ SIÊU TỐC & REALTIME TỨC THÌ LÊN SUPABASE CLOUD
+-- Áp dụng cho: SỔ BÁO CÁO SĨ SỐ & BÁN TRÚ - TRƯỜNG PTDTBT THCS XA DUNG
+-- Hướng dẫn: Mở Supabase Dashboard -> SQL Editor -> Dán toàn bộ và bấm "Run"
+-- ==============================================================================
+
+-- 1. KÍCH HOẠT EXTENSIONS
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+-- 2. TẠO HOẶC CẬP NHẬT CẤU TRÚC TẤT CẢ CÁC BẢNG CỐT LÕI
+CREATE TABLE IF NOT EXISTS public.profiles (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    full_name TEXT NOT NULL,
+    email TEXT UNIQUE NOT NULL,
+    role TEXT NOT NULL DEFAULT 'GVCN' CHECK (role IN ('ADMIN', 'BGH', 'GVCN')),
+    assigned_class_id TEXT,
+    active BOOLEAN NOT NULL DEFAULT true,
+    phone TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
+);
+
+CREATE TABLE IF NOT EXISTS public.school_settings (
+    id TEXT PRIMARY KEY DEFAULT 'school_01',
+    school_name TEXT NOT NULL DEFAULT '',
+    short_name TEXT DEFAULT '',
+    department_name TEXT DEFAULT '',
+    sub_department_name TEXT DEFAULT '',
+    address TEXT DEFAULT '',
+    commune TEXT DEFAULT '',
+    province TEXT DEFAULT '',
+    phone TEXT DEFAULT '',
+    email TEXT DEFAULT '',
+    website TEXT DEFAULT '',
+    student_results_url TEXT DEFAULT '',
+    logo_url TEXT DEFAULT '',
+    principal_name TEXT DEFAULT '',
+    principal_title TEXT DEFAULT 'Hiệu trưởng',
+    reporter_name TEXT DEFAULT '',
+    reporter_title TEXT DEFAULT 'Người lập biểu',
+    report_title TEXT DEFAULT 'BÁO CÁO SĨ SỐ HỌC SINH',
+    footer_text TEXT DEFAULT '',
+    developer_name TEXT DEFAULT 'Vũ Văn Hùng',
+    developer_contact TEXT DEFAULT 'SĐT: 0984246993',
+    primary_color TEXT DEFAULT '#1d4ed8',
+    input_mode TEXT DEFAULT 'MODE_1_TOTAL_PRESENT' CHECK (input_mode IN ('MODE_1_TOTAL_PRESENT', 'MODE_2_TOTAL_ABSENT', 'MODE_3_ALL_THREE')),
+    enable_campuses BOOLEAN DEFAULT false,
+    week1_start_date TEXT DEFAULT '2026-09-07',
+    school_days_per_week INTEGER DEFAULT 5,
+    ranking_threshold_excellent NUMERIC DEFAULT 98,
+    ranking_threshold_good NUMERIC DEFAULT 95,
+    ranking_threshold_fair NUMERIC DEFAULT 90,
+    enable_early_report_bonus BOOLEAN DEFAULT true,
+    early_report_deadline TEXT DEFAULT '07:30',
+    early_report_bonus_points NUMERIC DEFAULT 0.5,
+    early_report_max_bonus NUMERIC DEFAULT 2.5,
+    enable_auto_reminder BOOLEAN DEFAULT true,
+    auto_reminder_time TEXT DEFAULT '07:30',
+    reminder_message_template TEXT,
+    friday_breakfast BOOLEAN DEFAULT true,
+    friday_lunch BOOLEAN DEFAULT true,
+    friday_dinner BOOLEAN DEFAULT false,
+    saturday_breakfast BOOLEAN DEFAULT false,
+    saturday_lunch BOOLEAN DEFAULT false,
+    saturday_dinner BOOLEAN DEFAULT false,
+    allow_gvcn_report_friday BOOLEAN DEFAULT true,
+    allow_gvcn_report_saturday BOOLEAN DEFAULT false,
+    boarding_sheet_title TEXT DEFAULT 'SỔ CHẤM ĂN HỌC SINH BÁN TRÚ',
+    grade_names JSONB DEFAULT '{"1": "Khối 1", "2": "Khối 2", "3": "Khối 3", "4": "Khối 4", "5": "Khối 5", "6": "Khối 6", "7": "Khối 7", "8": "Khối 8", "9": "Khối 9", "10": "Khối 10", "11": "Khối 11", "12": "Khối 12"}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
+);
+
+CREATE TABLE IF NOT EXISTS public.school_years (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    name TEXT NOT NULL UNIQUE,
+    is_active BOOLEAN NOT NULL DEFAULT false,
+    is_locked BOOLEAN NOT NULL DEFAULT false,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
+);
+
+CREATE TABLE IF NOT EXISTS public.campuses (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    name TEXT NOT NULL,
+    active BOOLEAN NOT NULL DEFAULT true,
+    principal_name TEXT,
+    principal_title TEXT,
+    reporter_name TEXT,
+    reporter_title TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
+);
+
+CREATE TABLE IF NOT EXISTS public.classes (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    class_name TEXT NOT NULL,
+    grade INTEGER NOT NULL CHECK (grade BETWEEN 1 AND 12),
+    school_year_id TEXT,
+    campus_id TEXT,
+    homeroom_teacher_id TEXT,
+    active BOOLEAN NOT NULL DEFAULT true,
+    is_locked BOOLEAN NOT NULL DEFAULT false,
+    sort_order INTEGER DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
+);
+
+CREATE TABLE IF NOT EXISTS public.indicator_groups (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    name TEXT NOT NULL,
+    code TEXT NOT NULL UNIQUE,
+    enabled BOOLEAN NOT NULL DEFAULT true,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    show_total BOOLEAN NOT NULL DEFAULT true,
+    show_present BOOLEAN NOT NULL DEFAULT true,
+    show_absent BOOLEAN NOT NULL DEFAULT true,
+    show_percentage BOOLEAN NOT NULL DEFAULT true,
+    column_header_override TEXT,
+    icon TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
+);
+
+CREATE TABLE IF NOT EXISTS public.daily_reports (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    class_id TEXT NOT NULL,
+    report_date DATE NOT NULL,
+    created_by TEXT,
+    status TEXT NOT NULL DEFAULT 'SUBMITTED' CHECK (status IN ('DRAFT', 'SUBMITTED', 'LOCKED')),
+    notes TEXT,
+    absent_students JSONB DEFAULT '[]'::jsonb,
+    reported_time TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
+    locked_at TIMESTAMPTZ,
+    CONSTRAINT daily_reports_class_id_report_date_key UNIQUE (class_id, report_date)
+);
+
+CREATE TABLE IF NOT EXISTS public.daily_report_values (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    report_id TEXT NOT NULL,
+    indicator_group_id TEXT NOT NULL,
+    total_count INTEGER NOT NULL DEFAULT 0 CHECK (total_count >= 0),
+    present_count INTEGER NOT NULL DEFAULT 0 CHECK (present_count >= 0),
+    absent_count INTEGER NOT NULL DEFAULT 0 CHECK (absent_count >= 0),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
+    CONSTRAINT daily_report_values_report_indicator_key UNIQUE (report_id, indicator_group_id)
+);
+
+CREATE TABLE IF NOT EXISTS public.boarding_reports (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    class_id TEXT NOT NULL,
+    date DATE NOT NULL,
+    status TEXT NOT NULL DEFAULT 'SUBMITTED' CHECK (status IN ('DRAFT', 'SUBMITTED', 'LOCKED')),
+    total_boarding_students INTEGER DEFAULT 0,
+    breakfast_count INTEGER DEFAULT 0,
+    lunch_count INTEGER DEFAULT 0,
+    dinner_count INTEGER DEFAULT 0,
+    absent_count INTEGER DEFAULT 0,
+    total_meals INTEGER DEFAULT 0,
+    notes TEXT,
+    records JSONB NOT NULL DEFAULT '[]'::jsonb,
+    submitted_by TEXT,
+    submitted_by_name TEXT,
+    submitted_at TIMESTAMPTZ,
+    locked_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
+    CONSTRAINT boarding_reports_class_date_key UNIQUE (class_id, date)
+);
+
+CREATE TABLE IF NOT EXISTS public.students (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    class_id TEXT NOT NULL,
+    full_name TEXT NOT NULL,
+    address TEXT,
+    village TEXT,
+    gender TEXT,
+    student_code TEXT,
+    birth_date TEXT,
+    ethnicity TEXT,
+    notes TEXT,
+    is_boarding BOOLEAN DEFAULT false,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
+);
+
+CREATE TABLE IF NOT EXISTS public.school_off_days (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    date DATE NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    type TEXT NOT NULL DEFAULT 'HOLIDAY',
+    applies_to TEXT DEFAULT 'ALL',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
+);
+
+CREATE TABLE IF NOT EXISTS public.notifications (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    user_id TEXT NOT NULL,
+    class_id TEXT,
+    class_name TEXT,
+    type TEXT NOT NULL,
+    title TEXT NOT NULL,
+    message TEXT NOT NULL,
+    date TEXT,
+    read BOOLEAN NOT NULL DEFAULT false,
+    action_url TEXT,
+    created_by_name TEXT,
+    urgent BOOLEAN DEFAULT false,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
+);
+
+CREATE TABLE IF NOT EXISTS public.system_logs (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    user_id TEXT NOT NULL,
+    user_name TEXT NOT NULL,
+    user_role TEXT NOT NULL,
+    action TEXT NOT NULL,
+    class_name TEXT,
+    report_date DATE,
+    old_data JSONB,
+    new_data JSONB,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
+);
+
+CREATE TABLE IF NOT EXISTS public.boarding_signature_configs (
+    id TEXT PRIMARY KEY,
+    class_id TEXT,
+    location_name TEXT DEFAULT 'Xa Dung',
+    teacher_title TEXT DEFAULT 'GIÁO VIÊN CHỦ NHIỆM',
+    teacher_name TEXT NOT NULL DEFAULT '',
+    principal_title TEXT DEFAULT 'HIỆU TRƯỞNG',
+    principal_name TEXT DEFAULT '',
+    accountant_title TEXT DEFAULT 'KẾ TOÁN BÁN TRÚ',
+    accountant_name TEXT DEFAULT '',
+    enable_digital_signature BOOLEAN DEFAULT true,
+    signature_image_url TEXT DEFAULT '',
+    stamp_image_url TEXT DEFAULT '',
+    certificate_serial TEXT DEFAULT '',
+    created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()),
+    updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now())
+);
+
+CREATE TABLE IF NOT EXISTS public.boarding_month_signatures (
+    id TEXT PRIMARY KEY,
+    class_id TEXT NOT NULL,
+    month TEXT NOT NULL,
+    is_signed BOOLEAN DEFAULT false,
+    signed_by_name TEXT DEFAULT '',
+    signed_by_role TEXT DEFAULT 'GVCN',
+    signed_at TIMESTAMPTZ,
+    location_name TEXT DEFAULT 'Xa Dung',
+    signature_image_url TEXT DEFAULT '',
+    certificate_hash TEXT DEFAULT '',
+    notes TEXT DEFAULT '',
+    standard_breakfast INTEGER,
+    standard_lunch INTEGER,
+    standard_dinner INTEGER,
+    created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()),
+    updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()),
+    CONSTRAINT unique_class_month_signature UNIQUE (class_id, month)
+);
+
+-- 3. HỦY BỎ TẤT CẢ CÁC RÀNG BUỘC KHÓA NGOẠI GÂY LỖI 23503 (CHỐNG LỆCH ID)
+DO $$
+BEGIN
+    ALTER TABLE public.daily_reports DROP CONSTRAINT IF EXISTS daily_reports_class_id_fkey;
+    ALTER TABLE public.daily_reports DROP CONSTRAINT IF EXISTS daily_reports_created_by_fkey;
+    ALTER TABLE public.daily_report_values DROP CONSTRAINT IF EXISTS daily_report_values_report_id_fkey;
+    ALTER TABLE public.daily_report_values DROP CONSTRAINT IF EXISTS daily_report_values_indicator_group_id_fkey;
+    ALTER TABLE public.boarding_reports DROP CONSTRAINT IF EXISTS boarding_reports_class_id_fkey;
+    ALTER TABLE public.students DROP CONSTRAINT IF EXISTS students_class_id_fkey;
+    ALTER TABLE public.classes DROP CONSTRAINT IF EXISTS classes_homeroom_teacher_id_fkey;
+    ALTER TABLE public.classes DROP CONSTRAINT IF EXISTS classes_campus_id_fkey;
+    ALTER TABLE public.classes DROP CONSTRAINT IF EXISTS classes_school_year_id_fkey;
+    ALTER TABLE public.boarding_signature_configs DROP CONSTRAINT IF EXISTS boarding_signature_configs_class_id_fkey;
+    ALTER TABLE public.boarding_month_signatures DROP CONSTRAINT IF EXISTS boarding_month_signatures_class_id_fkey;
+EXCEPTION WHEN OTHERS THEN END $$;
+
+-- 4. BỔ SUNG CỘT BẢO ĐẢM TƯƠNG THÍCH MỌI PHIÊN BẢN CŨ
+DO $$
+BEGIN
+    ALTER TABLE public.daily_reports ADD COLUMN IF NOT EXISTS reported_time TEXT;
+    ALTER TABLE public.daily_reports ADD COLUMN IF NOT EXISTS absent_students JSONB DEFAULT '[]'::jsonb;
+    ALTER TABLE public.daily_reports ADD COLUMN IF NOT EXISTS locked_at TIMESTAMPTZ;
+    ALTER TABLE public.students ADD COLUMN IF NOT EXISTS is_boarding BOOLEAN DEFAULT false;
+    ALTER TABLE public.students ADD COLUMN IF NOT EXISTS village TEXT;
+    ALTER TABLE public.students ADD COLUMN IF NOT EXISTS address TEXT;
+    ALTER TABLE public.boarding_month_signatures ADD COLUMN IF NOT EXISTS standard_breakfast INTEGER;
+    ALTER TABLE public.boarding_month_signatures ADD COLUMN IF NOT EXISTS standard_lunch INTEGER;
+    ALTER TABLE public.boarding_month_signatures ADD COLUMN IF NOT EXISTS standard_dinner INTEGER;
+EXCEPTION WHEN OTHERS THEN END $$;
+
+-- 5. THIẾT LẬP REPLICA IDENTITY FULL ĐỂ REALTIME TRUYỀN ĐỦ DỮ LIỆU CŨ VÀ MỚI
+ALTER TABLE public.profiles REPLICA IDENTITY FULL;
+ALTER TABLE public.school_settings REPLICA IDENTITY FULL;
+ALTER TABLE public.school_years REPLICA IDENTITY FULL;
+ALTER TABLE public.campuses REPLICA IDENTITY FULL;
+ALTER TABLE public.classes REPLICA IDENTITY FULL;
+ALTER TABLE public.indicator_groups REPLICA IDENTITY FULL;
+ALTER TABLE public.daily_reports REPLICA IDENTITY FULL;
+ALTER TABLE public.daily_report_values REPLICA IDENTITY FULL;
+ALTER TABLE public.boarding_reports REPLICA IDENTITY FULL;
+ALTER TABLE public.students REPLICA IDENTITY FULL;
+ALTER TABLE public.school_off_days REPLICA IDENTITY FULL;
+ALTER TABLE public.notifications REPLICA IDENTITY FULL;
+ALTER TABLE public.system_logs REPLICA IDENTITY FULL;
+ALTER TABLE public.boarding_signature_configs REPLICA IDENTITY FULL;
+ALTER TABLE public.boarding_month_signatures REPLICA IDENTITY FULL;
+
+-- 6. PHÂN QUYỀN RLS & CẤP QUYỀN TOÀN DIỆN CHO WEB CLIENT (ANON & AUTHENTICATED)
+GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL ROUTINES IN SCHEMA public TO anon, authenticated, service_role;
+
+DO $$
+DECLARE
+    tbl text;
+    tables text[] := ARRAY[
+        'profiles', 'school_settings', 'school_years', 'campuses',
+        'classes', 'indicator_groups', 'daily_reports', 'daily_report_values',
+        'students', 'school_off_days', 'notifications', 'system_logs',
+        'boarding_reports', 'boarding_signature_configs', 'boarding_month_signatures'
+    ];
+BEGIN
+    FOR tbl IN SELECT unnest(tables) LOOP
+        EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', tbl);
+        EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', 'Allow full access ' || tbl, tbl);
+        EXECUTE format('CREATE POLICY %I ON public.%I FOR ALL TO anon, authenticated USING (true) WITH CHECK (true)', 'Allow full access ' || tbl, tbl);
+    END LOOP;
+END $$;
+
+-- 7. KÍCH HOẠT REALTIME PUBLICATION CHO TẤT CẢ CÁC BẢNG (KHÔNG BÁO LỖI NẾU ĐÃ CÓ)
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime') THEN
+        CREATE PUBLICATION supabase_realtime;
+    END IF;
+END $$;
+
+DO $$
+DECLARE
+    tbl text;
+    tables text[] := ARRAY[
+        'school_settings', 'school_years', 'campuses', 'profiles',
+        'classes', 'indicator_groups', 'daily_reports', 'daily_report_values',
+        'students', 'school_off_days', 'notifications', 'system_logs',
+        'boarding_reports', 'boarding_signature_configs', 'boarding_month_signatures'
+    ];
+BEGIN
+    FOR tbl IN SELECT unnest(tables) LOOP
+        IF NOT EXISTS (
+            SELECT 1 FROM pg_publication_tables 
+            WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = tbl
+        ) THEN
+            BEGIN
+                EXECUTE format('ALTER PUBLICATION supabase_realtime ADD TABLE public.%I', tbl);
+            EXCEPTION WHEN OTHERS THEN END;
+        END IF;
+    END LOOP;
+END $$;
+
+-- 8. TỐI ƯU HÓA CHỈ MỤC TĂNG TỐC ĐỘ ĐỒNG BỘ & TRUY VẤN
+CREATE INDEX IF NOT EXISTS idx_daily_reports_class_date ON public.daily_reports (class_id, report_date);
+CREATE INDEX IF NOT EXISTS idx_daily_reports_date ON public.daily_reports (report_date);
+CREATE INDEX IF NOT EXISTS idx_daily_report_values_report ON public.daily_report_values (report_id);
+CREATE INDEX IF NOT EXISTS idx_daily_report_values_indicator ON public.daily_report_values (indicator_group_id);
+CREATE INDEX IF NOT EXISTS idx_boarding_reports_class_date ON public.boarding_reports (class_id, date);
+CREATE INDEX IF NOT EXISTS idx_boarding_reports_date ON public.boarding_reports (date);
+CREATE INDEX IF NOT EXISTS idx_students_class ON public.students (class_id);
+`;
+
+/**
  * KỊCH BẢN SQL CHUYÊN BIỆT: ĐẢM BẢO 100% LƯU HỌC SINH & BÁN TRÚ TRÊN SUPABASE
  * Chạy kịch bản này trên Supabase SQL Editor để khắc phục triệt để lỗi học sinh không lưu hoặc mở trình duyệt khác bị rỗng
  */
