@@ -199,34 +199,82 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
   }, [monthlyClassId, selectedMonth]);
 
   useEffect(() => {
+    // Initial fetch
     if (reportMode === 'daily') {
       loadReportData(true);
     } else {
       loadMonthlyData(true);
     }
 
-    let debounceTimer: any = null;
-    const unsub = subscribeRealtime((event) => {
-      if (event.table === 'daily_reports' || event.table === 'daily_report_values') {
-        const payloadClassId = event.payload?.classId;
-        // If current user is a GVCN viewing their specific class, avoid reloading if event is from another class
-        if (isGVCN && currentUser?.assigned_class_id && payloadClassId && payloadClassId !== currentUser.assigned_class_id) {
-          return;
-        }
+    const triggerRefresh = (showIndicator = false) => {
+      if (reportMode === 'daily') {
+        loadReportData(showIndicator);
+      } else {
+        loadMonthlyData(showIndicator);
+      }
+    };
 
+    let debounceTimer: any = null;
+    const RELEVANT_TABLES = new Set([
+      'daily_reports',
+      'daily_report_values',
+      'reports',
+      'values',
+      'boarding_reports',
+      'classes',
+      'students',
+      'school_settings',
+      'all',
+      'sync',
+    ]);
+
+    // 1. Live subscription via Supabase realtime & BroadcastChannel
+    const unsub = subscribeRealtime((event) => {
+      if (!event?.table || RELEVANT_TABLES.has(event.table) || String(event.table).includes('report')) {
         if (debounceTimer) clearTimeout(debounceTimer);
         debounceTimer = setTimeout(() => {
-          if (reportMode === 'daily') {
-            loadReportData(false);
-          } else {
-            loadMonthlyData(false);
-          }
-        }, 400);
+          triggerRefresh(false);
+        }, 300);
       }
     });
 
+    // 2. Background polling every 5s to guarantee fresh data across all devices/tabs
+    const pollInterval = setInterval(() => {
+      triggerRefresh(false);
+    }, 5000);
+
+    // 3. Immediate refresh when tab becomes active / focused
+    const handleVisibilityOrFocus = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        triggerRefresh(false);
+      }
+    };
+    window.addEventListener('focus', handleVisibilityOrFocus);
+    document.addEventListener('visibilitychange', handleVisibilityOrFocus);
+
+    // 4. Cross-tab storage change listener
+    const handleStorageChange = (e: StorageEvent) => {
+      if (
+        !e.key ||
+        e.key.includes('daily_reports') ||
+        e.key.includes('daily_report_values') ||
+        e.key.includes('boarding_reports') ||
+        e.key.includes('students')
+      ) {
+        if (debounceTimer) clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => {
+          triggerRefresh(false);
+        }, 300);
+      }
+    };
+    window.addEventListener('storage', handleStorageChange);
+
     return () => {
       if (debounceTimer) clearTimeout(debounceTimer);
+      clearInterval(pollInterval);
+      window.removeEventListener('focus', handleVisibilityOrFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
+      window.removeEventListener('storage', handleStorageChange);
       unsub();
     };
   }, [reportMode, loadReportData, loadMonthlyData]);
@@ -474,11 +522,19 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
   };
 
   const getAbsentStudentText = (row: ClassReportRow): string => {
-    if (row.report?.absent_students && row.report.absent_students.length > 0) {
-      const listStr = row.report.absent_students
+    let absentStudents = row.report?.absent_students;
+    if (typeof absentStudents === 'string') {
+      try {
+        absentStudents = JSON.parse(absentStudents);
+      } catch {
+        absentStudents = [];
+      }
+    }
+    if (Array.isArray(absentStudents) && absentStudents.length > 0) {
+      const listStr = absentStudents
         .map((s) => `${s.full_name}${s.isBoarding ? ' (Bán Trú)' : ' (Ngoại Trú)'}${s.reason ? ` (${s.reason})` : ''}`)
         .join('\n');
-      if (row.report.notes && !listStr.includes(row.report.notes)) {
+      if (row.report?.notes && !listStr.includes(row.report.notes)) {
         return `${listStr}\n- Ghi chú: ${row.report.notes}`;
       }
       return listStr;
@@ -487,8 +543,16 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
   };
 
   const getAbsentStudentAddresses = (row: ClassReportRow): string => {
-    if (row.report?.absent_students && row.report.absent_students.length > 0) {
-      const addrs = row.report.absent_students
+    let absentStudents = row.report?.absent_students;
+    if (typeof absentStudents === 'string') {
+      try {
+        absentStudents = JSON.parse(absentStudents);
+      } catch {
+        absentStudents = [];
+      }
+    }
+    if (Array.isArray(absentStudents) && absentStudents.length > 0) {
+      const addrs = absentStudents
         .map((s) => {
           const addr = getResolvedAddress(s, row.classItem.id);
           return addr && addr.trim() !== '' ? addr : '-';
@@ -830,6 +894,17 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
                 </button>
               </>
             )}
+
+            <div
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-[11px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 shadow-2xs"
+              title="Dữ liệu biểu mẫu được đồng bộ tự động ngay lập tức theo thời gian thực khi GVCN gửi báo cáo"
+            >
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-600"></span>
+              </span>
+              <span className="hidden md:inline font-semibold">Tự động đồng bộ</span>
+            </div>
 
             <button
               type="button"
