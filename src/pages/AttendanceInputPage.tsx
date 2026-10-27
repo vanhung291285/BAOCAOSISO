@@ -2838,7 +2838,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                 <div>
                   <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-300 text-xs font-black mb-1">
                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                    Đã đồng bộ trực tuyến
+                    Đã tự động đồng bộ Supabase Cloud
                   </span>
                   <h3 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight">
                     ĐÃ GỬI BÁO CÁO THÀNH CÔNG!
@@ -2846,7 +2846,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                 </div>
 
                 <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
-                  Báo cáo sĩ số lớp <strong>{selectedClass?.class_name || ''}</strong> ngày <strong>{formatDateVN(selectedDate)}</strong> đã được ghi nhận và đồng bộ trực tuyến lên máy chủ Ban Giám Hiệu.
+                  Báo cáo sĩ số lớp <strong>{selectedClass?.class_name || ''}</strong> ngày <strong>{formatDateVN(selectedDate)}</strong> đã được ghi nhận và tự động đồng bộ thời gian thực lên máy chủ Supabase Cloud. Ban Giám Hiệu và các thiết bị khác sẽ thấy số liệu mới nhất ngay lập tức mà không cần thao tác đồng bộ thủ công.
                 </p>
               </>
             ) : (

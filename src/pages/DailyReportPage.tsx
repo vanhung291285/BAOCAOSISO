@@ -919,11 +919,12 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
               type="button"
               onClick={handleSyncSupabase}
               disabled={syncingSupabase}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-teal-800 bg-teal-50 hover:bg-teal-100 border border-teal-200 shadow-2xs transition-colors disabled:opacity-50 cursor-pointer"
-              title="Đồng bộ toàn bộ dữ liệu báo cáo, chỉ số và danh sách vắng lên Supabase"
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 shadow-2xs transition-colors disabled:opacity-50 cursor-pointer"
+              title="Dữ liệu báo cáo sĩ số của các lớp tự động đồng bộ thời gian thực với Supabase Cloud. Nhấp để làm mới nếu cần."
             >
-              <CloudUpload className={`w-4 h-4 text-teal-700 ${syncingSupabase ? 'animate-bounce' : ''}`} />
-              <span className="hidden xl:inline">{syncingSupabase ? 'ĐANG ĐỒNG BỘ...' : 'ĐỒNG BỘ'}</span>
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              <CloudUpload className={`w-3.5 h-3.5 text-emerald-700 ${syncingSupabase ? 'animate-spin' : ''}`} />
+              <span className="hidden xl:inline">{syncingSupabase ? 'ĐANG ĐỒNG BỘ...' : 'TỰ ĐỘNG ĐỒNG BỘ CLOUD'}</span>
             </button>
 
             <button

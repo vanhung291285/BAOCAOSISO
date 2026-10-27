@@ -264,25 +264,39 @@ export function subscribeRealtime(callback: (event: { table: string; payload?: a
         .channel('public:all_changes')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_reports' }, (payload) => {
           try {
+            const cleanDate = (d: any) => String(d || '').split('T')[0].trim();
             if (payload.new && (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE')) {
               const newRep = payload.new as DailyReport;
+              const cleanCDate = cleanDate(newRep.report_date);
+              const normalizedRep = { ...newRep, report_date: cleanCDate };
               const raw = localStorage.getItem(STORAGE_KEYS.REPORTS);
               let reps: DailyReport[] = raw ? JSON.parse(raw) : [];
-              const idx = reps.findIndex(r => r.id === newRep.id || (r.class_id === newRep.class_id && r.report_date === newRep.report_date));
-              if (idx >= 0) reps[idx] = newRep;
-              else reps.push(newRep);
+              const idx = reps.findIndex(
+                (r) =>
+                  r.id === newRep.id ||
+                  (matchClassReport(r.class_id, newRep.class_id) && cleanDate(r.report_date) === cleanCDate)
+              );
+              if (idx >= 0) reps[idx] = normalizedRep;
+              else reps.push(normalizedRep);
               localStorage.setItem(STORAGE_KEYS.REPORTS, JSON.stringify(reps));
+
+              invalidateCache(`report_${newRep.class_id}_${cleanCDate}`);
+              invalidateCache(`latest_report_${newRep.class_id}`);
+              invalidateCache(`daily_aggregate_${cleanCDate}`);
             } else if (payload.old && payload.eventType === 'DELETE') {
               const oldId = (payload.old as any).id;
               const raw = localStorage.getItem(STORAGE_KEYS.REPORTS);
               let reps: DailyReport[] = raw ? JSON.parse(raw) : [];
-              reps = reps.filter(r => r.id !== oldId);
+              reps = reps.filter((r) => r.id !== oldId);
               localStorage.setItem(STORAGE_KEYS.REPORTS, JSON.stringify(reps));
             }
           } catch (e) {
             console.warn('Error merging realtime daily_reports:', e);
           }
           callback({ table: 'daily_reports', payload });
+          try {
+            window.dispatchEvent(new CustomEvent('sso_realtime_update', { detail: { table: 'daily_reports', payload } }));
+          } catch {}
         })
         .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_report_values' }, (payload) => {
           try {
@@ -290,7 +304,11 @@ export function subscribeRealtime(callback: (event: { table: string; payload?: a
               const newVal = payload.new as DailyReportValue;
               const raw = localStorage.getItem(STORAGE_KEYS.VALUES);
               let vals: DailyReportValue[] = raw ? JSON.parse(raw) : [];
-              const idx = vals.findIndex(v => v.id === newVal.id || (v.report_id === newVal.report_id && v.indicator_group_id === newVal.indicator_group_id));
+              const idx = vals.findIndex(
+                (v) =>
+                  v.id === newVal.id ||
+                  (v.report_id === newVal.report_id && v.indicator_group_id === newVal.indicator_group_id)
+              );
               if (idx >= 0) vals[idx] = newVal;
               else vals.push(newVal);
               localStorage.setItem(STORAGE_KEYS.VALUES, JSON.stringify(vals));
@@ -299,6 +317,9 @@ export function subscribeRealtime(callback: (event: { table: string; payload?: a
             console.warn('Error merging realtime daily_report_values:', e);
           }
           callback({ table: 'daily_report_values', payload });
+          try {
+            window.dispatchEvent(new CustomEvent('sso_realtime_update', { detail: { table: 'daily_report_values', payload } }));
+          } catch {}
         })
         .on('postgres_changes', { event: '*', schema: 'public', table: 'classes' }, (payload) => {
           callback({ table: 'classes', payload });
@@ -3626,27 +3647,32 @@ export const StorageService = {
           // 1. Đảm bảo profile người tạo tồn tại trên Supabase để tránh lỗi FK created_by
           if (user && user.id) {
             try {
-              await supabase.from('profiles').upsert(user, { onConflict: 'id' });
+              const cleanProfile: any = {
+                id: user.id,
+                full_name: user.full_name || 'GVCN',
+                email: user.email || `${user.id}@school.edu.vn`,
+                role: user.role || 'GVCN',
+                active: user.active !== false,
+                assigned_class_id: user.assigned_class_id || canonicalClassId || null,
+              };
+              await supabase.from('profiles').upsert(cleanProfile, { onConflict: 'id' });
             } catch (pErr) {
               console.warn('Supabase upsert user profile warning:', pErr);
             }
           }
 
-          // 1.5. Đảm bảo lớp học tồn tại trên Supabase để tránh lỗi FK class_id (mã lỗi 23503)
-          if (targetClass) {
-            try {
-              await supabase.from('classes').upsert({
-                id: targetClass.id,
-                class_name: targetClass.class_name,
-                grade: targetClass.grade || 6,
-                active: true,
-                sort_order: targetClass.sort_order || 0,
-                homeroom_teacher_id: targetClass.homeroom_teacher_id || user.id,
-                campus_id: targetClass.campus_id || null,
-              }, { onConflict: 'id' });
-            } catch (cErr) {
-              console.warn('Supabase ensure class exists warning:', cErr);
-            }
+          // 1.5. Đảm bảo lớp học tồn tại trên Supabase (loại trừ FK lỏng lẻo để tránh lỗi 23503)
+          try {
+            const classPayload: any = {
+              id: canonicalClassId,
+              class_name: targetClass?.class_name || classId,
+              grade: targetClass?.grade || 6,
+              active: true,
+              sort_order: targetClass?.sort_order || 0,
+            };
+            await supabase.from('classes').upsert(classPayload, { onConflict: 'id' });
+          } catch (cErr) {
+            console.warn('Supabase ensure class exists warning:', cErr);
           }
 
           // 2. Tìm ID báo cáo thực tế trên Cloud nếu đã tồn tại cho (class_id, report_date)
@@ -3675,10 +3701,16 @@ export const StorageService = {
           }
 
           let repData: any = {
-            ...report,
             id: effectiveReportId,
             class_id: canonicalClassId,
             report_date: cleanReportDate,
+            created_by: user?.id || null,
+            status: 'SUBMITTED',
+            notes: notes ?? (existingIndex >= 0 ? reports[existingIndex].notes : ''),
+            absent_students: enrichedAbsentStudents || [],
+            reported_time: initialReportedTime,
+            created_at: existingIndex >= 0 ? reports[existingIndex].created_at : now.toISOString(),
+            updated_at: now.toISOString(),
           };
 
           let { error: repErr } = await supabase.from('daily_reports').upsert(repData, { onConflict: 'class_id,report_date' });
@@ -3692,16 +3724,6 @@ export const StorageService = {
 
           // Nếu lỗi khóa ngoại người tạo (23503) -> thử lại với created_by = null
           if (repErr && (repErr.code === '23503' || repErr.message?.includes('foreign key') || repErr.message?.includes('profiles'))) {
-            if (targetClass) {
-              try {
-                await supabase.from('classes').upsert({
-                  id: targetClass.id,
-                  class_name: targetClass.class_name,
-                  grade: targetClass.grade || 6,
-                  active: true,
-                }, { onConflict: 'id' });
-              } catch {}
-            }
             const repWithoutCreator = { ...repData, created_by: null };
             const retryRes = await supabase.from('daily_reports').upsert(repWithoutCreator, { onConflict: 'class_id,report_date' });
             repErr = retryRes.error;
@@ -3715,41 +3737,54 @@ export const StorageService = {
           // 3. Chuẩn bị và đẩy daily_report_values với report_id chính xác
           let valuesSynced = true;
           if (newValues.length > 0) {
-            const cloudValKeyMap = new Map<string, string>();
-            try {
-              const { data: cloudVals } = await supabase
-                .from('daily_report_values')
-                .select('id, indicator_group_id')
-                .eq('report_id', effectiveReportId);
-              if (cloudVals) {
-                cloudVals.forEach((cv) => cloudValKeyMap.set(cv.indicator_group_id, cv.id));
-              }
-            } catch {}
-
             const cloudValues = newValues.map((v) => ({
-              ...v,
-              id: cloudValKeyMap.get(v.indicator_group_id) || `val_${effectiveReportId}_${v.indicator_group_id}`,
+              id: `val_${effectiveReportId}_${v.indicator_group_id}`,
               report_id: effectiveReportId,
+              indicator_group_id: v.indicator_group_id,
               total_count: Math.max(0, Number(v.total_count) || 0),
               present_count: Math.max(0, Number(v.present_count) || 0),
               absent_count: Math.max(0, Number(v.absent_count) || 0),
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
             }));
 
-            let { error: valErr } = await supabase
-              .from('daily_report_values')
-              .upsert(cloudValues, { onConflict: 'report_id,indicator_group_id' });
+            // Step A: Xóa sạch dữ liệu cũ của report_id này để tránh lỗi unique constraint PostgREST
+            try {
+              await supabase.from('daily_report_values').delete().eq('report_id', effectiveReportId);
+            } catch (delErr) {
+              console.warn('Supabase clean previous values notice:', delErr);
+            }
 
-            // Nếu gặp lỗi FK với indicator_groups, tự động đẩy indicator_groups trước rồi thử lại
+            // Step B: Insert các dòng giá trị chỉ tiêu mới
+            let { error: valErr } = await supabase.from('daily_report_values').insert(cloudValues);
+
+            // Nếu gặp lỗi FK với indicator_groups (23503), tự động đẩy indicator_groups trước rồi thử lại
             if (valErr && (valErr.code === '23503' || valErr.message?.includes('indicator_groups'))) {
               const indicators = await this.getIndicatorGroups();
               if (indicators.length > 0) {
-                const cleanInds = indicators.map(({ icon: _i, ...rest }) => rest);
-                await supabase.from('indicator_groups').upsert(cleanInds, { onConflict: 'id' });
-                const retryVal = await supabase
-                  .from('daily_report_values')
-                  .upsert(cloudValues, { onConflict: 'report_id,indicator_group_id' });
+                const cleanInds = indicators.map(({ icon: _i, ...rest }) => ({
+                  id: rest.id,
+                  name: rest.name,
+                  code: rest.code,
+                  enabled: rest.enabled !== false,
+                  sort_order: rest.sort_order || 0,
+                  show_total: rest.show_total !== false,
+                  show_present: rest.show_present !== false,
+                  show_absent: rest.show_absent !== false,
+                  show_percentage: rest.show_percentage !== false,
+                }));
+                try {
+                  await supabase.from('indicator_groups').upsert(cleanInds, { onConflict: 'id' });
+                } catch {}
+                const retryVal = await supabase.from('daily_report_values').insert(cloudValues);
                 valErr = retryVal.error;
               }
+            }
+
+            // Nếu vẫn lỗi do trùng ID hoặc xung đột khác, fallback sang upsert theo ID
+            if (valErr) {
+              const retryVal = await supabase.from('daily_report_values').upsert(cloudValues, { onConflict: 'id' });
+              valErr = retryVal.error;
             }
 
             if (valErr) {
@@ -3862,12 +3897,22 @@ export const StorageService = {
       if (reports.length > 0) {
         for (const rep of reports) {
           try {
-            const { error: repErr } = await supabase.from('daily_reports').upsert(rep, { onConflict: 'class_id,report_date' });
+            let { error: repErr } = await supabase.from('daily_reports').upsert(rep, { onConflict: 'class_id,report_date' });
+            if (repErr && (repErr.message?.includes('reported_time') || repErr.message?.includes('absent_students') || repErr.code === 'PGRST204')) {
+              const { reported_time: _rt, absent_students: _as, locked_at: _la, ...cleanRep } = rep as any;
+              const retryRes = await supabase.from('daily_reports').upsert(cleanRep, { onConflict: 'class_id,report_date' });
+              repErr = retryRes.error;
+            }
             if (!repErr) {
               syncedDailyCount++;
               const vals = allValues.filter((v) => v.report_id === rep.id);
               if (vals.length > 0) {
-                await supabase.from('daily_report_values').upsert(vals, { onConflict: 'report_id,indicator_group_id' });
+                try {
+                  await supabase.from('daily_report_values').delete().eq('report_id', rep.id);
+                  await supabase.from('daily_report_values').insert(vals);
+                } catch {
+                  await supabase.from('daily_report_values').upsert(vals, { onConflict: 'id' });
+                }
               }
             }
           } catch {}
@@ -3889,6 +3934,88 @@ export const StorageService = {
     }
 
     return { syncedDailyCount, syncedBoardingCount };
+  },
+
+  /**
+   * Tự động kéo dữ liệu báo cáo mới nhất từ Supabase Cloud về máy (không cần người dùng phải bấm đồng bộ thủ công)
+   */
+  async autoSyncRecentReportsFromCloud(days: number = 7): Promise<void> {
+    ensureInitialized();
+    if (typeof navigator !== 'undefined' && !navigator.onLine) return;
+    const supabase = getSupabaseClient();
+    if (!supabase || !isSupabaseConnected()) return;
+
+    try {
+      const today = getTodayDateStr();
+      const pastDate = addDaysToDateStr(today, -days);
+
+      const { data: cloudReports, error: rErr } = await supabase
+        .from('daily_reports')
+        .select('*')
+        .gte('report_date', pastDate);
+
+      if (!rErr && cloudReports && cloudReports.length > 0) {
+        const cleanDate = (d: any) => String(d || '').split('T')[0].trim();
+        const rawReports = localStorage.getItem(STORAGE_KEYS.REPORTS);
+        let reports: DailyReport[] = rawReports ? JSON.parse(rawReports) : [];
+        let hasChanges = false;
+
+        cloudReports.forEach((cRep) => {
+          const cleanCDate = cleanDate(cRep.report_date);
+          const normalizedRep = { ...cRep, report_date: cleanCDate };
+          const idx = reports.findIndex(
+            (r) =>
+              r.id === cRep.id ||
+              (matchClassReport(r.class_id, cRep.class_id) && cleanDate(r.report_date) === cleanCDate)
+          );
+          if (idx >= 0) {
+            const localTs = new Date(reports[idx].updated_at || reports[idx].created_at || 0).getTime();
+            const cloudTs = new Date(cRep.updated_at || cRep.created_at || 0).getTime();
+            if (cloudTs >= localTs) {
+              reports[idx] = normalizedRep;
+              hasChanges = true;
+            }
+          } else {
+            reports.push(normalizedRep);
+            hasChanges = true;
+          }
+        });
+
+        if (hasChanges) {
+          localStorage.setItem(STORAGE_KEYS.REPORTS, JSON.stringify(reports));
+        }
+
+        const repIds = cloudReports.map((r) => r.id);
+        if (repIds.length > 0) {
+          const { data: cloudValues, error: vErr } = await supabase
+            .from('daily_report_values')
+            .select('*')
+            .in('report_id', repIds);
+
+          if (!vErr && cloudValues && cloudValues.length > 0) {
+            const rawValues = localStorage.getItem(STORAGE_KEYS.VALUES);
+            let allValues: DailyReportValue[] = rawValues ? JSON.parse(rawValues) : [];
+            cloudValues.forEach((cVal) => {
+              const vIdx = allValues.findIndex(
+                (v) =>
+                  v.id === cVal.id ||
+                  (v.report_id === cVal.report_id && v.indicator_group_id === cVal.indicator_group_id)
+              );
+              if (vIdx >= 0) allValues[vIdx] = cVal;
+              else allValues.push(cVal);
+            });
+            localStorage.setItem(STORAGE_KEYS.VALUES, JSON.stringify(allValues));
+          }
+        }
+
+        if (hasChanges) {
+          notifyRealtimeChange('daily_reports');
+          notifyRealtimeChange('daily_report_values');
+        }
+      }
+    } catch (e) {
+      console.warn('autoSyncRecentReportsFromCloud error:', e);
+    }
   },
 
   async lockReport(reportId: string, locked: boolean, adminUser: Profile): Promise<void> {

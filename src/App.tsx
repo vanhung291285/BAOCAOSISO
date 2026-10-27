@@ -26,6 +26,7 @@ import { AIPredictiveDropoutPage } from './pages/AIPredictiveDropoutPage';
 import { AITeacherAssistantPage } from './pages/AITeacherAssistantPage';
 import { TeacherAIAssistant } from './components/TeacherAIAssistant';
 import { AIAssistantModal } from './components/AIAssistantModal';
+import { StorageService } from './services/storage';
 import {
   School,
   LayoutDashboard,
@@ -43,6 +44,32 @@ import {
 const AppContent: React.FC = () => {
   const { currentUser, isGVCN, isAdmin, isBGH, loading } = useAuth();
   const { settings, activeYear, classes } = useSchool();
+
+  // Tự động kiểm tra và đồng bộ dữ liệu mới nhất từ Supabase Cloud khi mở ứng dụng hoặc khi có kết nối mạng
+  useEffect(() => {
+    const handleSync = () => {
+      StorageService.syncOfflineReports().then((res) => {
+        if (res.syncedDailyCount > 0 || res.syncedBoardingCount > 0) {
+          window.dispatchEvent(new CustomEvent('sso_realtime_update', { detail: { table: 'daily_reports' } }));
+        }
+      }).catch(console.warn);
+
+      StorageService.autoSyncRecentReportsFromCloud(7).catch(console.warn);
+    };
+
+    window.addEventListener('online', handleSync);
+    if (typeof navigator !== 'undefined' && navigator.onLine) {
+      const timer = setTimeout(handleSync, 1200);
+      return () => {
+        clearTimeout(timer);
+        window.removeEventListener('online', handleSync);
+      };
+    }
+
+    return () => {
+      window.removeEventListener('online', handleSync);
+    };
+  }, []);
 
   // Navigation state
   const [currentPath, setCurrentPath] = useState<string>(() => {
