@@ -38,7 +38,7 @@ export const SettingsSupabasePage: React.FC = () => {
   const [copiedStudents, setCopiedStudents] = useState(false);
   const [quickLinkCopied, setQuickLinkCopied] = useState(false);
   const [resetSuccess, setResetSuccess] = useState(false);
-  const [sqlViewMode, setSqlViewMode] = useState<'students' | 'full' | 'schema'>('students');
+  const [sqlViewMode, setSqlViewMode] = useState<'students' | 'full' | 'schema'>('schema');
 
   // Credentials
   const [supabaseUrl, setSupabaseUrl] = useState('');
@@ -789,31 +789,33 @@ export const SettingsSupabasePage: React.FC = () => {
             <div className="bg-slate-200 p-1 rounded-xl flex items-center gap-1 text-[11px] font-bold">
               <button
                 type="button"
+                onClick={() => setSqlViewMode('schema')}
+                className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
+                  sqlViewMode === 'schema' ? 'bg-white text-blue-700 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900'
+                }`}
+                title="Kịch bản chuẩn hóa toàn bộ 15 bảng, bật REPLICA IDENTITY FULL và publication Realtime tức thì"
+              >
+                SQL Realtime Tức Thì (Khuyến nghị)
+              </button>
+              <button
+                type="button"
+                onClick={() => setSqlViewMode('full')}
+                className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
+                  sqlViewMode === 'full' ? 'bg-white text-indigo-700 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900'
+                }`}
+                title="Bao gồm toàn bộ cấu trúc bảng và dữ liệu thực tế đang có trong máy"
+              >
+                Cả Cấu Trúc + Dữ Liệu
+              </button>
+              <button
+                type="button"
                 onClick={() => setSqlViewMode('students')}
                 className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
                   sqlViewMode === 'students' ? 'bg-white text-emerald-700 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900'
                 }`}
                 title="Kịch bản tối ưu hóa chuẩn lưu học sinh, bỏ khóa ngoại chặn ghi và tạo sẵn lớp"
               >
-                SQL Học Sinh & Bán Trú
-              </button>
-              <button
-                type="button"
-                onClick={() => setSqlViewMode('full')}
-                className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
-                  sqlViewMode === 'full' ? 'bg-white text-blue-700 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                Cả Cấu Trúc + Dữ Liệu
-              </button>
-              <button
-                type="button"
-                onClick={() => setSqlViewMode('schema')}
-                className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
-                  sqlViewMode === 'schema' ? 'bg-white text-blue-700 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                Chỉ Cấu Trúc Bảng
+                Chỉ Học Sinh & Bán Trú
               </button>
             </div>
 

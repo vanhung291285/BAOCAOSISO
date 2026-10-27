@@ -494,6 +494,30 @@ BEGIN
     EXCEPTION WHEN OTHERS THEN END;
 
     BEGIN
+        ALTER TABLE public.daily_reports DROP CONSTRAINT IF EXISTS daily_reports_created_by_fkey;
+    EXCEPTION WHEN OTHERS THEN END;
+
+    BEGIN
+        ALTER TABLE public.daily_report_values DROP CONSTRAINT IF EXISTS daily_report_values_report_id_fkey;
+    EXCEPTION WHEN OTHERS THEN END;
+
+    BEGIN
+        ALTER TABLE public.daily_report_values DROP CONSTRAINT IF EXISTS daily_report_values_indicator_group_id_fkey;
+    EXCEPTION WHEN OTHERS THEN END;
+
+    BEGIN
+        ALTER TABLE public.classes DROP CONSTRAINT IF EXISTS classes_homeroom_teacher_id_fkey;
+    EXCEPTION WHEN OTHERS THEN END;
+
+    BEGIN
+        ALTER TABLE public.classes DROP CONSTRAINT IF EXISTS classes_campus_id_fkey;
+    EXCEPTION WHEN OTHERS THEN END;
+
+    BEGIN
+        ALTER TABLE public.classes DROP CONSTRAINT IF EXISTS classes_school_year_id_fkey;
+    EXCEPTION WHEN OTHERS THEN END;
+
+    BEGIN
         ALTER TABLE public.boarding_reports DROP CONSTRAINT IF EXISTS boarding_reports_class_id_fkey;
     EXCEPTION WHEN OTHERS THEN END;
 
@@ -539,56 +563,61 @@ ALTER TABLE public.boarding_reports ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.boarding_signature_configs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.boarding_month_signatures ENABLE ROW LEVEL SECURITY;
 
--- Cấp quyền truy cập cho anon & authenticated
-GRANT USAGE ON SCHEMA public TO anon, authenticated;
-GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated;
-GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated;
+-- Cấp toàn quyền truy cập cho anon, authenticated & service_role
+GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL ROUTINES IN SCHEMA public TO anon, authenticated, service_role;
 
--- Policies: Cho phép đọc/ghi an toàn từ ứng dụng
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON ROUTINES TO anon, authenticated, service_role;
+
+-- Policies: Cho phép đọc/ghi an toàn từ ứng dụng không bị giới hạn
 DROP POLICY IF EXISTS "Allow all for profiles" ON public.profiles;
-CREATE POLICY "Allow all for profiles" ON public.profiles FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all for profiles" ON public.profiles FOR ALL TO anon, authenticated, service_role USING (true) WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Allow all for school_settings" ON public.school_settings;
-CREATE POLICY "Allow all for school_settings" ON public.school_settings FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all for school_settings" ON public.school_settings FOR ALL TO anon, authenticated, service_role USING (true) WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Allow all for school_years" ON public.school_years;
-CREATE POLICY "Allow all for school_years" ON public.school_years FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all for school_years" ON public.school_years FOR ALL TO anon, authenticated, service_role USING (true) WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Allow all for campuses" ON public.campuses;
-CREATE POLICY "Allow all for campuses" ON public.campuses FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all for campuses" ON public.campuses FOR ALL TO anon, authenticated, service_role USING (true) WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Allow all for classes" ON public.classes;
-CREATE POLICY "Allow all for classes" ON public.classes FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all for classes" ON public.classes FOR ALL TO anon, authenticated, service_role USING (true) WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Allow all for indicator_groups" ON public.indicator_groups;
-CREATE POLICY "Allow all for indicator_groups" ON public.indicator_groups FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all for indicator_groups" ON public.indicator_groups FOR ALL TO anon, authenticated, service_role USING (true) WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Allow all for daily_reports" ON public.daily_reports;
-CREATE POLICY "Allow all for daily_reports" ON public.daily_reports FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all for daily_reports" ON public.daily_reports FOR ALL TO anon, authenticated, service_role USING (true) WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Allow all for daily_report_values" ON public.daily_report_values;
-CREATE POLICY "Allow all for daily_report_values" ON public.daily_report_values FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all for daily_report_values" ON public.daily_report_values FOR ALL TO anon, authenticated, service_role USING (true) WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Allow all for system_logs" ON public.system_logs;
-CREATE POLICY "Allow all for system_logs" ON public.system_logs FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all for system_logs" ON public.system_logs FOR ALL TO anon, authenticated, service_role USING (true) WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Allow all for students" ON public.students;
-CREATE POLICY "Allow all for students" ON public.students FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all for students" ON public.students FOR ALL TO anon, authenticated, service_role USING (true) WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Allow all for school_off_days" ON public.school_off_days;
-CREATE POLICY "Allow all for school_off_days" ON public.school_off_days FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all for school_off_days" ON public.school_off_days FOR ALL TO anon, authenticated, service_role USING (true) WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Allow all for notifications" ON public.notifications;
-CREATE POLICY "Allow all for notifications" ON public.notifications FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all for notifications" ON public.notifications FOR ALL TO anon, authenticated, service_role USING (true) WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Allow all for boarding_reports" ON public.boarding_reports;
-CREATE POLICY "Allow all for boarding_reports" ON public.boarding_reports FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all for boarding_reports" ON public.boarding_reports FOR ALL TO anon, authenticated, service_role USING (true) WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Allow all for boarding_signature_configs" ON public.boarding_signature_configs;
-CREATE POLICY "Allow all for boarding_signature_configs" ON public.boarding_signature_configs FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all for boarding_signature_configs" ON public.boarding_signature_configs FOR ALL TO anon, authenticated, service_role USING (true) WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Allow all for boarding_month_signatures" ON public.boarding_month_signatures;
-CREATE POLICY "Allow all for boarding_month_signatures" ON public.boarding_month_signatures FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all for boarding_month_signatures" ON public.boarding_month_signatures FOR ALL TO anon, authenticated, service_role USING (true) WITH CHECK (true);
 
 -- ==============================================================================
 -- DỌN DẸP SẠCH TOÀN BỘ HỌC SINH MẪU TỰ SINH TRÊN SUPABASE (NẾU CÓ)
@@ -614,9 +643,26 @@ WHERE id LIKE 'std_seed_%'
    );
 
 -- ==============================================================================
--- REALTIME SUBSCRIPTIONS
--- Tự động đẩy thông báo thời gian thực khi có báo cáo mới hoặc thay đổi cấu hình
+-- REALTIME SUBSCRIPTIONS & REPLICA IDENTITY FULL (ĐỒNG BỘ TỨC THÌ 100%)
+-- Bật REPLICA IDENTITY FULL để sự kiện UPDATE/DELETE truyền tải đầy đủ toàn bộ cột
+-- Thêm tất cả các bảng vào publication supabase_realtime để đồng bộ tức thì
 -- ==============================================================================
+ALTER TABLE public.profiles REPLICA IDENTITY FULL;
+ALTER TABLE public.school_settings REPLICA IDENTITY FULL;
+ALTER TABLE public.school_years REPLICA IDENTITY FULL;
+ALTER TABLE public.campuses REPLICA IDENTITY FULL;
+ALTER TABLE public.classes REPLICA IDENTITY FULL;
+ALTER TABLE public.indicator_groups REPLICA IDENTITY FULL;
+ALTER TABLE public.daily_reports REPLICA IDENTITY FULL;
+ALTER TABLE public.daily_report_values REPLICA IDENTITY FULL;
+ALTER TABLE public.system_logs REPLICA IDENTITY FULL;
+ALTER TABLE public.students REPLICA IDENTITY FULL;
+ALTER TABLE public.school_off_days REPLICA IDENTITY FULL;
+ALTER TABLE public.notifications REPLICA IDENTITY FULL;
+ALTER TABLE public.boarding_reports REPLICA IDENTITY FULL;
+ALTER TABLE public.boarding_signature_configs REPLICA IDENTITY FULL;
+ALTER TABLE public.boarding_month_signatures REPLICA IDENTITY FULL;
+
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime') THEN
@@ -628,21 +674,21 @@ DO $$
 DECLARE
     t text;
     tables text[] := ARRAY[
-        'public.school_settings', 
-        'public.school_years', 
-        'public.campuses', 
-        'public.profiles',
-        'public.classes', 
-        'public.indicator_groups', 
-        'public.daily_reports', 
-        'public.daily_report_values',
-        'public.students',
-        'public.school_off_days',
-        'public.notifications',
-        'public.system_logs',
-        'public.boarding_reports',
-        'public.boarding_signature_configs',
-        'public.boarding_month_signatures'
+        'school_settings', 
+        'school_years', 
+        'campuses', 
+        'profiles',
+        'classes', 
+        'indicator_groups', 
+        'daily_reports', 
+        'daily_report_values',
+        'students',
+        'school_off_days',
+        'notifications',
+        'system_logs',
+        'boarding_reports',
+        'boarding_signature_configs',
+        'boarding_month_signatures'
     ];
 BEGIN
     FOR t IN SELECT unnest(tables) LOOP
@@ -650,9 +696,10 @@ BEGIN
             SELECT 1 
             FROM pg_publication_tables 
             WHERE pubname = 'supabase_realtime' 
-            AND schemaname || '.' || tablename = t
+            AND schemaname = 'public'
+            AND tablename = t
         ) THEN
-            EXECUTE format('ALTER PUBLICATION supabase_realtime ADD TABLE %s', t);
+            EXECUTE format('ALTER PUBLICATION supabase_realtime ADD TABLE public.%I', t);
         END IF;
     END LOOP;
 END $$;
@@ -1031,27 +1078,33 @@ VALUES
 ON CONFLICT (id) DO UPDATE SET class_name = EXCLUDED.class_name, grade = EXCLUDED.grade;
 
 -- 6. PHÂN QUYỀN ROW LEVEL SECURITY (RLS) & CẤP QUYỀN CHO ANON & AUTHENTICATED
-GRANT USAGE ON SCHEMA public TO anon, authenticated;
-GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated;
-GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated;
+GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
+
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;
 
 ALTER TABLE public.students ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Allow all for students" ON public.students;
-CREATE POLICY "Allow all for students" ON public.students FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all for students" ON public.students FOR ALL TO anon, authenticated, service_role USING (true) WITH CHECK (true);
 
 ALTER TABLE public.classes ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Allow all for classes" ON public.classes;
-CREATE POLICY "Allow all for classes" ON public.classes FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all for classes" ON public.classes FOR ALL TO anon, authenticated, service_role USING (true) WITH CHECK (true);
 
 ALTER TABLE public.boarding_reports ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Allow all for boarding_reports" ON public.boarding_reports;
-CREATE POLICY "Allow all for boarding_reports" ON public.boarding_reports FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all for boarding_reports" ON public.boarding_reports FOR ALL TO anon, authenticated, service_role USING (true) WITH CHECK (true);
 
--- 7. KÍCH HOẠT REALTIME AN TOÀN (KHÔNG BÁO LỖI NẾU ĐÃ CÓ TRONG PUBLICATION)
+-- 7. KÍCH HOẠT REALTIME & REPLICA IDENTITY FULL AN TOÀN
+ALTER TABLE public.students REPLICA IDENTITY FULL;
+ALTER TABLE public.classes REPLICA IDENTITY FULL;
+ALTER TABLE public.boarding_reports REPLICA IDENTITY FULL;
+
 DO $$
 DECLARE
     t text;
-    tables text[] := ARRAY['public.students', 'public.classes', 'public.boarding_reports'];
+    tables text[] := ARRAY['students', 'classes', 'boarding_reports'];
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime') THEN
         CREATE PUBLICATION supabase_realtime;
@@ -1061,9 +1114,10 @@ BEGIN
             SELECT 1 
             FROM pg_publication_tables 
             WHERE pubname = 'supabase_realtime' 
-            AND schemaname || '.' || tablename = t
+            AND schemaname = 'public'
+            AND tablename = t
         ) THEN
-            EXECUTE format('ALTER PUBLICATION supabase_realtime ADD TABLE %s', t);
+            EXECUTE format('ALTER PUBLICATION supabase_realtime ADD TABLE public.%I', t);
         END IF;
     END LOOP;
 END $$;

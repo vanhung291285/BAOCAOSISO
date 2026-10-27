@@ -572,17 +572,17 @@ export async function exportAttendanceDailyExcel(params: ExportAttendanceDailyEx
     sumLabel.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
 
     const sumRow = ws.getRow(currentRow);
-    sumRow.getCell(3).value = hasAnyReported ? sumTotalAll : '-';
-    sumRow.getCell(4).value = hasAnyReported ? sumAbsentAll : '-';
-    sumRow.getCell(5).value = hasAnyReported ? sumTotalBoarding : '-';
-    sumRow.getCell(6).value = hasAnyReported ? sumAbsentBoarding : '-';
-    sumRow.getCell(7).value = hasAnyReported ? sumBaoAnBoarding : '-';
-    sumRow.getCell(8).value = hasAnyReported ? sumTotalNgoaiTru : '-';
-    sumRow.getCell(9).value = hasAnyReported ? sumAbsentNgoaiTru : '-';
+    sumRow.getCell(3).value = sumTotalAll;
+    sumRow.getCell(4).value = sumAbsentAll;
+    sumRow.getCell(5).value = sumTotalBoarding;
+    sumRow.getCell(6).value = sumAbsentBoarding;
+    sumRow.getCell(7).value = sumBaoAnBoarding;
+    sumRow.getCell(8).value = sumTotalNgoaiTru;
+    sumRow.getCell(9).value = sumAbsentNgoaiTru;
     sumRow.getCell(10).value = '-';
     sumRow.getCell(11).value = '-';
-    sumRow.getCell(12).value = hasAnyReported ? `${overallAbsentRate.toFixed(2).replace('.', ',')}%` : '-';
-    sumRow.getCell(13).value = hasAnyReported ? `${overallPresentRate.toFixed(2).replace('.', ',')}%` : '-';
+    sumRow.getCell(12).value = `${overallAbsentRate.toFixed(2).replace('.', ',')}%`;
+    sumRow.getCell(13).value = `${overallPresentRate.toFixed(2).replace('.', ',')}%`;
 
     for (let c = 1; c <= 13; c++) {
       const cell = sumRow.getCell(c);

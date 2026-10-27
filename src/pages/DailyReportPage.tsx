@@ -1184,25 +1184,31 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
                   {/* Summary Row Theo Ngày */}
                   {displayDailyRows.length > 0 &&
                     (() => {
+                      // 1. CHỈ CỘNG DỒN TỪ CÁC LỚP ĐÃ CÓ BÁO CÁO (SUBMITTED / LOCKED)
+                      // Khi chưa có lớp nào nộp báo cáo (0/14 lớp), tất cả cột tổng nhảy về 0. Khi các lớp báo thì cộng dồn.
                       const reportedRows = displayDailyRows.filter(
                         (r) => r.status !== 'NOT_REPORTED' && r.report && (r.report.status === 'SUBMITTED' || r.report.status === 'LOCKED')
                       );
 
-                      // 1. Cột định mức: Luôn hiển thị tổng sĩ số danh sách thực tế của toàn trường/phân hiệu
-                      const sumTotalAll = displayDailyRows.reduce((acc, r) => {
+                      const sumTotalAll = reportedRows.reduce((acc, r) => {
                         const v = allIndicator ? r.values[allIndicator.id]?.total : 0;
                         return acc + (v ?? 0);
                       }, 0);
 
-                      const sumTotalBoarding = displayDailyRows.reduce((acc, r) => {
+                      const sumTotalBoarding = reportedRows.reduce((acc, r) => {
                         const v = boardingIndicator ? r.values[boardingIndicator.id]?.total : 0;
                         return acc + (v ?? 0);
                       }, 0);
 
-                      const sumTotalNgoaiTru = Math.max(0, sumTotalAll - sumTotalBoarding);
+                      const sumTotalNgoaiTru = reportedRows.reduce((acc, r) => {
+                        const allVal = allIndicator ? r.values[allIndicator.id] : null;
+                        const boardingVal = boardingIndicator ? r.values[boardingIndicator.id] : null;
+                        const tAll = allVal?.total ?? 0;
+                        const tB = boardingVal?.total ?? 0;
+                        return acc + Math.max(0, tAll - tB);
+                      }, 0);
 
-                      // 2. Các cột biến động (vắng, báo ăn): CHỈ CỘNG DỒN TỪ CÁC LỚP ĐÃ CÓ BÁO CÁO (SUBMITTED / LOCKED)
-                      // Khi chưa có lớp nào nộp báo cáo (0/14 lớp), vắng và báo ăn phải là 0, tuyệt đối không tự lấy bằng tổng sĩ số bán trú
+                      // 2. Các cột biến động (vắng, báo ăn): CHỈ CỘNG DỒN TỪ CÁC LỚP ĐÃ CÓ BÁO CÁO
                       const sumAbsentAll = reportedRows.reduce((acc, r) => {
                         const v = allIndicator ? r.values[allIndicator.id]?.absent : 0;
                         return acc + (v ?? 0);
@@ -1228,14 +1234,11 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
                         return acc + Math.max(0, absentAll - absentBoarding);
                       }, 0);
 
-                      // Tỉ lệ phần trăm tính theo số lớp đã nộp báo cáo (khi chưa có lớp nào báo cáo: vắng 0,00%, chuyên cần 100,00%)
-                      const reportedTotalAll = reportedRows.reduce((acc, r) => {
-                        const v = allIndicator ? r.values[allIndicator.id]?.total : 0;
-                        return acc + (v ?? 0);
-                      }, 0);
-
-                      const overallAbsentRate = reportedTotalAll > 0 ? (sumAbsentAll / reportedTotalAll) * 100 : 0;
-                      const overallPresentRate = reportedTotalAll > 0 ? ((reportedTotalAll - sumAbsentAll) / reportedTotalAll) * 100 : 100;
+                      // 3. Tỉ lệ phần trăm vắng và chuyên cần:
+                      // Khi chưa có lớp nào báo cáo (sumTotalAll === 0): vắng 0,00%, chuyên cần 0,00%
+                      // Khi các lớp báo thì tính theo tổng số học sinh đã nộp báo cáo
+                      const overallAbsentRate = sumTotalAll > 0 ? (sumAbsentAll / sumTotalAll) * 100 : 0;
+                      const overallPresentRate = sumTotalAll > 0 ? ((sumTotalAll - sumAbsentAll) / sumTotalAll) * 100 : 0;
 
                       return (
                         <tr className="bg-slate-100 font-bold border-t-2 border-black">
