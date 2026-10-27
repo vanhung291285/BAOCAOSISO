@@ -264,20 +264,41 @@ export function subscribeRealtime(callback: (event: { table: string; payload?: a
         .channel('public:all_changes')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_reports' }, (payload) => {
           try {
+            const cleanD = (d: any) => String(d || '').split('T')[0].trim();
             if (payload.new && (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE')) {
               const newRep = payload.new as DailyReport;
+              const cleanReportDate = cleanD(newRep.report_date);
               const raw = localStorage.getItem(STORAGE_KEYS.REPORTS);
               let reps: DailyReport[] = raw ? JSON.parse(raw) : [];
-              const idx = reps.findIndex(r => r.id === newRep.id || (r.class_id === newRep.class_id && r.report_date === newRep.report_date));
-              if (idx >= 0) reps[idx] = newRep;
-              else reps.push(newRep);
+              const idx = reps.findIndex(r => r.id === newRep.id || (matchClassReport(r.class_id, newRep.class_id) && cleanD(r.report_date) === cleanReportDate));
+              let parsedAbsent = newRep.absent_students;
+              if (typeof parsedAbsent === 'string') {
+                try { parsedAbsent = JSON.parse(parsedAbsent); } catch { parsedAbsent = []; }
+              }
+              const safeAbsent = (Array.isArray(parsedAbsent) && parsedAbsent.length > 0)
+                ? parsedAbsent
+                : (idx >= 0 && Array.isArray(reps[idx]?.absent_students) && reps[idx].absent_students.length > 0 ? reps[idx].absent_students : []);
+              const normalizedNewRep: DailyReport = {
+                ...newRep,
+                report_date: cleanReportDate,
+                absent_students: safeAbsent,
+              };
+              if (idx >= 0) reps[idx] = normalizedNewRep;
+              else reps.push(normalizedNewRep);
               localStorage.setItem(STORAGE_KEYS.REPORTS, JSON.stringify(reps));
+              invalidateCache('daily_reports');
             } else if (payload.old && payload.eventType === 'DELETE') {
               const oldId = (payload.old as any).id;
+              const oldClassId = (payload.old as any).class_id;
+              const oldDate = cleanD((payload.old as any).report_date);
               const raw = localStorage.getItem(STORAGE_KEYS.REPORTS);
               let reps: DailyReport[] = raw ? JSON.parse(raw) : [];
-              reps = reps.filter(r => r.id !== oldId);
+              reps = reps.filter(r => !(
+                (oldId && r.id === oldId) ||
+                (oldClassId && oldDate && matchClassReport(r.class_id, oldClassId) && cleanD(r.report_date) === oldDate)
+              ));
               localStorage.setItem(STORAGE_KEYS.REPORTS, JSON.stringify(reps));
+              invalidateCache('daily_reports');
             }
           } catch (e) {
             console.warn('Error merging realtime daily_reports:', e);
@@ -294,6 +315,14 @@ export function subscribeRealtime(callback: (event: { table: string; payload?: a
               if (idx >= 0) vals[idx] = newVal;
               else vals.push(newVal);
               localStorage.setItem(STORAGE_KEYS.VALUES, JSON.stringify(vals));
+              invalidateCache('daily_report_values');
+            } else if (payload.old && payload.eventType === 'DELETE') {
+              const oldId = (payload.old as any).id;
+              const raw = localStorage.getItem(STORAGE_KEYS.VALUES);
+              let vals: DailyReportValue[] = raw ? JSON.parse(raw) : [];
+              vals = vals.filter(v => v.id !== oldId);
+              localStorage.setItem(STORAGE_KEYS.VALUES, JSON.stringify(vals));
+              invalidateCache('daily_report_values');
             }
           } catch (e) {
             console.warn('Error merging realtime daily_report_values:', e);
@@ -4093,11 +4122,22 @@ export const StorageService = {
           
           cloudReports.forEach((cRep) => {
             const cleanCDate = cleanDate(cRep.report_date);
-            const normalizedCRep = { ...cRep, report_date: cleanCDate };
+            let parsedAbsent = cRep.absent_students;
+            if (typeof parsedAbsent === 'string') {
+              try { parsedAbsent = JSON.parse(parsedAbsent); } catch { parsedAbsent = []; }
+            }
             const idx = reports.findIndex((r) => 
               r.id === cRep.id || 
               (matchClassReport(r.class_id, cRep.class_id) && cleanDate(r.report_date) === cleanCDate)
             );
+            const safeAbsent = (Array.isArray(parsedAbsent) && parsedAbsent.length > 0)
+              ? parsedAbsent
+              : (idx >= 0 && Array.isArray(reports[idx]?.absent_students) && reports[idx].absent_students.length > 0 ? reports[idx].absent_students : []);
+            const normalizedCRep = { 
+              ...cRep, 
+              report_date: cleanCDate,
+              absent_students: safeAbsent,
+            };
             if (idx >= 0) {
               const oldLocalId = reports[idx].id;
               reports[idx] = normalizedCRep;
@@ -4325,7 +4365,7 @@ export const StorageService = {
       return {
         classItem: cls,
         teacher,
-        report: rep,
+        report: rep ? { ...rep, absent_students: absentList } : undefined,
         status,
         values,
         overallRate,
