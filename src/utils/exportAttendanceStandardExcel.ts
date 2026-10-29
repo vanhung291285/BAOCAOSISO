@@ -83,7 +83,7 @@ export function resolveTeacherName(
   if (typeof teacherOrName === 'string') {
     name = teacherOrName.trim();
   } else if (teacherOrName && typeof teacherOrName === 'object' && teacherOrName.full_name) {
-    name = teacherOrName.full_name.trim();
+    name = (teacherOrName.full_name || '').trim();
   }
 
   // Nếu tên hợp lệ (không phải placeholder rỗng / generic / raw ID)
