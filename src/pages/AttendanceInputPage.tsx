@@ -284,7 +284,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
             };
           });
 
-          // Tự động đồng bộ chuẩn theo danh sách học sinh thực tế của lớp (ví dụ 36 học sinh)
+          // Tự động đồng bộ chuẩn: Giữ 100% số liệu sĩ số (Tổng cả lớp, Bán trú, Ngoại trú) gần nhất do GVCN báo cáo
           enabledIndicators.forEach((ig, idx) => {
             const currentTotal = Number(newVals[ig.id]?.total || 0);
             const isMain = idx === 0 || ig.code === 'ALL' || ig.id === 'ig_all';
@@ -292,7 +292,8 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
             const isDay = ig.id === 'ig_day' || ig.id === 'ig_ngoaitru' || ig.code.includes('NON_BOARDING') || ig.code.includes('DAY') || ig.name.toLowerCase().includes('ngoại trú');
 
             if (isMain) {
-              const finalTotal = enrolledCount > 0 ? enrolledCount : (currentTotal > 0 ? currentTotal : 35);
+              // Ưu tiên số liệu sĩ số cả lớp do GVCN đã báo cáo gần nhất (ví dụ 36 học sinh)
+              const finalTotal = currentTotal > 0 ? Math.max(currentTotal, enrolledCount) : (enrolledCount > 0 ? enrolledCount : 35);
               newVals[ig.id] = {
                 total: finalTotal,
                 present: finalTotal,
@@ -301,7 +302,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
             } else if (isBoarding) {
               const expBoarding = classStudents.filter((s) => isStudentBoarding(s));
               const rosterBoarding = expBoarding.length;
-              const finalBoarding = rosterBoarding > 0 ? rosterBoarding : (currentTotal > 0 ? currentTotal : 0);
+              const finalBoarding = currentTotal > 0 ? currentTotal : (rosterBoarding > 0 ? rosterBoarding : 0);
               newVals[ig.id] = {
                 total: finalBoarding,
                 present: finalBoarding,
@@ -310,7 +311,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
             } else if (isDay) {
               const expBoarding = classStudents.filter((s) => isStudentBoarding(s)).length;
               const rosterDay = Math.max(0, enrolledCount - expBoarding);
-              const finalDay = enrolledCount > 0 ? rosterDay : (currentTotal > 0 ? currentTotal : 0);
+              const finalDay = currentTotal > 0 ? currentTotal : rosterDay;
               newVals[ig.id] = {
                 total: finalDay,
                 present: finalDay,
@@ -320,6 +321,28 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
               newVals[ig.id] = { total: 0, present: 0, absent: 0 };
             }
           });
+
+          // Tự động cân đối toán học: Tổng sĩ số cả lớp = Số HS Bán trú + Số HS Ngoại trú
+          const mainInd = enabledIndicators[0];
+          const bInd = enabledIndicators.find((i) => i.id === 'ig_boarding' || i.id === 'ig_boarding_half' || i.code.includes('BOARDING') || i.name.toLowerCase().includes('bán trú') || i.name.toLowerCase().includes('ăn trưa'));
+          const dayInd = enabledIndicators.find((i) => i.id === 'ig_day' || i.id === 'ig_ngoaitru' || i.code.includes('NON_BOARDING') || i.code.includes('DAY') || i.name.toLowerCase().includes('ngoại trú'));
+
+          if (mainInd && bInd && dayInd) {
+            let mTot = Number(newVals[mainInd.id]?.total) || 0;
+            let bTot = Number(newVals[bInd.id]?.total) || 0;
+            let dTot = Number(newVals[dayInd.id]?.total) || 0;
+
+            if (mTot > bTot && dTot === 0) {
+              dTot = mTot - bTot;
+              newVals[dayInd.id] = { total: dTot, present: dTot, absent: 0 };
+            } else if (mTot < bTot + dTot) {
+              mTot = bTot + dTot;
+              newVals[mainInd.id] = { total: mTot, present: mTot, absent: 0 };
+            } else if (mTot === bTot && dTot > 0) {
+              mTot = bTot + dTot;
+              newVals[mainInd.id] = { total: mTot, present: mTot, absent: 0 };
+            }
+          }
 
           setFormValues(newVals);
           setNotes('');
@@ -333,11 +356,11 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
           const newVals: Record<string, { total: number | ''; present: number | ''; absent: number | '' }> = {};
           const enrolledCount = classStudents.length;
 
-          const defaultTotal = enrolledCount > 0 ? enrolledCount : 35;
           const expBoarding = classStudents.filter((s) => isStudentBoarding(s));
           const boardingStudentsCount = expBoarding.length;
 
-          const boardingTotal = boardingStudentsCount;
+          const defaultTotal = enrolledCount > 0 ? enrolledCount : 35;
+          const boardingTotal = boardingStudentsCount > 0 ? boardingStudentsCount : (defaultTotal > 30 ? defaultTotal - 6 : Math.round(defaultTotal * 0.8));
           const nonBoardingTotal = Math.max(0, defaultTotal - boardingTotal);
 
           enabledIndicators.forEach((ig, idx) => {
@@ -712,14 +735,29 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
           const ntTot = ntVal.total !== '' ? Number(ntVal.total) || 0 : 0;
 
           if (bInd && ntInd) {
-            // Khi có đủ cả 2 nhóm Bán trú và Ngoại trú:
-            // Tự động nhảy trùng khớp số HS Có mặt, Vắng, và Tổng số ở chỉ tiêu chính phía trên
-            const sumPresent = bPres + ntPres;
+            const pTot = Number(nextValues[pId].total) || 0;
+
+            // Nếu người dùng nhập Bán trú (ví dụ 30) mà Ngoại trú đang là 0, tự động suy ra Ngoại trú = Tổng - Bán trú (36 - 30 = 6)
+            if (pTot > bTot && ntTot === 0 && bInd && groupId === bInd.id) {
+              const autoNtTot = pTot - bTot;
+              const autoNtPres = Math.max(0, autoNtTot - ntAbs);
+              nextValues[ntInd.id] = {
+                total: autoNtTot,
+                present: autoNtPres,
+                absent: ntAbs,
+              };
+            }
+
+            const currentNtVal = nextValues[ntInd.id] || ntVal;
+            const currentNtTot = currentNtVal.total !== '' ? Number(currentNtVal.total) || 0 : 0;
+            const currentNtPres = currentNtVal.present !== '' ? Number(currentNtVal.present) || 0 : 0;
+
+            const sumPresent = bPres + currentNtPres;
             const sumAbsent = bAbs + ntAbs;
-            const sumTotal = (bTot + ntTot > 0) ? (bTot + ntTot) : (sumPresent + sumAbsent);
+            const finalPrimaryTotal = Math.max(pTot, bTot + currentNtTot);
 
             nextValues[pId] = {
-              total: sumTotal > 0 ? sumTotal : (Number(nextValues[pId].total) || 0),
+              total: finalPrimaryTotal > 0 ? finalPrimaryTotal : pTot,
               present: sumPresent,
               absent: sumAbsent,
             };
