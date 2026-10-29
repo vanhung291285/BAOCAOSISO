@@ -2978,7 +2978,7 @@ export const StorageService = {
       for (const s of classStudents) {
         if (!s || !s.full_name) continue;
         if (s.isBoarding !== true && (s as any).is_boarding !== true) continue;
-        const normName = s.full_name.trim().toLowerCase();
+        const normName = (s.full_name || '').trim().toLowerCase();
         if (seenBoardingNames.has(normName)) continue;
         seenBoardingNames.add(normName);
         classBoardingStudents.push(s);
@@ -3583,12 +3583,12 @@ export const StorageService = {
           if (!addr) {
             const m = st.id
               ? storedStudents.find((s) => s.id === st.id)
-              : storedStudents.find((s) => matchClassReport(s.class_id, canonicalClassId) && s.full_name.trim().toLowerCase() === st.full_name.trim().toLowerCase())
-                || storedStudents.find((s) => s.full_name.trim().toLowerCase() === st.full_name.trim().toLowerCase());
+              : storedStudents.find((s) => matchClassReport(s.class_id, canonicalClassId) && (s.full_name || '').trim().toLowerCase() === (st.full_name || '').trim().toLowerCase())
+                || storedStudents.find((s) => (s.full_name || '').trim().toLowerCase() === (st.full_name || '').trim().toLowerCase());
             if (m && isValidStudentAddress(m.address || m.village)) {
               addr = cleanStudentAddress(m.address || m.village);
             } else {
-              const seed = DEFAULT_BOARDING_STUDENTS_SEED.find((sd) => sd.name.toLowerCase() === st.full_name.trim().toLowerCase());
+              const seed = DEFAULT_BOARDING_STUDENTS_SEED.find((sd) => sd.name.toLowerCase() === (st.full_name || '').trim().toLowerCase());
               if (seed) addr = seed.village;
             }
           }
@@ -4781,8 +4781,8 @@ export const StorageService = {
       // 3. Tìm theo họ tên học sinh
       if (s.full_name || s.name) {
         const queryName = (s.full_name || s.name || '').trim().toLowerCase();
-        const m = classStudents.find((std) => std.full_name.trim().toLowerCase() === queryName)
-               || students.find((std) => std.full_name.trim().toLowerCase() === queryName);
+        const m = classStudents.find((std) => (std.full_name || '').trim().toLowerCase() === queryName)
+               || students.find((std) => (std.full_name || '').trim().toLowerCase() === queryName);
         if (m && isValidStudentAddress(m.address || m.village)) return cleanStudentAddress(m.address || m.village);
         const seed = DEFAULT_BOARDING_STUDENTS_SEED.find((sd) => sd.name.toLowerCase() === queryName);
         if (seed) return seed.village;
@@ -4799,8 +4799,8 @@ export const StorageService = {
         const cleanedName = line.replace(/\s*\(.*?\)/g, '').trim();
         if (!cleanedName) return;
         const norm = cleanedName.toLowerCase();
-        const m = classStudents.find((std) => std.full_name.trim().toLowerCase() === norm)
-               || students.find((std) => std.full_name.trim().toLowerCase() === norm);
+        const m = classStudents.find((std) => (std.full_name || '').trim().toLowerCase() === norm)
+               || students.find((std) => (std.full_name || '').trim().toLowerCase() === norm);
         if (m && isValidStudentAddress(m.address || m.village)) {
           addrs.push(cleanStudentAddress(m.address || m.village));
         } else {
@@ -5014,7 +5014,7 @@ export const StorageService = {
           const found = classStudents.find(
             (std) =>
               std.id === s.id ||
-              std.full_name.trim().toLowerCase() === String(s.full_name || s.name || '').trim().toLowerCase()
+              (std.full_name || '').trim().toLowerCase() === String(s.full_name || s.name || '').trim().toLowerCase()
           );
           return found ? (found.isBoarding === true || (found as any).is_boarding === true) : false;
         }).length;
@@ -6424,7 +6424,9 @@ export const StorageService = {
           .limit(limit);
 
         if (!error && data && data.length > 0) {
-          localStorage.setItem(STORAGE_KEYS.LOGS, JSON.stringify(data));
+          try {
+            localStorage.setItem(STORAGE_KEYS.LOGS, JSON.stringify(data.slice(0, 30)));
+          } catch (e) {}
           return data;
         }
       } catch (err) {
@@ -6446,7 +6448,9 @@ export const StorageService = {
       created_at: new Date().toISOString(),
     };
     logs.unshift(item);
-    localStorage.setItem(STORAGE_KEYS.LOGS, JSON.stringify(logs.slice(0, 200)));
+    try {
+      localStorage.setItem(STORAGE_KEYS.LOGS, JSON.stringify(logs.slice(0, 30)));
+    } catch (e) {}
 
     const supabase = getSupabaseClient();
     if (supabase && isSupabaseConnected()) {
@@ -7854,7 +7858,9 @@ export const StorageService = {
               list.push(cNotif);
             }
           }
-          localStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(list.slice(0, 100)));
+          try {
+            localStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(list.slice(0, 30)));
+          } catch (e) {}
         }
       } catch (e) {
         // Fallback local
@@ -7888,8 +7894,10 @@ export const StorageService = {
     } else {
       list.unshift(notif);
     }
-    // Giữ tối đa 100 thông báo gần nhất
-    localStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(list.slice(0, 100)));
+    // Giữ tối đa 30 thông báo gần nhất
+    try {
+      localStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(list.slice(0, 30)));
+    } catch (e) {}
 
     const supabase = getSupabaseClient();
     if (supabase && isSupabaseConnected()) {
@@ -8028,7 +8036,9 @@ export const StorageService = {
     };
     list.unshift(successNotif);
 
-    localStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(list.slice(0, 100)));
+    try {
+      localStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(list.slice(0, 30)));
+    } catch (e) {}
 
     const supabase = getSupabaseClient();
     if (supabase && isSupabaseConnected()) {
