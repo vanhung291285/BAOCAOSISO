@@ -223,7 +223,7 @@ export function buildDefaultMealRecords(
 
   return boardingStudents.map((st) => {
     // Check if student is marked absent in daily report
-    const normName = st.full_name.trim().toLowerCase();
+    const normName = (st.full_name || '').trim().toLowerCase();
     const noAccName = removeVietnameseAccents(st.full_name);
 
     let isMarkedAbsent = false;
