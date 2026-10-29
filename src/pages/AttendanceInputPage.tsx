@@ -237,8 +237,8 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
           if (!addr) {
             const m = st.id
               ? classStudents.find((cs) => cs.id === st.id) || students.find((s) => s.id === st.id)
-              : classStudents.find((cs) => cs.full_name.trim().toLowerCase() === st.full_name.trim().toLowerCase())
-                || students.find((s) => s.full_name.trim().toLowerCase() === st.full_name.trim().toLowerCase());
+              : classStudents.find((cs) => (cs.full_name || '').trim().toLowerCase() === (st.full_name || '').trim().toLowerCase())
+                || students.find((s) => (s.full_name || '').trim().toLowerCase() === (st.full_name || '').trim().toLowerCase());
             if (m && isValidStudentAddress(m.address || m.village)) {
               addr = cleanStudentAddress(m.address || m.village);
             }
@@ -824,24 +824,24 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
     studentId?: string
   ) => {
     if (isLocked) return;
-    const trimmedName = name.trim();
+    const trimmedName = (name || '').trim();
 
     const studentMatch = studentId
       ? classStudents.find((s) => s.id === studentId)
       : classStudents.find(
-          (s) => s.full_name.trim().toLowerCase() === trimmedName.toLowerCase()
+          (s) => (s.full_name || '').trim().toLowerCase() === trimmedName.toLowerCase()
         );
     const finalId = studentId || studentMatch?.id || undefined;
     const finalAddress = cleanStudentAddress(
-      (address.trim() && address.trim() !== '-')
-        ? address.trim()
+      ((address || '').trim() && (address || '').trim() !== '-')
+        ? (address || '').trim()
         : (studentMatch?.address || studentMatch?.village || '')
     );
     const finalBoarding = isBoarding !== undefined ? isBoarding : !!studentMatch?.isBoarding;
 
     setAbsentStudents((prev) => {
       // Find first empty slot if any to fill it
-      const emptyIdx = prev.findIndex((s) => !s.full_name.trim());
+      const emptyIdx = prev.findIndex((s) => !(s.full_name || '').trim());
       let nextList: AbsentStudent[];
       if (emptyIdx !== -1) {
         nextList = [...prev];
@@ -909,9 +909,9 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
         }
       }
       if (partial.full_name !== undefined) {
-        const trimmed = partial.full_name.trim();
+        const trimmed = (partial.full_name || '').trim();
         const matches = classStudents.filter(
-          (s) => s.full_name.trim().toLowerCase() === trimmed.toLowerCase()
+          (s) => (s.full_name || '').trim().toLowerCase() === trimmed.toLowerCase()
         );
         if (matches.length >= 1) {
           const match = matches[0];
@@ -1034,7 +1034,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
       }
 
       // 2.2 Tất cả học sinh trong danh sách vắng phải có họ tên
-      const emptyIdx = absentStudents.findIndex((s) => !s.full_name.trim());
+      const emptyIdx = absentStudents.findIndex((s) => !(s.full_name || '').trim());
       if (emptyIdx !== -1) {
         return {
           isValid: false,
@@ -1144,8 +1144,8 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
         let addr = cleanStudentAddress(st.address);
         const match = st.id
           ? classStudents.find((s) => s.id === st.id) || students.find((s) => s.id === st.id)
-          : classStudents.find((s) => s.full_name.trim().toLowerCase() === st.full_name.trim().toLowerCase())
-            || students.find((s) => s.full_name.trim().toLowerCase() === st.full_name.trim().toLowerCase());
+          : classStudents.find((s) => (s.full_name || '').trim().toLowerCase() === (st.full_name || '').trim().toLowerCase())
+            || students.find((s) => (s.full_name || '').trim().toLowerCase() === (st.full_name || '').trim().toLowerCase());
 
         if (!addr) {
           if (match && isValidStudentAddress(match.address || match.village)) {
@@ -1202,7 +1202,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
         for (const s of rawBoardingStudents) {
           if (!s || !s.full_name) continue;
           const sId = String(s.id || '').trim();
-          const normName = s.full_name.trim().toLowerCase();
+          const normName = (s.full_name || '').trim().toLowerCase();
           if (sId && seenIds.has(sId)) continue;
           if (normName && seenNames.has(normName)) continue;
           if (sId) seenIds.add(sId);
@@ -1238,7 +1238,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                 absentMap.set(ab.id, { reason: ab.reason });
               }
               if (ab.full_name) {
-                const norm = ab.full_name.trim().toLowerCase();
+                const norm = (ab.full_name || '').trim().toLowerCase();
                 const noAcc = removeVietnameseAccents(ab.full_name);
                 absentMap.set(norm, { reason: ab.reason });
                 absentMap.set(noAcc, { reason: ab.reason });
@@ -1390,16 +1390,16 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
     const markedIds = new Set(absentStudents.filter((s) => s.id).map((s) => s.id!));
     const markedNamesCount: Record<string, number> = {};
     absentStudents.forEach((s) => {
-      if (s.full_name && s.full_name.trim()) {
-        const norm = s.full_name.trim().toLowerCase();
+      if (s.full_name && (s.full_name || '').trim()) {
+        const norm = (s.full_name || '').trim().toLowerCase();
         markedNamesCount[norm] = (markedNamesCount[norm] || 0) + 1;
       }
     });
 
     return classStudents.filter((st) => {
       if (st.id && markedIds.has(st.id)) return false;
-      const norm = st.full_name.trim().toLowerCase();
-      const sameNameTotal = classStudents.filter((s) => s.full_name.trim().toLowerCase() === norm).length;
+      const norm = (st.full_name || '').trim().toLowerCase();
+      const sameNameTotal = classStudents.filter((s) => (s.full_name || '').trim().toLowerCase() === norm).length;
       if (sameNameTotal === 1 && (markedNamesCount[norm] || 0) > 0) return false;
       return true;
     });
@@ -1414,7 +1414,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
   }, [absentStudents]);
 
   const allAbsentNamed = useMemo(() => {
-    return absentStudents.length > 0 && absentStudents.every((s) => s.full_name.trim().length > 0);
+    return absentStudents.length > 0 && absentStudents.every((s) => (s.full_name || '').trim().length > 0);
   }, [absentStudents]);
 
   return (
@@ -2159,7 +2159,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
               </span>
             </div>
             <div className="text-[11px] font-black shrink-0 bg-white px-2 py-0.5 rounded border border-current/30 shadow-2xs">
-              {absentStudents.filter((s) => s.full_name.trim()).length}/{absentStudents.length} đã điền
+              {absentStudents.filter((s) => (s.full_name || '').trim()).length}/{absentStudents.length} đã điền
             </div>
           </div>
         )}
@@ -2178,9 +2178,9 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
             </div>
             <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto pr-1">
               {classStudents.map((st) => {
-                const normName = st.full_name.trim().toLowerCase();
+                const normName = (st.full_name || '').trim().toLowerCase();
                 const sameNameStudents = classStudents.filter(
-                  (s) => s.full_name.trim().toLowerCase() === normName
+                  (s) => (s.full_name || '').trim().toLowerCase() === normName
                 );
                 const isDuplicateName = sameNameStudents.length > 1;
                 const duplicateIndex = isDuplicateName
@@ -2191,7 +2191,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                 const isMarked = absentStudents.some((s) => {
                   if (s.id && st.id) return s.id === st.id;
                   if (isDuplicateName) return false;
-                  return s.full_name.trim().toLowerCase() === normName;
+                  return (s.full_name || '').trim().toLowerCase() === normName;
                 });
 
                 const addressSuffix = st.address || st.village;
@@ -2324,7 +2324,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                       <User className="w-3.5 h-3.5 text-slate-400" />
                       Họ và tên học sinh <span className="text-rose-500">*</span>
                     </span>
-                    {!st.full_name.trim() && (
+                    {!(st.full_name || '').trim() && (
                       <span className="text-[10px] text-rose-600 font-bold animate-pulse">
                         ⚠️ Cần điền họ tên
                       </span>
@@ -2655,7 +2655,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-                if (newAbsentName.trim()) {
+                if ((newAbsentName || '').trim()) {
                   handleAddAbsentStudent(newAbsentName, newAbsentAddress, newAbsentReason, newAbsentIsBoarding);
                 }
               }}
@@ -2675,7 +2675,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                     const val = e.target.value;
                     setNewAbsentName(val);
                     const match = classStudents.find(
-                      (s) => s.full_name.trim().toLowerCase() === val.trim().toLowerCase()
+                      (s) => (s.full_name || '').trim().toLowerCase() === (val || '').trim().toLowerCase()
                     );
                     if (match) {
                       setNewAbsentAddress(cleanStudentAddress(match.address || match.village));
@@ -2785,7 +2785,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                 </button>
                 <button
                   type="submit"
-                  disabled={!newAbsentName.trim()}
+                  disabled={!(newAbsentName || '').trim()}
                   className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold text-xs shadow-md shadow-blue-600/20 cursor-pointer"
                 >
                   Thêm vào danh sách
