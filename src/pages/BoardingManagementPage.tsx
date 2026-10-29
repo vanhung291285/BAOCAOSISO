@@ -304,7 +304,7 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
             absentMap.set(ab.id, { reason: ab.reason });
           }
           if (ab.full_name) {
-            const norm = ab.full_name.trim().toLowerCase();
+            const norm = (ab.full_name || '').trim().toLowerCase();
             const noAcc = removeVietnameseAccents(ab.full_name);
             absentMap.set(norm, { reason: ab.reason });
             absentMap.set(noAcc, { reason: ab.reason });
@@ -329,7 +329,7 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
           recs.forEach((r) => {
             if (r.student_id) recordById.set(r.student_id, r);
             if (r.student_name) {
-              recordByName.set(r.student_name.trim().toLowerCase(), r);
+              recordByName.set((r.student_name || '').trim().toLowerCase(), r);
               recordByName.set(removeVietnameseAccents(r.student_name), r);
             }
           });
@@ -341,7 +341,7 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
 
       // Strictly map 1-to-1 over classBoardingStudents: mealRecords.length will always equal classBoardingStudents.length
       const syncedRecords: BoardingMealRecord[] = classBoardingStudents.map((st) => {
-        const normName = st.full_name.trim().toLowerCase();
+        const normName = (st.full_name || '').trim().toLowerCase();
         const noAccName = removeVietnameseAccents(st.full_name);
 
         const isAbsentInDaily = Boolean(
@@ -621,9 +621,9 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
           if (ab.id) {
             absentMap.set(ab.id, { reason: ab.reason });
           } else if (ab.full_name) {
-            const norm = ab.full_name.trim().toLowerCase();
+            const norm = (ab.full_name || '').trim().toLowerCase();
             const sameCount = classBoardingStudents.filter(
-              (s) => s.full_name.trim().toLowerCase() === norm
+              (s) => (s.full_name || '').trim().toLowerCase() === norm
             ).length;
             if (sameCount === 1) {
               absentMap.set(norm, { reason: ab.reason });
