@@ -168,7 +168,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
           !cls.homeroom_teacher_id.startsWith('cls_')
         ) {
           const tByName = allUsers.find(
-            (u) => u.full_name.trim().toLowerCase() === cls.homeroom_teacher_id!.trim().toLowerCase()
+            (u) => (u.full_name || '').trim().toLowerCase() === cls.homeroom_teacher_id!.trim().toLowerCase()
           );
           if (tByName) return tByName;
 
@@ -195,7 +195,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       const tByEmail = allUsers.find(
         (u) =>
           u.role === 'GVCN' &&
-          ((u as any).assigned_class_name?.trim().toLowerCase() === cleanName ||
+          (((u as any).assigned_class_name || '').trim().toLowerCase() === cleanName ||
             u.email.toLowerCase().includes(`_${cleanName}@`) ||
             u.email.toLowerCase().includes(`.${cleanName}@`))
       );
@@ -208,7 +208,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
         const tByName = allUsers.find(
           (u) =>
             u.role === 'GVCN' &&
-            u.full_name.trim().toLowerCase() === defaultName.trim().toLowerCase()
+            (u.full_name || '').trim().toLowerCase() === defaultName.trim().toLowerCase()
         );
         if (tByName) return tByName;
       }
