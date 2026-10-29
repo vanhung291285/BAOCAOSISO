@@ -860,7 +860,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
                   absentMap.set(ab.id, { reason: ab.reason });
                 }
                 if (ab.full_name) {
-                  absentMap.set(ab.full_name.trim().toLowerCase(), { reason: ab.reason });
+                  absentMap.set((ab.full_name || '').trim().toLowerCase(), { reason: ab.reason });
                 }
               });
             }
@@ -941,7 +941,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
 
       studentsToRender.forEach((st) => {
         initialMatrix[st.id] = {};
-        const normName = st.full_name.trim().toLowerCase();
+        const normName = (st.full_name || '').trim().toLowerCase();
 
         monthDays.forEach((day) => {
           const rep = reportMap.get(day.dateStr);
@@ -1111,7 +1111,7 @@ export const MonthlyBoardingSheet: React.FC<MonthlyBoardingSheetProps> = ({
               absentMap.set(ab.id, { reason: ab.reason });
             }
             if (ab.full_name) {
-              absentMap.set(ab.full_name.trim().toLowerCase(), { reason: ab.reason });
+              absentMap.set((ab.full_name || '').trim().toLowerCase(), { reason: ab.reason });
             }
           });
         }
