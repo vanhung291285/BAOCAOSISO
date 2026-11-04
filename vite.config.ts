@@ -45,12 +45,12 @@ export default defineConfig(() => {
           ],
         },
         workbox: {
+          // Keep the entry document on the network so a deploy cannot leave
+          // returning users on an old login screen and old asset URLs.
+          navigateFallback: undefined,
+          cleanupOutdatedCaches: true,
+          globPatterns: ['**/*.{js,css,ico,svg,woff,woff2}'],
           maximumFileSizeToCacheInBytes: 15 * 1024 * 1024,
-          globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
-        },
-        devOptions: {
-          enabled: true,
-          type: 'module',
         },
       })
     ],

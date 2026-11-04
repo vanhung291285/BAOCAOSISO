@@ -373,7 +373,7 @@ export const ClassesManagementPage: React.FC = () => {
   // Open Edit modal
   const handleOpenEdit = (c: ClassItem) => {
     setEditingClass(c);
-    setFormName(c.class_name);
+    setFormName(c.class_name ?? '');
     setFormGrade(c.grade);
     setFormTeacherId(c.homeroom_teacher_id || '');
     setFormCampusId(c.campus_id || '');

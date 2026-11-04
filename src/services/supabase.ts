@@ -112,8 +112,11 @@ export function getSupabaseClient(): SupabaseClient | null {
   try {
     cachedClient = createClient(url, anonKey, {
       auth: {
-        persistSession: true,
-        autoRefreshToken: true,
+        // The application uses its own profile flow, so PostgREST must
+        // not inherit a stale Supabase Auth session from this origin.
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false,
       },
     });
     lastUrl = url;

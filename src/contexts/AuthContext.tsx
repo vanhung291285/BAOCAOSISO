@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { Profile, UserRole } from '../types';
-import { StorageService, subscribeRealtime } from '../services/storage';
+import { Profile } from '../types';
+import { readCachedProfiles, StorageService, subscribeRealtime } from '../services/storage';
 
 interface AuthContextType {
   currentUser: Profile | null;
@@ -21,50 +21,9 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const CURRENT_USER_KEY = 'sso_active_auth_user_id_v2';
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [currentUser, setCurrentUser] = useState<Profile | null>(() => {
-    if (typeof window === 'undefined') return null;
-    try {
-      // Check for saved user ID
-      let savedId = sessionStorage.getItem(CURRENT_USER_KEY) || localStorage.getItem(CURRENT_USER_KEY);
-      const rawUsers = localStorage.getItem('sso_profiles_v1');
-      
-      if (savedId && rawUsers) {
-        const users = JSON.parse(rawUsers);
-        const match = users.find((u: Profile) => u.id === savedId);
-        if (match) {
-          // ADMIN and BGH support persistent login if remembered on Safari / iPhone
-          if (match.role === 'ADMIN' || match.role === 'BGH') {
-            const hasSessionId = sessionStorage.getItem(CURRENT_USER_KEY) === savedId;
-            const isRemembered = localStorage.getItem('sso_admin_remember_login') !== 'false';
-            if (!hasSessionId && !isRemembered) {
-              localStorage.removeItem(CURRENT_USER_KEY);
-              return null;
-            }
-            sessionStorage.setItem('sso_session_active', 'true');
-            sessionStorage.setItem(CURRENT_USER_KEY, match.id);
-            return match;
-          }
+  const [currentUser, setCurrentUser] = useState<Profile | null>(null);
+  const [allUsers, setAllUsers] = useState<Profile[]>(readCachedProfiles);
 
-          // GVCN: Mỗi lần vào báo cáo sĩ số thì phải thực hiện thao tác đăng nhập ở cửa sổ đăng nhập
-          // Xóa session tự động để GVCN luôn bắt đầu tại cửa sổ đăng nhập
-          localStorage.removeItem(CURRENT_USER_KEY);
-          sessionStorage.removeItem(CURRENT_USER_KEY);
-          return null;
-        }
-      }
-    } catch (err) {}
-    return null;
-  });
-  
-  const [allUsers, setAllUsers] = useState<Profile[]>(() => {
-    if (typeof window === 'undefined') return [];
-    try {
-      const rawUsers = localStorage.getItem('sso_profiles_v1');
-      if (rawUsers) return JSON.parse(rawUsers);
-    } catch (err) {}
-    return [];
-  });
-  
   // Set default loading to true to prevent rendering the admin dashboard during session restore validation
   const [loading, setLoading] = useState(true);
 
@@ -73,36 +32,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const users = await StorageService.getProfiles();
       setAllUsers(users);
 
-      let savedId = sessionStorage.getItem(CURRENT_USER_KEY) || localStorage.getItem(CURRENT_USER_KEY);
+      const sessionId = sessionStorage.getItem(CURRENT_USER_KEY);
+      const savedId = sessionId || localStorage.getItem(CURRENT_USER_KEY);
+      if (!savedId) return;
 
-      if (savedId) {
-        const match = users.find((u) => u.id === savedId);
-        if (match) {
-          if (match.role === 'ADMIN' || match.role === 'BGH') {
-            const hasSessionId = sessionStorage.getItem(CURRENT_USER_KEY) === savedId;
-            const isRemembered = localStorage.getItem('sso_admin_remember_login') !== 'false';
-            if (!hasSessionId && !isRemembered) {
-              localStorage.removeItem(CURRENT_USER_KEY);
-              setCurrentUser(null);
-              return;
-            }
-            sessionStorage.setItem('sso_session_active', 'true');
-            sessionStorage.setItem(CURRENT_USER_KEY, match.id);
-            setCurrentUser(match);
-            return;
-          }
-
-          // GVCN: Duy trì phiên làm việc nếu có sso_session_active hoặc savedId khớp
-          const isSessionActive = sessionStorage.getItem('sso_session_active') === 'true';
-          const hasSessionId = sessionStorage.getItem(CURRENT_USER_KEY) === savedId;
-          if (isSessionActive || hasSessionId || (currentUser && (currentUser as Profile).id === match.id)) {
-            sessionStorage.setItem('sso_session_active', 'true');
-            sessionStorage.setItem(CURRENT_USER_KEY, match.id);
-            setCurrentUser(match);
-            return;
-          }
-        }
+      const match = users.find((user) => user.id === savedId);
+      if (!match || match.active === false) {
+        logout();
+        return;
       }
+
+      if (match.role === 'ADMIN' || match.role === 'BGH') {
+        const isRemembered = localStorage.getItem('sso_admin_remember_login') !== 'false';
+        if (sessionId || isRemembered) {
+          sessionStorage.setItem(CURRENT_USER_KEY, match.id);
+          setCurrentUser(match);
+          return;
+        }
+      } else if (sessionId && sessionStorage.getItem('sso_session_active') === 'true') {
+        // Realtime updates may refresh the current teacher profile.
+        setCurrentUser(match);
+        return;
+      }
+      logout();
     } catch (err) {
       console.error('Error in reloadUsers:', err);
     }
@@ -110,6 +62,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     let mounted = true;
+    // Teachers sign in again when the app opens, as in the existing workflow.
+    try {
+      sessionStorage.removeItem('sso_session_active');
+      localStorage.removeItem('sso_saved_admin_password');
+      localStorage.removeItem('sso_saved_admin_creds');
+    } catch {}
     reloadUsers().finally(() => {
       if (mounted) setLoading(false);
     });
@@ -134,15 +92,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const login = async (email: string): Promise<boolean> => {
-    const users = await StorageService.getProfiles();
     const cleanEmail = email.toLowerCase().trim();
-    let found = users.find((u) => u.email.toLowerCase() === cleanEmail);
-    if (!found && (cleanEmail === 'admin@db.edu.vn' || cleanEmail === 'admin' || cleanEmail === 'admin@xadung.edu.vn')) {
-      found = users.find((u) => u.role === 'ADMIN');
+    const isAdminAlias = ['admin@db.edu.vn', 'admin', 'admin@xadung.edu.vn'].includes(cleanEmail);
+    const findProfile = (users: Profile[]) =>
+      users.find((user) => user.email.toLowerCase() === cleanEmail) ||
+      (isAdminAlias ? users.find((user) => user.role === 'ADMIN') : undefined);
+    let found = findProfile(await StorageService.getProfiles());
+    if (!found) {
+      found = findProfile(await StorageService.refreshProfiles() ?? []);
     }
-    
+    if (found?.role === 'GVCN') return false;
+
     // Emergency fallback if admin is totally missing from database
-    if (!found && (cleanEmail === 'admin@db.edu.vn' || cleanEmail === 'admin' || cleanEmail === 'admin@xadung.edu.vn')) {
+    if (!found && isAdminAlias) {
       found = {
         id: 'u_admin_' + Date.now(),
         full_name: 'Quản trị viên Hệ thống',
@@ -155,36 +117,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await StorageService.saveProfile(found);
     }
 
-    if (found) {
+    if (found && found.active !== false) {
       setCurrentUser(found);
-      
-      // Storage strategy:
-      // GVCN and Admin with remember option persist in localStorage to avoid reload kicks on iPhone Safari
-      sessionStorage.setItem('sso_session_active', 'true');
-      sessionStorage.setItem(CURRENT_USER_KEY, found.id);
+      saveSession(found);
 
-      const isRemembered = localStorage.getItem('sso_admin_remember_login') !== 'false';
-      if (found.role === 'ADMIN' || found.role === 'BGH') {
-        if (isRemembered) {
-          localStorage.setItem(CURRENT_USER_KEY, found.id);
-        } else {
-          localStorage.removeItem(CURRENT_USER_KEY);
-        }
-      } else {
-        // GVCN: Mỗi lần vào báo cáo sĩ số thì phải thực hiện thao tác đăng nhập ở cửa sổ đăng nhập
-        localStorage.removeItem(CURRENT_USER_KEY);
-      }
       return true;
     }
     return false;
   };
 
+  const saveSession = (profile: Profile) => {
+    try {
+      sessionStorage.setItem('sso_session_active', 'true');
+      sessionStorage.setItem(CURRENT_USER_KEY, profile.id);
+    } catch {}
+    try {
+      const isRemembered = localStorage.getItem('sso_admin_remember_login') !== 'false';
+      if ((profile.role === 'ADMIN' || profile.role === 'BGH') && isRemembered) {
+        localStorage.setItem(CURRENT_USER_KEY, profile.id);
+      } else {
+        localStorage.removeItem(CURRENT_USER_KEY);
+      }
+    } catch {}
+  };
+
   const logout = () => {
-    localStorage.removeItem(CURRENT_USER_KEY);
-    sessionStorage.removeItem(CURRENT_USER_KEY);
-    sessionStorage.removeItem('sso_session_active');
-    // Don't leave completely blank in prototype; set to null for login page
     setCurrentUser(null);
+    try { localStorage.removeItem(CURRENT_USER_KEY); } catch {}
+    try {
+      sessionStorage.removeItem(CURRENT_USER_KEY);
+      sessionStorage.removeItem('sso_session_active');
+    } catch {}
   };
 
   const switchUser = async (userId: string, fallbackProfile?: Profile) => {
@@ -222,19 +185,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     setCurrentUser(match);
-    sessionStorage.setItem('sso_session_active', 'true');
-    sessionStorage.setItem(CURRENT_USER_KEY, match.id);
-
-    const isRemembered = localStorage.getItem('sso_admin_remember_login') !== 'false';
-    if (match.role === 'ADMIN' || match.role === 'BGH') {
-      if (isRemembered) {
-        localStorage.setItem(CURRENT_USER_KEY, match.id);
-      } else {
-        localStorage.removeItem(CURRENT_USER_KEY);
-      }
-    } else {
-      localStorage.removeItem(CURRENT_USER_KEY);
-    }
+    saveSession(match);
   };
 
   const updateCurrentProfile = async (data: Partial<Profile>) => {

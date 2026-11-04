@@ -232,35 +232,29 @@ export function notifyRealtimeChange(table: string, payload?: any) {
   }
 }
 
-export function subscribeRealtime(callback: (event: { table: string; payload?: any }) => void) {
-  if (typeof window === 'undefined') return () => {};
+type RealtimeChange = { table: string; payload?: any };
 
-  const handleCustom = (e: any) => {
-    if ((e.detail?.table === 'school_settings' || e.detail?.table === 'settings') && e.detail?.payload) {
-      try {
-        localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(e.detail.payload));
-      } catch {}
-    }
-    callback(e.detail);
-  };
-  const handleBroadcast = (e: MessageEvent) => {
-    if ((e.data?.table === 'school_settings' || e.data?.table === 'settings') && e.data?.payload) {
-      try {
-        localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(e.data.payload));
-      } catch {}
-    }
-    callback(e.data);
-  };
+let activeRealtimeClient: ReturnType<typeof getSupabaseClient> = null;
+let activeRealtimeChannel: ReturnType<NonNullable<typeof activeRealtimeClient>['channel']> | null = null;
 
-  window.addEventListener('sso_realtime_update', handleCustom);
-  realtimeChannel?.addEventListener('message', handleBroadcast);
+function publishSupabaseChange(event: RealtimeChange) {
+  invalidateCache(event.table);
+  window.dispatchEvent(new CustomEvent('sso_supabase_update', { detail: event }));
+}
 
-  // If Supabase is connected, subscribe to Postgres changes across all core tables
+// Supabase channels are shared by topic. Keep one channel per active client
+// and fan out events to the components subscribed in this tab.
+function ensureRealtimeChannel() {
   const supabase = getSupabaseClient();
-  let channel: any = null;
+  if (supabase === activeRealtimeClient && activeRealtimeChannel) return;
+  if (activeRealtimeChannel) {
+    void activeRealtimeClient?.removeChannel(activeRealtimeChannel);
+    activeRealtimeChannel = null;
+  }
+  activeRealtimeClient = supabase;
   if (supabase) {
     try {
-      channel = supabase
+      activeRealtimeChannel = supabase
         .channel('public:all_changes')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_reports' }, (payload) => {
           try {
@@ -303,7 +297,7 @@ export function subscribeRealtime(callback: (event: { table: string; payload?: a
           } catch (e) {
             console.warn('Error merging realtime daily_reports:', e);
           }
-          callback({ table: 'daily_reports', payload });
+          publishSupabaseChange({ table: 'daily_reports', payload });
         })
         .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_report_values' }, (payload) => {
           try {
@@ -327,10 +321,10 @@ export function subscribeRealtime(callback: (event: { table: string; payload?: a
           } catch (e) {
             console.warn('Error merging realtime daily_report_values:', e);
           }
-          callback({ table: 'daily_report_values', payload });
+          publishSupabaseChange({ table: 'daily_report_values', payload });
         })
         .on('postgres_changes', { event: '*', schema: 'public', table: 'classes' }, (payload) => {
-          callback({ table: 'classes', payload });
+          publishSupabaseChange({ table: 'classes', payload });
         })
         .on('postgres_changes', { event: '*', schema: 'public', table: 'students' }, (payload) => {
           try {
@@ -352,7 +346,7 @@ export function subscribeRealtime(callback: (event: { table: string; payload?: a
           } catch (e) {
             console.warn('Error merging realtime students:', e);
           }
-          callback({ table: 'students', payload });
+          publishSupabaseChange({ table: 'students', payload });
         })
         .on('postgres_changes', { event: '*', schema: 'public', table: 'boarding_reports' }, (payload) => {
           try {
@@ -374,13 +368,13 @@ export function subscribeRealtime(callback: (event: { table: string; payload?: a
           } catch (e) {
             console.warn('Error merging realtime boarding_reports:', e);
           }
-          callback({ table: 'boarding_reports', payload });
+          publishSupabaseChange({ table: 'boarding_reports', payload });
         })
         .on('postgres_changes', { event: '*', schema: 'public', table: 'boarding_signature_configs' }, (payload) => {
-          callback({ table: 'boarding_signature_configs', payload });
+          publishSupabaseChange({ table: 'boarding_signature_configs', payload });
         })
         .on('postgres_changes', { event: '*', schema: 'public', table: 'boarding_month_signatures' }, (payload) => {
-          callback({ table: 'boarding_month_signatures', payload });
+          publishSupabaseChange({ table: 'boarding_month_signatures', payload });
         })
         .on('postgres_changes', { event: '*', schema: 'public', table: 'school_settings' }, (payload) => {
           try {
@@ -396,41 +390,38 @@ export function subscribeRealtime(callback: (event: { table: string; payload?: a
           } catch (e) {
             console.warn('Error merging realtime school_settings:', e);
           }
-          callback({ table: 'school_settings', payload });
+          publishSupabaseChange({ table: 'school_settings', payload });
         })
         .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, (payload) => {
           try {
             if (payload.new && (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE')) {
               const newP = payload.new as Profile;
-              const raw = localStorage.getItem(STORAGE_KEYS.PROFILES);
-              let profs: Profile[] = raw ? JSON.parse(raw) : [];
+              const profs = readCachedProfiles();
               const idx = profs.findIndex((p) => p.id === newP.id);
               if (idx >= 0) profs[idx] = newP;
               else profs.push(newP);
               localStorage.setItem(STORAGE_KEYS.PROFILES, JSON.stringify(profs));
             } else if (payload.old && payload.eventType === 'DELETE') {
               const oldId = (payload.old as any).id;
-              const raw = localStorage.getItem(STORAGE_KEYS.PROFILES);
-              let profs: Profile[] = raw ? JSON.parse(raw) : [];
-              profs = profs.filter((p) => p.id !== oldId);
+              const profs = readCachedProfiles().filter((p) => p.id !== oldId);
               localStorage.setItem(STORAGE_KEYS.PROFILES, JSON.stringify(profs));
             }
           } catch (e) {
             console.warn('Error merging realtime profiles:', e);
           }
-          callback({ table: 'profiles', payload });
+          publishSupabaseChange({ table: 'profiles', payload });
         })
         .on('postgres_changes', { event: '*', schema: 'public', table: 'campuses' }, (payload) => {
-          callback({ table: 'campuses', payload });
+          publishSupabaseChange({ table: 'campuses', payload });
         })
         .on('postgres_changes', { event: '*', schema: 'public', table: 'school_off_days' }, (payload) => {
-          callback({ table: 'school_off_days', payload });
+          publishSupabaseChange({ table: 'school_off_days', payload });
         })
         .on('postgres_changes', { event: '*', schema: 'public', table: 'school_years' }, (payload) => {
-          callback({ table: 'school_years', payload });
+          publishSupabaseChange({ table: 'school_years', payload });
         })
         .on('postgres_changes', { event: '*', schema: 'public', table: 'indicator_groups' }, (payload) => {
-          callback({ table: 'indicator_groups', payload });
+          publishSupabaseChange({ table: 'indicator_groups', payload });
         })
         .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications' }, (payload) => {
           try {
@@ -452,7 +443,7 @@ export function subscribeRealtime(callback: (event: { table: string; payload?: a
           } catch (e) {
             console.warn('Error merging realtime notifications:', e);
           }
-          callback({ table: 'notifications', payload });
+          publishSupabaseChange({ table: 'notifications', payload });
         })
         .subscribe();
     } catch (e) {
@@ -460,12 +451,39 @@ export function subscribeRealtime(callback: (event: { table: string; payload?: a
     }
   }
 
+}
+
+export function subscribeRealtime(callback: (event: { table: string; payload?: any }) => void) {
+  if (typeof window === 'undefined') return () => {};
+
+  const handleCustom = (e: any) => {
+    if ((e.detail?.table === 'school_settings' || e.detail?.table === 'settings') && e.detail?.payload) {
+      try {
+        localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(e.detail.payload));
+      } catch {}
+    }
+    callback(e.detail);
+  };
+  const handleBroadcast = (e: MessageEvent) => {
+    if ((e.data?.table === 'school_settings' || e.data?.table === 'settings') && e.data?.payload) {
+      try {
+        localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(e.data.payload));
+      } catch {}
+    }
+    callback(e.data);
+  };
+
+  window.addEventListener('sso_realtime_update', handleCustom);
+  realtimeChannel?.addEventListener('message', handleBroadcast);
+
+  const handleSupabase = (event: Event) => callback((event as CustomEvent<RealtimeChange>).detail);
+  window.addEventListener('sso_supabase_update', handleSupabase);
+  ensureRealtimeChannel();
+
   return () => {
     window.removeEventListener('sso_realtime_update', handleCustom);
+    window.removeEventListener('sso_supabase_update', handleSupabase);
     realtimeChannel?.removeEventListener('message', handleBroadcast);
-    if (channel && supabase) {
-      supabase.removeChannel(channel);
-    }
   };
 }
 
@@ -676,6 +694,22 @@ export function ensureInitialized() {
       });
     }, 50);
   }
+}
+
+export function readCachedProfiles(): Profile[] {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(STORAGE_KEYS.PROFILES) ?? 'null');
+    if (Array.isArray(parsed)) {
+      return parsed.filter((profile): profile is Profile =>
+        typeof profile?.id === 'string' &&
+        typeof profile.email === 'string' &&
+        typeof profile.full_name === 'string'
+      );
+    }
+  } catch {
+    // A damaged cache can be rebuilt from Supabase.
+  }
+  return [];
 }
 
 // ----------------------------------------------------
@@ -1253,15 +1287,28 @@ export const StorageService = {
         return collator.compare(a.class_name, b.class_name);
       };
 
+      const isValidClass = (item: unknown): item is ClassItem => {
+        const value = item as Partial<ClassItem> | null;
+        return typeof value?.id === 'string' && Boolean(value.id.trim())
+          && typeof value.class_name === 'string' && Boolean(value.class_name.trim());
+      };
+
       // 1. Read local storage first (0ms instant access)
       const raw = localStorage.getItem(STORAGE_KEYS.CLASSES);
       let localData: ClassItem[] = [];
+      let shouldSeed = raw === null;
       if (raw) {
-        try { localData = JSON.parse(raw); } catch {}
+        try {
+          const parsed: unknown = JSON.parse(raw);
+          if (Array.isArray(parsed)) {
+            shouldSeed = parsed.length === 0;
+            localData = parsed.filter(isValidClass);
+          }
+        } catch {}
       }
 
       // If local storage is empty, initialize immediately with default classes
-      if (!localData || localData.length === 0) {
+      if (shouldSeed) {
         localData = buildDefaultClasses();
         try {
           localStorage.setItem(STORAGE_KEYS.CLASSES, JSON.stringify(localData));
@@ -1282,13 +1329,14 @@ export const StorageService = {
             );
             const { data: cloudData, error } = (await Promise.race([fetchPromise, timeoutPromise])) as any;
             if (!error && cloudData && cloudData.length > 0) {
-              cloudData.sort(sortFn);
+              const classes = cloudData.filter(isValidClass).sort(sortFn);
+              if (!classes.length) return;
               const currentRaw = localStorage.getItem(STORAGE_KEYS.CLASSES) || '';
-              const newRaw = JSON.stringify(cloudData);
+              const newRaw = JSON.stringify(classes);
               if (currentRaw !== newRaw) {
                 localStorage.setItem(STORAGE_KEYS.CLASSES, newRaw);
-                setCached(CACHE_KEY, cloudData, 60000);
-                notifyRealtimeChange('classes', cloudData);
+                setCached(CACHE_KEY, classes, 60000);
+                notifyRealtimeChange('classes', classes);
               }
             }
           } catch (err) {
@@ -3167,12 +3215,8 @@ export const StorageService = {
     if (cached && cached.length > 0) return cached;
 
     return coalesceRequest(CACHE_KEY, async () => {
-      const raw = localStorage.getItem(STORAGE_KEYS.PROFILES);
-      let data: Profile[] = [];
-      if (raw) {
-        try { data = JSON.parse(raw); } catch {}
-      }
-      if (!data || data.length === 0) {
+      let data = readCachedProfiles();
+      if (data.length === 0) {
         data = getInitialData().profiles;
         try { localStorage.setItem(STORAGE_KEYS.PROFILES, JSON.stringify(data)); } catch {}
       }
@@ -3191,38 +3235,41 @@ export const StorageService = {
 
       setCached(CACHE_KEY, list, 60000);
 
-      // Background revalidation from Supabase
-      const supabase = getSupabaseClient();
-      if (supabase && isSupabaseConnected()) {
-        (async () => {
-          try {
-            const fetchPromise = supabase.from('profiles').select('*').order('created_at', { ascending: true });
-            const timeoutPromise = new Promise<{ data: null; error: Error }>((_, reject) =>
-              setTimeout(() => reject(new Error('Profiles cloud fetch timeout')), 3500)
-            );
-            const { data: cloudData, error } = (await Promise.race([fetchPromise, timeoutPromise])) as any;
-            if (!error && cloudData && cloudData.length > 0) {
-              let cList = cloudData.map((p: Profile) => {
-                if (p.role === 'ADMIN' && p.email !== 'admin@db.edu.vn') {
-                  p.email = 'admin@db.edu.vn';
-                }
-                return p;
-              });
-              const currentStr = localStorage.getItem(STORAGE_KEYS.PROFILES) || '';
-              const newStr = JSON.stringify(cList);
-              if (currentStr !== newStr) {
-                localStorage.setItem(STORAGE_KEYS.PROFILES, newStr);
-                setCached(CACHE_KEY, cList, 60000);
-                notifyRealtimeChange('profiles', cList);
-              }
-            }
-          } catch (err) {
-            // Background fetch error handled gracefully
-          }
-        })();
-      }
-
+      void this.refreshProfiles();
       return list;
+    });
+  },
+
+  async refreshProfiles(): Promise<Profile[] | null> {
+    return coalesceRequest('profiles_cloud', async () => {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5000);
+      try {
+        const supabase = getSupabaseClient();
+        if (!supabase) return null;
+
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('*')
+          .order('created_at', { ascending: true })
+          .abortSignal(controller.signal);
+        if (error || !data?.length) return null;
+
+        const profiles: Profile[] = data.map((profile: Profile) =>
+          profile.role === 'ADMIN' ? { ...profile, email: 'admin@db.edu.vn' } : profile
+        );
+        const serialized = JSON.stringify(profiles);
+        if (localStorage.getItem(STORAGE_KEYS.PROFILES) !== serialized) {
+          localStorage.setItem(STORAGE_KEYS.PROFILES, serialized);
+          notifyRealtimeChange('profiles', profiles);
+        }
+        setCached('profiles_list', profiles, 60000);
+        return profiles;
+      } catch {
+        return null;
+      } finally {
+        clearTimeout(timeout);
+      }
     });
   },
 

@@ -153,7 +153,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
   // Helper tìm kiếm giáo viên tương ứng trong allUsers hoặc từ cấu hình lớp
   const findMatchedTeacher = useCallback(
     (cls: ClassItem | null): Profile | null => {
-      if (!cls) return null;
+      if (!cls || typeof cls.class_name !== 'string') return null;
 
       // 1. Theo homeroom_teacher_id của lớp trong allUsers
       if (cls.homeroom_teacher_id) {
@@ -244,7 +244,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
     }
 
     // Nếu có trong bảng mẫu mặc định THCS (6A1-9D10)
-    const cleanCls = currentClass.class_name.replace(/^Lớp\s+/i, '').trim().toUpperCase();
+    const cleanCls = (currentClass.class_name || '').replace(/^Lớp\s+/i, '').trim().toUpperCase();
     if (DEFAULT_CLASS_TEACHER_MAP[cleanCls]) {
       return DEFAULT_CLASS_TEACHER_MAP[cleanCls];
     }
@@ -325,7 +325,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
         const targetTeacherId = teacher?.id || selectedTeacherId || `teacher_${currentClass.id}`;
 
         if (rememberLogin) {
-          localStorage.setItem('sso_saved_active_tab', 'GVCN');
+          try { localStorage.setItem('sso_saved_active_tab', 'GVCN'); } catch {}
         }
 
         await switchUser(targetTeacherId, teacher);
@@ -355,11 +355,14 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
           }
         }
 
-        if (rememberLogin) {
-          localStorage.setItem('sso_admin_remember_login', 'true');
-          localStorage.setItem('sso_saved_admin_email', cleanEmail);
-          localStorage.setItem('sso_saved_admin_password', password.trim());
-        }
+        try {
+          localStorage.setItem('sso_admin_remember_login', String(rememberLogin));
+          if (rememberLogin) {
+            localStorage.setItem('sso_saved_admin_email', cleanEmail);
+          } else {
+            localStorage.removeItem('sso_saved_admin_email');
+          }
+        } catch {}
 
         const ok = await login(email);
         if (ok) {
@@ -803,10 +806,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                   setActiveTab('ADMIN');
                   setError('');
                   setSsoNotice(null);
-                  const savedEmail = localStorage.getItem('sso_saved_admin_email');
-                  const savedPass = localStorage.getItem('sso_saved_admin_password');
-                  setEmail(savedEmail || '');
-                  setPassword(savedPass || '');
+                  try {
+                    setEmail(localStorage.getItem('sso_saved_admin_email') || '');
+                  } catch {
+                    setEmail('');
+                  }
+                  setPassword('');
                 }}
                 className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer text-center select-none ${
                   activeTab === 'ADMIN'

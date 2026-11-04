@@ -44,8 +44,8 @@ export const UsersManagementPage: React.FC = () => {
 
   const handleOpenEdit = (user: Profile) => {
     setEditingUser(user);
-    setFormEmail(user.email);
-    setFormFullName(user.full_name);
+    setFormEmail(user.email ?? '');
+    setFormFullName(user.full_name ?? '');
     setFormPhone(user.phone || '');
     setFormRole(user.role);
     setFormClassId(user.assigned_class_id || '');
