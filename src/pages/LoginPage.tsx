@@ -552,421 +552,417 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
         </div>
       </header>
 
-      {/* ========================================================
-          CENTER: CỬA SỔ ĐĂNG NHẬP TINH TẾ, THANH THOÁT, KHÔNG THÔ KỆCH
-          - Tỷ lệ kích thước cân đối: max-w-[390px] sm:max-w-[405px]
-          - Kiểu chữ sắc nét, khoảng đệm trang nhã
-          - Mặc định "Chọn tên lớp", khi chọn lớp hiển thị đúng GVCN
-         ======================================================== */}
       <main className="siso-login-main relative z-20 flex-1">
-        <section className="siso-login-intro" aria-label="Giới thiệu ứng dụng">
-          <p className="siso-eyebrow">QUẢN LÝ NHÀ TRƯỜNG</p>
-          <h2>Sổ báo cáo<br className="hidden lg:inline" /> sĩ số</h2>
-          <p>Điểm danh, theo dõi bán trú và tổng hợp báo cáo theo lớp.</p>
-        </section>
-        <div className="siso-login-panel">
-        {/* Urgent reminder alert notice if unsubmitted report */}
-        {urgentAttendanceReminder && (
-          <div className="w-full max-w-[395px] mb-2.5 animate-in fade-in slide-in-from-top-3">
-            <div className="bg-gradient-to-r from-red-600 via-rose-600 to-amber-600 text-white p-2.5 rounded-2xl shadow-xl border border-amber-300/80 flex items-center justify-between gap-2.5">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <BellRing className="w-4 h-4 text-amber-200 shrink-0 animate-bounce" />
-                <div className="min-w-0">
-                  <div className="text-xs font-black truncate">
-                    CẢNH BÁO: LỚP {urgentAttendanceReminder.class_name || ''} CHƯA BÁO CÁO!
+        <div className="siso-login-stage">
+          <section className="siso-login-intro" aria-label="Giới thiệu ứng dụng">
+            <p className="siso-eyebrow">QUẢN LÝ NHÀ TRƯỜNG</p>
+            <h2>Sổ báo cáo sĩ số</h2>
+            <p>Điểm danh, theo dõi bán trú và tổng hợp báo cáo theo lớp.</p>
+          </section>
+          <div className="siso-login-panel">
+          {/* Urgent reminder alert notice if unsubmitted report */}
+          {urgentAttendanceReminder && (
+            <div className="mb-3 w-full">
+              <div className="flex items-center justify-between gap-3 rounded-2xl border border-amber-300/70 bg-amber-50 px-3 py-2.5 text-amber-950">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <BellRing className="h-4 w-4 shrink-0 text-amber-700" />
+                  <div className="min-w-0">
+                    <div className="text-xs font-extrabold leading-snug">
+                      Lớp {urgentAttendanceReminder.class_name || ''} chưa báo cáo
+                    </div>
+                    <div className="mt-0.5 text-xs leading-snug text-amber-900">
+                      {urgentAttendanceReminder.message}
+                    </div>
                   </div>
-                  <div className="text-[10px] text-rose-100 truncate">
-                    {urgentAttendanceReminder.message}
-                  </div>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={handleDirectAttendanceFromAlert}
-                className="px-2.5 py-1 bg-amber-300 hover:bg-amber-200 text-slate-950 font-black text-xs rounded-xl shadow-xs shrink-0 cursor-pointer active:scale-95 transition-all"
-              >
-                Vào ngay
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Khung viền kính mờ tinh tế (Bo góc 24px, đổ bóng nhẹ nhàng chuẩn hình gốc) */}
-        <div className="siso-login-card w-full">
-          {/* Card trắng bên trong: kích thước gọn gàng, không bị thô dày */}
-          <div className="w-full bg-white rounded-[inherit] p-5 sm:p-7">
-            {/* Header: Logo hình tròn và Tiêu đề ĐĂNG NHẬP */}
-            <div className="flex items-center gap-3 sm:gap-3.5 mb-4">
-              {/* Circular Emblem Seal */}
-              <div className="w-13 h-13 sm:w-14 sm:h-14 rounded-full border-2 border-[#005f73] p-0.5 flex items-center justify-center shrink-0 shadow-xs bg-gradient-to-b from-white to-blue-50/40">
-                <svg viewBox="0 0 100 100" className="w-full h-full" fill="none">
-                  {/* Outer circle rings */}
-                  <circle cx="50" cy="50" r="47" stroke="#005F73" strokeWidth="2" />
-                  <circle cx="50" cy="50" r="43" stroke="#00897B" strokeWidth="1" strokeDasharray="2 2" />
-
-                  {/* Circular text top */}
-                  <path id="curve" d="M 18,50 A 32,32 0 1,1 82,50" fill="none" />
-                  <text fontSize="7.5" fill="#005F73" fontWeight="900" letterSpacing="0.8">
-                    <textPath href="#curve" startOffset="50%" textAnchor="middle">
-                      HỆ THỐNG QUẢN TRỊ & BÁO CÁO
-                    </textPath>
-                  </text>
-
-                  {/* Shield / Book base */}
-                  <path d="M50 35 L70 44 L50 53 L30 44 Z" fill="#00897B" opacity="0.9" />
-                  <polygon points="50,33 74,44 50,55 26,44" fill="#00897B" />
-                  <path
-                    d="M36 50 L36 60 Q50 68 64 60 L64 50"
-                    stroke="#005F73"
-                    strokeWidth="2.5"
-                    fill="none"
-                  />
-                  <path d="M42 62 Q50 68 58 62" stroke="#00897B" strokeWidth="2" fill="none" />
-
-                  {/* Graduation cap tassel */}
-                  <line x1="70" y1="45" x2="74" y2="58" stroke="#F59E0B" strokeWidth="2" />
-                  <circle cx="74" cy="59" r="2" fill="#F59E0B" />
-
-                  {/* Laurel branches */}
-                  <path
-                    d="M26 62 Q20 50 26 40 M74 62 Q80 50 74 40"
-                    stroke="#00897B"
-                    strokeWidth="1.5"
-                    fill="none"
-                  />
-                </svg>
-              </div>
-
-              {/* Title texts */}
-              <div className="min-w-0">
-                <div className="text-[10px] sm:text-[11px] font-bold text-slate-500 uppercase tracking-wider leading-none">
-                  HỆ THỐNG QUẢN TRỊ &amp; BÁO CÁO
-                </div>
-                <h1 className="text-xl sm:text-[22px] font-black text-[#0f2d59] tracking-tight leading-tight mt-0.5">
-                  ĐĂNG NHẬP
-                </h1>
-                <p className="text-[11px] sm:text-xs text-slate-600 font-normal mt-0.5">
-                  Vui lòng nhập thông tin tài khoản của bạn
-                </p>
-              </div>
-            </div>
-
-            {/* Segmented Tab Switcher (Giáo Viên / Nhân Viên vs Ban Giám Hiệu) */}
-            <div className="siso-role-switch bg-slate-100 p-1 rounded-xl grid grid-cols-2 gap-1 mb-4">
-              <button
-                type="button"
-                aria-pressed={activeTab === 'GVCN'}
-                onClick={() => {
-                  setActiveTab('GVCN');
-                  setError('');
-                  setSsoNotice(null);
-                  setEmail('');
-                  setPassword('');
-                }}
-                className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer text-center select-none ${
-                  activeTab === 'GVCN'
-                    ? 'bg-gradient-to-r from-[#00897b] to-[#00796b] text-white shadow-xs'
-                    : 'text-slate-600 hover:text-slate-950 hover:bg-white/70'
-                }`}
-              >
-                Giáo Viên / Nhân Viên
-              </button>
-
-              <button
-                type="button"
-                aria-pressed={activeTab === 'ADMIN'}
-                onClick={() => {
-                  setActiveTab('ADMIN');
-                  setError('');
-                  setSsoNotice(null);
-                  try {
-                    setEmail(localStorage.getItem('sso_saved_admin_email') || '');
-                  } catch {
-                    setEmail('');
-                  }
-                  setPassword('');
-                }}
-                className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer text-center select-none ${
-                  activeTab === 'ADMIN'
-                    ? 'bg-gradient-to-r from-[#00897b] to-[#00796b] text-white shadow-xs'
-                    : 'text-slate-600 hover:text-slate-950 hover:bg-white/70'
-                }`}
-              >
-                Ban Giám Hiệu
-              </button>
-            </div>
-
-            {/* Error banner if any */}
-            {error && (
-              <div className="mb-3 p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-xs font-semibold text-rose-700 flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
-                <span>{error}</span>
-              </div>
-            )}
-
-            {/* SSO Info Notice (Giữ nguyên tại cửa sổ đăng nhập khi click Google/Microsoft) */}
-            {ssoNotice && (
-              <div className="mb-3 p-2.5 bg-sky-50 border border-sky-200 rounded-xl text-xs text-sky-950 flex items-start justify-between gap-2 animate-in fade-in">
-                <div className="flex items-start gap-2">
-                  <AlertCircle className="w-4 h-4 text-sky-600 shrink-0 mt-0.5" />
-                  <span className="font-medium leading-relaxed">{ssoNotice}</span>
                 </div>
                 <button
                   type="button"
-                  onClick={() => setSsoNotice(null)}
-                  className="p-0.5 text-sky-400 hover:text-sky-700 cursor-pointer shrink-0"
-                  title="Đóng thông báo"
+                  onClick={handleDirectAttendanceFromAlert}
+                  className="min-h-11 shrink-0 cursor-pointer rounded-xl bg-amber-200 px-3 text-xs font-bold text-amber-950 transition-colors hover:bg-amber-300"
                 >
-                  <X className="w-3.5 h-3.5" />
+                  Vào ngay
                 </button>
               </div>
-            )}
+            </div>
+          )}
 
-            {/* FORM ĐĂNG NHẬP */}
-            <form onSubmit={handleLoginSubmit} method="post" action="#" className="space-y-3">
-              {/* ========================================================
-                  Ô 1: TÀI KHOẢN EMAIL -> THAY BẰNG "TÊN LỚP" (GVCN)
-                  Mặc định: "Chọn tên lớp"
-                 ======================================================== */}
-              <div>
-                <div className="relative flex items-center border border-slate-200 hover:border-slate-300 focus-within:border-[#00897b] focus-within:ring-2 focus-within:ring-[#00897b]/15 rounded-xl px-3 h-12 bg-slate-50/60 focus-within:bg-white transition-all shadow-2xs">
-                  <User className="w-4 h-4 text-slate-400 shrink-0 mr-2.5" />
+          {/* Khung viền kính mờ tinh tế (Bo góc 24px, đổ bóng nhẹ nhàng chuẩn hình gốc) */}
+          <div className="siso-login-card w-full">
+            {/* Card trắng bên trong: kích thước gọn gàng, không bị thô dày */}
+            <div className="w-full bg-white rounded-[inherit] p-5 sm:p-7">
+              {/* Header: Logo hình tròn và Tiêu đề ĐĂNG NHẬP */}
+              <div className="flex items-center gap-3 sm:gap-3.5 mb-4">
+                {/* Circular Emblem Seal */}
+                <div className="w-13 h-13 sm:w-14 sm:h-14 rounded-full border-2 border-[#005f73] p-0.5 flex items-center justify-center shrink-0 shadow-xs bg-gradient-to-b from-white to-blue-50/40">
+                  <svg viewBox="0 0 100 100" className="w-full h-full" fill="none">
+                    {/* Outer circle rings */}
+                    <circle cx="50" cy="50" r="47" stroke="#005F73" strokeWidth="2" />
+                    <circle cx="50" cy="50" r="43" stroke="#00897B" strokeWidth="1" strokeDasharray="2 2" />
 
-                  {activeTab === 'GVCN' ? (
-                    /* GVCN: TÊN LỚP (Mặc định: "Chọn tên lớp") */
-                    <div className="relative flex-1">
-                      <select
-                        id="login-class-select"
-                        value={selectedClassId}
-                        onChange={(e) => handleClassChange(e.target.value)}
-                        required
-                        className="w-full bg-transparent text-xs sm:text-[13.5px] font-semibold text-slate-800 focus:outline-hidden cursor-pointer appearance-none pr-6"
-                      >
-                        <option value="">Chọn tên lớp</option>
-                        {distinctGrades.map((grade) => {
-                          const grp = sortedClasses.filter((c) => c.grade === grade);
-                          if (grp.length === 0) return null;
-                          const gradeLabel = settings?.grade_names?.[grade.toString()] || `Khối ${grade}`;
-                          return (
-                            <optgroup key={grade} label={gradeLabel}>
-                              {grp.map((c) => (
+                    {/* Circular text top */}
+                    <path id="curve" d="M 18,50 A 32,32 0 1,1 82,50" fill="none" />
+                    <text fontSize="7.5" fill="#005F73" fontWeight="900" letterSpacing="0.8">
+                      <textPath href="#curve" startOffset="50%" textAnchor="middle">
+                        HỆ THỐNG QUẢN TRỊ & BÁO CÁO
+                      </textPath>
+                    </text>
+
+                    {/* Shield / Book base */}
+                    <path d="M50 35 L70 44 L50 53 L30 44 Z" fill="#00897B" opacity="0.9" />
+                    <polygon points="50,33 74,44 50,55 26,44" fill="#00897B" />
+                    <path
+                      d="M36 50 L36 60 Q50 68 64 60 L64 50"
+                      stroke="#005F73"
+                      strokeWidth="2.5"
+                      fill="none"
+                    />
+                    <path d="M42 62 Q50 68 58 62" stroke="#00897B" strokeWidth="2" fill="none" />
+
+                    {/* Graduation cap tassel */}
+                    <line x1="70" y1="45" x2="74" y2="58" stroke="#F59E0B" strokeWidth="2" />
+                    <circle cx="74" cy="59" r="2" fill="#F59E0B" />
+
+                    {/* Laurel branches */}
+                    <path
+                      d="M26 62 Q20 50 26 40 M74 62 Q80 50 74 40"
+                      stroke="#00897B"
+                      strokeWidth="1.5"
+                      fill="none"
+                    />
+                  </svg>
+                </div>
+
+                {/* Title texts */}
+                <div className="min-w-0">
+                  <div className="text-[10px] sm:text-[11px] font-bold text-slate-500 uppercase tracking-wider leading-none">
+                    HỆ THỐNG QUẢN TRỊ &amp; BÁO CÁO
+                  </div>
+                  <h1 className="text-xl sm:text-[22px] font-black text-[#0f2d59] tracking-tight leading-tight mt-0.5">
+                    ĐĂNG NHẬP
+                  </h1>
+                  <p className="text-[11px] sm:text-xs text-slate-600 font-normal mt-0.5">
+                    Vui lòng nhập thông tin tài khoản của bạn
+                  </p>
+                </div>
+              </div>
+
+              {/* Segmented Tab Switcher (Giáo Viên / Nhân Viên vs Ban Giám Hiệu) */}
+              <div className="siso-role-switch bg-slate-100 p-1 rounded-xl grid grid-cols-2 gap-1 mb-4">
+                <button
+                  type="button"
+                  aria-pressed={activeTab === 'GVCN'}
+                  onClick={() => {
+                    setActiveTab('GVCN');
+                    setError('');
+                    setSsoNotice(null);
+                    setEmail('');
+                    setPassword('');
+                  }}
+                  className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer text-center select-none ${
+                    activeTab === 'GVCN'
+                      ? 'bg-gradient-to-r from-[#00897b] to-[#00796b] text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-950 hover:bg-white/70'
+                  }`}
+                >
+                  Giáo Viên / Nhân Viên
+                </button>
+
+                <button
+                  type="button"
+                  aria-pressed={activeTab === 'ADMIN'}
+                  onClick={() => {
+                    setActiveTab('ADMIN');
+                    setError('');
+                    setSsoNotice(null);
+                    try {
+                      setEmail(localStorage.getItem('sso_saved_admin_email') || '');
+                    } catch {
+                      setEmail('');
+                    }
+                    setPassword('');
+                  }}
+                  className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer text-center select-none ${
+                    activeTab === 'ADMIN'
+                      ? 'bg-gradient-to-r from-[#00897b] to-[#00796b] text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-950 hover:bg-white/70'
+                  }`}
+                >
+                  Ban Giám Hiệu
+                </button>
+              </div>
+
+              {/* Error banner if any */}
+              {error && (
+                <div className="mb-3 p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-xs font-semibold text-rose-700 flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+                  <span>{error}</span>
+                </div>
+              )}
+
+              {/* SSO Info Notice (Giữ nguyên tại cửa sổ đăng nhập khi click Google/Microsoft) */}
+              {ssoNotice && (
+                <div className="mb-3 p-2.5 bg-sky-50 border border-sky-200 rounded-xl text-xs text-sky-950 flex items-start justify-between gap-2 animate-in fade-in">
+                  <div className="flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 text-sky-600 shrink-0 mt-0.5" />
+                    <span className="font-medium leading-relaxed">{ssoNotice}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSsoNotice(null)}
+                    className="p-0.5 text-sky-400 hover:text-sky-700 cursor-pointer shrink-0"
+                    title="Đóng thông báo"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
+
+              {/* FORM ĐĂNG NHẬP */}
+              <form onSubmit={handleLoginSubmit} method="post" action="#" className="space-y-3">
+                {/* ========================================================
+                    Ô 1: TÀI KHOẢN EMAIL -> THAY BẰNG "TÊN LỚP" (GVCN)
+                    Mặc định: "Chọn tên lớp"
+                   ======================================================== */}
+                <div>
+                  <div className="relative flex items-center border border-slate-200 hover:border-slate-300 focus-within:border-[#00897b] focus-within:ring-2 focus-within:ring-[#00897b]/15 rounded-xl px-3 h-12 bg-slate-50/60 focus-within:bg-white transition-all shadow-2xs">
+                    <User className="w-4 h-4 text-slate-400 shrink-0 mr-2.5" />
+
+                    {activeTab === 'GVCN' ? (
+                      /* GVCN: TÊN LỚP (Mặc định: "Chọn tên lớp") */
+                      <div className="relative flex-1">
+                        <select
+                          id="login-class-select"
+                          value={selectedClassId}
+                          onChange={(e) => handleClassChange(e.target.value)}
+                          required
+                          className="w-full bg-transparent text-xs sm:text-[13.5px] font-semibold text-slate-800 focus:outline-hidden cursor-pointer appearance-none pr-6"
+                        >
+                          <option value="">Chọn tên lớp</option>
+                          {distinctGrades.map((grade) => {
+                            const grp = sortedClasses.filter((c) => c.grade === grade);
+                            if (grp.length === 0) return null;
+                            const gradeLabel = settings?.grade_names?.[grade.toString()] || `Khối ${grade}`;
+                            return (
+                              <optgroup key={grade} label={gradeLabel}>
+                                {grp.map((c) => (
+                                  <option key={c.id} value={c.id}>
+                                    Lớp {c.class_name}
+                                  </option>
+                                ))}
+                              </optgroup>
+                            );
+                          })}
+                          {otherClasses.length > 0 && (
+                            <optgroup label="Khối khác">
+                              {otherClasses.map((c) => (
                                 <option key={c.id} value={c.id}>
                                   Lớp {c.class_name}
                                 </option>
                               ))}
                             </optgroup>
-                          );
-                        })}
-                        {otherClasses.length > 0 && (
-                          <optgroup label="Khối khác">
-                            {otherClasses.map((c) => (
-                              <option key={c.id} value={c.id}>
-                                Lớp {c.class_name}
-                              </option>
-                            ))}
-                          </optgroup>
+                          )}
+                        </select>
+                        <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-0 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      </div>
+                    ) : (
+                      /* ADMIN: TÀI KHOẢN HOẶC EMAIL */
+                      <input
+                        id="login-admin-email"
+                        name="username"
+                        type="text"
+                        autoComplete="username"
+                        autoCapitalize="none"
+                        autoCorrect="off"
+                        spellCheck="false"
+                        required
+                        placeholder="Tài khoản hoặc Email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        className="w-full bg-transparent text-xs sm:text-[13.5px] font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-hidden"
+                      />
+                    )}
+                  </div>
+                </div>
+
+                {/* ========================================================
+                    Ô 2: MẬT KHẨU -> THAY BẰNG "TÊN GVCN" (GVCN)
+                    Khi GVCN chọn lớp thì tự động hiển thị đúng GVCN tương ứng
+                   ======================================================== */}
+                <div>
+                  {activeTab === 'GVCN' ? (
+                    /* GVCN: TÊN GIÁO VIÊN CHỦ NHIỆM */
+                    <div
+                      className={`relative flex items-center border rounded-xl px-3 h-12 transition-all shadow-2xs ${
+                        selectedClassId
+                          ? 'border-emerald-300/80 bg-emerald-50/30 text-slate-900'
+                          : 'border-slate-200 bg-slate-50/60 text-slate-400'
+                      }`}
+                    >
+                      {selectedClassId ? (
+                        <UserCheck className="w-4 h-4 text-emerald-600 shrink-0 mr-2.5" />
+                      ) : (
+                        <Lock className="w-4 h-4 text-slate-400 shrink-0 mr-2.5" />
+                      )}
+
+                      <div className="flex-1 flex items-center justify-between min-w-0 pr-1">
+                        {selectedClassId ? (
+                          <>
+                            <div className="text-xs sm:text-[13.5px] font-bold text-slate-800 truncate">
+                              GVCN: {resolvedTeacherName || 'Chưa phân công'}
+                            </div>
+                            <span
+                              className={`shrink-0 text-[10px] font-extrabold uppercase px-1.5 py-0.5 rounded-md border ${
+                                resolvedTeacherName
+                                  ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                                  : 'bg-amber-100 text-amber-800 border-amber-200'
+                              }`}
+                            >
+                              {resolvedTeacherName ? 'Đúng GVCN' : 'Chưa phân công'}
+                            </span>
+                          </>
+                        ) : (
+                          <div className="text-xs sm:text-[13px] text-slate-400 font-medium truncate select-none">
+                            Tên GVCN (Chọn tên lớp để hiển thị)
+                          </div>
                         )}
-                      </select>
-                      <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-0 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      </div>
                     </div>
                   ) : (
-                    /* ADMIN: TÀI KHOẢN HOẶC EMAIL */
-                    <input
-                      id="login-admin-email"
-                      name="username"
-                      type="text"
-                      autoComplete="username"
-                      autoCapitalize="none"
-                      autoCorrect="off"
-                      spellCheck="false"
-                      required
-                      placeholder="Tài khoản hoặc Email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      className="w-full bg-transparent text-xs sm:text-[13.5px] font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-hidden"
-                    />
+                    /* ADMIN: MẬT KHẨU */
+                    <div className="relative flex items-center border border-slate-200 hover:border-slate-300 focus-within:border-[#00897b] focus-within:ring-2 focus-within:ring-[#00897b]/15 rounded-xl px-3 h-12 bg-slate-50/60 focus-within:bg-white transition-all shadow-2xs">
+                      <Lock className="w-4 h-4 text-slate-400 shrink-0 mr-2.5" />
+                      <input
+                        id="login-admin-password"
+                        name="password"
+                        type={showPassword ? 'text' : 'password'}
+                        autoComplete="current-password"
+                        autoCapitalize="none"
+                        autoCorrect="off"
+                        spellCheck="false"
+                        required
+                        placeholder="Mật khẩu"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        className="w-full bg-transparent text-xs sm:text-[13.5px] font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-hidden"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="text-slate-400 hover:text-slate-600 ml-2 cursor-pointer transition-colors"
+                        tabIndex={-1}
+                      >
+                        {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
                   )}
                 </div>
-              </div>
 
-              {/* ========================================================
-                  Ô 2: MẬT KHẨU -> THAY BẰNG "TÊN GVCN" (GVCN)
-                  Khi GVCN chọn lớp thì tự động hiển thị đúng GVCN tương ứng
-                 ======================================================== */}
-              <div>
-                {activeTab === 'GVCN' ? (
-                  /* GVCN: TÊN GIÁO VIÊN CHỦ NHIỆM */
-                  <div
-                    className={`relative flex items-center border rounded-xl px-3 h-12 transition-all shadow-2xs ${
-                      selectedClassId
-                        ? 'border-emerald-300/80 bg-emerald-50/30 text-slate-900'
-                        : 'border-slate-200 bg-slate-50/60 text-slate-400'
-                    }`}
-                  >
-                    {selectedClassId ? (
-                      <UserCheck className="w-4 h-4 text-emerald-600 shrink-0 mr-2.5" />
-                    ) : (
-                      <Lock className="w-4 h-4 text-slate-400 shrink-0 mr-2.5" />
-                    )}
-
-                    <div className="flex-1 flex items-center justify-between min-w-0 pr-1">
-                      {selectedClassId ? (
-                        <>
-                          <div className="text-xs sm:text-[13.5px] font-bold text-slate-800 truncate">
-                            GVCN: {resolvedTeacherName || 'Chưa phân công'}
-                          </div>
-                          <span
-                            className={`shrink-0 text-[10px] font-extrabold uppercase px-1.5 py-0.5 rounded-md border ${
-                              resolvedTeacherName
-                                ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
-                                : 'bg-amber-100 text-amber-800 border-amber-200'
-                            }`}
-                          >
-                            {resolvedTeacherName ? 'Đúng GVCN' : 'Chưa phân công'}
-                          </span>
-                        </>
-                      ) : (
-                        <div className="text-xs sm:text-[13px] text-slate-400 font-medium truncate select-none">
-                          Tên GVCN (Chọn tên lớp để hiển thị)
-                        </div>
-                      )}
+                {/* Row: Ghi nhớ đăng nhập & Quên mật khẩu? */}
+                <div className="flex items-center justify-between text-xs pt-0.5">
+                  <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                    <div
+                      onClick={() => setRememberLogin(!rememberLogin)}
+                      className={`w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors ${
+                        rememberLogin
+                          ? 'bg-[#00897b] border-[#00897b] text-white'
+                          : 'border-slate-300 bg-white'
+                      }`}
+                    >
+                      {rememberLogin && <Check className="w-2.5 h-2.5 stroke-[3]" />}
                     </div>
-                  </div>
-                ) : (
-                  /* ADMIN: MẬT KHẨU */
-                  <div className="relative flex items-center border border-slate-200 hover:border-slate-300 focus-within:border-[#00897b] focus-within:ring-2 focus-within:ring-[#00897b]/15 rounded-xl px-3 h-12 bg-slate-50/60 focus-within:bg-white transition-all shadow-2xs">
-                    <Lock className="w-4 h-4 text-slate-400 shrink-0 mr-2.5" />
-                    <input
-                      id="login-admin-password"
-                      name="password"
-                      type={showPassword ? 'text' : 'password'}
-                      autoComplete="current-password"
-                      autoCapitalize="none"
-                      autoCorrect="off"
-                      spellCheck="false"
-                      required
-                      placeholder="Mật khẩu"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      className="w-full bg-transparent text-xs sm:text-[13.5px] font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-hidden"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="text-slate-400 hover:text-slate-600 ml-2 cursor-pointer transition-colors"
-                      tabIndex={-1}
-                    >
-                      {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                    </button>
-                  </div>
-                )}
-              </div>
+                    <span className="text-slate-600 font-medium text-[11px] sm:text-xs">
+                      Ghi nhớ đăng nhập
+                    </span>
+                  </label>
 
-              {/* Row: Ghi nhớ đăng nhập & Quên mật khẩu? */}
-              <div className="flex items-center justify-between text-xs pt-0.5">
-                <label className="flex items-center gap-1.5 cursor-pointer select-none">
-                  <div
-                    onClick={() => setRememberLogin(!rememberLogin)}
-                    className={`w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors ${
-                      rememberLogin
-                        ? 'bg-[#00897b] border-[#00897b] text-white'
-                        : 'border-slate-300 bg-white'
-                    }`}
+                  <button
+                    type="button"
+                    onClick={() => setShowForgotModal(true)}
+                    className="text-[#00897b] hover:text-[#00695c] hover:underline font-medium text-[11px] sm:text-xs cursor-pointer"
                   >
-                    {rememberLogin && <Check className="w-2.5 h-2.5 stroke-[3]" />}
-                  </div>
-                  <span className="text-slate-600 font-medium text-[11px] sm:text-xs">
-                    Ghi nhớ đăng nhập
-                  </span>
-                </label>
-
-                <button
-                  type="button"
-                  onClick={() => setShowForgotModal(true)}
-                  className="text-[#00897b] hover:text-[#00695c] hover:underline font-medium text-[11px] sm:text-xs cursor-pointer"
-                >
-                  Quên mật khẩu?
-                </button>
-              </div>
-
-              {/* Nút ĐĂNG NHẬP (Pill Gradient Button theo đúng hình gốc) */}
-              <div className="pt-1.5">
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="min-h-12 w-full px-4 rounded-xl bg-gradient-to-r from-[#003B5C] via-[#005B82] to-[#00897B] hover:opacity-95 text-white font-bold text-xs sm:text-sm uppercase tracking-wider shadow-md shadow-teal-900/20 active:scale-[0.99] transition-all cursor-pointer flex items-center justify-center"
-                >
-                  <span>{isSubmitting ? 'ĐANG ĐĂNG NHẬP...' : 'ĐĂNG NHẬP'}</span>
-                </button>
-              </div>
-
-              {/* Hoặc đăng nhập nhanh bằng Google / Microsoft */}
-              <div className="pt-2 text-center">
-                <div className="text-[11px] sm:text-xs text-slate-500 flex items-center justify-center gap-2">
-                  <span>Hoặc đăng nhập nhanh bằng</span>
-
-                  <div className="flex items-center gap-1.5">
-                    {/* Google Icon Button */}
-                    <button
-                      type="button"
-                      onClick={() => handleQuickDemoLogin('google')}
-                      title="Đăng nhập nhanh với Google"
-                      className="p-1 hover:bg-slate-100 rounded-lg transition-transform hover:scale-110 active:scale-95 cursor-pointer"
-                    >
-                      <svg className="w-4 h-4" viewBox="0 0 24 24">
-                        <path
-                          fill="#4285F4"
-                          d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.8-2.4 3.65v3.03h3.88c2.27-2.09 3.665-5.17 3.665-9.12z"
-                        />
-                        <path
-                          fill="#34A853"
-                          d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.03c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.26v3.13C3.25 21.36 7.34 24 12 24z"
-                        />
-                        <path
-                          fill="#FBBC05"
-                          d="M5.28 14.29c-.25-.72-.38-1.49-.38-2.29s.13-1.57.38-2.29V6.58H1.26C.46 8.18 0 9.99 0 12s.46 3.82 1.26 5.42l4.02-3.13z"
-                        />
-                        <path
-                          fill="#EA4335"
-                          d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.34 0 3.25 2.64 1.26 6.58l4.02 3.13c.95-2.83 3.6-4.96 6.72-4.96z"
-                        />
-                      </svg>
-                    </button>
-
-                    {/* Microsoft Icon Button */}
-                    <button
-                      type="button"
-                      onClick={() => handleQuickDemoLogin('microsoft')}
-                      title="Đăng nhập nhanh với Microsoft"
-                      className="p-1 hover:bg-slate-100 rounded-lg transition-transform hover:scale-110 active:scale-95 cursor-pointer"
-                    >
-                      <svg className="w-3.5 h-3.5" viewBox="0 0 21 21">
-                        <rect x="1" y="1" width="9" height="9" fill="#F25022" />
-                        <rect x="11" y="1" width="9" height="9" fill="#7FBA00" />
-                        <rect x="1" y="11" width="9" height="9" fill="#00A4EF" />
-                        <rect x="11" y="11" width="9" height="9" fill="#FFB900" />
-                      </svg>
-                    </button>
-                  </div>
+                    Quên mật khẩu?
+                  </button>
                 </div>
 
-                {/* Optional Year configuration shortcut for Admin */}
-                {activeTab === 'ADMIN' && (
-                  <div className="mt-2.5 pt-2 border-t border-slate-100 flex justify-center">
-                    <button
-                      type="button"
-                      onClick={handleOpenAdminYearModal}
-                      className="text-xs font-bold text-slate-500 hover:text-teal-700 flex items-center gap-1.5 cursor-pointer transition-colors"
-                    >
-                      <Settings2 className="w-3.5 h-3.5 text-teal-600" />
-                      <span>Cấu hình năm học hoạt động</span>
-                    </button>
+                {/* Nút ĐĂNG NHẬP (Pill Gradient Button theo đúng hình gốc) */}
+                <div className="pt-1.5">
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="min-h-12 w-full px-4 rounded-xl bg-gradient-to-r from-[#003B5C] via-[#005B82] to-[#00897B] hover:opacity-95 text-white font-bold text-xs sm:text-sm uppercase tracking-wider shadow-md shadow-teal-900/20 active:scale-[0.99] transition-all cursor-pointer flex items-center justify-center"
+                  >
+                    <span>{isSubmitting ? 'ĐANG ĐĂNG NHẬP...' : 'ĐĂNG NHẬP'}</span>
+                  </button>
+                </div>
+
+                {/* Hoặc đăng nhập nhanh bằng Google / Microsoft */}
+                <div className="pt-2 text-center">
+                  <div className="text-[11px] sm:text-xs text-slate-500 flex items-center justify-center gap-2">
+                    <span>Hoặc đăng nhập nhanh bằng</span>
+
+                    <div className="flex items-center gap-1.5">
+                      {/* Google Icon Button */}
+                      <button
+                        type="button"
+                        onClick={() => handleQuickDemoLogin('google')}
+                        title="Đăng nhập nhanh với Google"
+                        className="p-1 hover:bg-slate-100 rounded-lg transition-transform hover:scale-110 active:scale-95 cursor-pointer"
+                      >
+                        <svg className="w-4 h-4" viewBox="0 0 24 24">
+                          <path
+                            fill="#4285F4"
+                            d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.8-2.4 3.65v3.03h3.88c2.27-2.09 3.665-5.17 3.665-9.12z"
+                          />
+                          <path
+                            fill="#34A853"
+                            d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.03c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.26v3.13C3.25 21.36 7.34 24 12 24z"
+                          />
+                          <path
+                            fill="#FBBC05"
+                            d="M5.28 14.29c-.25-.72-.38-1.49-.38-2.29s.13-1.57.38-2.29V6.58H1.26C.46 8.18 0 9.99 0 12s.46 3.82 1.26 5.42l4.02-3.13z"
+                          />
+                          <path
+                            fill="#EA4335"
+                            d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.34 0 3.25 2.64 1.26 6.58l4.02 3.13c.95-2.83 3.6-4.96 6.72-4.96z"
+                          />
+                        </svg>
+                      </button>
+
+                      {/* Microsoft Icon Button */}
+                      <button
+                        type="button"
+                        onClick={() => handleQuickDemoLogin('microsoft')}
+                        title="Đăng nhập nhanh với Microsoft"
+                        className="p-1 hover:bg-slate-100 rounded-lg transition-transform hover:scale-110 active:scale-95 cursor-pointer"
+                      >
+                        <svg className="w-3.5 h-3.5" viewBox="0 0 21 21">
+                          <rect x="1" y="1" width="9" height="9" fill="#F25022" />
+                          <rect x="11" y="1" width="9" height="9" fill="#7FBA00" />
+                          <rect x="1" y="11" width="9" height="9" fill="#00A4EF" />
+                          <rect x="11" y="11" width="9" height="9" fill="#FFB900" />
+                        </svg>
+                      </button>
+                    </div>
                   </div>
-                )}
-              </div>
-            </form>
+
+                  {/* Optional Year configuration shortcut for Admin */}
+                  {activeTab === 'ADMIN' && (
+                    <div className="mt-2.5 pt-2 border-t border-slate-100 flex justify-center">
+                      <button
+                        type="button"
+                        onClick={handleOpenAdminYearModal}
+                        className="text-xs font-bold text-slate-500 hover:text-teal-700 flex items-center gap-1.5 cursor-pointer transition-colors"
+                      >
+                        <Settings2 className="w-3.5 h-3.5 text-teal-600" />
+                        <span>Cấu hình năm học hoạt động</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </form>
+            </div>
           </div>
-        </div>
+          </div>
         </div>
       </main>
 
