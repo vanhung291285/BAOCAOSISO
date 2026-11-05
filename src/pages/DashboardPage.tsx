@@ -23,7 +23,6 @@ import {
   Sparkles,
   Bed,
   Layers,
-  GraduationCap,
   ArrowRight,
   ClipboardCheck,
   ChevronDown,
@@ -33,8 +32,6 @@ import {
   Award,
   RotateCcw,
   BellRing,
-  ExternalLink,
-  Globe,
   FileCheck2,
   School,
   Code2,
@@ -383,50 +380,6 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSele
           </div>
         </div>
 
-        {/* Prominent School Links Banner */}
-        <div className="mt-4 pt-3.5 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2.5 bg-gradient-to-r from-blue-50/90 via-indigo-50/40 to-emerald-50/90 p-2.5 sm:p-3 rounded-xl border border-blue-100/80 shadow-2xs">
-          <div className="flex items-center gap-2 text-xs font-extrabold text-slate-800 shrink-0">
-            <Sparkles className="w-4 h-4 text-amber-500 fill-amber-400 animate-pulse shrink-0" />
-            <span className="uppercase tracking-wider text-[11px] text-blue-950 font-extrabold">
-              Liên kết nổi bật nhà trường:
-            </span>
-          </div>
-          <div className="grid w-full min-w-0 grid-cols-1 gap-2 sm:grid-cols-3">
-            <a
-              href={settings?.website || 'https://thcsxadung.db.edu.vn/'}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex min-h-11 min-w-0 items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-extrabold text-blue-900 bg-white hover:bg-blue-600 hover:text-white border border-blue-300 hover:border-blue-600 shadow-2xs hover:shadow-md transition-all active:scale-95 group cursor-pointer"
-              title="Mở Trang thông tin điện tử nhà trường (https://thcsxadung.db.edu.vn/)"
-            >
-              <Globe className="w-4 h-4 text-blue-600 group-hover:text-white shrink-0" />
-              <span>Trang thông tin điện tử</span>
-              <ExternalLink className="w-3.5 h-3.5 text-blue-400 group-hover:text-white shrink-0 ml-0.5" />
-            </a>
-
-            <a
-              href={settings?.student_results_url || 'https://kqht.db.edu.vn/'}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex min-h-11 min-w-0 items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-extrabold text-emerald-950 bg-white hover:bg-emerald-600 hover:text-white border border-emerald-300 hover:border-emerald-600 shadow-2xs hover:shadow-md transition-all active:scale-95 group cursor-pointer"
-              title="Mở Trang tra cứu kết quả học tập của trường (https://kqht.db.edu.vn/)"
-            >
-              <GraduationCap className="w-4 h-4 text-emerald-600 group-hover:text-white shrink-0" />
-              <span>Tra cứu kết quả học tập</span>
-              <ExternalLink className="w-3.5 h-3.5 text-emerald-400 group-hover:text-white shrink-0 ml-0.5" />
-            </a>
-            <a
-              href="https://dangky.db.edu.vn/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex min-h-11 min-w-0 items-center justify-center gap-1.5 rounded-xl border border-violet-300 bg-white px-3 py-2 text-center text-xs font-extrabold text-violet-950 transition-colors hover:border-violet-700 hover:bg-violet-700 hover:text-white focus-visible:ring-2 focus-visible:ring-violet-600"
-            >
-              <Calendar className="h-4 w-4 shrink-0" aria-hidden="true" />
-              <span>Đăng ký học sinh ở lại cuối tuần</span>
-              <ExternalLink className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-            </a>
-          </div>
-        </div>
       </div>
 
       {/* 1.5. 4-LEVEL ATTENDANCE OVERVIEW (NGÀY - TUẦN - THÁNG - HỌC KỲ) */}

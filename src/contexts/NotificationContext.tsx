@@ -269,7 +269,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   }, [urgentAttendanceReminder]);
 
   useEffect(() => {
-    if (!urgentAttendanceReminder) {
+    if (!currentUser || !urgentAttendanceReminder) {
       stopDocumentTitleAlert();
       return;
     }
@@ -311,7 +311,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       clearInterval(interval);
       stopDocumentTitleAlert();
     };
-  }, [urgentAttendanceReminder, snoozedId]);
+  }, [currentUser, urgentAttendanceReminder, snoozedId]);
 
   const markAsRead = async (id: string) => {
     await StorageService.markNotificationAsRead(id);

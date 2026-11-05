@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useSchool } from '../contexts/SchoolContext';
-import { useNotifications } from '../contexts/NotificationContext';
 import {
   User,
   Lock,
@@ -19,7 +18,9 @@ import {
   Trash2,
   Unlock,
   KeyRound,
-  BellRing,
+  Globe,
+  GraduationCap,
+  ExternalLink,
   UserCheck,
 } from 'lucide-react';
 import { SchoolYear, ClassItem, Profile } from '../types';
@@ -32,10 +33,6 @@ interface LoginPageProps {
 
 export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
   const { currentUser, login, allUsers, reloadUsers, switchUser } = useAuth();
-  const {
-    urgentAttendanceReminder,
-    markAsRead,
-  } = useNotifications();
   const {
     settings,
     classes,
@@ -380,62 +377,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
     }
   };
 
-  // Direct Attendance Alert Action
-  const handleDirectAttendanceFromAlert = async () => {
-    if (!urgentAttendanceReminder) return;
-    const targetClassId = urgentAttendanceReminder.class_id || selectedClassId;
-    const targetClass = classes.find(
-      (c) => c.id === targetClassId || c.class_name === urgentAttendanceReminder.class_name
-    );
-    let teacher = findMatchedTeacher(targetClass || null);
-    if (!teacher && targetClassId) {
-      teacher = allUsers.find(
-        (u) =>
-          u.role === 'GVCN' &&
-          (u.assigned_class_id === targetClassId ||
-            classes.some((c) => c.id === targetClassId && c.homeroom_teacher_id === u.id))
-      );
-    }
-    if (!teacher && selectedTeacherId) {
-      teacher = allUsers.find((u) => u.id === selectedTeacherId);
-    }
-    if (!teacher && targetClass) {
-      const teacherId = targetClass.homeroom_teacher_id || `teacher_${targetClass.id}`;
-      const teacherFullName =
-        resolvedTeacherName ||
-        (targetClass.homeroom_teacher_id && targetClass.homeroom_teacher_id.includes(' ')
-          ? targetClass.homeroom_teacher_id
-          : `GVCN Lớp ${targetClass.class_name}`);
-      teacher = {
-        id: teacherId,
-        full_name: teacherFullName,
-        email: `gvcn_${targetClass.class_name.toLowerCase().replace(/[^a-z0-9]/g, '')}@xadung.edu.vn`,
-        role: 'GVCN',
-        active: true,
-        assigned_class_id: targetClass.id,
-        created_at: new Date().toISOString(),
-      };
-    }
-    if (!teacher) {
-      teacher = allUsers.find((u) => u.role === 'GVCN');
-    }
-
-    if (teacher) {
-      setIsSubmitting(true);
-      try {
-        await switchUser(teacher.id, teacher);
-        if (urgentAttendanceReminder) {
-          await markAsRead(urgentAttendanceReminder.id);
-        }
-        onLoginSuccess('/attendance');
-      } catch {
-        setError('Không thể tự động đăng nhập.');
-      } finally {
-        setIsSubmitting(false);
-      }
-    }
-  };
-
   // Xử lý khi nhấn biểu tượng Google / Microsoft (Đăng nhập nhanh):
   // Theo yêu cầu người dùng: Giữ nguyên ở cửa sổ đăng nhập, không bao giờ hiển thị hay chuyển sang tài khoản/mật khẩu quản trị!
   const handleQuickDemoLogin = (provider: 'google' | 'microsoft') => {
@@ -560,32 +501,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
             <p>Điểm danh, theo dõi bán trú và tổng hợp báo cáo theo lớp.</p>
           </section>
           <div className="siso-login-panel">
-          {/* Urgent reminder alert notice if unsubmitted report */}
-          {urgentAttendanceReminder && (
-            <div className="mb-3 w-full">
-              <div className="flex items-center justify-between gap-3 rounded-2xl border border-amber-300/70 bg-amber-50 px-3 py-2.5 text-amber-950">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <BellRing className="h-4 w-4 shrink-0 text-amber-700" />
-                  <div className="min-w-0">
-                    <div className="text-xs font-extrabold leading-snug">
-                      Lớp {urgentAttendanceReminder.class_name || ''} chưa báo cáo
-                    </div>
-                    <div className="mt-0.5 text-xs leading-snug text-amber-900">
-                      {urgentAttendanceReminder.message}
-                    </div>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleDirectAttendanceFromAlert}
-                  className="min-h-11 shrink-0 cursor-pointer rounded-xl bg-amber-200 px-3 text-xs font-bold text-amber-950 transition-colors hover:bg-amber-300"
-                >
-                  Vào ngay
-                </button>
-              </div>
-            </div>
-          )}
-
           {/* Khung viền kính mờ tinh tế (Bo góc 24px, đổ bóng nhẹ nhàng chuẩn hình gốc) */}
           <div className="siso-login-card w-full">
             {/* Card trắng bên trong: kích thước gọn gàng, không bị thô dày */}
@@ -963,6 +878,30 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
             </div>
           </div>
           </div>
+          <nav aria-labelledby="school-links-title">
+            <h2 id="school-links-title" className="mb-2 text-center text-xs font-semibold text-slate-200">
+              Liên kết nhà trường
+            </h2>
+            <div className="grid grid-cols-2 gap-2 min-[480px]:grid-cols-3">
+              {[
+                { label: 'Trang thông tin điện tử', href: settings?.website || 'https://thcsxadung.db.edu.vn/', Icon: Globe },
+                { label: 'Tra cứu kết quả học tập', href: settings?.student_results_url || 'https://kqht.db.edu.vn/', Icon: GraduationCap },
+                { label: 'Đăng ký học sinh ở lại cuối tuần', href: 'https://dangky.db.edu.vn/', Icon: Calendar },
+              ].map(({ label, href, Icon }, index) => (
+                <a
+                  key={label}
+                  href={href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`flex min-h-11 items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-2.5 py-2 text-xs font-semibold leading-snug text-white transition-colors hover:bg-white/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-300 ${index === 2 ? 'col-span-2 min-[480px]:col-span-1' : ''}`}
+                >
+                  <Icon className="h-4 w-4 shrink-0 text-teal-200" aria-hidden="true" />
+                  <span className="flex-1">{label}</span>
+                  <ExternalLink className="h-3 w-3 shrink-0 text-slate-300" aria-hidden="true" />
+                </a>
+              ))}
+            </div>
+          </nav>
         </div>
       </main>
 
