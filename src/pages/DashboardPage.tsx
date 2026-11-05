@@ -391,7 +391,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSele
               Liên kết nổi bật nhà trường:
             </span>
           </div>
-          <div className="grid w-full min-w-0 grid-cols-1 gap-2 sm:w-auto sm:grid-cols-2">
+          <div className="grid w-full min-w-0 grid-cols-1 gap-2 sm:grid-cols-3">
             <a
               href={settings?.website || 'https://thcsxadung.db.edu.vn/'}
               target="_blank"
@@ -414,6 +414,16 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSele
               <GraduationCap className="w-4 h-4 text-emerald-600 group-hover:text-white shrink-0" />
               <span>Tra cứu kết quả học tập</span>
               <ExternalLink className="w-3.5 h-3.5 text-emerald-400 group-hover:text-white shrink-0 ml-0.5" />
+            </a>
+            <a
+              href="https://dangky.db.edu.vn/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex min-h-11 min-w-0 items-center justify-center gap-1.5 rounded-xl border border-violet-300 bg-white px-3 py-2 text-center text-xs font-extrabold text-violet-950 transition-colors hover:border-violet-700 hover:bg-violet-700 hover:text-white focus-visible:ring-2 focus-visible:ring-violet-600"
+            >
+              <Calendar className="h-4 w-4 shrink-0" aria-hidden="true" />
+              <span>Đăng ký học sinh ở lại cuối tuần</span>
+              <ExternalLink className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
             </a>
           </div>
         </div>

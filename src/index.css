@@ -142,7 +142,7 @@
   .siso-login-main {
     display: flex;
     align-items: center;
-    width: min(100%, 30rem);
+    width: min(100%, 32rem);
     margin-inline: auto;
     padding: 1.5rem 1rem;
   }
@@ -151,13 +151,14 @@
     display: grid;
     width: 100%;
     grid-template-columns: minmax(0, 1fr);
-    gap: 1.25rem;
+    gap: 1rem;
   }
 
-  .siso-login-intro { color: #d5e6f1; }
+  .siso-login-intro { color: #d5e6f1; text-align: center; }
+  .siso-login-intro > p:last-child { font-size: .875rem; line-height: 1.5; }
   .siso-login-intro h2 {
     margin-block: .35rem .5rem;
-    font-size: clamp(2rem, 4.2vw, 3.6rem);
+    font-size: clamp(1.75rem, 4vw, 2.5rem);
     line-height: 1.05;
     font-weight: 800;
     letter-spacing: -.045em;
@@ -200,23 +201,4 @@
     .siso-content { padding-inline: .85rem; }
   }
 
-  @media (min-width: 1024px) {
-    .siso-login-main {
-      width: min(100%, 68rem);
-      padding: 2.5rem 1.25rem;
-    }
-    .siso-login-stage {
-      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-      align-items: center;
-      gap: 2rem;
-      padding: 1.5rem;
-      border: 1px solid #ffffff24;
-      border-radius: 2rem;
-      background: #0c2236b3;
-      box-shadow: 0 24px 72px #050c1a45;
-    }
-    .siso-login-intro { padding: 1rem clamp(1rem, 3vw, 2.5rem); }
-    .siso-login-intro h2 { max-width: 12ch; text-wrap: balance; }
-    .siso-login-intro > p:last-child { max-width: 34ch; line-height: 1.65; }
-  }
 }
