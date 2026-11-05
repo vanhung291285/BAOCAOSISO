@@ -144,7 +144,7 @@
     align-items: center;
     width: min(100%, 32rem);
     margin-inline: auto;
-    padding: 1.5rem 1rem;
+    padding: 1rem 1rem clamp(2.5rem, 8dvh, 5rem);
   }
 
   .siso-login-stage {
@@ -176,6 +176,7 @@
     border-radius: 1.4rem;
     box-shadow: 0 16px 46px #050c1a60;
   }
+  .siso-login-card-inner { padding: 1.75rem; }
   .siso-role-switch button { min-height: 44px; font-size: .78rem; }
   .siso-login :is(button, input, select):focus-visible,
   .siso-mobile-dock button:focus-visible {
@@ -196,6 +197,18 @@
   .siso-mobile-dock > button.font-bold { background: #edf5ff; }
 
   @media (max-width: 639px) {
+    .siso-login-header {
+      padding: calc(.75rem + env(safe-area-inset-top)) 1rem 0;
+    }
+    .siso-login-main {
+      align-items: flex-start;
+      padding: clamp(.75rem, 2.5dvh, 1.5rem) 1rem 1rem;
+    }
+    .siso-login-stage { gap: .75rem; }
+    .siso-login-intro h2 { margin-block: .2rem .3rem; }
+    .siso-login-intro > p:last-child { font-size: .8rem; }
+    .siso-login-card-inner { padding: 1rem; }
+    .siso-login-form > :not(:last-child) { margin-block: 0 .55rem; }
     .siso-login input:not([type='checkbox']):not([type='hidden']),
     .siso-login select { font-size: 16px; }
     .siso-content { padding-inline: .85rem; }

@@ -589,7 +589,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
           {/* Khung viền kính mờ tinh tế (Bo góc 24px, đổ bóng nhẹ nhàng chuẩn hình gốc) */}
           <div className="siso-login-card w-full">
             {/* Card trắng bên trong: kích thước gọn gàng, không bị thô dày */}
-            <div className="w-full bg-white rounded-[inherit] p-5 sm:p-7">
+            <div className="siso-login-card-inner w-full rounded-[inherit] bg-white">
               {/* Header: Logo hình tròn và Tiêu đề ĐĂNG NHẬP */}
               <div className="flex items-center gap-3 sm:gap-3.5 mb-4">
                 {/* Circular Emblem Seal */}
@@ -718,7 +718,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
               )}
 
               {/* FORM ĐĂNG NHẬP */}
-              <form onSubmit={handleLoginSubmit} method="post" action="#" className="space-y-3">
+              <form onSubmit={handleLoginSubmit} method="post" action="#" className="siso-login-form space-y-3">
                 {/* ========================================================
                     Ô 1: TÀI KHOẢN EMAIL -> THAY BẰNG "TÊN LỚP" (GVCN)
                     Mặc định: "Chọn tên lớp"
