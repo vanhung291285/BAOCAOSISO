@@ -1,3 +1,4 @@
+import { isStorageQuotaError } from '../utils/safeStorage';
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useSchool } from '../contexts/SchoolContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -1307,7 +1308,9 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
     } catch (err: any) {
       console.error('Error saving report:', err);
       setToastMessage({
-        text: err?.message || 'Có lỗi xảy ra khi lưu báo cáo!',
+        text: isStorageQuotaError(err)
+          ? 'Bộ nhớ lưu trữ của ứng dụng đã đầy hoặc bị giới hạn. Báo cáo chưa được xác nhận. Hãy giữ màn hình này mở và thử lại.'
+          : err?.message || 'Có lỗi xảy ra khi lưu báo cáo!',
         type: 'error',
       });
     } finally {

@@ -516,143 +516,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
   };
 
   return (
-    <div className="min-h-screen w-full relative flex flex-col justify-between overflow-x-hidden font-sans select-none bg-[#111927]">
-      {/* ========================================================
-          BACKGROUND: 100% MATCHING THE REFERENCE IMAGE
-          - Left: Dark tech background with glowing isometric wireframe cubes, particles, chevrons
-          - Right: Diagonal cut into soft light blue-gray gradient
-          - Lower right: Dark navy wedge with 4-point sparkle star
-         ======================================================== */}
-      <div className="absolute inset-0 pointer-events-none overflow-hidden">
-        {/* Right diagonal light area */}
-        <div
-          className="absolute inset-0 bg-gradient-to-br from-[#f0f4f9] via-[#e2eaf4] to-[#cddbea]"
-          style={{
-            clipPath: 'polygon(52% 0%, 100% 0%, 100% 100%, 75% 100%)',
-          }}
-        />
-
-        {/* Lower right dark navy wedge */}
-        <div
-          className="absolute bottom-0 right-0 w-[42%] h-[60%] bg-[#0e1d33]"
-          style={{
-            clipPath: 'polygon(100% 0%, 0% 100%, 100% 100%)',
-          }}
-        />
-
-        {/* 4-point sparkle star in lower right */}
-        <div className="absolute bottom-16 right-20 text-slate-400/40 text-4xl select-none animate-pulse">
-          ✦
-        </div>
-
-        {/* Left tech grid and glowing particles */}
-        <div className="absolute inset-0 bg-[radial-gradient(#1e3a5f_1px,transparent_1px)] [background-size:24px_24px] opacity-25" />
-
-        {/* Left 3D Isometric wireframe cubes SVG illustration */}
-        <svg
-          className="absolute left-[-40px] top-[15%] w-[420px] h-[520px] opacity-35"
-          viewBox="0 0 400 500"
-          fill="none"
-          xmlns="http://www.w3.org/2000/svg"
-        >
-          {/* Chevron stack >>> */}
-          <path
-            d="M40 70 L55 85 L40 100"
-            stroke="#00d2ff"
-            strokeWidth="2.5"
-            opacity="0.6"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-          <path
-            d="M40 95 L55 110 L40 125"
-            stroke="#00d2ff"
-            strokeWidth="2.5"
-            opacity="0.4"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-          <path
-            d="M40 120 L55 135 L40 150"
-            stroke="#00d2ff"
-            strokeWidth="2.5"
-            opacity="0.25"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-
-          {/* Cube 1 (Large Isometric) */}
-          <g transform="translate(180, 160)">
-            <path
-              d="M0 -60 L52 -30 L52 30 L0 60 L-52 30 L-52 -30 Z"
-              stroke="#38bdf8"
-              strokeWidth="1.5"
-              fill="rgba(15,23,42,0.4)"
-            />
-            <path
-              d="M0 0 L0 60 M0 0 L52 -30 M0 0 L-52 -30"
-              stroke="#38bdf8"
-              strokeWidth="1.2"
-              opacity="0.8"
-            />
-            <circle cx="0" cy="-60" r="3" fill="#38bdf8" />
-            <circle cx="52" cy="-30" r="3" fill="#38bdf8" />
-            <circle cx="52" cy="30" r="3" fill="#38bdf8" />
-            <circle cx="0" cy="60" r="3" fill="#38bdf8" />
-            <circle cx="-52" cy="30" r="3" fill="#38bdf8" />
-            <circle cx="-52" cy="-30" r="3" fill="#38bdf8" />
-          </g>
-
-          {/* Cube 2 (Medium Isometric lower left) */}
-          <g transform="translate(90, 360)">
-            <path
-              d="M0 -45 L39 -22 L39 22 L0 45 L-39 22 L-39 -22 Z"
-              stroke="#00897b"
-              strokeWidth="1.5"
-              fill="rgba(15,23,42,0.4)"
-            />
-            <path
-              d="M0 0 L0 45 M0 0 L39 -22 M0 0 L-39 -22"
-              stroke="#00897b"
-              strokeWidth="1.2"
-              opacity="0.8"
-            />
-            <circle cx="0" cy="-45" r="2.5" fill="#2dd4bf" />
-            <circle cx="39" cy="22" r="2.5" fill="#2dd4bf" />
-          </g>
-
-          {/* Glowing connecting dots */}
-          <circle cx="120" cy="220" r="2" fill="#38bdf8" className="animate-ping" />
-          <circle cx="260" cy="280" r="2.5" fill="#2dd4bf" />
-          <circle cx="80" cy="180" r="2" fill="#818cf8" />
-          <circle cx="210" cy="400" r="2.5" fill="#38bdf8" />
-          <line
-            x1="120"
-            y1="220"
-            x2="180"
-            y2="160"
-            stroke="#38bdf8"
-            strokeWidth="0.8"
-            strokeDasharray="3 3"
-            opacity="0.4"
-          />
-          <line
-            x1="90"
-            y1="360"
-            x2="180"
-            y2="220"
-            stroke="#2dd4bf"
-            strokeWidth="0.8"
-            strokeDasharray="3 3"
-            opacity="0.4"
-          />
-        </svg>
-      </div>
-
-      {/* ========================================================
-          TOP HEADER BAR: QUỐC HUY VIỆT NAM & TIÊU ĐỀ
-         ======================================================== */}
-      <header className="relative z-20 w-full pt-3.5 sm:pt-4 px-4 sm:px-6 flex items-center justify-between">
+    <div className="siso-login relative flex w-full flex-col justify-between font-sans">
+      <header className="siso-login-header relative z-20 flex w-full items-center justify-between gap-4">
         <div className="flex items-center gap-2.5 sm:gap-3">
           {/* Vietnam National Emblem Icon */}
           <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-gradient-to-br from-red-600 to-red-700 p-1 flex items-center justify-center shadow-lg shadow-red-900/40 ring-2 ring-yellow-400 shrink-0">
@@ -693,7 +558,13 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
           - Kiểu chữ sắc nét, khoảng đệm trang nhã
           - Mặc định "Chọn tên lớp", khi chọn lớp hiển thị đúng GVCN
          ======================================================== */}
-      <main className="relative z-20 flex-1 flex flex-col items-center justify-center py-4 px-3 sm:px-4">
+      <main className="siso-login-main relative z-20 flex-1">
+        <section className="siso-login-intro" aria-label="Giới thiệu ứng dụng">
+          <p className="siso-eyebrow">QUẢN LÝ NHÀ TRƯỜNG</p>
+          <h2>Sổ báo cáo<br className="hidden lg:inline" /> sĩ số</h2>
+          <p>Điểm danh, theo dõi bán trú và tổng hợp báo cáo theo lớp.</p>
+        </section>
+        <div className="siso-login-panel">
         {/* Urgent reminder alert notice if unsubmitted report */}
         {urgentAttendanceReminder && (
           <div className="w-full max-w-[395px] mb-2.5 animate-in fade-in slide-in-from-top-3">
@@ -721,9 +592,9 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
         )}
 
         {/* Khung viền kính mờ tinh tế (Bo góc 24px, đổ bóng nhẹ nhàng chuẩn hình gốc) */}
-        <div className="w-full max-w-[390px] sm:max-w-[405px] p-2 sm:p-2.5 bg-white/20 backdrop-blur-xl rounded-[24px] border border-white/40 shadow-2xl shadow-slate-950/40 transition-all duration-300">
+        <div className="siso-login-card w-full">
           {/* Card trắng bên trong: kích thước gọn gàng, không bị thô dày */}
-          <div className="w-full bg-white rounded-[18px] p-5 sm:p-6 shadow-xs">
+          <div className="w-full bg-white rounded-[inherit] p-5 sm:p-7">
             {/* Header: Logo hình tròn và Tiêu đề ĐĂNG NHẬP */}
             <div className="flex items-center gap-3 sm:gap-3.5 mb-4">
               {/* Circular Emblem Seal */}
@@ -774,16 +645,17 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                 <h1 className="text-xl sm:text-[22px] font-black text-[#0f2d59] tracking-tight leading-tight mt-0.5">
                   ĐĂNG NHẬP
                 </h1>
-                <p className="text-[11px] sm:text-xs text-slate-400 font-normal mt-0.5">
+                <p className="text-[11px] sm:text-xs text-slate-600 font-normal mt-0.5">
                   Vui lòng nhập thông tin tài khoản của bạn
                 </p>
               </div>
             </div>
 
             {/* Segmented Tab Switcher (Giáo Viên / Nhân Viên vs Ban Giám Hiệu) */}
-            <div className="bg-[#131d2a] p-1 rounded-xl grid grid-cols-2 gap-1 mb-3.5">
+            <div className="siso-role-switch bg-slate-100 p-1 rounded-xl grid grid-cols-2 gap-1 mb-4">
               <button
                 type="button"
+                aria-pressed={activeTab === 'GVCN'}
                 onClick={() => {
                   setActiveTab('GVCN');
                   setError('');
@@ -794,7 +666,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                 className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer text-center select-none ${
                   activeTab === 'GVCN'
                     ? 'bg-gradient-to-r from-[#00897b] to-[#00796b] text-white shadow-xs'
-                    : 'text-slate-300 hover:text-white hover:bg-white/5'
+                    : 'text-slate-600 hover:text-slate-950 hover:bg-white/70'
                 }`}
               >
                 Giáo Viên / Nhân Viên
@@ -802,6 +674,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
 
               <button
                 type="button"
+                aria-pressed={activeTab === 'ADMIN'}
                 onClick={() => {
                   setActiveTab('ADMIN');
                   setError('');
@@ -816,7 +689,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                 className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer text-center select-none ${
                   activeTab === 'ADMIN'
                     ? 'bg-gradient-to-r from-[#00897b] to-[#00796b] text-white shadow-xs'
-                    : 'text-slate-300 hover:text-white hover:bg-white/5'
+                    : 'text-slate-600 hover:text-slate-950 hover:bg-white/70'
                 }`}
               >
                 Ban Giám Hiệu
@@ -856,7 +729,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                   Mặc định: "Chọn tên lớp"
                  ======================================================== */}
               <div>
-                <div className="relative flex items-center border border-slate-200 hover:border-slate-300 focus-within:border-[#00897b] focus-within:ring-2 focus-within:ring-[#00897b]/15 rounded-xl px-3 h-10.5 sm:h-11 bg-slate-50/60 focus-within:bg-white transition-all shadow-2xs">
+                <div className="relative flex items-center border border-slate-200 hover:border-slate-300 focus-within:border-[#00897b] focus-within:ring-2 focus-within:ring-[#00897b]/15 rounded-xl px-3 h-12 bg-slate-50/60 focus-within:bg-white transition-all shadow-2xs">
                   <User className="w-4 h-4 text-slate-400 shrink-0 mr-2.5" />
 
                   {activeTab === 'GVCN' ? (
@@ -924,7 +797,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                 {activeTab === 'GVCN' ? (
                   /* GVCN: TÊN GIÁO VIÊN CHỦ NHIỆM */
                   <div
-                    className={`relative flex items-center border rounded-xl px-3 h-10.5 sm:h-11 transition-all shadow-2xs ${
+                    className={`relative flex items-center border rounded-xl px-3 h-12 transition-all shadow-2xs ${
                       selectedClassId
                         ? 'border-emerald-300/80 bg-emerald-50/30 text-slate-900'
                         : 'border-slate-200 bg-slate-50/60 text-slate-400'
@@ -961,7 +834,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                   </div>
                 ) : (
                   /* ADMIN: MẬT KHẨU */
-                  <div className="relative flex items-center border border-slate-200 hover:border-slate-300 focus-within:border-[#00897b] focus-within:ring-2 focus-within:ring-[#00897b]/15 rounded-xl px-3 h-10.5 sm:h-11 bg-slate-50/60 focus-within:bg-white transition-all shadow-2xs">
+                  <div className="relative flex items-center border border-slate-200 hover:border-slate-300 focus-within:border-[#00897b] focus-within:ring-2 focus-within:ring-[#00897b]/15 rounded-xl px-3 h-12 bg-slate-50/60 focus-within:bg-white transition-all shadow-2xs">
                     <Lock className="w-4 h-4 text-slate-400 shrink-0 mr-2.5" />
                     <input
                       id="login-admin-password"
@@ -1021,7 +894,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="w-full py-2.5 sm:py-3 px-4 rounded-full bg-gradient-to-r from-[#003B5C] via-[#005B82] to-[#00897B] hover:opacity-95 text-white font-bold text-xs sm:text-sm uppercase tracking-wider shadow-md shadow-teal-900/20 active:scale-[0.99] transition-all cursor-pointer flex items-center justify-center"
+                  className="min-h-12 w-full px-4 rounded-xl bg-gradient-to-r from-[#003B5C] via-[#005B82] to-[#00897B] hover:opacity-95 text-white font-bold text-xs sm:text-sm uppercase tracking-wider shadow-md shadow-teal-900/20 active:scale-[0.99] transition-all cursor-pointer flex items-center justify-center"
                 >
                   <span>{isSubmitting ? 'ĐANG ĐĂNG NHẬP...' : 'ĐĂNG NHẬP'}</span>
                 </button>
@@ -1094,12 +967,13 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
             </form>
           </div>
         </div>
+        </div>
       </main>
 
       {/* ========================================================
           BOTTOM FOOTER: BẢN QUYỀN & HỖ TRỢ KỸ THUẬT
          ======================================================== */}
-      <footer className="relative z-20 w-full py-3 px-4 text-center text-[10px] sm:text-xs text-slate-400/90 font-medium select-none">
+      <footer className="siso-login-footer relative z-20 w-full py-3 px-4 text-center text-[10px] sm:text-xs text-slate-400/90 font-medium select-none">
         <div className="flex flex-wrap items-center justify-center gap-1.5 sm:gap-2">
           <span>© 2026 Bản quyền thuộc về Hệ thống Quản lý Giáo dục.</span>
           <span>
@@ -1112,7 +986,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
           MODAL: QUÊN MẬT KHẨU?
          ======================================================== */}
       {showForgotModal && (
-        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-sm w-full p-5 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95">
             <div className="flex items-center justify-between pb-2.5 border-b border-slate-100">
               <h3 className="font-black text-slate-900 text-xs sm:text-sm uppercase">
@@ -1153,7 +1027,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
           MODAL: CẤU HÌNH NĂM HỌC (QUẢN TRỊ VIÊN)
          ======================================================== */}
       {showYearModal && (
-        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-lg w-full p-5 sm:p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between pb-3.5 border-b border-slate-200">
               <div className="flex items-center gap-2.5">

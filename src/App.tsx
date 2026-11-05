@@ -157,7 +157,7 @@ const AppContent: React.FC = () => {
           }}
         />
       ) : (
-        <div className="min-h-[100dvh] bg-slate-100/70 flex flex-col font-sans antialiased text-slate-800 selection:bg-blue-600 selection:text-white">
+        <div className="siso-shell min-h-[100dvh] bg-slate-100/70 flex flex-col font-sans antialiased text-slate-800 selection:bg-blue-600 selection:text-white">
           {/* Top Navbar Header */}
           <Navbar
             currentPath={currentPath}
@@ -183,7 +183,7 @@ const AppContent: React.FC = () => {
               <GVCNUnreportedAlertBanner onNavigate={handleNavigate} currentPath={currentPath} />
 
               <main
-                className={`flex-1 w-full max-w-[1600px] mx-auto px-3 sm:px-6 lg:px-8 ${
+                className={`siso-content flex-1 w-full min-w-0 max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 ${
                   currentPath === '/attendance'
                     ? 'pt-3.5 pb-0 sm:py-6'
                     : 'py-3.5 sm:py-6 pb-28 sm:pb-8'
@@ -307,38 +307,38 @@ const AppContent: React.FC = () => {
 
           {/* Persistent Mobile Bottom Navigation Bar (Hidden when on /attendance page where docked actions exist) */}
           {currentPath !== '/attendance' && (
-            <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-30 bg-white/95 backdrop-blur-md border-t border-slate-200 px-2 py-1.5 flex items-center justify-around shadow-lg no-print pb-[env(safe-area-inset-bottom)]">
+            <nav aria-label="Điều hướng nhanh" className="siso-mobile-dock lg:hidden fixed bottom-0 left-0 right-0 z-30 bg-white/95 backdrop-blur-md border-t border-slate-200 grid grid-cols-5 items-center no-print">
               {/* 1. Tổng quan */}
               <button
                 type="button"
                 onClick={() => handleNavigate('/dashboard')}
-                className={`flex flex-col items-center justify-center min-w-[56px] py-1 transition-all ${
+                className={`flex flex-col items-center justify-center min-w-0 py-1 transition-all ${
                   currentPath === '/dashboard' ? 'text-blue-600 font-bold' : 'text-slate-500 font-medium'
                 }`}
               >
                 <LayoutDashboard className="w-4 h-4 mb-0.5" />
-                <span className="text-[9px] whitespace-nowrap">Tổng quan</span>
+                <span className="text-[10px] max-w-full truncate">Tổng quan</span>
               </button>
 
               {/* 2. Điểm danh sĩ số */}
               <button
                 type="button"
                 onClick={() => handleNavigate('/attendance')}
-                className={`flex flex-col items-center justify-center min-w-[56px] py-1 transition-all ${
+                className={`flex flex-col items-center justify-center min-w-0 py-1 transition-all ${
                   currentPath === '/attendance' ? 'text-blue-600 font-bold' : 'text-slate-500 font-medium'
                 }`}
               >
                 <ClipboardList className="w-4 h-4 mb-0.5" />
-                <span className="text-[9px] whitespace-nowrap">{isGVCN && assignedClass ? `Lớp ${assignedClass.class_name}` : 'Điểm danh'}</span>
+                <span className="text-[10px] max-w-full truncate">{isGVCN && assignedClass ? `Lớp ${assignedClass.class_name}` : 'Điểm danh'}</span>
               </button>
 
               {/* 3. Báo ăn Lớp (Nổi bật) */}
               <button
                 type="button"
                 onClick={() => handleNavigate('/boarding')}
-                className="flex flex-col items-center justify-center relative -top-2.5 min-w-[62px]"
+                className="flex flex-col items-center justify-center min-w-0"
               >
-                <div className={`w-11 h-11 rounded-full flex items-center justify-center shadow-lg active:scale-95 transition-transform ${
+                <div className={`w-8 h-8 rounded-xl flex items-center justify-center shadow-lg active:scale-95 transition-transform ${
                   currentPath === '/boarding' || currentPath === '/boarding-meals'
                     ? 'bg-amber-500 text-slate-950 ring-2 ring-amber-300'
                     : 'bg-emerald-600 text-white'
@@ -354,24 +354,24 @@ const AppContent: React.FC = () => {
               <button
                 type="button"
                 onClick={() => handleNavigate('/reports/boarding-monthly')}
-                className={`flex flex-col items-center justify-center min-w-[56px] py-1 transition-all ${
+                className={`flex flex-col items-center justify-center min-w-0 py-1 transition-all ${
                   currentPath === '/reports/boarding-monthly' ? 'text-emerald-700 font-bold' : 'text-slate-500 font-medium'
                 }`}
               >
                 <FileSpreadsheet className="w-4 h-4 mb-0.5 text-emerald-600" />
-                <span className="text-[9px] whitespace-nowrap">Sổ cơm</span>
+                <span className="text-[10px] max-w-full truncate">Sổ cơm</span>
               </button>
 
               {/* 5. Báo cáo theo ngày */}
               <button
                 type="button"
                 onClick={() => handleNavigate('/reports/daily')}
-                className={`flex flex-col items-center justify-center min-w-[56px] py-1 transition-all ${
+                className={`flex flex-col items-center justify-center min-w-0 py-1 transition-all ${
                   currentPath === '/reports/daily' || currentPath === '/daily-report' ? 'text-blue-600 font-bold' : 'text-slate-500 font-medium'
                 }`}
               >
                 <Calendar className="w-4 h-4 mb-0.5" />
-                <span className="text-[9px] whitespace-nowrap">Theo ngày</span>
+                <span className="text-[10px] max-w-full truncate">Theo ngày</span>
               </button>
             </nav>
           )}

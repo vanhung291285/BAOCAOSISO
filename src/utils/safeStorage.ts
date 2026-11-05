@@ -12,6 +12,17 @@ export function sanitizeClassId(classId: any): string {
   return String(classId).trim();
 }
 
+export function isStorageQuotaError(error: unknown): boolean {
+  const value = error as { name?: string; code?: number; message?: string } | null;
+  return Boolean(value && (
+    value.name === 'QuotaExceededError' ||
+    value.name === 'NS_ERROR_DOM_QUOTA_REACHED' ||
+    value.code === 22 ||
+    value.code === 1014 ||
+    /quota has been exceeded/i.test(value.message ?? '')
+  ));
+}
+
 // Global protection against QuotaExceededError for all localStorage.setItem calls
 if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
   try {
@@ -26,13 +37,7 @@ if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
       try {
         originalSetItem(key, valToStore);
       } catch (err: any) {
-        if (
-          err &&
-          (err.name === 'QuotaExceededError' ||
-            err.name === 'NS_ERROR_DOM_QUOTA_REACHED' ||
-            err.code === 22 ||
-            err.code === 1014)
-        ) {
+        if (isStorageQuotaError(err)) {
           console.warn(`[SafeStorage] Quota exceeded when setting key "${key}". Cleaning non-critical cache...`);
           try {
             // Clean non-critical transient storage to free up quota
@@ -60,7 +65,7 @@ export function safeSetItem(key: string, value: any): boolean {
       valStr = sanitizeClassId(value);
     }
     localStorage.setItem(key, valStr);
-    return true;
+    return localStorage.getItem(key) === valStr;
   } catch (err: any) {
     console.error(`[SafeStorage] safeSetItem error for key "${key}":`, err);
     return false;

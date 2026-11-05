@@ -125,3 +125,83 @@
   }
 }
 
+
+@media screen {
+  .siso-login {
+    min-height: 100dvh;
+    background: radial-gradient(ellipse at 12% 14%, #185572 0, transparent 52%),
+      linear-gradient(145deg, #10263d, #0b1829 74%);
+  }
+
+  .siso-login-header {
+    max-width: 76rem;
+    margin-inline: auto;
+    padding: calc(1rem + env(safe-area-inset-top)) 1.25rem 0;
+  }
+
+  .siso-login-main {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-content: center;
+    gap: 1.25rem;
+    width: min(100%, 30rem);
+    margin-inline: auto;
+    padding: 1.5rem 1rem;
+  }
+
+  .siso-login-intro { color: #d5e6f1; }
+  .siso-login-intro h2 {
+    margin-block: .35rem .5rem;
+    font-size: clamp(2rem, 6vw, 4.25rem);
+    line-height: 1.05;
+    font-weight: 800;
+    letter-spacing: -.045em;
+    color: #fff;
+  }
+  .siso-eyebrow {
+    font-size: .7rem;
+    letter-spacing: .17em;
+    font-weight: 750;
+    color: #82e7d6;
+  }
+  .siso-login-panel { min-width: 0; }
+  .siso-login-footer { padding-bottom: calc(.75rem + env(safe-area-inset-bottom)); }
+  .siso-login-card {
+    border-radius: 1.4rem;
+    box-shadow: 0 16px 46px #050c1a60;
+  }
+  .siso-role-switch button { min-height: 44px; font-size: .78rem; }
+  .siso-login :is(button, input, select):focus-visible,
+  .siso-mobile-dock button:focus-visible {
+    outline: 2px solid #0d9488;
+    outline-offset: 3px;
+  }
+  .siso-shell { background: #f3f7fb; }
+  .siso-dashboard-hero {
+    background: linear-gradient(125deg, #fff 35%, #edf8fa 100%);
+  }
+  .siso-content .overflow-x-auto { max-width: 100%; overscroll-behavior-inline: contain; }
+  .siso-mobile-dock {
+    padding: .3rem max(.35rem, env(safe-area-inset-right))
+      calc(.3rem + env(safe-area-inset-bottom)) max(.35rem, env(safe-area-inset-left));
+    box-shadow: 0 -6px 24px #12304d12;
+  }
+  .siso-mobile-dock > button { min-height: 48px; border-radius: .75rem; }
+  .siso-mobile-dock > button.font-bold { background: #edf5ff; }
+
+  @media (max-width: 639px) {
+    .siso-login input:not([type='checkbox']):not([type='hidden']),
+    .siso-login select { font-size: 16px; }
+    .siso-content { padding-inline: .85rem; }
+  }
+
+  @media (min-width: 1024px) {
+    .siso-login-main {
+      width: min(100%, 66rem);
+      grid-template-columns: minmax(0, 1fr) minmax(0, 29rem);
+      align-items: center;
+      gap: clamp(2rem, 7vw, 7rem);
+      padding-block: 2.5rem;
+    }
+  }
+}

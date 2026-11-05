@@ -30,6 +30,7 @@ import {
   CampusWeeklySummary,
   WeeklyDayData,
 } from '../types';
+import { safeSetItem } from '../utils/safeStorage';
 import { getSupabaseClient, isSupabaseConnected } from './supabase';
 import {
   DEFAULT_WEEK1_START_DATE,
@@ -3665,7 +3666,7 @@ export const StorageService = {
     } else {
       reports.push(report);
     }
-    localStorage.setItem(STORAGE_KEYS.REPORTS, JSON.stringify(reports));
+    const reportStoredLocally = safeSetItem(STORAGE_KEYS.REPORTS, reports);
 
     // Update values (xóa sạch mọi giá trị cũ của báo cáo này để tránh rác / lệch số liệu)
     const rawValues = localStorage.getItem(STORAGE_KEYS.VALUES);
@@ -3688,12 +3689,13 @@ export const StorageService = {
       newValues.push(vItem);
     });
 
-    localStorage.setItem(STORAGE_KEYS.VALUES, JSON.stringify(allValues));
+    const valuesStoredLocally = safeSetItem(STORAGE_KEYS.VALUES, allValues);
 
     // PERSIST DIRECTLY TO SUPABASE WITH FULL FK PROTECTION & ROBUST TIMEOUT
     let effectiveReportId = reportId;
     const supabase = getSupabaseClient();
     if (supabase && isSupabaseConnected()) {
+      let timeout: ReturnType<typeof setTimeout> | undefined;
       try {
         const upsertPromise = (async () => {
           // 1. Đảm bảo profile người tạo tồn tại trên Supabase để tránh lỗi FK created_by
@@ -3781,8 +3783,7 @@ export const StorageService = {
           }
 
           if (repErr) {
-            console.error('Supabase upsert daily_reports error:', repErr);
-            return;
+            throw repErr;
           }
 
           // 3. Chuẩn bị và đẩy daily_report_values với report_id chính xác
@@ -3825,19 +3826,25 @@ export const StorageService = {
             }
 
             if (valErr) {
-              console.error('Supabase upsert daily_report_values error:', valErr);
+              throw valErr;
             }
           }
         })();
 
-        // Chờ lưu an toàn lên Supabase tối đa 4000ms để đảm bảo hoàn tất đồng bộ cloud trước khi GVCN thoát/đăng xuất
         await Promise.race([
           upsertPromise,
-          new Promise((resolve) => setTimeout(resolve, 4000))
+          new Promise<never>((_, reject) => {
+            timeout = setTimeout(() => reject(new Error('Supabase chưa phản hồi')), 15000);
+          }),
         ]);
       } catch (err) {
         console.error('Supabase sync report error:', err);
+        throw new Error('Chưa xác nhận được báo cáo trên máy chủ. Hãy kiểm tra kết nối và bấm gửi lại.');
+      } finally {
+        clearTimeout(timeout);
       }
+    } else if (!reportStoredLocally || !valuesStoredLocally) {
+      throw new Error('Bộ nhớ lưu trữ của ứng dụng đã đầy hoặc bị giới hạn. Báo cáo chưa được lưu. Giữ màn hình này mở để thử lại.');
     }
 
     // Đảm bảo cập nhật report.id đồng nhất giữa cloud và local
@@ -3854,7 +3861,7 @@ export const StorageService = {
         if (rIdx >= 0) {
           curReps[rIdx].id = effectiveReportId;
           curReps[rIdx].class_id = canonicalClassId;
-          localStorage.setItem(STORAGE_KEYS.REPORTS, JSON.stringify(curReps));
+          safeSetItem(STORAGE_KEYS.REPORTS, curReps);
         }
       }
       const curValsRaw = localStorage.getItem(STORAGE_KEYS.VALUES);
@@ -3865,7 +3872,7 @@ export const StorageService = {
             v.report_id = effectiveReportId;
           }
         });
-        localStorage.setItem(STORAGE_KEYS.VALUES, JSON.stringify(curVals));
+        safeSetItem(STORAGE_KEYS.VALUES, curVals);
       }
       newValues.forEach((v) => {
         v.report_id = effectiveReportId;

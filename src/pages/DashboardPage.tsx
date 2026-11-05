@@ -326,7 +326,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSele
     <div className="space-y-4 sm:space-y-6">
       {/* Toast Notification */}
       {toastNotice && (
-        <div className="fixed bottom-6 right-6 z-50 max-w-md bg-slate-900 text-white p-4 rounded-2xl shadow-2xl border border-slate-700 animate-in fade-in slide-in-from-bottom-4 duration-200 flex items-start gap-3">
+        <div className="fixed bottom-24 right-3 left-3 sm:bottom-6 sm:right-6 sm:left-auto z-50 sm:max-w-md bg-slate-900 text-white p-4 rounded-2xl shadow-2xl border border-slate-700 animate-in fade-in slide-in-from-bottom-4 duration-200 flex items-start gap-3">
           <Sparkles className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
           <div className="flex-1 text-xs leading-relaxed font-medium">{toastNotice}</div>
           <button
@@ -339,7 +339,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSele
       )}
 
       {/* 1. TOP WELCOME & DATE HEADER (Clean Modern Educational Dashboard) */}
-      <div className="bg-white rounded-2xl p-4 sm:p-6 border border-slate-200/90 shadow-xs">
+      <div className="siso-dashboard-hero rounded-2xl p-4 sm:p-6 border border-slate-200/90 shadow-xs">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 flex-wrap">
@@ -358,8 +358,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSele
               </span>
             </div>
 
-            <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight mt-1.5 uppercase">
-              XIN CHÀO, {currentUser?.full_name?.toUpperCase() || 'THẦY/CÔ'}
+            <h1 className="text-xl sm:text-3xl font-extrabold text-slate-900 tracking-tight mt-2 break-words">
+              Xin chào, {currentUser?.full_name || 'thầy/cô'}
             </h1>
             <p className="text-xs sm:text-sm text-slate-600 font-medium mt-0.5">
               Hôm nay, {formatDateVN(selectedDate)}
@@ -384,19 +384,19 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSele
         </div>
 
         {/* Prominent School Links Banner */}
-        <div className="mt-4 pt-3.5 border-t border-slate-100 flex flex-wrap sm:flex-nowrap items-center justify-between gap-2.5 bg-gradient-to-r from-blue-50/90 via-indigo-50/40 to-emerald-50/90 p-2.5 sm:p-3 rounded-xl border border-blue-100/80 shadow-2xs">
+        <div className="mt-4 pt-3.5 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2.5 bg-gradient-to-r from-blue-50/90 via-indigo-50/40 to-emerald-50/90 p-2.5 sm:p-3 rounded-xl border border-blue-100/80 shadow-2xs">
           <div className="flex items-center gap-2 text-xs font-extrabold text-slate-800 shrink-0">
             <Sparkles className="w-4 h-4 text-amber-500 fill-amber-400 animate-pulse shrink-0" />
             <span className="uppercase tracking-wider text-[11px] text-blue-950 font-extrabold">
               Liên kết nổi bật nhà trường:
             </span>
           </div>
-          <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap w-full sm:w-auto">
+          <div className="grid w-full min-w-0 grid-cols-1 gap-2 sm:w-auto sm:grid-cols-2">
             <a
               href={settings?.website || 'https://thcsxadung.db.edu.vn/'}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-extrabold text-blue-900 bg-white hover:bg-blue-600 hover:text-white border border-blue-300 hover:border-blue-600 shadow-2xs hover:shadow-md transition-all active:scale-95 group cursor-pointer"
+              className="inline-flex min-h-11 min-w-0 items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-extrabold text-blue-900 bg-white hover:bg-blue-600 hover:text-white border border-blue-300 hover:border-blue-600 shadow-2xs hover:shadow-md transition-all active:scale-95 group cursor-pointer"
               title="Mở Trang thông tin điện tử nhà trường (https://thcsxadung.db.edu.vn/)"
             >
               <Globe className="w-4 h-4 text-blue-600 group-hover:text-white shrink-0" />
@@ -408,7 +408,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSele
               href={settings?.student_results_url || 'https://kqht.db.edu.vn/'}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-extrabold text-emerald-950 bg-white hover:bg-emerald-600 hover:text-white border border-emerald-300 hover:border-emerald-600 shadow-2xs hover:shadow-md transition-all active:scale-95 group cursor-pointer"
+              className="inline-flex min-h-11 min-w-0 items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-extrabold text-emerald-950 bg-white hover:bg-emerald-600 hover:text-white border border-emerald-300 hover:border-emerald-600 shadow-2xs hover:shadow-md transition-all active:scale-95 group cursor-pointer"
               title="Mở Trang tra cứu kết quả học tập của trường (https://kqht.db.edu.vn/)"
             >
               <GraduationCap className="w-4 h-4 text-emerald-600 group-hover:text-white shrink-0" />
