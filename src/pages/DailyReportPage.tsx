@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useSchool } from '../contexts/SchoolContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useNotifications } from '../contexts/NotificationContext';
@@ -96,6 +96,7 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
     rows: ClassReportRow[];
     totals: Record<string, { total: number; present: number; absent: number; rate: number }>;
     overallSchool: { total: number; present: number; absent: number; rate: number; presentRate: number };
+    sync?: { source: 'supabase' | 'local'; checkedAt: string; cloudReportCount: number; localOnlyCount: number; projectHost: string; warning?: string };
   } | null>(null);
 
   // Dữ liệu báo cáo tháng của lớp
@@ -119,6 +120,7 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
   } | null>(null);
 
   const [loading, setLoading] = useState(true);
+  const dailyLoadSequence = useRef(0);
   const [loadingMonthly, setLoadingMonthly] = useState(false);
   const [exporting, setExporting] = useState(false);
 
@@ -173,15 +175,21 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
     }
   }, [displayClasses, monthlyClassId, isGVCN, currentUser]);
 
-  const loadReportData = useCallback(async (showIndicator = true) => {
+  const loadReportData = useCallback(async (showIndicator = true, forceFresh = false) => {
+    const sequence = ++dailyLoadSequence.current;
     if (showIndicator) setLoading(true);
     try {
-      const data = await StorageService.getDailyAggregate(selectedDate, selectedCampusId);
-      setReportData(data);
+      const data = await StorageService.getDailyAggregate(selectedDate, selectedCampusId, { fresh: forceFresh });
+      // Yêu cầu cũ (ngày/lớp khác, mạng chậm) không được ghi đè dữ liệu vừa tải.
+      if (sequence === dailyLoadSequence.current) setReportData(data);
     } catch (err) {
-      console.error('Failed to load report data:', err);
+      if (sequence === dailyLoadSequence.current) {
+        console.error('Failed to load report data:', err);
+        setReportData(null);
+        setToastMessage('Không thể tải dữ liệu ngày này. Vui lòng kiểm tra kết nối Supabase rồi thử lại.');
+      }
     } finally {
-      if (showIndicator) setLoading(false);
+      if (sequence === dailyLoadSequence.current) setLoading(false);
     }
   }, [selectedDate, selectedCampusId]);
 
@@ -201,14 +209,16 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
   useEffect(() => {
     // Initial fetch
     if (reportMode === 'daily') {
-      loadReportData(true);
+      // Đổi ngày hoặc phân hiệu phải xóa bảng cũ trước khi nạp bảng mới.
+      setReportData(null);
+      loadReportData(true, true);
     } else {
       loadMonthlyData(true);
     }
 
     const triggerRefresh = (showIndicator = false) => {
       if (reportMode === 'daily') {
-        loadReportData(showIndicator);
+        loadReportData(showIndicator, true);
       } else {
         loadMonthlyData(showIndicator);
       }
@@ -330,25 +340,17 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
   };
 
   const handleSyncSupabase = async () => {
+    // Tải lại có xác nhận từ Cloud; TUYỆT ĐỐI không upload cả kho localStorage
+    // vì trình duyệt có thể giữ các báo cáo cũ hoặc báo cáo chưa được kiểm chứng.
     setSyncingSupabase(true);
     try {
-      const res = await StorageService.syncAllToSupabase();
-      if (res.success) {
-        setToastMessage('Đã đồng bộ thành công toàn bộ dữ liệu báo cáo lên Supabase!');
-        if (reportMode === 'daily') {
-          await loadReportData(false);
-        } else {
-          await loadMonthlyData(false);
-        }
+      if (reportMode === 'daily') {
+        await loadReportData(true, true);
       } else {
-        setToastMessage(res.message || 'Lỗi khi đồng bộ. Vui lòng kiểm tra cấu hình Supabase.');
+        await loadMonthlyData(true);
       }
-    } catch (err: any) {
-      console.error('Lỗi khi đồng bộ lên Supabase:', err);
-      setToastMessage('Lỗi đồng bộ Supabase: ' + (err?.message || err));
     } finally {
       setSyncingSupabase(false);
-      setTimeout(() => setToastMessage(''), 4500);
     }
   };
 
@@ -766,6 +768,14 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
         </div>
       )}
 
+      {/* Nguồn dữ liệu của biểu mẫu ngày hiện tại: không che lỗi bằng cache trình duyệt. */}
+      {reportMode === 'daily' && reportData?.date === selectedDate && reportData.sync && (
+        <div className={`no-print rounded-xl border px-4 py-3 text-xs sm:text-sm ${reportData.sync.warning ? 'border-amber-400 bg-amber-50 text-amber-950' : 'border-emerald-200 bg-emerald-50 text-emerald-900'}`}>
+          <div className="font-bold">{reportData.sync.source === 'supabase' ? `Nguồn dữ liệu: Supabase (${reportData.sync.projectHost}) — ${reportData.sync.cloudReportCount} báo cáo ngày ${selectedDate}` : `CẢNH BÁO: chỉ đang xem dữ liệu trên thiết bị — ${reportData.sync.projectHost}`}</div>
+          {reportData.sync.warning && <p className="mt-1 leading-relaxed">{reportData.sync.warning} Không xóa dữ liệu trình duyệt trước khi đối chiếu.</p>}
+        </div>
+      )}
+
       {/* Control Bar (Hidden on print) */}
       <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-xs flex flex-col gap-4 no-print">
         {/* Top line: Header & Mode Switcher */}
@@ -899,19 +909,19 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
             )}
 
             <div
-              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-[11px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 shadow-2xs"
-              title="Dữ liệu biểu mẫu được đồng bộ tự động ngay lập tức theo thời gian thực khi GVCN gửi báo cáo"
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-[11px] font-bold border shadow-2xs ${reportData?.sync?.source === 'supabase' && !reportData.sync.warning ? 'text-emerald-800 bg-emerald-50 border-emerald-200' : 'text-amber-900 bg-amber-50 border-amber-300'}`}
+              title={reportData?.sync ? `Máy chủ: ${reportData.sync.projectHost} - Nguồn: ${reportData.sync.source}` : 'Đang kiểm tra nguồn dữ liệu'}
             >
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-600"></span>
+                <span className={`relative inline-flex rounded-full h-2 w-2 ${reportData?.sync?.source === 'supabase' && !reportData.sync.warning ? 'bg-emerald-600' : 'bg-amber-600'}`}></span>
               </span>
-              <span className="hidden md:inline font-semibold">Tự động đồng bộ</span>
+              <span className="hidden md:inline font-semibold">{reportData?.sync?.source === 'supabase' ? 'Đã đọc Supabase' : 'Dữ liệu chưa xác nhận'}</span>
             </div>
 
             <button
               type="button"
-              onClick={() => (reportMode === 'daily' ? loadReportData(true) : loadMonthlyData(true))}
+              onClick={() => (reportMode === 'daily' ? loadReportData(true, true) : loadMonthlyData(true))}
               disabled={loading || loadingMonthly}
               className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-300 shadow-2xs transition-colors disabled:opacity-50 cursor-pointer"
               title="Tải lại số liệu mới nhất"
@@ -998,10 +1008,10 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
               onClick={handleSyncSupabase}
               disabled={syncingSupabase}
               className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-teal-800 bg-teal-50 hover:bg-teal-100 border border-teal-200 shadow-2xs transition-colors disabled:opacity-50 cursor-pointer"
-              title="Đồng bộ toàn bộ dữ liệu báo cáo, chỉ số và danh sách vắng lên Supabase"
+              title="Kiểm tra và tải báo cáo mới trực tiếp từ Supabase; không ghi đè dữ liệu trên máy chủ"
             >
               <CloudUpload className={`w-4 h-4 text-teal-700 ${syncingSupabase ? 'animate-bounce' : ''}`} />
-              <span className="hidden xl:inline">{syncingSupabase ? 'ĐANG ĐỒNG BỘ...' : 'ĐỒNG BỘ'}</span>
+              <span className="hidden xl:inline">{syncingSupabase ? 'ĐANG KIỂM TRA...' : 'KIỂM TRA MÁY CHỦ'}</span>
             </button>
 
             <button

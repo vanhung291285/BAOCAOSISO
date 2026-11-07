@@ -31,7 +31,7 @@ import {
   WeeklyDayData,
 } from '../types';
 import { safeSetItem } from '../utils/safeStorage';
-import { getSupabaseClient, isSupabaseConnected } from './supabase';
+import { getSupabaseClient, isSupabaseConnected, getSupabaseCredentials } from './supabase';
 import {
   DEFAULT_WEEK1_START_DATE,
   DEFAULT_SCHOOL_DAYS_PER_WEEK,
@@ -175,7 +175,7 @@ export function invalidateCache(keyOrPrefix?: string): void {
   if (prefix === 'daily_reports' || prefix === 'reports') {
     prefixes.push('report', 'daily_report', 'latest_report');
   } else if (prefix === 'daily_report_values' || prefix === 'values') {
-    prefixes.push('value', 'daily_report_value');
+    prefixes.push('value', 'daily_report_value', 'report_window', 'report', 'latest_report');
   } else if (prefix === 'boarding_reports' || prefix === 'boarding') {
     prefixes.push('boarding_report', 'boarding');
   }
@@ -206,11 +206,14 @@ export function coalesceRequest<T>(key: string, fetcher: () => Promise<T>): Prom
  * Chỉ một bộ yêu cầu Supabase cho mỗi khoảng ngày, có phân trang và kiểm lỗi.
  * Toàn bộ kết quả phải tải đủ trước khi hợp nhất vào cache trình duyệt.
  */
-async function fetchReportWindow(startDate: string, endDate: string): Promise<{ reports: DailyReport[]; values: DailyReportValue[] }> {
+async function fetchReportWindow(startDate: string, endDate: string, forceFresh = false): Promise<{ reports: DailyReport[]; values: DailyReportValue[] }> {
   const cacheKey = `report_window:${startDate}:${endDate}`;
-  const cached = getCached<{ reports: DailyReport[]; values: DailyReportValue[] }>(cacheKey);
+  // Khi người dùng bấm Làm mới hay tab được kích hoạt, luôn lấy từ máy chủ.
+  // Không gộp truy vấn buộc làm mới với truy vấn cũ đang chạy.
+  const cached = !forceFresh ? getCached<{ reports: DailyReport[]; values: DailyReportValue[] }>(cacheKey) : null;
   if (cached) return cached;
-  return coalesceRequest(cacheKey, async () => {
+  const requestKey = forceFresh ? `${cacheKey}:fresh` : cacheKey;
+  return coalesceRequest(requestKey, async () => {
     const supabase = getSupabaseClient();
     if (!supabase) throw new Error('Chưa có kết nối Supabase.');
     const pageSize = 500;
@@ -4184,7 +4187,7 @@ export const StorageService = {
   },
 
   // --- 8. Aggregate Reports for Day ---
-  async getDailyAggregate(reportDate: string, campusId?: string): Promise<{
+  async getDailyAggregate(reportDate: string, campusId?: string, options?: { fresh?: boolean }): Promise<{
     date: string;
     totalClasses: number;
     reportedClasses: number;
@@ -4192,16 +4195,34 @@ export const StorageService = {
     rows: ClassReportRow[];
     totals: Record<string, { total: number; present: number; absent: number; rate: number }>;
     overallSchool: { total: number; present: number; absent: number; rate: number; presentRate: number };
+    sync: { source: 'supabase' | 'local'; checkedAt: string; cloudReportCount: number; localOnlyCount: number; projectHost: string; warning?: string };
   }> {
     ensureInitialized();
     const cleanDate = (d: any) => String(d || '').split('T')[0].trim();
     const cleanReportDate = cleanDate(reportDate);
 
-    // Pull fresh data from Supabase if connected
+    // Dữ liệu ngày hiện tại phải có một nguồn sự thật: Supabase khi truy vấn thành công.
+    // localStorage vẫn được giữ nguyên để người dùng có thể khôi phục báo cáo chưa đồng bộ.
+    let cloudSnapshot: { reports: DailyReport[]; values: DailyReportValue[] } | null = null;
+    let cloudLoadError = '';
+    let localOnlyCount = 0;
     const supabase = getSupabaseClient();
     if (supabase && isSupabaseConnected()) {
       try {
-        const { reports: cloudReports, values: cloudValues } = await fetchReportWindow(cleanReportDate, cleanReportDate);
+        const { reports: cloudReports, values: cloudValues } = await fetchReportWindow(cleanReportDate, cleanReportDate, options?.fresh === true);
+        cloudSnapshot = { reports: cloudReports, values: cloudValues };
+
+        // Chỉ đếm, không xóa hoặc tự đẩy các báo cáo chỉ có trên thiết bị.
+        // Một trình duyệt khác có thể là nơi duy nhất còn lưu báo cáo chưa gửi thành công.
+        try {
+          const rawLocal = localStorage.getItem(STORAGE_KEYS.REPORTS);
+          const cachedReports: DailyReport[] = rawLocal ? JSON.parse(rawLocal) : [];
+          localOnlyCount = cachedReports.filter((r) =>
+            cleanDate(r.report_date) === cleanReportDate &&
+            (r.status === 'SUBMITTED' || r.status === 'LOCKED') &&
+            !cloudReports.some((cr) => cr.id === r.id || matchClassReport(cr.class_id, r.class_id))
+          ).length;
+        } catch (e) { console.warn('Không đọc được báo cáo cục bộ để đối chiếu', e); }
 
         if (cloudReports && cloudReports.length > 0) {
           const rawReports = localStorage.getItem(STORAGE_KEYS.REPORTS);
@@ -4217,9 +4238,8 @@ export const StorageService = {
               r.id === cRep.id || 
               (matchClassReport(r.class_id, cRep.class_id) && cleanDate(r.report_date) === cleanCDate)
             );
-            const safeAbsent = (Array.isArray(parsedAbsent) && parsedAbsent.length > 0)
-              ? parsedAbsent
-              : (idx >= 0 && Array.isArray(reports[idx]?.absent_students) && reports[idx].absent_students.length > 0 ? reports[idx].absent_students : []);
+            // Không ghép danh sách vắng cũ vào bản ghi mới đã tải thành công từ Cloud.
+            const safeAbsent = Array.isArray(parsedAbsent) ? parsedAbsent : [];
             const normalizedCRep = { 
               ...cRep, 
               report_date: cleanCDate,
@@ -4272,29 +4292,51 @@ export const StorageService = {
             }
           }
         }
-      } catch (err) {
+      } catch (err: any) {
+        cloudLoadError = err?.message || String(err);
         console.warn('Supabase fetch daily aggregate reports fallback to local:', err);
       }
+    } else {
+      cloudLoadError = 'Chưa cấu hình hoặc chưa khởi tạo được kết nối Supabase.';
     }
 
-    const [classes, profiles, indicators, allNotifs, students] = await Promise.all([
+    const [cachedClasses, profiles, indicators, allNotifs, students] = await Promise.all([
       this.getClasses(),
       this.getProfiles(),
       this.getIndicatorGroups(),
       this.getNotifications(),
       this.getStudents(),
     ]);
+    // Tránh dùng danh mục lớp cũ của từng trình duyệt khi hiển thị báo cáo từ Supabase.
+    let classes = cachedClasses;
+    if (cloudSnapshot !== null && supabase) {
+      try {
+        const { data: serverClasses, error: classesError } = await supabase.from('classes')
+          .select('*').order('sort_order', { ascending: true });
+        if (classesError) throw classesError;
+        if (serverClasses && serverClasses.length > 0) {
+          classes = serverClasses as ClassItem[];
+        }
+      } catch (e) {
+        console.warn('Chưa đọc được danh mục lớp mới; tạm dùng danh mục trên thiết bị:', e);
+      }
+    }
 
     const rawReports = localStorage.getItem(STORAGE_KEYS.REPORTS);
     const reports: DailyReport[] = rawReports ? JSON.parse(rawReports) : [];
-    const dayReports = reports.filter((r) => cleanDate(r.report_date) === cleanReportDate);
+    // Dùng bản chụp dữ liệu Cloud cho ngày đang xem, KHÔNG trộn với báo cáo cũ ở máy.
+    const dayReports = cloudSnapshot !== null
+      ? cloudSnapshot.reports.map((r) => ({ ...r, report_date: cleanDate(r.report_date), absent_students: typeof r.absent_students === 'string' ? (() => { try { return JSON.parse(r.absent_students); } catch { return []; } })() : r.absent_students }))
+      : reports.filter((r) => cleanDate(r.report_date) === cleanReportDate);
 
     // Calculate distinct past report dates to determine unreported days count
     const distinctDates = Array.from(new Set(reports.map((r) => cleanDate(r.report_date)))).filter((d) => d <= cleanReportDate);
     const evaluationDates = distinctDates.length > 0 ? distinctDates : [cleanReportDate];
 
     const rawValues = localStorage.getItem(STORAGE_KEYS.VALUES);
-    const allValues: DailyReportValue[] = rawValues ? JSON.parse(rawValues) : [];
+    const allValues: DailyReportValue[] = cloudSnapshot !== null
+      ? cloudSnapshot.values
+      : (rawValues ? JSON.parse(rawValues) : []);
 
     let activeClasses = classes.filter((c) => c.active !== false);
     if (campusId && campusId !== 'all') {
@@ -4476,8 +4518,30 @@ export const StorageService = {
     const mainSchoolRate = mainReportedCount > 0 ? Math.round((mainSchoolAbsent / mainReportedCount) * 1000) / 10 : 0;
     const mainSchoolPresentRate = mainReportedCount > 0 ? Math.round((mainSchoolPresent / mainReportedCount) * 1000) / 10 : 0;
 
+    const projectHost = (() => {
+      try { return new URL(getSupabaseCredentials().url).hostname; } catch { return 'chưa rõ'; }
+    })();
+    const missingIndicatorCount = cloudSnapshot !== null
+      ? cloudSnapshot.reports.filter((r) => !cloudSnapshot!.values.some((v) => v.report_id === r.id)).length
+      : 0;
+    const warnings: string[] = [];
+    if (cloudSnapshot === null) {
+      warnings.push(`Không đọc được dữ liệu mới từ Supabase: ${cloudLoadError || 'lỗi kết nối'}. Bảng đang hiển thị dữ liệu lưu trên thiết bị, có thể không đầy đủ.`);
+    } else {
+      if (localOnlyCount > 0) warnings.push(`Có ${localOnlyCount} báo cáo ngày ${cleanReportDate} chỉ thấy trong bộ nhớ trình duyệt này, chưa thấy trên Supabase. Không tự đồng bộ để tránh ghi đè dữ liệu nhà trường.`);
+      if (missingIndicatorCount > 0) warnings.push(`Có ${missingIndicatorCount} báo cáo trên Supabase chưa kèm chỉ tiêu sĩ số. Cần kiểm tra quá trình GVCN gửi báo cáo.`);
+    }
+
     return {
       date: cleanReportDate,
+      sync: {
+        source: cloudSnapshot !== null ? 'supabase' : 'local',
+        checkedAt: new Date().toISOString(),
+        cloudReportCount: cloudSnapshot?.reports.length || 0,
+        localOnlyCount,
+        projectHost,
+        warning: warnings.length ? warnings.join(' ') : undefined,
+      },
       totalClasses,
       reportedClasses,
       unreportedClasses: totalClasses - reportedClasses,
