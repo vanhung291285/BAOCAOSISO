@@ -1,3 +1,4 @@
+import { compareSchoolClasses } from '../utils/classSorting';
 import {
   Profile,
   SchoolSettings,
@@ -1316,16 +1317,10 @@ export const StorageService = {
     ensureInitialized();
     const CACHE_KEY = 'classes_list';
     const cached = getCached<ClassItem[]>(CACHE_KEY);
-    if (cached && cached.length > 0) return cached;
+    if (cached && cached.length > 0) return [...cached].sort(compareSchoolClasses);
 
     return coalesceRequest(CACHE_KEY, async () => {
-      const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
-      const sortFn = (a: ClassItem, b: ClassItem) => {
-        if (a.grade !== b.grade) {
-          return (a.grade || 0) - (b.grade || 0);
-        }
-        return collator.compare(a.class_name, b.class_name);
-      };
+      const sortFn = compareSchoolClasses;
 
       const isValidClass = (item: unknown): item is ClassItem => {
         const value = item as Partial<ClassItem> | null;
@@ -1391,13 +1386,7 @@ export const StorageService = {
     if (idx >= 0) list[idx] = classItem;
     else list.push(classItem);
     
-    const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
-    list.sort((a, b) => {
-      if (a.grade !== b.grade) {
-        return (a.grade || 0) - (b.grade || 0);
-      }
-      return collator.compare(a.class_name, b.class_name);
-    });
+    list.sort(compareSchoolClasses);
     localStorage.setItem(STORAGE_KEYS.CLASSES, JSON.stringify(list));
 
     const supabase = getSupabaseClient();
@@ -3050,7 +3039,7 @@ export const StorageService = {
     if (campusId && campusId !== 'all') {
       activeClasses = activeClasses.filter((c) => c.campus_id === campusId);
     }
-    activeClasses.sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0) || (a.class_name || '').localeCompare(b.class_name || ''));
+    activeClasses.sort(compareSchoolClasses);
 
     let sumBoarding = 0;
     let sumBreakfast = 0;
@@ -4342,6 +4331,8 @@ export const StorageService = {
     if (campusId && campusId !== 'all') {
       activeClasses = activeClasses.filter(c => c.campus_id === campusId);
     }
+    // Giữ khối/lớp liên tiếp ngay cả khi sort_order trên Supabase bị trùng hoặc lệch.
+    activeClasses.sort(compareSchoolClasses);
     const totalClasses = activeClasses.length;
 
     let reportedClasses = 0;

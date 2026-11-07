@@ -15,6 +15,7 @@ import {
   resolveTeacherName,
 } from '../utils/exportAttendanceStandardExcel';
 import { DEFAULT_BOARDING_STUDENTS_SEED } from '../utils/boardingRules';
+import { compareSchoolClasses } from '../utils/classSorting';
 import { isValidStudentAddress, cleanStudentAddress, isStudentInClass, matchClassReport, isStudentBoarding } from '../utils/studentUtils';
 import {
   Printer,
@@ -151,7 +152,7 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
     if (selectedCampusId !== 'all') {
       list = list.filter((c) => c.campus_id === selectedCampusId);
     }
-    return list;
+    return [...list].sort(compareSchoolClasses);
   }, [classes, selectedCampusId]);
 
   // Cập nhật monthlyClassId mặc định nếu chưa chọn hoặc không nằm trong danh sách phân hiệu hiện tại
@@ -588,10 +589,11 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
   // Rows hiển thị khi xem theo ngày (lọc theo lớp nếu chọn lớp cụ thể)
   const displayDailyRows = useMemo(() => {
     if (!reportData) return [];
-    if (selectedClassFilter === 'all') return reportData.rows;
-    return reportData.rows.filter(
+    const rows = selectedClassFilter === 'all' ? reportData.rows : reportData.rows.filter(
       (r) => r.classItem.id === selectedClassFilter || matchClassReport(r.classItem.id, selectedClassFilter, r.classItem.class_name)
     );
+    // Luôn sắp theo tên lớp, không phụ thuộc thứ tự báo cáo Supabase trả về.
+    return [...rows].sort((a, b) => compareSchoolClasses(a.classItem, b.classItem));
   }, [reportData, selectedClassFilter]);
 
   // Rows hiển thị khi xem theo tháng của lớp
@@ -624,7 +626,8 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
       } else {
         // Chế độ Ngày
         if (!reportData && !exportBlankTemplate) return;
-        const rowsData: ClassDailyRowData[] = (reportData?.rows || []).map((row) => {
+        const rowsData: ClassDailyRowData[] = [...(reportData?.rows || [])]
+          .sort((a, b) => compareSchoolClasses(a.classItem, b.classItem)).map((row) => {
           const isReported = row.status !== 'NOT_REPORTED';
           const allVal = allIndicator ? row.values[allIndicator.id] : null;
           const boardingVal = boardingIndicator ? row.values[boardingIndicator.id] : null;
