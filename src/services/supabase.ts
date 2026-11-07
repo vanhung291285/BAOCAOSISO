@@ -94,6 +94,45 @@ export function saveSupabaseCredentials(url: string, anonKey: string) {
   lastKey = '';
 }
 
+/**
+ * Giới hạn thời gian thực cho HTTP (AbortController), chỉ thử lại GET an toàn.
+ * Không tự gửi lại POST/PATCH/DELETE để tránh nhân đôi dữ liệu báo cáo.
+ */
+const stableSupabaseFetch: typeof fetch = async (input, init) => {
+  const method = String(init?.method || (typeof Request !== 'undefined' && input instanceof Request ? input.method : 'GET')).toUpperCase();
+  const canRetry = method === 'GET' || method === 'HEAD';
+  const attempts = canRetry ? 2 : 1;
+  const originalSignal = init?.signal ?? (typeof Request !== 'undefined' && input instanceof Request ? input.signal : undefined);
+
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    if (originalSignal?.aborted) throw new DOMException('Yêu cầu đã bị hủy', 'AbortError');
+    const controller = new AbortController();
+    let timedOut = false;
+    const onAbort = () => controller.abort();
+    originalSignal?.addEventListener('abort', onAbort, { once: true });
+    const timeout = setTimeout(() => { timedOut = true; controller.abort(); }, canRetry ? 12000 : 20000);
+    try {
+      const response = await fetch(input, { ...init, signal: controller.signal });
+      if (canRetry && attempt < attempts - 1 && [429, 502, 503, 504].includes(response.status)) {
+        await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
+        continue;
+      }
+      return response;
+    } catch (error) {
+      if (originalSignal?.aborted) throw error;
+      if (!canRetry || attempt === attempts - 1) {
+        if (timedOut) throw new Error('Hết thời gian chờ kết nối Supabase. Vui lòng thử lại.');
+        throw error;
+      }
+      await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
+    } finally {
+      clearTimeout(timeout);
+      originalSignal?.removeEventListener('abort', onAbort);
+    }
+  }
+  throw new Error('Không thể truy vấn Supabase sau khi thử lại.');
+};
+
 let cachedClient: SupabaseClient | null = null;
 let lastUrl = '';
 let lastKey = '';
@@ -111,6 +150,7 @@ export function getSupabaseClient(): SupabaseClient | null {
 
   try {
     cachedClient = createClient(url, anonKey, {
+      global: { fetch: stableSupabaseFetch },
       auth: {
         // The application uses its own profile flow, so PostgREST must
         // not inherit a stale Supabase Auth session from this origin.

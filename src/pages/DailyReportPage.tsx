@@ -238,10 +238,13 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
       }
     });
 
-    // 2. Background polling every 5s to guarantee fresh data across all devices/tabs
+    // Realtime là đường chính; polling 30s chỉ là dự phòng khi websocket bị gián đoạn.
+    // Không phát yêu cầu nền khi tab ẩn.
     const pollInterval = setInterval(() => {
-      triggerRefresh(false);
-    }, 5000);
+      if (document.visibilityState === 'visible' && navigator.onLine) {
+        triggerRefresh(false);
+      }
+    }, 30000);
 
     // 3. Immediate refresh when tab becomes active / focused
     const handleVisibilityOrFocus = () => {
