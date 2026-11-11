@@ -49,7 +49,9 @@ export const Attendance4LevelsOverview: React.FC<Attendance4LevelsOverviewProps>
     semester: any;
   } | null>(null);
 
+  const requestId = React.useRef(0);
   const loadData = useCallback(async (showSpinner = true) => {
+    const request = ++requestId.current;
     if (showSpinner) setLoading(true);
     try {
       const summary = await StorageService.getAttendanceSummary4Levels({
@@ -57,14 +59,16 @@ export const Attendance4LevelsOverview: React.FC<Attendance4LevelsOverviewProps>
         classId,
         dateStr: selectedDate,
       });
+      if (request !== requestId.current) return;
       setData(summary);
       setLoadError(null);
     } catch (err) {
       console.error('Failed to load 4-level attendance summary:', err);
+      if (request !== requestId.current) return;
       setLoadError(err instanceof Error ? err.message : 'Không thể xác minh dữ liệu trên Supabase');
       setData(null);
     } finally {
-      if (showSpinner) setLoading(false);
+      if (request === requestId.current && showSpinner) setLoading(false);
     }
   }, [campusId, classId, selectedDate]);
 
@@ -83,6 +87,7 @@ export const Attendance4LevelsOverview: React.FC<Attendance4LevelsOverviewProps>
 
     return () => {
       if (debounceTimer) clearTimeout(debounceTimer);
+      requestId.current++;
       unsub();
     };
   }, [loadData]);
@@ -99,28 +104,28 @@ export const Attendance4LevelsOverview: React.FC<Attendance4LevelsOverviewProps>
     ? [
         {
           name: 'Theo Ngày',
-          rate: data.daily.reportedClasses === 0 ? 0 : data.daily.attendanceRate,
+          rate: data.daily.hasData ? data.daily.attendanceRate : null,
           absentRate: data.daily.reportedClasses === 0 ? 0 : data.daily.absentRate,
           label: `Ngày (${data.daily.reportedClasses}/${data.daily.totalClasses} lớp)`,
           fill: getBadgeStyle(data.daily.attendanceRate).fill,
         },
         {
           name: 'Theo Tuần',
-          rate: data.weekly.attendanceRate,
+          rate: data.weekly.hasData ? data.weekly.attendanceRate : null,
           absentRate: data.weekly.absentRate,
           label: `Tuần ${data.weekly.weekNumber} (${data.weekly.reportedDaysCount} buổi)`,
           fill: getBadgeStyle(data.weekly.attendanceRate).fill,
         },
         {
           name: 'Theo Tháng',
-          rate: data.monthly.attendanceRate,
+          rate: data.monthly.hasData ? data.monthly.attendanceRate : null,
           absentRate: data.monthly.absentRate,
           label: `${data.monthly.monthLabel} (${data.monthly.reportedDaysCount} ngày)`,
           fill: getBadgeStyle(data.monthly.attendanceRate).fill,
         },
         {
           name: 'Theo Học kỳ',
-          rate: data.semester.attendanceRate,
+          rate: data.semester.hasData ? data.semester.attendanceRate : null,
           absentRate: data.semester.absentRate,
           label: `${data.semester.semesterLabel} (${data.semester.reportedDaysCount} ngày)`,
           fill: getBadgeStyle(data.semester.attendanceRate).fill,
@@ -143,7 +148,7 @@ export const Attendance4LevelsOverview: React.FC<Attendance4LevelsOverviewProps>
               </h2>
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
-              Hệ thống tự động loại bỏ các ngày chưa điểm danh (dữ liệu trống) để đảm bảo chỉ số trung bình chuẩn xác 100%
+              Cùng một ngày tham chiếu cho cả 4 kỳ và biểu đồ. Chỉ tính báo cáo đã nộp trên Supabase; không tính bản nháp hoặc ngày chưa báo cáo.
             </p>
           </div>
 
@@ -222,15 +227,15 @@ export const Attendance4LevelsOverview: React.FC<Attendance4LevelsOverviewProps>
                   <Calendar className="w-3.5 h-3.5" />
                   Theo Tuần (Tuần {data.weekly.weekNumber})
                 </span>
-                <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border ${getBadgeStyle(data.weekly.attendanceRate).bg}`}>
-                  {getBadgeStyle(data.weekly.attendanceRate).text}
+                <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border ${(data.weekly.hasData ? getBadgeStyle(data.weekly.attendanceRate).bg : 'bg-slate-100 text-slate-600 border-slate-200')}`}>
+                  {data.weekly.hasData ? getBadgeStyle(data.weekly.attendanceRate).text : 'Chưa có báo cáo'}
                 </span>
               </div>
 
               <div className="flex items-baseline justify-between mt-1">
                 <div>
                   <div className="text-2xl font-black text-slate-900 group-hover:text-emerald-700 transition-colors">
-                    {data.weekly.attendanceRate.toFixed(1)}%
+                    {data.weekly.hasData ? `${data.weekly.attendanceRate.toFixed(1)}%` : '—'}
                   </div>
                   <div className="text-[11px] font-medium text-slate-500 mt-0.5">
                     Trung bình {data.weekly.reportedDaysCount} buổi điểm danh
@@ -260,15 +265,15 @@ export const Attendance4LevelsOverview: React.FC<Attendance4LevelsOverviewProps>
                   <CalendarRange className="w-3.5 h-3.5" />
                   Theo Tháng ({data.monthly.monthLabel})
                 </span>
-                <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border ${getBadgeStyle(data.monthly.attendanceRate).bg}`}>
-                  {getBadgeStyle(data.monthly.attendanceRate).text}
+                <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border ${(data.monthly.hasData ? getBadgeStyle(data.monthly.attendanceRate).bg : 'bg-slate-100 text-slate-600 border-slate-200')}`}>
+                  {data.monthly.hasData ? getBadgeStyle(data.monthly.attendanceRate).text : 'Chưa có báo cáo'}
                 </span>
               </div>
 
               <div className="flex items-baseline justify-between mt-1">
                 <div>
                   <div className="text-2xl font-black text-slate-900 group-hover:text-amber-800 transition-colors">
-                    {data.monthly.attendanceRate.toFixed(1)}%
+                    {data.monthly.hasData ? `${data.monthly.attendanceRate.toFixed(1)}%` : '—'}
                   </div>
                   <div className="text-[11px] font-medium text-slate-500 mt-0.5">
                     Tổng cộng {data.monthly.reportedDaysCount} ngày học đã điểm danh
@@ -298,15 +303,15 @@ export const Attendance4LevelsOverview: React.FC<Attendance4LevelsOverviewProps>
                   <GraduationCap className="w-3.5 h-3.5" />
                   {data.semester.semesterLabel}
                 </span>
-                <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border ${getBadgeStyle(data.semester.attendanceRate).bg}`}>
-                  {getBadgeStyle(data.semester.attendanceRate).text}
+                <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border ${(data.semester.hasData ? getBadgeStyle(data.semester.attendanceRate).bg : 'bg-slate-100 text-slate-600 border-slate-200')}`}>
+                  {data.semester.hasData ? getBadgeStyle(data.semester.attendanceRate).text : 'Chưa có báo cáo'}
                 </span>
               </div>
 
               <div className="flex items-baseline justify-between mt-1">
                 <div>
                   <div className="text-2xl font-black text-slate-900 group-hover:text-purple-800 transition-colors">
-                    {data.semester.attendanceRate.toFixed(1)}%
+                    {data.semester.hasData ? `${data.semester.attendanceRate.toFixed(1)}%` : '—'}
                   </div>
                   <div className="text-[11px] font-medium text-slate-500 mt-0.5">
                     Tổng số {data.semester.reportedDaysCount} ngày đã thực hiện báo cáo
@@ -363,7 +368,7 @@ export const Attendance4LevelsOverview: React.FC<Attendance4LevelsOverviewProps>
                   <XAxis dataKey="name" tick={{ fontSize: 11, fontWeight: 700, fill: '#475569' }} axisLine={false} tickLine={false} />
                   <YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} unit="%" />
                   <Tooltip
-                    formatter={(val: any) => [`${Number(val).toFixed(1)}%`, 'Chuyên cần']}
+                    formatter={(val: any) => [val == null ? 'Chưa có báo cáo' : `${Number(val).toFixed(1)}%`, 'Chuyên cần']}
                     labelFormatter={(label, items) => {
                       const item = items[0]?.payload;
                       return item ? `${label}: ${item.label}` : label;

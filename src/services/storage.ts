@@ -5958,14 +5958,109 @@ export const StorageService = {
     campusId?: string;
     classId?: string;
   }) {
-    const [daily, weekly, monthly, semester] = await Promise.all([
-      this.calculateDailyAttendance(params?.dateStr, params?.classId, params?.campusId),
-      this.calculateWeeklyAttendance(params?.weekNumber, undefined, params?.campusId, params?.classId),
-      this.calculateMonthlyAttendance(params?.month, params?.year, params?.campusId, params?.classId),
-      this.calculateSemesterAttendance(params?.semester || 1, undefined, params?.campusId, params?.classId),
-    ]);
-
-    return { daily, weekly, monthly, semester };
+    ensureInitialized();
+    // All four cards and the chart are derived from one anchored, server-side snapshot.
+    const date = params?.dateStr || getTodayDateStr();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error('Ngày thống kê không hợp lệ');
+    const settings = await this.getSchoolSettings();
+    const firstWeek = settings.week1_start_date || DEFAULT_WEEK1_START_DATE;
+    const weekInfo = getSchoolWeekFromDate(date, firstWeek);
+    const weekNumber = weekInfo.weekNumber;
+    const month = Number(date.slice(5, 7));
+    const year = Number(date.slice(0, 4));
+    const weekStart = weekInfo.startDate;
+    const weekEnd = addDaysToDateStr(weekStart, 6);
+    const monthStart = `${date.slice(0, 7)}-01`;
+    const monthEnd = `${date.slice(0, 7)}-${String(new Date(year, month, 0).getDate()).padStart(2, '0')}`;
+    const schoolWeekIndex = Math.max(1, weekNumber);
+    const semesterNumber: 1 | 2 = schoolWeekIndex <= 18 ? 1 : 2;
+    const semesterStart = addDaysToDateStr(firstWeek, (semesterNumber === 1 ? 0 : 18) * 7);
+    const semesterEnd = addDaysToDateStr(firstWeek, (semesterNumber === 1 ? 18 : 37) * 7 - 1);
+    // Do not include reports after the selected date in any period (as-of reporting).
+    const minDate = [weekStart, monthStart, semesterStart, date].sort()[0];
+    const client = getSupabaseClient();
+    if (!client || !isSupabaseConnected()) throw new Error('Không có kết nối Supabase');
+    let classes = (await this.getClasses()).filter(c => c.active);
+    if (params?.campusId && params.campusId !== 'all') classes = classes.filter(c => c.campus_id === params.campusId);
+    if (params?.classId && params.classId !== 'all') {
+      const target = params.classId.toLowerCase();
+      classes = classes.filter(c => c.id === params.classId || c.class_name.toLowerCase() === target);
+    }
+    const classIds = new Set(classes.map(c => c.id));
+    const reports: DailyReport[] = [];
+    for (let offset = 0; ; offset += 500) {
+      const { data, error } = await client.from('daily_reports').select('*')
+        .gte('report_date', minDate).lte('report_date', date)
+        .in('status', ['SUBMITTED', 'LOCKED'])
+        .order('report_date', { ascending: true }).order('id', { ascending: true })
+        .range(offset, offset + 499);
+      if (error) throw new Error(`Không đọc được báo cáo: ${error.message}`);
+      reports.push(...((data || []) as DailyReport[]));
+      if (!data || data.length < 500) break;
+    }
+    const relevant = reports.filter(r => classIds.has(r.class_id));
+    const indicators = await this.getIndicatorGroups();
+    const mainId = indicators.find(i => i.code === 'ALL')?.id || 'ig_all';
+    const valueMap = new Map<string, DailyReportValue>();
+    for (let i = 0; i < relevant.length; i += 100) {
+      const ids = relevant.slice(i, i + 100).map(r => r.id);
+      for (let offset = 0; ; offset += 500) {
+        const { data, error } = await client.from('daily_report_values').select('*')
+          .in('report_id', ids).order('id', { ascending: true }).range(offset, offset + 499);
+        if (error) throw new Error(`Không đọc được số liệu chuyên cần: ${error.message}`);
+        for (const v of (data || []) as DailyReportValue[]) {
+          if (v.indicator_group_id === mainId || v.indicator_group_id === 'ig_all') valueMap.set(v.report_id, v);
+        }
+        if (!data || data.length < 500) break;
+      }
+    }
+    const validReports = relevant.filter(r => {
+      const v = valueMap.get(r.id);
+      if (!v) return false;
+      const total = Number(v.total_count);
+      const present = Number(v.present_count);
+      const absent = Number(v.absent_count);
+      return Number.isFinite(total) && total > 0 && Number.isFinite(present) && Number.isFinite(absent)
+        && present >= 0 && absent >= 0 && present + absent <= total;
+    });
+    const aggregate = (start: string, end: string) => {
+      const unique = new Map<string, DailyReport>();
+      for (const r of validReports) {
+        const d = String(r.report_date).slice(0, 10);
+        if (d >= start && d <= end) unique.set(`${r.class_id}|${d}`, r);
+      }
+      let totalPresent = 0, totalAbsent = 0, totalEligible = 0;
+      const days = new Set<string>();
+      const classSet = new Set<string>();
+      for (const r of unique.values()) {
+        const v = valueMap.get(r.id)!;
+        totalPresent += Number(v.present_count);
+        totalAbsent += Number(v.absent_count);
+        totalEligible += Number(v.total_count);
+        days.add(String(r.report_date).slice(0, 10));
+        classSet.add(r.class_id);
+      }
+      const attendanceRate = totalEligible ? Math.round(totalPresent / totalEligible * 1000) / 10 : 0;
+      const absentRate = totalEligible ? Math.round(totalAbsent / totalEligible * 1000) / 10 : 0;
+      return {
+        totalPresent, totalAbsent, totalEligible,
+        reportedDaysCount: days.size, reportedClasses: classSet.size,
+        totalClasses: classes.length, attendanceRate, absentRate,
+        dailyAveragePresent: days.size ? Math.round(totalPresent / days.size) : 0,
+        dailyAverageAbsent: days.size ? Math.round(totalAbsent / days.size) : 0,
+        hasData: totalEligible > 0,
+      };
+    };
+    const dailyStats = aggregate(date, date);
+    return {
+      daily: { ...dailyStats, date, totalStudents: classes.reduce((n, c) => n + (c.student_count || 0), 0),
+        status: dailyStats.reportedClasses === 0 ? 'EMPTY' : dailyStats.reportedClasses === classes.length ? 'FULL' : 'PARTIAL' },
+      weekly: { ...aggregate(weekStart, weekEnd < date ? weekEnd : date), weekNumber, startDate: weekStart, endDate: weekEnd,
+        label: `Tuần ${weekNumber}` },
+      monthly: { ...aggregate(monthStart, monthEnd < date ? monthEnd : date), month, year, monthLabel: `Tháng ${month}/${year}` },
+      semester: { ...aggregate(semesterStart, semesterEnd < date ? semesterEnd : date), semester: semesterNumber,
+        semesterLabel: semesterNumber === 1 ? 'Học kỳ I (Tuần 1 - 18)' : 'Học kỳ II (Tuần 19 - 37)' },
+    };
   },
 
   // --- 9.2 Quản lý Ngày Nghỉ Học Sinh (Không xếp loại những ngày nghỉ) ---
