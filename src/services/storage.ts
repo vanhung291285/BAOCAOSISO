@@ -6127,12 +6127,15 @@ export const StorageService = {
         Number.isFinite(present) && Number.isFinite(absent) &&
         present >= 0 && absent >= 0 && present + absent <= total;
     };
+    // Index indicator values FIRST: isValidReport reads this map.
+    // Previously reports were validated against an empty map, so every report
+    // was rejected and the ranking incorrectly showed 0 reported days.
+    for (const value of allValues) {
+      valuesByReportAndIndicator.set(`${value.report_id}|${value.indicator_group_id}`, value);
+    }
     for (const report of reports) {
       if (!isValidReport(report)) continue;
       reportByClassAndDate.set(`${report.class_id}|${normalizedDate(report.report_date)}`, report);
-    }
-    for (const value of allValues) {
-      valuesByReportAndIndicator.set(`${value.report_id}|${value.indicator_group_id}`, value);
     }
 
     // Filter reports in date range
