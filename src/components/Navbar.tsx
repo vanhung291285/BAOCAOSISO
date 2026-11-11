@@ -346,7 +346,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
       {/* 4. Mobile / Tablet Drawer Menu */}
       {mobileMenuOpen && (
-        <div className="lg:hidden border-t border-slate-200 bg-white px-4 pt-3 pb-6 space-y-3 animate-in slide-in-from-top-2 duration-150 max-h-[85vh] overflow-y-auto">
+        <div className="baocaosiso-mobile-menu lg:hidden border-t border-slate-200 bg-white px-4 pt-3 pb-6 space-y-3 animate-in slide-in-from-top-2 duration-150 max-h-[85vh] overflow-y-auto">
           {/* Mobile User Header Box */}
           {currentUser ? (
             <div className="p-3 bg-gradient-to-r from-slate-50 to-blue-50/50 rounded-2xl border border-slate-200/80 mb-2 flex items-center justify-between">

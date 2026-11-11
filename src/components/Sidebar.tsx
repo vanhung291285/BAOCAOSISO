@@ -347,7 +347,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <aside
-      className={`hidden lg:flex flex-col bg-white border-r border-slate-200 sticky top-15 h-[calc(100dvh-3.75rem)] transition-all duration-300 z-20 select-none ${
+      className={`baocaosiso-sidebar hidden lg:flex flex-col bg-white border-r border-slate-200 sticky top-15 h-[calc(100dvh-3.75rem)] transition-all duration-300 z-20 select-none ${
         collapsed ? 'w-18' : 'w-64'
       }`}
     >
