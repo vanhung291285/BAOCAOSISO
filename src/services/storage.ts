@@ -3412,146 +3412,34 @@ export const StorageService = {
     beforeDate?: string
   ): Promise<{ report?: DailyReport; values: DailyReportValue[] }> {
     ensureInitialized();
-    const CACHE_KEY = `latest_report_${classId}_${beforeDate || 'all'}`;
-    const cached = getCached<{ report?: DailyReport; values: DailyReportValue[] }>(CACHE_KEY);
-    if (cached) return cached;
-
-    return coalesceRequest(CACHE_KEY, async () => {
-      // Thu thập toàn bộ định danh hợp lệ của lớp (UUID và tên lớp)
-      const validIds = new Set<string>([classId]);
-      const rawCls = localStorage.getItem(STORAGE_KEYS.CLASSES);
-      if (rawCls) {
-        try {
-          const clsList = JSON.parse(rawCls);
-          const match = clsList.find(
-            (c: any) =>
-              c.id === classId ||
-              c.class_name === classId ||
-              String(c.class_name).trim().toLowerCase() === String(classId).trim().toLowerCase()
-          );
-          if (match) {
-            if (match.id) validIds.add(match.id);
-            if (match.class_name) validIds.add(match.class_name);
-          }
-        } catch {}
+    const supabase = getSupabaseClient();
+    if (!supabase || !isSupabaseConnected()) {
+      throw new Error('Không có cấu hình Supabase. Không thể lấy báo cáo gần nhất.');
+    }
+    // Never use browser-local reports as authoritative data across devices.
+    const classes = await this.getClasses();
+    const matching = classes.find(c => matchClassReport(c.id, classId) || matchClassReport(c.class_name, classId));
+    const ids = Array.from(new Set([classId, matching?.id, matching?.class_name].filter(Boolean))) as string[];
+    let query = supabase.from('daily_reports').select('*').in('class_id', ids);
+    if (beforeDate) query = query.lt('report_date', beforeDate);
+    const { data: reports, error } = await query.order('report_date', { ascending: false }).limit(10);
+    if (error) throw new Error(`Không tải được báo cáo gần nhất: ${error.message}`);
+    for (const report of reports || []) {
+      const { data: values, error: valueError } = await supabase.from('daily_report_values')
+        .select('*').eq('report_id', report.id);
+      if (valueError) throw new Error(`Không tải được chỉ tiêu: ${valueError.message}`);
+      if (values?.length && values.some(v => Number(v.total_count) > 0)) {
+        return { report: report as DailyReport, values: values as DailyReportValue[] };
       }
-      const validIdArr = Array.from(validIds);
-
-      // 1. Kiểm tra Local Storage trước để trả về siêu tốc 0ms không bị chờ mạng
-      const rawReports = localStorage.getItem(STORAGE_KEYS.REPORTS);
-      const reports: DailyReport[] = rawReports ? JSON.parse(rawReports) : [];
-      let classReports = reports
-        .filter((r) => validIds.has(r.class_id) && (!beforeDate || r.report_date < beforeDate))
-        .sort((a, b) => b.report_date.localeCompare(a.report_date));
-
-      // Fallback nếu không có báo cáo trước beforeDate, lấy báo cáo gần nhất bất kỳ của lớp
-      if (classReports.length === 0) {
-        classReports = reports
-          .filter((r) => validIds.has(r.class_id))
-          .sort((a, b) => b.report_date.localeCompare(a.report_date));
-      }
-
-      const rawValues = localStorage.getItem(STORAGE_KEYS.VALUES);
-      const allValues: DailyReportValue[] = rawValues ? JSON.parse(rawValues) : [];
-
-      for (const report of classReports) {
-        const values = allValues.filter((v) => v.report_id === report.id);
-        if (values.length > 0 && values.some((v) => v.total_count > 0)) {
-          const res = { report, values };
-          setCached(CACHE_KEY, res, 30000);
-          return res;
-        }
-      }
-
-      if (classReports.length > 0 && classReports[0]) {
-        const fallbackReport = classReports[0];
-        const values = allValues.filter((v) => v.report_id === fallbackReport.id);
-        if (values.length > 0) {
-          const res = { report: fallbackReport, values };
-          setCached(CACHE_KEY, res, 30000);
-          return res;
-        }
-      }
-
-      // 2. Nếu local chưa có, mới truy vấn Supabase
-      const supabase = getSupabaseClient();
-      if (supabase && isSupabaseConnected()) {
-        try {
-          let query = supabase
-            .from('daily_reports')
-            .select('*')
-            .in('class_id', validIdArr);
-
-          if (beforeDate) {
-            query = query.lt('report_date', beforeDate);
-          }
-
-          let { data: reps, error: rErr } = await query
-            .order('report_date', { ascending: false })
-            .limit(5);
-
-          if (!rErr && (!reps || reps.length === 0)) {
-            const { data: anyReps } = await supabase
-              .from('daily_reports')
-              .select('*')
-              .in('class_id', validIdArr)
-              .order('report_date', { ascending: false })
-              .limit(3);
-            if (anyReps && anyReps.length > 0) {
-              reps = anyReps;
-            }
-          }
-
-          if (!rErr && reps && reps.length > 0) {
-            for (const rep of reps) {
-              const { data: vals, error: vErr } = await supabase
-                .from('daily_report_values')
-                .select('*')
-                .eq('report_id', rep.id);
-
-              if (!vErr && vals && vals.length > 0) {
-                const res = { report: rep, values: vals };
-                setCached(CACHE_KEY, res, 30000);
-                return res;
-              }
-            }
-          }
-        } catch (err) {
-          console.warn('Supabase fetch latest report fallback to local:', err);
-        }
-      }
-
-      const emptyRes = { report: undefined, values: [] };
-      setCached(CACHE_KEY, emptyRes, 15000);
-      return emptyRes;
-    });
+    }
+    return { report: undefined, values: [] };
   },
 
   async getLatestReportForClass(
     classId: string,
     beforeDate?: string
   ): Promise<{ report?: DailyReport; values: DailyReportValue[] }> {
-    ensureInitialized();
-    const rawReports = localStorage.getItem(STORAGE_KEYS.REPORTS);
-    const reports: DailyReport[] = rawReports ? JSON.parse(rawReports) : [];
-
-    // Filter by class and date (if provided), sort descending by report_date
-    const classReports = reports
-      .filter((r) => r.class_id === classId && (!beforeDate || r.report_date < beforeDate))
-      .sort((a, b) => b.report_date.localeCompare(a.report_date));
-
-    const rawValues = localStorage.getItem(STORAGE_KEYS.VALUES);
-    const allValues: DailyReportValue[] = rawValues ? JSON.parse(rawValues) : [];
-
-    for (const r of classReports) {
-      const vals = allValues.filter((v) => v.report_id === r.id);
-      const hasPositiveTotal = vals.some((v) => v.total_count > 0);
-      if (hasPositiveTotal) {
-        return { report: r, values: vals };
-      }
-    }
-
-    return { report: undefined, values: [] };
+    return this.getLatestReport(classId, beforeDate);
   },
 
   async saveDailyReport(
@@ -3654,7 +3542,8 @@ export const StorageService = {
     } else {
       reports.push(report);
     }
-    const reportStoredLocally = safeSetItem(STORAGE_KEYS.REPORTS, reports);
+    // Cache only after Supabase confirms both report and indicators.
+    const reportStoredLocally = true;
 
     // Update values (xóa sạch mọi giá trị cũ của báo cáo này để tránh rác / lệch số liệu)
     const rawValues = localStorage.getItem(STORAGE_KEYS.VALUES);
@@ -3677,7 +3566,7 @@ export const StorageService = {
       newValues.push(vItem);
     });
 
-    const valuesStoredLocally = safeSetItem(STORAGE_KEYS.VALUES, allValues);
+    const valuesStoredLocally = true;
 
     // PERSIST DIRECTLY TO SUPABASE WITH FULL FK PROTECTION & ROBUST TIMEOUT
     let effectiveReportId = reportId;
@@ -3828,6 +3717,13 @@ export const StorageService = {
     } else if (!reportStoredLocally || !valuesStoredLocally) {
       throw new Error('Bộ nhớ lưu trữ của ứng dụng đã đầy hoặc bị giới hạn. Báo cáo chưa được lưu. Giữ màn hình này mở để thử lại.');
     }
+
+    // Cloud writes above succeeded. Local copies are non-authoritative caches only.
+    report.id = effectiveReportId;
+    const confirmedReports = reports.map(r => r.id === reportId ? { ...r, id: effectiveReportId } : r);
+    const confirmedValues = allValues.map(v => v.report_id === reportId ? { ...v, report_id: effectiveReportId } : v);
+    safeSetItem(STORAGE_KEYS.REPORTS, confirmedReports);
+    safeSetItem(STORAGE_KEYS.VALUES, confirmedValues);
 
     // Đảm bảo cập nhật report.id đồng nhất giữa cloud và local
     if (effectiveReportId !== reportId) {
