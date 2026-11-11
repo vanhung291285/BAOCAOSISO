@@ -1,5 +1,5 @@
 import { isStorageQuotaError } from '../utils/safeStorage';
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useSchool } from '../contexts/SchoolContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useNotifications } from '../contexts/NotificationContext';
@@ -206,6 +206,9 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
   const [newAbsentAddress, setNewAbsentAddress] = useState<string>('');
   const [newAbsentReason, setNewAbsentReason] = useState<string>('Ốm');
   const [newAbsentIsBoarding, setNewAbsentIsBoarding] = useState<boolean>(false);
+
+  // Prevent unrelated roster/indicator realtime updates from resetting an in-progress report.
+  const loadedReportKeyRef = useRef<string>('');
 
   // Auto-hide toast after 4s
   useEffect(() => {
@@ -465,8 +468,16 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
   };
 
   useEffect(() => {
-    loadClassReport();
-  }, [loadClassReport]);
+    const key = `${selectedClassId}::${selectedDate}`;
+    if (!selectedClassId || !selectedDate || loadedReportKeyRef.current === key) return;
+    loadedReportKeyRef.current = key;
+    void loadClassReport().catch(() => {
+      // Allow retry if the initial request fails unexpectedly.
+      if (loadedReportKeyRef.current === key) loadedReportKeyRef.current = '';
+    });
+    // Only a class/date switch should initialize the editable form.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedClassId, selectedDate]);
 
   // Calculation mode logic
   // Calculation mode logic
