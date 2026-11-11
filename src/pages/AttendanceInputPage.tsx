@@ -1452,7 +1452,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
   }, [absentStudents]);
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-800 pb-24 sm:pb-28 -mx-3 sm:-mx-6 -mt-4 sm:-mt-6">
+    <div className="min-h-screen min-w-0 max-w-full overflow-x-clip bg-slate-50 text-slate-800 pb-36 sm:pb-28 -mx-3 sm:-mx-6 -mt-4 sm:-mt-6">
       {/* Toast Notification */}
       {toastMessage && (
         <div
@@ -2284,10 +2284,10 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
             {absentStudents.map((st, index) => (
               <div
                 key={index}
-                className="p-3.5 sm:p-4 rounded-2xl bg-white border border-slate-200 shadow-2xs hover:border-blue-300 transition-all space-y-3"
+                className="min-w-0 max-w-full p-3 sm:p-4 rounded-2xl bg-white border border-slate-200 shadow-2xs hover:border-blue-300 transition-all space-y-3"
               >
                 {/* Card Header: Index badge + Quick Class Select + Delete Button */}
-                <div className="flex items-center justify-between gap-2 pb-2.5 border-b border-slate-100">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-2.5 border-b border-slate-100 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="w-6 h-6 rounded-full bg-rose-600 text-white flex items-center justify-center text-xs font-black shrink-0 shadow-2xs">
                       {index + 1}
@@ -2306,10 +2306,10 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                     )}
                   </div>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 min-w-0 w-full sm:w-auto">
                     {/* Quick Select from Class Dropdown */}
                     {!isLocked && classStudents.length > 0 && (
-                      <div className="relative">
+                      <div className="relative flex-1 min-w-0 sm:flex-none">
                         <select
                           value=""
                           onChange={(e) => {
@@ -2323,7 +2323,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                               });
                             }
                           }}
-                          className="text-[11px] font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg px-2.5 py-1 pr-6 cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-500 appearance-none max-w-[170px] sm:max-w-none truncate shadow-2xs"
+                          className="text-[11px] font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg px-2.5 py-1 pr-6 cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-500 appearance-none w-full min-w-0 max-w-full sm:max-w-[260px] truncate shadow-2xs"
                           title="Chọn nhanh từ danh sách học sinh của lớp"
                         >
                           <option value="">+ Chọn từ DS lớp ({classStudents.length} HS)...</option>
@@ -2553,8 +2553,8 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
       </main>
 
       {/* 4. Sticky Footer Action (Cố định nút Gửi báo cáo ở đáy màn hình di động) */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 p-3 sm:p-4 shadow-lg z-40">
-        <div className="max-w-5xl mx-auto flex flex-col gap-2">
+      <div className="fixed bottom-0 inset-x-0 w-full max-w-[100vw] box-border overflow-x-clip bg-white border-t border-slate-200 px-3 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] sm:p-4 shadow-lg z-40">
+        <div className="max-w-5xl min-w-0 mx-auto flex flex-col gap-2">
           {/* Validation Error Notice if invalid */}
           {!isLocked && !isValid && validationResult.error && (
             <div className="px-3 py-1.5 rounded-xl bg-amber-50 border border-amber-300 text-amber-900 text-xs font-semibold flex items-center gap-2 animate-in fade-in duration-150">
@@ -2563,7 +2563,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
             </div>
           )}
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             {/* Status display on desktop/tablet */}
             <div className="text-xs text-slate-500 hidden sm:flex items-center gap-1.5 shrink-0">
               <span>Trạng thái:</span>
@@ -2603,7 +2603,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                 type="button"
                 onClick={handleSubmit}
                 disabled={!isValid || isSaving}
-                className={`w-full bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold py-3 px-4 rounded-xl shadow-md transition-all flex items-center justify-center gap-2 text-base ${
+                className={`min-w-0 flex-1 w-full bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold py-3 px-4 rounded-xl shadow-md transition-all flex items-center justify-center gap-2 text-base ${
                   isValid && !isSaving
                     ? 'cursor-pointer shadow-emerald-700/25 active:scale-[0.99]'
                     : 'bg-slate-300 text-slate-500 cursor-not-allowed shadow-none'
@@ -2616,7 +2616,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                   </>
                 ) : (
                   <>
-                    <span>🚀 {existingReport ? 'CẬP NHẬT BÁO CÁO NGAY' : 'GỬI BÁO CÁO NGAY'}</span>
+                    <span className="block min-w-0 text-center text-xs sm:text-base leading-snug whitespace-normal">🚀 {existingReport ? 'CẬP NHẬT BÁO CÁO NGAY' : 'GỬI BÁO CÁO NGAY'}</span>
                   </>
                 )}
               </button>
