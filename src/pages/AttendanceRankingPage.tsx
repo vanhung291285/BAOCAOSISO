@@ -233,9 +233,12 @@ export const AttendanceRankingPage: React.FC<AttendanceRankingPageProps> = ({ on
     loadOffDays();
   }, []);
 
+  const [rankingError, setRankingError] = useState<string | null>(null);
+
   // Fetch ranking data
   const fetchRankings = async () => {
     setLoading(true);
+    setRankingError(null);
     try {
       const isWeek = periodType === 'WEEK';
       const result = await StorageService.getAttendanceRanking({
@@ -254,6 +257,8 @@ export const AttendanceRankingPage: React.FC<AttendanceRankingPageProps> = ({ on
       setSummary(result);
     } catch (err) {
       console.error('Error fetching attendance ranking:', err);
+      setSummary(null);
+      setRankingError(err instanceof Error ? err.message : 'Không thể tải bảng xếp hạng từ Supabase.');
     } finally {
       setLoading(false);
     }
@@ -1594,6 +1599,8 @@ export const AttendanceRankingPage: React.FC<AttendanceRankingPageProps> = ({ on
             <Clock className="w-6 h-6 animate-spin mx-auto text-blue-600 mb-2" />
             Đang tổng hợp số liệu thi đua sĩ số...
           </div>
+        ) : rankingError ? (
+          <div role="alert" className="p-8 text-center text-red-700 bg-red-50">{rankingError}</div>
         ) : !summary || summary.rankings.length === 0 ? (
           <div className="p-12 text-center text-slate-500 text-sm">
             Chưa có dữ liệu báo cáo sĩ số trong khoảng thời gian đã chọn.
