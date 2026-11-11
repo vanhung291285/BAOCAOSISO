@@ -4237,10 +4237,15 @@ export const StorageService = {
         }
       } catch (err: any) {
         cloudLoadError = err?.message || String(err);
-        console.warn('Supabase fetch daily aggregate reports fallback to local:', err);
+        console.error('Không thể đọc báo cáo từ Supabase:', err);
       }
     } else {
       cloudLoadError = 'Chưa cấu hình hoặc chưa khởi tạo được kết nối Supabase.';
+    }
+
+    // Không hiển thị số liệu trên máy như thể đã được xác nhận trên Supabase.
+    if (cloudSnapshot === null) {
+      throw new Error(`Không xác minh được báo cáo ngày ${cleanReportDate} trên Supabase: ${cloudLoadError || 'Không có kết nối'}`);
     }
 
     const [cachedClasses, profiles, indicators, allNotifs, students] = await Promise.all([
@@ -4324,10 +4329,10 @@ export const StorageService = {
 
       let repValues = allValues.filter((v) => possibleReportIds.has(v.report_id));
       let hasRealData = repValues.some((v) => (Number(v.total_count) || 0) > 0);
-      const isReported = Boolean(rep && (hasRealData || rep.status === 'SUBMITTED' || rep.status === 'LOCKED'));
+      const isReported = Boolean(rep && (rep.status === 'SUBMITTED' || rep.status === 'LOCKED'));
       let status: ReportStatus = 'NOT_REPORTED';
 
-      if (cls.is_locked || rep?.status === 'LOCKED') {
+      if (rep?.status === 'LOCKED') {
         status = 'LOCKED';
       } else if (isReported) {
         status = 'REPORTED';
@@ -5699,14 +5704,14 @@ export const StorageService = {
   async calculateDailyAttendance(dateStr?: string, classId?: string, campusId?: string) {
     ensureInitialized();
     const targetDate = dateStr || getTodayDateStr();
-    const dailyAgg = await this.getDailyAggregate(targetDate, campusId && campusId !== 'all' ? campusId : undefined);
+    const dailyAgg = await this.getDailyAggregate(targetDate, campusId && campusId !== 'all' ? campusId : undefined, { fresh: true });
     let rows = dailyAgg.rows;
     if (classId && classId !== 'all') {
       const cLower = String(classId).trim().toLowerCase();
       rows = rows.filter((r) => r.classItem.id === classId || r.classItem.class_name.toLowerCase() === cLower);
     }
 
-    const reportedRows = rows.filter((r) => r.status !== 'NOT_REPORTED' && r.report);
+    const reportedRows = rows.filter((r) => r.report && (r.report.status === 'SUBMITTED' || r.report.status === 'LOCKED'));
     const totalClasses = rows.length;
     const reportedClasses = reportedRows.length;
 
@@ -5727,7 +5732,7 @@ export const StorageService = {
     });
 
     const totalValidCount = totalPresent + totalAbsent;
-    const attendanceRate = totalValidCount > 0 ? Math.round((totalPresent / totalValidCount) * 1000) / 10 : 100;
+    const attendanceRate = totalValidCount > 0 ? Math.round((totalPresent / totalValidCount) * 1000) / 10 : 0;
     const absentRate = totalValidCount > 0 ? Math.round((totalAbsent / totalValidCount) * 1000) / 10 : 0;
 
     return {
@@ -5739,7 +5744,7 @@ export const StorageService = {
       totalAbsent,
       attendanceRate,
       absentRate,
-      status: reportedClasses === totalClasses ? 'FULL' : reportedClasses > 0 ? 'PARTIAL' : 'EMPTY',
+      status: reportedClasses > 0 && reportedClasses === totalClasses ? 'FULL' : reportedClasses > 0 ? 'PARTIAL' : 'EMPTY',
     };
   },
 

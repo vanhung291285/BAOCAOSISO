@@ -383,7 +383,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSele
       </div>
 
       {/* 1.5. 4-LEVEL ATTENDANCE OVERVIEW (NGÀY - TUẦN - THÁNG - HỌC KỲ) */}
-      <Attendance4LevelsOverview campusId={selectedCampus} onNavigate={onNavigate} />
+      <Attendance4LevelsOverview campusId={selectedCampus} selectedDate={selectedDate} onNavigate={onNavigate} />
 
       {/* 2. FOUR BIG PRIMARY STAT CARDS (Specification 4: 👨‍🎓 TỔNG SỐ, 🟢 CÓ MẶT, 🔴 VẮNG, 📊 TỶ LỆ CHUYÊN CẦN) */}
       {aggregateData && (

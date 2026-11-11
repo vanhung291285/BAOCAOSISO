@@ -28,6 +28,7 @@ import {
 interface Attendance4LevelsOverviewProps {
   campusId?: string;
   classId?: string;
+  selectedDate?: string;
   showTitle?: boolean;
   onNavigate?: (path: string) => void;
 }
@@ -35,6 +36,7 @@ interface Attendance4LevelsOverviewProps {
 export const Attendance4LevelsOverview: React.FC<Attendance4LevelsOverviewProps> = ({
   campusId,
   classId,
+  selectedDate,
   showTitle = true,
   onNavigate,
 }) => {
@@ -53,6 +55,7 @@ export const Attendance4LevelsOverview: React.FC<Attendance4LevelsOverviewProps>
       const summary = await StorageService.getAttendanceSummary4Levels({
         campusId,
         classId,
+        dateStr: selectedDate,
       });
       setData(summary);
       setLoadError(null);
@@ -63,7 +66,7 @@ export const Attendance4LevelsOverview: React.FC<Attendance4LevelsOverviewProps>
     } finally {
       if (showSpinner) setLoading(false);
     }
-  }, [campusId, classId]);
+  }, [campusId, classId, selectedDate]);
 
   useEffect(() => {
     loadData(true);
@@ -97,7 +100,7 @@ export const Attendance4LevelsOverview: React.FC<Attendance4LevelsOverviewProps>
         {
           name: 'Theo Ngày',
           rate: data.daily.reportedClasses === 0 ? 0 : data.daily.attendanceRate,
-          absentRate: data.daily.absentRate,
+          absentRate: data.daily.reportedClasses === 0 ? 0 : data.daily.absentRate,
           label: `Ngày (${data.daily.reportedClasses}/${data.daily.totalClasses} lớp)`,
           fill: getBadgeStyle(data.daily.attendanceRate).fill,
         },
@@ -204,7 +207,7 @@ export const Attendance4LevelsOverview: React.FC<Attendance4LevelsOverviewProps>
                 </div>
                 <div className="bg-rose-50/70 p-1.5 rounded-lg text-center">
                   <span className="text-rose-500 text-[10px] uppercase font-bold block">Tổng vắng</span>
-                  <span className="font-extrabold text-rose-600">{data.daily.totalAbsent} em</span>
+                  <span className="font-extrabold text-rose-600">{data.daily.reportedClasses === 0 ? "—" : `${data.daily.totalAbsent} em`}</span>
                 </div>
               </div>
             </div>
