@@ -215,3 +215,41 @@
   }
 
 }
+
+/* BAOCAOSISO visual theme — presentation only, no application logic changes. */
+@media screen {
+  .baocaosiso-sidebar {
+    background: linear-gradient(165deg,#102d61 0%,#092452 48%,#071a3b 100%) !important;
+    border-right: 1px solid rgba(147,197,253,.22) !important;
+    color: #eaf2ff;
+  }
+  .baocaosiso-sidebar .custom-scrollbar-slate > div > div:first-child { color: #a9c6ef !important; }
+  .baocaosiso-sidebar button:not([title="Đăng xuất tài khoản"]):not([title="Mở rộng menu"]):not([title="Thu gọn menu"]) { color: #eaf2ff; }
+  .baocaosiso-sidebar button.bg-blue-600 {
+    background: linear-gradient(95deg,#087cff,#2458f6) !important;
+    color: white !important;
+    box-shadow: 0 4px 16px rgba(0,110,255,.32);
+  }
+  .baocaosiso-sidebar button.bg-blue-50,
+  .baocaosiso-sidebar button.bg-blue-50\/90 { background: rgba(67,128,223,.19) !important; color: #eaf2ff !important; border-color: rgba(147,197,253,.2) !important; }
+  .baocaosiso-sidebar button:hover { background-color: rgba(91,158,245,.2); }
+  .baocaosiso-sidebar button svg { color: #a9cfff !important; }
+  .baocaosiso-sidebar button.bg-blue-600 svg { color: #fff !important; }
+  .baocaosiso-sidebar .border-t, .baocaosiso-sidebar .border-l-2 { border-color: rgba(160,199,255,.22) !important; }
+  .baocaosiso-sidebar .bg-slate-50\/40, .baocaosiso-sidebar .bg-slate-50\/70 { background: rgba(6,22,53,.55) !important; }
+  .baocaosiso-sidebar .text-slate-400 { color: #b7c9e5 !important; }
+  .baocaosiso-sidebar a { color: #eaf2ff; }
+  .baocaosiso-sidebar a:hover { color: white; }
+  .baocaosiso-sidebar button:focus-visible, .baocaosiso-mobile-menu button:focus-visible { outline: 2px solid #93c5fd; outline-offset: 2px; }
+  .baocaosiso-mobile-menu { background: linear-gradient(170deg,#102d61,#071b3e) !important; color: #f0f6ff; }
+  .baocaosiso-mobile-menu button { min-height: 42px; }
+  .baocaosiso-mobile-menu button:not(.bg-blue-600):not(.bg-white) { color: #edf5ff; }
+  .baocaosiso-mobile-menu .text-slate-900, .baocaosiso-mobile-menu .text-slate-700, .baocaosiso-mobile-menu .text-slate-600 { color: #eaf2ff; }
+  .baocaosiso-mobile-menu .text-slate-400 { color: #b4c8e8; }
+  .baocaosiso-mobile-menu .border-slate-200 { border-color: rgba(147,197,253,.2); }
+  @media (max-width: 767px) {
+    html, body, #root { max-width: 100%; }
+    input, select, textarea { max-width: 100%; }
+    .baocaosiso-mobile-menu { max-height: min(82dvh,720px); overscroll-behavior: contain; }
+  }
+}
