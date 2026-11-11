@@ -209,6 +209,12 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
 
   // Prevent unrelated roster/indicator realtime updates from resetting an in-progress report.
   const loadedReportKeyRef = useRef<string>('');
+  // A cloud response must never replace an in-progress teacher edit.
+  const editRevisionRef = useRef(0);
+  const activeLoadRef = useRef(0);
+  const currentReportKeyRef = useRef('');
+  const markEdited = () => { editRevisionRef.current += 1; };
+
 
   // Auto-hide toast after 4s
   useEffect(() => {
@@ -228,9 +234,16 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
       return;
     }
 
+    const requestId = ++activeLoadRef.current;
+    const requestKey = `${selectedClassId}::${selectedDate}`;
+    const revisionAtStart = editRevisionRef.current;
+    const stillCurrent = () => requestId === activeLoadRef.current &&
+      requestKey === currentReportKeyRef.current &&
+      revisionAtStart === editRevisionRef.current;
     setIsLoadingReport(true);
     try {
       const { report, values } = await StorageService.getDailyReport(selectedClassId, selectedDate);
+      if (!stillCurrent()) return;
       setExistingReport(report || null);
 
       if (report) {
@@ -271,6 +284,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
       } else {
         // No report for this date: Lấy đúng sĩ số gần nhất mà GVCN đã báo cáo
         const { report: latestReport, values: latestValues } = await StorageService.getLatestReport(selectedClassId, selectedDate);
+        if (!stillCurrent()) return;
 
         if (latestReport && latestValues.length > 0) {
           setInheritedReport({ report: latestReport, values: latestValues });
@@ -414,9 +428,9 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
       }
     } catch (err) {
       console.error('Error loading report for input:', err);
-      setToastMessage({ text: 'Lỗi tải dữ liệu báo cáo!', type: 'error' });
+      if (stillCurrent()) setToastMessage({ text: 'Lỗi tải dữ liệu báo cáo!', type: 'error' });
     } finally {
-      setIsLoadingReport(false);
+      if (stillCurrent()) setIsLoadingReport(false);
     }
   }, [selectedClassId, selectedDate, enabledIndicators, classStudents]);
 
@@ -471,6 +485,8 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
     const key = `${selectedClassId}::${selectedDate}`;
     if (!selectedClassId || !selectedDate || loadedReportKeyRef.current === key) return;
     loadedReportKeyRef.current = key;
+    currentReportKeyRef.current = key;
+    ++activeLoadRef.current;
     void loadClassReport().catch(() => {
       // Allow retry if the initial request fails unexpectedly.
       if (loadedReportKeyRef.current === key) loadedReportKeyRef.current = '';
@@ -557,6 +573,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
     val: number | ''
   ) => {
     if (isLocked) return;
+    markEdited();
 
     setFormValues((prev) => {
       const cur = prev[groupId] || { total: 0, present: 0, absent: 0 };
@@ -680,7 +697,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
             const ntTot = Number(nextValues[ntInd.id].total) || 0;
             nextValues[ntInd.id] = { total: nextValues[ntInd.id].total, present: ntTot, absent: 0 };
           }
-          setAbsentStudents([]);
+          // Keep named absences until the teacher explicitly resets or removes them.
         } else {
           // Nếu cả lớp vắng N em (ví dụ vắng 2 hoặc 3)
           const bTot = bInd && nextValues[bInd.id] ? (Number(nextValues[bInd.id].total) || 0) : 0;
@@ -836,6 +853,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
     studentId?: string
   ) => {
     if (isLocked) return;
+    markEdited();
     const trimmedName = (name || '').trim();
 
     const studentMatch = studentId
@@ -891,6 +909,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
   // Remove absent student
   const handleRemoveAbsentStudent = (index: number) => {
     if (isLocked) return;
+    markEdited();
 
     setAbsentStudents((prev) => {
       const nextList = prev.filter((_, i) => i !== index);
@@ -902,6 +921,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
   // Update absent student row
   const handleUpdateAbsentStudent = (index: number, partial: Partial<AbsentStudent>) => {
     if (isLocked) return;
+    markEdited();
 
     setAbsentStudents((prev) => {
       if (!prev[index]) return prev;

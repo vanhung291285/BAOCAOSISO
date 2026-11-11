@@ -3362,10 +3362,12 @@ export const StorageService = {
     return { report, values };
   },
 
+  // Supabase is authoritative for shared attendance data. LocalStorage is only a cache.
   async getAllDailyReports(): Promise<DailyReport[]> {
     ensureInitialized();
-    const rawReports = localStorage.getItem(STORAGE_KEYS.REPORTS);
-    const reports: DailyReport[] = rawReports ? JSON.parse(rawReports) : [];
+    const rows = await this.fetchAllRowsFromCloud('daily_reports');
+    const reports = rows as DailyReport[];
+    safeSetItem(STORAGE_KEYS.REPORTS, reports);
     return reports;
   },
 
@@ -3378,84 +3380,31 @@ export const StorageService = {
     reportDate: string
   ): Promise<{ report?: DailyReport; values: DailyReportValue[] }> {
     ensureInitialized();
-    const cleanDate = (d: any) => String(d || '').split('T')[0].trim();
-    const cleanReportDate = cleanDate(reportDate);
-    const CACHE_KEY = `report_${classId}_${cleanReportDate}`;
-
-    const cached = getCached<{ report?: DailyReport; values: DailyReportValue[] }>(CACHE_KEY);
-    if (cached) return cached;
-
-    return coalesceRequest(CACHE_KEY, async () => {
-      // 1. Check local storage first for instant 0ms retrieval
-      const rawReports = localStorage.getItem(STORAGE_KEYS.REPORTS);
-      const reports: DailyReport[] = rawReports ? JSON.parse(rawReports) : [];
-      const localReport = reports.find(
-        (r) => matchClassReport(r.class_id, classId) && cleanDate(r.report_date) === cleanReportDate
-      );
-
-      const rawValues = localStorage.getItem(STORAGE_KEYS.VALUES);
-      const allValues: DailyReportValue[] = rawValues ? JSON.parse(rawValues) : [];
-      const localValues = localReport ? allValues.filter((v) => v.report_id === localReport.id) : [];
-
-      if (localReport && localValues.length > 0) {
-        const res = { report: localReport, values: localValues };
-        setCached(CACHE_KEY, res, 25000);
-        return res;
-      }
-
-      // 2. Query Supabase if not found locally
-      const supabase = getSupabaseClient();
-      if (supabase && isSupabaseConnected()) {
-        try {
-          // Resolve all class aliases
-          const rawCls = localStorage.getItem(STORAGE_KEYS.CLASSES);
-          let validClassIds = [classId];
-          if (rawCls) {
-            try {
-              const clsList = JSON.parse(rawCls);
-              const target = clsList.find((c: any) => matchClassReport(c, classId));
-              if (target) {
-                validClassIds = Array.from(new Set([target.id, target.class_name, classId].filter(Boolean)));
-              }
-            } catch {}
-          }
-
-          const { data: rep, error: rErr } = await supabase
-            .from('daily_reports')
-            .select('*')
-            .in('class_id', validClassIds)
-            .eq('report_date', cleanReportDate)
-            .maybeSingle();
-
-          if (!rErr && rep) {
-            const { data: vals, error: vErr } = await supabase
-              .from('daily_report_values')
-              .select('*')
-              .eq('report_id', rep.id);
-
-            if (!vErr && vals) {
-              const rIdx = reports.findIndex((r) => r.id === rep.id || (matchClassReport(r.class_id, rep.class_id) && cleanDate(r.report_date) === cleanReportDate));
-              if (rIdx >= 0) reports[rIdx] = rep;
-              else reports.push(rep);
-              localStorage.setItem(STORAGE_KEYS.REPORTS, JSON.stringify(reports));
-
-              const mergedValues = allValues.filter((v) => v.report_id !== rep.id).concat(vals);
-              localStorage.setItem(STORAGE_KEYS.VALUES, JSON.stringify(mergedValues));
-
-              const res = { report: rep, values: vals };
-              setCached(CACHE_KEY, res, 25000);
-              return res;
-            }
-          }
-        } catch (err) {
-          console.warn('Supabase fetch report fallback to local:', err);
-        }
-      }
-
-      const emptyRes = { report: localReport, values: localValues };
-      setCached(CACHE_KEY, emptyRes, 15000);
-      return emptyRes;
-    });
+    const supabase = getSupabaseClient();
+    if (!supabase || !isSupabaseConnected()) {
+      throw new Error('Không kết nối được Supabase. Không thể xác nhận sĩ số mới nhất.');
+    }
+    const date = String(reportDate || '').split('T')[0].trim();
+    const classes = await this.getClasses();
+    const matching = classes.find((c) => matchClassReport(c.id, classId) || matchClassReport(c.class_name, classId));
+    const ids = Array.from(new Set([classId, matching?.id, matching?.class_name].filter(Boolean))) as string[];
+    const { data: rows, error } = await supabase.from('daily_reports')
+      .select('*').in('class_id', ids).eq('report_date', date)
+      .order('updated_at', { ascending: false }).limit(2);
+    if (error) throw new Error(`Không tải được báo cáo Supabase: ${error.message}`);
+    if (!rows?.length) return { report: undefined, values: [] };
+    const report = rows[0] as DailyReport;
+    const { data: values, error: valueError } = await supabase.from('daily_report_values')
+      .select('*').eq('report_id', report.id);
+    if (valueError) throw new Error(`Không tải được chỉ tiêu Supabase: ${valueError.message}`);
+    // Cache only after BOTH cloud reads succeed; never return stale local rows as authoritative.
+    const rawReports = localStorage.getItem(STORAGE_KEYS.REPORTS);
+    const existing: DailyReport[] = rawReports ? JSON.parse(rawReports) : [];
+    safeSetItem(STORAGE_KEYS.REPORTS, existing.filter(r => r.id !== report.id && !(ids.includes(r.class_id) && String(r.report_date).split('T')[0] === date)).concat(report));
+    const rawValues = localStorage.getItem(STORAGE_KEYS.VALUES);
+    const oldValues: DailyReportValue[] = rawValues ? JSON.parse(rawValues) : [];
+    safeSetItem(STORAGE_KEYS.VALUES, oldValues.filter(v => v.report_id !== report.id).concat((values || []) as DailyReportValue[]));
+    return { report, values: (values || []) as DailyReportValue[] };
   },
 
   async getLatestReport(
@@ -3614,6 +3563,11 @@ export const StorageService = {
     absent_students?: import('../types').AbsentStudent[]
   ): Promise<{ report: DailyReport; values: DailyReportValue[] }> {
     ensureInitialized();
+
+    // Cloud is the authoritative store: never acknowledge an offline-only report.
+    if (!getSupabaseClient() || !isSupabaseConnected()) {
+      throw new Error('Chưa kết nối Supabase. Báo cáo chưa được lưu; vui lòng kết nối lại rồi thử lại.');
+    }
 
     // Guard: Prevent saving empty report where total is 0
     const maxTotal = Object.values(valuesByGroup).reduce(
@@ -6131,23 +6085,59 @@ export const StorageService = {
     const targetClassIds = new Set(targetClasses.map((c) => c.id));
     const mainIndicator = indicators.find((i) => i.code === 'ALL') || indicators[0];
 
-    const rawReports = localStorage.getItem(STORAGE_KEYS.REPORTS);
-    const reports: DailyReport[] = rawReports ? JSON.parse(rawReports) : [];
-
-    const rawValues = localStorage.getItem(STORAGE_KEYS.VALUES);
-    const allValues: DailyReportValue[] = rawValues ? JSON.parse(rawValues) : [];
+    // Ranking is a cross-device view: Supabase is authoritative, never localStorage.
+    // Fetch the requested date range in pages to avoid PostgREST's default 1000-row cap.
+    const supabase = getSupabaseClient();
+    if (!supabase || !isSupabaseConnected()) {
+      throw new Error('Không thể kết nối Supabase để lấy dữ liệu xếp hạng.');
+    }
+    const reports: DailyReport[] = [];
+    const pageSize = 500;
+    for (let offset = 0; ; offset += pageSize) {
+      const { data, error } = await supabase.from('daily_reports')
+        .select('*').gte('report_date', startDate).lte('report_date', endDate)
+        .order('report_date', { ascending: true }).order('id', { ascending: true })
+        .range(offset, offset + pageSize - 1);
+      if (error) throw new Error(`Không đọc được báo cáo trên Supabase: ${error.message}`);
+      reports.push(...((data || []) as DailyReport[]));
+      if (!data || data.length < pageSize) break;
+    }
+    const allValues: DailyReportValue[] = [];
+    const reportIds = reports.map(r => r.id);
+    // Limit IN-filter size; retrieve every indicator row for each report.
+    for (let i = 0; i < reportIds.length; i += 100) {
+      const ids = reportIds.slice(i, i + 100);
+      for (let offset = 0; ; offset += pageSize) {
+        const { data, error } = await supabase.from('daily_report_values')
+          .select('*').in('report_id', ids).order('id', { ascending: true })
+          .range(offset, offset + pageSize - 1);
+        if (error) throw new Error(`Không đọc được chỉ tiêu báo cáo: ${error.message}`);
+        allValues.push(...((data || []) as DailyReportValue[]));
+        if (!data || data.length < pageSize) break;
+      }
+    }
+    const normalizedDate = (date: string) => String(date || '').slice(0, 10);
+    const reportByClassAndDate = new Map<string, DailyReport>();
+    const valuesByReportAndIndicator = new Map<string, DailyReportValue>();
+    for (const report of reports) {
+      reportByClassAndDate.set(`${report.class_id}|${normalizedDate(report.report_date)}`, report);
+    }
+    for (const value of allValues) {
+      valuesByReportAndIndicator.set(`${value.report_id}|${value.indicator_group_id}`, value);
+    }
 
     // Filter reports in date range
     const periodReports = reports.filter(
-      (r) => r.report_date >= startDate && r.report_date <= endDate && targetClassIds.has(r.class_id)
+      (r) => normalizedDate(r.report_date) >= startDate && normalizedDate(r.report_date) <= endDate && targetClassIds.has(r.class_id)
     );
 
     // Group reports by date
     const reportsByDate = new Map<string, DailyReport[]>();
     periodReports.forEach((r) => {
-      const list = reportsByDate.get(r.report_date) || [];
+      const dateKey = normalizedDate(r.report_date);
+      const list = reportsByDate.get(dateKey) || [];
       list.push(r);
-      reportsByDate.set(r.report_date, list);
+      reportsByDate.set(dateKey, list);
     });
 
     // Generate list of all calendar days in [startDate, endDate] safely without timezone shifts
@@ -6222,7 +6212,7 @@ export const StorageService = {
       let lastKnownTotal = 0;
 
       validDates.forEach((dateStr) => {
-        const dayRep = reports.find((r) => r.class_id === cls.id && r.report_date === dateStr);
+        const dayRep = reportByClassAndDate.get(`${cls.id}|${dateStr}`);
         if (dayRep) {
           reportedDays++;
 
@@ -6235,9 +6225,7 @@ export const StorageService = {
             reportTimes.push(timeStr);
           }
 
-          const val = allValues.find(
-            (v) => v.report_id === dayRep.id && v.indicator_group_id === mainIndicator?.id
-          );
+          const val = valuesByReportAndIndicator.get(`${dayRep.id}|${mainIndicator?.id}`);
           if (val) {
             classPossible += val.total_count;
             classPresent += val.present_count;
@@ -6251,7 +6239,7 @@ export const StorageService = {
       if (lastKnownTotal === 0) {
         const anyRep = reports.find((r) => r.class_id === cls.id);
         if (anyRep) {
-          const val = allValues.find((v) => v.report_id === anyRep.id && v.indicator_group_id === mainIndicator?.id);
+          const val = valuesByReportAndIndicator.get(`${anyRep.id}|${mainIndicator?.id}`);
           if (val) lastKnownTotal = val.total_count;
         }
       }
