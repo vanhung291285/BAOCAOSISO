@@ -11,63 +11,14 @@ export interface SupabaseConnectionStatus {
 
 // Get Supabase credentials from localStorage (both key formats supported) or import.meta.env
 export function getSupabaseCredentials(): { url: string; anonKey: string } {
-  // Tự động nhận diện cấu hình từ URL (nếu mở liên kết chia sẻ kết nối nhanh từ máy khác)
-  if (typeof window !== 'undefined' && (window.location.search || window.location.hash)) {
-    try {
-      const searchParams = new URLSearchParams(window.location.search);
-      let pUrl = searchParams.get('sb_url');
-      let pKey = searchParams.get('sb_key') || searchParams.get('sb_anon');
-
-      if (!pUrl && window.location.hash.includes('?')) {
-        const hashQuery = window.location.hash.split('?')[1];
-        const hashParams = new URLSearchParams(hashQuery);
-        pUrl = hashParams.get('sb_url');
-        pKey = hashParams.get('sb_key') || hashParams.get('sb_anon');
-      }
-
-      if (pUrl && pKey && pUrl.startsWith('http')) {
-        saveSupabaseCredentials(pUrl, pKey);
-        // Làm sạch URL để không để lộ key trên thanh địa chỉ
-        const cleanPath = window.location.pathname + (window.location.hash.split('?')[0] || '');
-        window.history.replaceState({}, document.title, cleanPath);
-      }
-    } catch {}
-  }
-
-  const localUrl =
-    (typeof window !== 'undefined' &&
-      (localStorage.getItem('sso_supabase_url') ||
-        localStorage.getItem('app_custom_supabase_url'))) ||
-    '';
-  const localKey =
-    (typeof window !== 'undefined' &&
-      (localStorage.getItem('sso_supabase_anon_key') ||
-        localStorage.getItem('app_custom_supabase_key'))) ||
-    '';
-
-  const envUrl = (import.meta as any).env?.VITE_SUPABASE_URL || '';
-  const envKey = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || '';
-
-  const DEFAULT_SUPABASE_URL = 'https://jzycmjynzkhevuxyjngv.supabase.co';
-  const DEFAULT_SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6eWNtanluemtoZXZ1eHlqbmd2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIxOTUzODksImV4cCI6MjA4Nzc3MTM4OX0.k9bRVlYvcCKqhDGZspPajyT128e1CfQCcL2Swr76Ayw';
-
-  let rawUrl = (localUrl || envUrl).trim();
-  let rawKey = (localKey || envKey).trim();
-
-  if (rawUrl.includes('YOUR_SUPABASE') || rawUrl.includes('placeholder') || !rawUrl) {
-    rawUrl = DEFAULT_SUPABASE_URL;
-  }
-  if (rawKey.includes('YOUR_SUPABASE') || rawKey.includes('placeholder') || !rawKey) {
-    rawKey = DEFAULT_SUPABASE_KEY;
-  }
-
-  // Remove trailing slashes
-  rawUrl = rawUrl.replace(/\/+$/, '');
-
-  return {
-    url: rawUrl,
-    anonKey: rawKey,
-  };
+  // Production has ONE Supabase project, configured in Vercel environment variables.
+  // Never silently fall back to a different project or accept URL-provided credentials.
+  const envUrl = String((import.meta as any).env?.VITE_SUPABASE_URL || '').trim();
+  const envKey = String((import.meta as any).env?.VITE_SUPABASE_ANON_KEY || '').trim();
+  const dev = Boolean((import.meta as any).env?.DEV);
+  const localUrl = dev && typeof window !== 'undefined' ? localStorage.getItem('sso_supabase_url') || '' : '';
+  const localKey = dev && typeof window !== 'undefined' ? localStorage.getItem('sso_supabase_anon_key') || '' : '';
+  return { url: (envUrl || localUrl).replace(/\/+$/, ''), anonKey: envKey || localKey };
 }
 
 export function saveSupabaseCredentials(url: string, anonKey: string) {
