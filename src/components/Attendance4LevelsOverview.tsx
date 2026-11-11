@@ -39,6 +39,7 @@ export const Attendance4LevelsOverview: React.FC<Attendance4LevelsOverviewProps>
   onNavigate,
 }) => {
   const [loading, setLoading] = useState<boolean>(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [data, setData] = useState<{
     daily: any;
     weekly: any;
@@ -54,8 +55,11 @@ export const Attendance4LevelsOverview: React.FC<Attendance4LevelsOverviewProps>
         classId,
       });
       setData(summary);
+      setLoadError(null);
     } catch (err) {
       console.error('Failed to load 4-level attendance summary:', err);
+      setLoadError(err instanceof Error ? err.message : 'Không thể xác minh dữ liệu trên Supabase');
+      setData(null);
     } finally {
       if (showSpinner) setLoading(false);
     }
@@ -80,6 +84,7 @@ export const Attendance4LevelsOverview: React.FC<Attendance4LevelsOverviewProps>
     };
   }, [loadData]);
 
+  // Báo lỗi thay vì hiển thị số liệu cũ khi Supabase không phản hồi.
   const getBadgeStyle = (rate: number) => {
     if (rate >= 98) return { bg: 'bg-emerald-50 text-emerald-800 border-emerald-200', text: 'Xuất sắc 🟢', fill: '#10b981' };
     if (rate >= 95) return { bg: 'bg-blue-50 text-blue-800 border-blue-200', text: 'Tốt 🔵', fill: '#3b82f6' };
@@ -91,7 +96,7 @@ export const Attendance4LevelsOverview: React.FC<Attendance4LevelsOverviewProps>
     ? [
         {
           name: 'Theo Ngày',
-          rate: data.daily.attendanceRate,
+          rate: data.daily.reportedClasses === 0 ? 0 : data.daily.attendanceRate,
           absentRate: data.daily.absentRate,
           label: `Ngày (${data.daily.reportedClasses}/${data.daily.totalClasses} lớp)`,
           fill: getBadgeStyle(data.daily.attendanceRate).fill,
@@ -152,6 +157,11 @@ export const Attendance4LevelsOverview: React.FC<Attendance4LevelsOverviewProps>
         </div>
       )}
 
+      {loadError && !loading && (
+        <div role="alert" className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-800">
+          Không thể xác minh dữ liệu báo cáo trên Supabase. Không hiển thị số liệu lưu cục bộ. {loadError}
+        </div>
+      )}
       {loading && !data ? (
         <div className="bg-white rounded-2xl p-8 border border-slate-200 text-center">
           <RefreshCw className="w-6 h-6 text-blue-600 animate-spin mx-auto mb-2" />
@@ -171,15 +181,15 @@ export const Attendance4LevelsOverview: React.FC<Attendance4LevelsOverviewProps>
                   <CalendarDays className="w-3.5 h-3.5" />
                   Theo Ngày
                 </span>
-                <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border ${getBadgeStyle(data.daily.attendanceRate).bg}`}>
-                  {getBadgeStyle(data.daily.attendanceRate).text}
+                <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border ${(data.daily.reportedClasses === 0 ? 'bg-slate-100 text-slate-600 border-slate-200' : getBadgeStyle(data.daily.attendanceRate).bg)}`}>
+                  {data.daily.reportedClasses === 0 ? 'Chưa có báo cáo' : getBadgeStyle(data.daily.attendanceRate).text}
                 </span>
               </div>
 
               <div className="flex items-baseline justify-between mt-1">
                 <div>
                   <div className="text-2xl font-black text-slate-900 group-hover:text-blue-700 transition-colors">
-                    {data.daily.attendanceRate.toFixed(1)}%
+                    {data.daily.reportedClasses === 0 ? '—' : `${data.daily.attendanceRate.toFixed(1)}%`}
                   </div>
                   <div className="text-[11px] font-medium text-slate-500 mt-0.5">
                     Chuyên cần ngày {data.daily.date.split('-').reverse().join('/')}
