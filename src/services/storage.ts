@@ -6092,6 +6092,7 @@ export const StorageService = {
     for (let offset = 0; ; offset += pageSize) {
       const { data, error } = await supabase.from('daily_reports')
         .select('*').gte('report_date', startDate).lte('report_date', endDate)
+        .in('status', ['SUBMITTED', 'LOCKED'])
         .order('report_date', { ascending: true }).order('id', { ascending: true })
         .range(offset, offset + pageSize - 1);
       if (error) throw new Error(`Không đọc được báo cáo trên Supabase: ${error.message}`);
@@ -6115,7 +6116,19 @@ export const StorageService = {
     const normalizedDate = (date: string) => String(date || '').slice(0, 10);
     const reportByClassAndDate = new Map<string, DailyReport>();
     const valuesByReportAndIndicator = new Map<string, DailyReportValue>();
+    const isValidReport = (report: DailyReport): boolean => {
+      if (report.status !== 'SUBMITTED' && report.status !== 'LOCKED') return false;
+      const value = valuesByReportAndIndicator.get(`${report.id}|${mainIndicator?.id}`);
+      if (!value) return false;
+      const total = Number(value.total_count);
+      const present = Number(value.present_count);
+      const absent = Number(value.absent_count);
+      return Number.isFinite(total) && total > 0 &&
+        Number.isFinite(present) && Number.isFinite(absent) &&
+        present >= 0 && absent >= 0 && present + absent <= total;
+    };
     for (const report of reports) {
+      if (!isValidReport(report)) continue;
       reportByClassAndDate.set(`${report.class_id}|${normalizedDate(report.report_date)}`, report);
     }
     for (const value of allValues) {
@@ -6124,7 +6137,7 @@ export const StorageService = {
 
     // Filter reports in date range
     const periodReports = reports.filter(
-      (r) => normalizedDate(r.report_date) >= startDate && normalizedDate(r.report_date) <= endDate && targetClassIds.has(r.class_id)
+      (r) => normalizedDate(r.report_date) >= startDate && normalizedDate(r.report_date) <= endDate && targetClassIds.has(r.class_id) && isValidReport(r)
     );
 
     // Group reports by date
@@ -6233,7 +6246,7 @@ export const StorageService = {
 
       // If no report on valid dates, fallback enrollment
       if (lastKnownTotal === 0) {
-        const anyRep = reports.find((r) => r.class_id === cls.id);
+        const anyRep = reports.find((r) => r.class_id === cls.id && isValidReport(r));
         if (anyRep) {
           const val = valuesByReportAndIndicator.get(`${anyRep.id}|${mainIndicator?.id}`);
           if (val) lastKnownTotal = val.total_count;
