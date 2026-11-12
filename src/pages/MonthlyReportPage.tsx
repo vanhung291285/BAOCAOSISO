@@ -674,6 +674,7 @@ export const MonthlyReportPage: React.FC<MonthlyReportPageProps> = ({ onNavigate
             <button
               type="button"
               onClick={handlePrint}
+              disabled={loading}
               className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-xs transition-colors cursor-pointer"
               title="In biểu mẫu báo cáo sĩ số chuẩn ra giấy A4 nằm ngang y hệt hình gốc"
             >
@@ -685,7 +686,7 @@ export const MonthlyReportPage: React.FC<MonthlyReportPageProps> = ({ onNavigate
             <button
               type="button"
               onClick={handleExportStandardMonthlyExcel}
-              disabled={isExportingStandard}
+              disabled={isExportingStandard || loading}
               className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-emerald-800 bg-emerald-100 hover:bg-emerald-200 border border-emerald-300 transition-colors cursor-pointer disabled:opacity-50"
               title="Xuất file Excel đúng biểu mẫu 13 cột quy định (Quốc hiệu tiêu ngữ, Báo cáo sĩ số học sinh, chữ ký)"
             >
@@ -704,7 +705,7 @@ export const MonthlyReportPage: React.FC<MonthlyReportPageProps> = ({ onNavigate
               <button
                 type="button"
                 onClick={() => handleExportBoardingForGVCN()}
-                disabled={isExportingBoarding}
+                disabled={isExportingBoarding || loading}
                 className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-black text-white bg-indigo-600 hover:bg-indigo-700 shadow-xs transition-colors cursor-pointer disabled:opacity-50"
                 title={`Xuất Excel Sổ chấm cơm và biểu tổng hợp ăn bán trú Tháng ${selectedMonth}`}
               >
@@ -874,7 +875,20 @@ export const MonthlyReportPage: React.FC<MonthlyReportPageProps> = ({ onNavigate
         </div>
 
         {loading ? (
-          <div className="p-12 text-center text-slate-400 text-xs">Đang tải và tổng hợp dữ liệu tháng...</div>
+          <div role="status" aria-live="polite" aria-label="Đang tải báo cáo tháng" className="min-h-[280px] flex flex-col items-center justify-center rounded-2xl bg-slate-50/70 px-5 py-10 text-center print:hidden">
+            <div className="relative flex h-[76px] w-[76px] items-center justify-center rounded-2xl border border-blue-100 bg-white shadow-sm">
+              <div className="absolute inset-[7px] rounded-full border-[3px] border-blue-100" />
+              <div className="absolute inset-[7px] animate-spin rounded-full border-[3px] border-transparent border-t-blue-600 border-r-blue-400" style={{ animationDuration: '1.15s' }} />
+              <FileSpreadsheet className="relative h-7 w-7 text-blue-600" aria-hidden="true" />
+            </div>
+            <h3 className="mt-5 text-sm font-bold tracking-tight text-slate-800">Đang tổng hợp báo cáo tháng</h3>
+            <p className="mt-1.5 text-xs text-slate-500">Đang đồng bộ dữ liệu sĩ số và chuyên cần. Vui lòng chờ...</p>
+            <div className="mt-5 flex items-center gap-2" aria-hidden="true">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-blue-600" />
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-blue-400" style={{ animationDelay: '160ms' }} />
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-blue-200" style={{ animationDelay: '320ms' }} />
+            </div>
+          </div>
         ) : (
           <div className="overflow-x-auto">
             {/* Table with Full Solid Borders (Đúng chuẩn 13 cột theo hình gốc) */}
