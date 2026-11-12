@@ -85,6 +85,15 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
   const [mealPasswordError, setMealPasswordError] = useState('');
   const [verifyingMealPassword, setVerifyingMealPassword] = useState(false);
   const [mealSheetUnlocked, setMealSheetUnlocked] = useState(false);
+  // ADD-ONLY: Thông báo xác thực thành công, tự ẩn sau 2,5 giây.
+  const [showMealVerifiedNotice, setShowMealVerifiedNotice] = useState(false);
+  useEffect(() => {
+    if (!mealSheetUnlocked) return;
+    setShowMealVerifiedNotice(true);
+    const timeoutId = window.setTimeout(() => setShowMealVerifiedNotice(false), 2500);
+    return () => window.clearTimeout(timeoutId);
+  }, [mealSheetUnlocked]);
+
   const openMealSheet = () => {
     if (mealSheetUnlocked) { setActiveTab('monthly-sheet'); return; }
     setMealPassword(''); setMealPasswordError(''); setShowMealPassword(true);
@@ -1263,6 +1272,13 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
 
   return (
     <div className="space-y-4 sm:space-y-6 pb-12">
+      {/* ADD-ONLY: Phản hồi xác thực thành công */}
+      {showMealVerifiedNotice && activeTab === 'monthly-sheet' && (
+        <div role="status" aria-live="polite" className="fixed top-5 left-1/2 -translate-x-1/2 z-[250] flex items-center gap-3 rounded-2xl border border-emerald-200 bg-white px-5 py-4 shadow-2xl shadow-emerald-900/15">
+          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100"><CheckCircle2 className="h-6 w-6 text-emerald-600" /></span>
+          <span><strong className="block text-sm text-emerald-800">Xác thực thành công!</strong><span className="block text-xs text-slate-600">Đã mở Sổ chấm cơm tháng.</span></span>
+        </div>
+      )}
       {/* Toast Notification */}
       {toastMessage && (
         <div
@@ -2205,6 +2221,21 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
             <p className="mt-3 text-sm text-slate-600">Áp dụng cho cả Quản trị viên và GVCN. Nhập mật khẩu được quản trị viên cấp để mở sổ.</p>
             <label htmlFor="meal-sheet-password" className="mt-5 mb-2 block text-sm font-semibold">Mật khẩu Sổ chấm cơm</label>
             <input id="meal-sheet-password" autoFocus type="password" autoComplete="off" value={mealPassword} onChange={e => setMealPassword(e.target.value)} required className="w-full min-w-0 rounded-xl border border-slate-300 px-4 py-3 text-base outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
+            {/* ADD-ONLY: Loading xác thực và biểu tượng báo lỗi */}
+            {verifyingMealPassword && (
+              <div role="status" aria-live="polite" className="mt-4 flex items-center gap-3 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3">
+                <span className="relative flex h-9 w-9 shrink-0 items-center justify-center">
+                  <span className="absolute inset-0 animate-spin rounded-full border-[3px] border-blue-200 border-t-blue-600" />
+                  <ShieldCheck className="h-4 w-4 text-blue-600" />
+                </span>
+                <span><strong className="block text-sm text-blue-900">Đang xác thực mật khẩu</strong><span className="block text-xs text-blue-700">Vui lòng chờ trong giây lát...</span></span>
+              </div>
+            )}
+            {!!mealPasswordError && (
+              <div role="status" className="mt-3 flex items-center gap-2 rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
+                <AlertCircle className="h-5 w-5 shrink-0" /> Không thể xác thực. Vui lòng kiểm tra mật khẩu hoặc liên hệ quản trị viên.
+              </div>
+            )}
             {mealPasswordError && <p role="alert" className="mt-2 text-sm text-red-600">{mealPasswordError}</p>}
             <div className="mt-6 flex gap-3"><button type="button" onClick={() => setShowMealPassword(false)} className="flex-1 rounded-xl border border-slate-300 py-3 font-semibold">Hủy</button><button type="submit" disabled={verifyingMealPassword} className="flex-1 rounded-xl bg-blue-600 py-3 font-semibold text-white disabled:opacity-50">{verifyingMealPassword ? 'Đang kiểm tra...' : 'Xác nhận'}</button></div>
           </form>
