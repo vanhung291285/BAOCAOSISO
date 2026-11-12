@@ -121,6 +121,7 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
   } | null>(null);
 
   const [loading, setLoading] = useState(true);
+  const [dailyLoadError, setDailyLoadError] = useState(false);
   const dailyLoadSequence = useRef(0);
   const [loadingMonthly, setLoadingMonthly] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -179,6 +180,7 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
   const loadReportData = useCallback(async (showIndicator = true, forceFresh = false) => {
     const sequence = ++dailyLoadSequence.current;
     if (showIndicator) setLoading(true);
+    setDailyLoadError(false);
     try {
       const data = await StorageService.getDailyAggregate(selectedDate, selectedCampusId, { fresh: forceFresh });
       // Yêu cầu cũ (ngày/lớp khác, mạng chậm) không được ghi đè dữ liệu vừa tải.
@@ -187,6 +189,7 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
       if (sequence === dailyLoadSequence.current) {
         console.error('Failed to load report data:', err);
         setReportData(null);
+        setDailyLoadError(true);
         setToastMessage('Không thể tải dữ liệu ngày này. Vui lòng kiểm tra kết nối Supabase rồi thử lại.');
       }
     } finally {
@@ -957,7 +960,7 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
             <button
               type="button"
               onClick={() => handleExportExcel(false)}
-              disabled={exporting}
+              disabled={exporting || (reportMode === 'daily' && (loading || dailyLoadError))}
               className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-emerald-800 bg-emerald-100 hover:bg-emerald-200 border border-emerald-300 shadow-2xs transition-colors disabled:opacity-50 cursor-pointer"
               title={
                 reportMode === 'daily'
@@ -984,7 +987,7 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
               <button
                 type="button"
                 onClick={handleExportAllClassesMonthly}
-                disabled={exporting}
+                disabled={exporting || (reportMode === 'daily' && (loading || dailyLoadError))}
                 className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-teal-800 bg-teal-100 hover:bg-teal-200 border border-teal-300 shadow-2xs transition-colors disabled:opacity-50 cursor-pointer"
                 title="Xuất 1 file Excel gồm Sheet Tổng hợp và tất cả các Sheet riêng cho từng lớp theo đúng biểu mẫu chuẩn này"
               >
@@ -997,7 +1000,7 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
               <button
                 type="button"
                 onClick={() => handleExportExcel(true)}
-                disabled={exporting}
+                disabled={exporting || (reportMode === 'daily' && (loading || dailyLoadError))}
                 className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-300 shadow-2xs transition-colors disabled:opacity-50 cursor-pointer"
                 title="Xuất file Excel mẫu trắng y hệt hình gốc"
               >
@@ -1045,7 +1048,42 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
       </div>
 
       {/* Main Document Layout - Matched precisely to the template image with solid borderlines */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 sm:p-8 print-container text-black">
+      <div className="relative bg-white rounded-2xl border border-slate-200 shadow-sm p-5 sm:p-8 print-container text-black" aria-busy={reportMode === 'daily' && loading}>
+        {/* Loading riêng cho biểu mẫu: giữ thanh điều hướng hoạt động, không hiển thị dữ liệu cũ. */}
+        {reportMode === 'daily' && (loading || dailyLoadError) && (
+          <div className="absolute inset-0 z-20 flex min-h-[280px] items-start justify-center rounded-2xl bg-white/95 pt-24 no-print" role={loading ? 'status' : 'alert'} aria-live="polite">
+            <div className="flex max-w-sm flex-col items-center gap-3 px-5 text-center">
+              {loading ? (
+                <>
+                  <div className="relative flex h-20 w-20 items-center justify-center" aria-hidden="true">
+                    <span className="absolute inset-0 rounded-full bg-blue-50" />
+                    <span className="absolute inset-1 animate-spin rounded-full border-[3px] border-blue-100 border-t-blue-600 border-r-blue-400" />
+                    <span className="absolute inset-[11px] animate-[spin_2.4s_linear_infinite_reverse] rounded-full border-2 border-transparent border-b-sky-400 border-l-sky-200" />
+                    <span className="relative flex h-9 w-9 items-center justify-center rounded-xl bg-white shadow-sm ring-1 ring-blue-100">
+                      <FileSpreadsheet className="h-5 w-5 text-blue-600" />
+                    </span>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm font-extrabold tracking-tight text-slate-800">Đang đồng bộ báo cáo ngày</p>
+                    <p className="text-xs leading-5 text-slate-500">Đang lấy dữ liệu mới nhất từ hệ thống...</p>
+                  </div>
+                  <div className="h-1 w-44 overflow-hidden rounded-full bg-blue-100" aria-hidden="true">
+                    <div className="h-full w-1/3 animate-[pulse_1.2s_ease-in-out_infinite] rounded-full bg-gradient-to-r from-sky-400 to-blue-600" />
+                  </div>
+                  <p className="text-[11px] text-slate-400">Vui lòng chờ trong giây lát</p>
+                </>
+              ) : (
+                <>
+                  <AlertCircle className="h-10 w-10 text-rose-500" aria-hidden="true" />
+                  <p className="text-sm font-bold text-slate-800">Không tải được dữ liệu báo cáo</p>
+                  <button type="button" onClick={() => loadReportData(true, true)} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700">
+                    <RefreshCw className="h-4 w-4" /> Thử lại
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        )}
         {/* Official Document Header Block */}
         <div className="flex flex-col md:flex-row justify-between items-start font-serif text-black mb-6">
           <div className="flex flex-col items-start text-left">
