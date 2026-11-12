@@ -53,6 +53,28 @@ export const SettingsSchoolPage: React.FC = () => {
   } = useSchool();
 
   const [formData, setFormData] = useState<Partial<SchoolSettings>>(settings || {});
+  const [mealNewPassword, setMealNewPassword] = useState('');
+  const [mealConfirmPassword, setMealConfirmPassword] = useState('');
+  const [mealManagementPassword, setMealManagementPassword] = useState('');
+  const [mealSaveMessage, setMealSaveMessage] = useState('');
+  const [mealSaving, setMealSaving] = useState(false);
+  const saveMealSheetPassword = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (mealNewPassword !== mealConfirmPassword) { setMealSaveMessage('Hai lần nhập mật khẩu không khớp.'); return; }
+    if (mealNewPassword.length < 8) { setMealSaveMessage('Mật khẩu mới phải có ít nhất 8 ký tự.'); return; }
+    setMealSaving(true); setMealSaveMessage('');
+    try {
+      const response = await fetch('/api/boarding-sheet-access', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'set', managementPassword: mealManagementPassword, newPassword: mealNewPassword }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || 'Không lưu được mật khẩu.');
+      setMealNewPassword(''); setMealConfirmPassword(''); setMealManagementPassword('');
+      setMealSaveMessage('Đã lưu mật khẩu Sổ chấm cơm trên Supabase.');
+    } catch (error: any) { setMealSaveMessage(error?.message || 'Không thể lưu mật khẩu.'); }
+    finally { setMealSaving(false); }
+  };
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isSavingGrades, setIsSavingGrades] = useState(false);
@@ -229,6 +251,24 @@ export const SettingsSchoolPage: React.FC = () => {
     <div className="max-w-4xl mx-auto space-y-6">
       {/* Navigation Sub-Tabs */}
       <SettingsNavTabs currentPath="/settings/school" />
+
+      <section className="rounded-2xl border border-blue-200 bg-white p-5 shadow-sm" aria-label="Bảo mật Sổ chấm cơm">
+        <h2 className="flex items-center gap-2 text-lg font-bold text-slate-900"><Lock className="h-5 w-5 text-blue-600" /> Bảo mật Sổ chấm cơm tháng</h2>
+        <p className="mt-2 text-sm text-slate-600">Quản trị đặt mật khẩu dùng chung để GVCN và Quản trị viên mở Sổ chấm cơm. Cần nhập mật khẩu quản lý riêng đã khởi tạo bằng SQL.</p>
+        <form onSubmit={saveMealSheetPassword} className="mt-4 grid gap-3 sm:grid-cols-2">
+          <label className="block text-sm font-semibold text-slate-700">Mật khẩu Sổ chấm cơm mới
+            <input type="password" autoComplete="new-password" required minLength={8} maxLength={128} value={mealNewPassword} onChange={e => setMealNewPassword(e.target.value)} className="mt-1 block w-full min-w-0 rounded-xl border border-slate-300 p-3" />
+          </label>
+          <label className="block text-sm font-semibold text-slate-700">Nhập lại mật khẩu mới
+            <input type="password" autoComplete="new-password" required minLength={8} maxLength={128} value={mealConfirmPassword} onChange={e => setMealConfirmPassword(e.target.value)} className="mt-1 block w-full min-w-0 rounded-xl border border-slate-300 p-3" />
+          </label>
+          <label className="block text-sm font-semibold text-slate-700 sm:col-span-2">Mật khẩu quản lý (chỉ Quản trị viên giữ)
+            <input type="password" autoComplete="off" required value={mealManagementPassword} onChange={e => setMealManagementPassword(e.target.value)} className="mt-1 block w-full min-w-0 rounded-xl border border-slate-300 p-3" />
+          </label>
+          {mealSaveMessage && <p role="status" className="text-sm text-blue-700 sm:col-span-2">{mealSaveMessage}</p>}
+          <button type="submit" disabled={mealSaving} className="rounded-xl bg-blue-600 px-5 py-3 font-bold text-white disabled:opacity-50 sm:col-span-2">{mealSaving ? 'Đang lưu...' : 'Lưu mật khẩu Sổ chấm cơm'}</button>
+        </form>
+      </section>
 
       {/* Top Banner Header */}
       <div className="bg-white rounded-2xl p-5 border border-slate-200/90 shadow-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">

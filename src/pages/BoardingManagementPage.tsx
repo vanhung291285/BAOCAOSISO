@@ -96,9 +96,9 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
     try {
       const response = await fetch('/api/boarding-sheet-access', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: mealPassword }),
+        body: JSON.stringify({ action: 'verify', password: mealPassword }),
       });
-      if (!response.ok) throw new Error(response.status === 401 ? 'Mật khẩu không đúng.' : 'Chưa thể xác thực. Liên hệ quản trị viên.');
+      if (!response.ok) { const result = await response.json().catch(() => ({})); throw new Error(result.error || 'Chưa thể xác thực. Liên hệ quản trị viên.'); }
       setMealSheetUnlocked(true); setShowMealPassword(false); setMealPassword(''); setActiveTab('monthly-sheet');
     } catch (error: any) { setMealPasswordError(error?.message || 'Xác thực thất bại.'); }
     finally { setVerifyingMealPassword(false); }
