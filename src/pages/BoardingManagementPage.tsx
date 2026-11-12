@@ -79,14 +79,38 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
   const { currentUser, isGVCN, isAdmin, isBGH } = useAuth();
 
   // Active Tab
-  const [activeTab, setActiveTab] = useState<TabType>(initialTab || 'daily-attendance');
+  const [activeTab, setActiveTab] = useState<TabType>(initialTab === 'monthly-sheet' ? 'daily-attendance' : (initialTab || 'daily-attendance'));
+  const [showMealPassword, setShowMealPassword] = useState(initialTab === 'monthly-sheet');
+  const [mealPassword, setMealPassword] = useState('');
+  const [mealPasswordError, setMealPasswordError] = useState('');
+  const [verifyingMealPassword, setVerifyingMealPassword] = useState(false);
+  const [mealSheetUnlocked, setMealSheetUnlocked] = useState(false);
+  const openMealSheet = () => {
+    if (mealSheetUnlocked) { setActiveTab('monthly-sheet'); return; }
+    setMealPassword(''); setMealPasswordError(''); setShowMealPassword(true);
+  };
+  const verifyMealPassword = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (verifyingMealPassword) return;
+    setVerifyingMealPassword(true); setMealPasswordError('');
+    try {
+      const response = await fetch('/api/boarding-sheet-access', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: mealPassword }),
+      });
+      if (!response.ok) throw new Error(response.status === 401 ? 'Mật khẩu không đúng.' : 'Chưa thể xác thực. Liên hệ quản trị viên.');
+      setMealSheetUnlocked(true); setShowMealPassword(false); setMealPassword(''); setActiveTab('monthly-sheet');
+    } catch (error: any) { setMealPasswordError(error?.message || 'Xác thực thất bại.'); }
+    finally { setVerifyingMealPassword(false); }
+  };
   const [isSyncingCloud, setIsSyncingCloud] = useState<boolean>(false);
   const isCloudConnected = isSupabaseConnected();
 
   // Keep active tab in sync if initialTab prop changes
   useEffect(() => {
     if (initialTab) {
-      setActiveTab(initialTab);
+      if (initialTab === 'monthly-sheet') openMealSheet();
+      else setActiveTab(initialTab);
     }
   }, [initialTab]);
 
@@ -1323,7 +1347,7 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
 
           <button
             type="button"
-            onClick={() => setActiveTab('monthly-sheet')}
+            onClick={openMealSheet}
             className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all whitespace-nowrap ${
               activeTab === 'monthly-sheet'
                 ? 'bg-white text-blue-900 shadow-md shadow-black/10'
@@ -1711,7 +1735,7 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
             <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
               <button
                 type="button"
-                onClick={() => setActiveTab('monthly-sheet')}
+                onClick={openMealSheet}
                 className="px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold bg-amber-50 text-amber-900 hover:bg-amber-100 border border-amber-300 flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
                 title="Mở Sổ chấm cơm tháng & Xuất file Excel chuẩn mẫu"
               >
@@ -2171,10 +2195,26 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
         </div>
       )}
 
+      {showMealPassword && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-950/65 p-4" role="presentation">
+          <form onSubmit={verifyMealPassword} role="dialog" aria-modal="true" aria-label="Xác thực Sổ chấm cơm" className="w-full max-w-md rounded-2xl bg-white p-5 sm:p-7 shadow-2xl">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 font-bold text-slate-900"><ShieldCheck className="text-blue-600"/> Xác thực Sổ chấm cơm tháng</div>
+              <button type="button" aria-label="Đóng" onClick={() => setShowMealPassword(false)} className="rounded-lg p-2 hover:bg-slate-100"><X className="w-5 h-5"/></button>
+            </div>
+            <p className="mt-3 text-sm text-slate-600">Áp dụng cho cả Quản trị viên và GVCN. Nhập mật khẩu được quản trị viên cấp để mở sổ.</p>
+            <label htmlFor="meal-sheet-password" className="mt-5 mb-2 block text-sm font-semibold">Mật khẩu Sổ chấm cơm</label>
+            <input id="meal-sheet-password" autoFocus type="password" autoComplete="off" value={mealPassword} onChange={e => setMealPassword(e.target.value)} required className="w-full min-w-0 rounded-xl border border-slate-300 px-4 py-3 text-base outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
+            {mealPasswordError && <p role="alert" className="mt-2 text-sm text-red-600">{mealPasswordError}</p>}
+            <div className="mt-6 flex gap-3"><button type="button" onClick={() => setShowMealPassword(false)} className="flex-1 rounded-xl border border-slate-300 py-3 font-semibold">Hủy</button><button type="submit" disabled={verifyingMealPassword} className="flex-1 rounded-xl bg-blue-600 py-3 font-semibold text-white disabled:opacity-50">{verifyingMealPassword ? 'Đang kiểm tra...' : 'Xác nhận'}</button></div>
+          </form>
+        </div>
+      )}
+
       {/* ========================================================================= */}
       {/* TAB: SỔ CHẤM CƠM THÁNG (MONTHLY MEAL SHEET) */}
       {/* ========================================================================= */}
-      {activeTab === 'monthly-sheet' && (
+      {activeTab === 'monthly-sheet' && mealSheetUnlocked && (
         <MonthlyBoardingSheet
           selectedClassId={selectedClassId}
           onClassChange={(cid) => setSelectedClassId(cid)}
