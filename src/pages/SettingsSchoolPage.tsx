@@ -80,6 +80,56 @@ export const SettingsSchoolPage: React.FC = () => {
   const [isSavingGrades, setIsSavingGrades] = useState(false);
   const [savedGradesSuccess, setSavedGradesSuccess] = useState(false);
 
+  const [logoUploadError, setLogoUploadError] = useState('');
+  const [logoProcessing, setLogoProcessing] = useState(false);
+
+  // Lưu trực tiếp ảnh huy hiệu dưới dạng data URL trong school_settings.logo_url (Supabase TEXT).
+  // Giới hạn kích thước để tránh lỗi payload và giữ tỷ lệ huy hiệu gốc.
+  const handleEmblemUpload = async (file?: File) => {
+    if (!file) return;
+    setLogoUploadError('');
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) {
+      setLogoUploadError('Chỉ hỗ trợ ảnh PNG, JPG hoặc WebP.');
+      return;
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      setLogoUploadError('Ảnh quá lớn (tối đa 8 MB).');
+      return;
+    }
+    setLogoProcessing(true);
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => reject(new Error('Không đọc được ảnh huy hiệu.'));
+        reader.onload = () => resolve(String(reader.result));
+        reader.readAsDataURL(file);
+      });
+      const img = new Image();
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = () => reject(new Error('Ảnh không hợp lệ.'));
+        img.src = dataUrl;
+      });
+      const maxSide = 720;
+      const ratio = Math.min(1, maxSide / Math.max(img.naturalWidth, img.naturalHeight));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(img.naturalWidth * ratio));
+      canvas.height = Math.max(1, Math.round(img.naturalHeight * ratio));
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('Không xử lý được ảnh.');
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      // PNG giữ nền trong suốt và hình dạng huy hiệu như bản gốc.
+      let encoded = canvas.toDataURL('image/png');
+      if (encoded.length > 300000) encoded = canvas.toDataURL('image/webp', 0.82);
+      if (encoded.length > 500000) throw new Error('Ảnh quá phức tạp; vui lòng chọn ảnh nhỏ hơn.');
+      setFormData(prev => ({ ...prev, logo_url: encoded }));
+    } catch (err: any) {
+      setLogoUploadError(err?.message || 'Không tải được huy hiệu.');
+    } finally {
+      setLogoProcessing(false);
+    }
+  };
+
   // Preset applying handlers for grade names
   const handleApplyGradePreset = (type: 'PRIMARY' | 'SECONDARY' | 'COMBINED' | 'SHORT' | 'CLASS') => {
     const current = { ...(formData.grade_names || {}) };
@@ -222,6 +272,7 @@ export const SettingsSchoolPage: React.FC = () => {
       setTimeout(() => setSavedSuccess(false), 4000);
     } catch (err) {
       console.error('Failed to save settings:', err);
+      setLogoUploadError(err instanceof Error ? err.message : 'Không lưu được cấu hình vào CSDL.');
     } finally {
       setIsSaving(false);
     }
@@ -1117,15 +1168,23 @@ export const SettingsSchoolPage: React.FC = () => {
 
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                Đường dẫn ảnh Logo trường (URL)
+                Huy hiệu nhà trường (lưu trong CSDL Supabase)
               </label>
               <input
-                type="url"
-                value={formData.logo_url || ''}
-                onChange={(e) => setFormData({ ...formData, logo_url: e.target.value })}
-                placeholder="https://..."
-                className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs font-semibold focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white"
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                disabled={logoProcessing || isSaving}
+                onChange={(e) => { void handleEmblemUpload(e.target.files?.[0]); e.target.value = ''; }}
+                className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs bg-white"
               />
+              {logoProcessing && <p className="mt-1 text-xs text-blue-700">Đang xử lý ảnh huy hiệu...</p>}
+              {logoUploadError && <p role="alert" className="mt-1 text-xs text-red-700">{logoUploadError}</p>}
+              {formData.logo_url && (
+                <div className="mt-2 flex items-center gap-3">
+                  <img src={formData.logo_url} alt="Huy hiệu nhà trường" className="w-20 h-20 object-contain" />
+                  <span className="text-xs text-slate-600">Nhấn Lưu cấu hình để ghi huy hiệu vào CSDL.</span>
+                </div>
+              )}
             </div>
 
             <div>
