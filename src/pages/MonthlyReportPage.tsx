@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useSchool } from '../contexts/SchoolContext';
 import { useAuth } from '../contexts/AuthContext';
 import { StorageService, subscribeRealtime } from '../services/storage';
@@ -103,6 +103,8 @@ export const MonthlyReportPage: React.FC<MonthlyReportPageProps> = ({ onNavigate
 
   // Data states
   const [loading, setLoading] = useState(true);
+  // Chỉ bật màn hình tải toàn trang khi mở lần đầu hoặc thay đổi bộ lọc.
+  const lastLoadingFilterRef = useRef<string | null>(null);
   const [stats, setStats] = useState<{
     yearMonth: string;
     totalDaysReported: number;
@@ -206,8 +208,8 @@ export const MonthlyReportPage: React.FC<MonthlyReportPageProps> = ({ onNavigate
   }, [selectedCampusId, campuses, settings]);
 
   // Load all data
-  const loadData = useCallback(async () => {
-    setLoading(true);
+  const loadData = useCallback(async (showFullLoading = false) => {
+    if (showFullLoading) setLoading(true);
     try {
       const targetClassId =
         selectedClassFilter !== 'all'
@@ -323,12 +325,15 @@ export const MonthlyReportPage: React.FC<MonthlyReportPageProps> = ({ onNavigate
     } catch (err) {
       console.error('Lỗi khi tải dữ liệu báo cáo tháng:', err);
     } finally {
-      setLoading(false);
+      if (showFullLoading) setLoading(false);
     }
   }, [selectedMonth, selectedCampusId, selectedClassFilter, displayClasses, students]);
 
   useEffect(() => {
-    loadData();
+    const filterKey = `${selectedMonth}|${selectedCampusId}|${selectedClassFilter}|${viewMode}`;
+    const showFullLoading = lastLoadingFilterRef.current !== filterKey;
+    lastLoadingFilterRef.current = filterKey;
+    loadData(showFullLoading);
 
     // Lắng nghe realtime từ các bảng liên quan
     const unsubscribe = subscribeRealtime((event) => {
@@ -338,14 +343,15 @@ export const MonthlyReportPage: React.FC<MonthlyReportPageProps> = ({ onNavigate
         event?.table === 'classes' ||
         event?.table === 'all_reset'
       ) {
-        loadData();
+        // Đồng bộ ngầm, không che báo cáo đã hiển thị.
+        loadData(false);
       }
     });
 
     return () => {
       unsubscribe();
     };
-  }, [loadData]);
+  }, [loadData, viewMode]);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
