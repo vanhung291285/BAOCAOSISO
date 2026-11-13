@@ -932,6 +932,10 @@ export const StorageService = {
     localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(updated));
 
     const supabase = getSupabaseClient();
+    const logoChanged = settings.logo_url !== undefined && settings.logo_url !== current.logo_url;
+    if (logoChanged && (!supabase || !isSupabaseConnected())) {
+      throw new Error('Chưa kết nối Supabase, huy hiệu chưa được lưu vào CSDL.');
+    }
     if (supabase && isSupabaseConnected()) {
       try {
         const cloudFooterWithExt = packExtSettingsIntoFooter(cleanFooter, updated);
@@ -940,6 +944,16 @@ export const StorageService = {
           footer_text: cloudFooterWithExt,
         };
 
+        // Logo là dữ liệu bắt buộc lưu ở cột logo_url; không dùng fallback bỏ cột này.
+        if (logoChanged) {
+          const { error: logoError } = await supabase.from('school_settings').upsert({ id: updated.id, logo_url: updated.logo_url, updated_at: updated.updated_at });
+          if (logoError) throw new Error(`Không lưu được huy hiệu vào Supabase: ${logoError.message}`);
+          const { data: verified, error: verifyError } = await supabase.from('school_settings')
+            .select('logo_url').eq('id', updated.id).maybeSingle();
+          if (verifyError || verified?.logo_url !== updated.logo_url) {
+            throw new Error('Không xác nhận được huy hiệu đã lưu vào CSDL.');
+          }
+        } else {
         let curPayload: any = { ...cloudPayload };
         for (let attempt = 0; attempt < 8; attempt++) {
           const { error } = await supabase.from('school_settings').upsert(curPayload);
@@ -973,8 +987,14 @@ export const StorageService = {
           }
           break;
         }
+        }
       } catch (e) {
         console.error('Supabase update settings error:', e);
+        if (logoChanged) {
+          localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(current));
+          invalidateCache('school_settings');
+          throw e;
+        }
       }
 
       // Lưu snapshot cấu hình vào system_logs để luôn đồng bộ ngay cả khi bảng thiếu cột
