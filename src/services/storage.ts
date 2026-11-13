@@ -4800,123 +4800,24 @@ export const StorageService = {
       return addrs.length > 0 ? addrs.join('\n') : '-';
     };
 
-    // Đồng bộ nhanh từ Supabase bảng daily_reports & daily_report_values nếu có kết nối
-    const rawTargetIds = [classId, classItem?.id, classItem?.class_name, (classItem as any)?.code].filter(Boolean) as string[];
-    const targetQueryIds = Array.from(new Set(rawTargetIds.flatMap((k) => {
-      const s = String(k).trim();
-      const sClean = s.replace(/^c_/i, '').replace(/^lớp\s*/i, '').trim();
-      return [
-        s,
-        s.toLowerCase(),
-        s.toUpperCase(),
-        sClean,
-        sClean.toLowerCase(),
-        sClean.toUpperCase(),
-        `c_${sClean}`.toLowerCase(),
-        `c_${sClean}`.toUpperCase(),
-      ];
-    })));
-
+    // Báo cáo tháng dùng cùng tập bản ghi Supabase với báo cáo ngày.
+    // Không dựa vào localStorage từng thiết bị khi Cloud đã kết nối.
     const supabase = getSupabaseClient();
-    if (supabase && isSupabaseConnected()) {
-      try {
-        const { data: cloudReports, error: cErr } = await supabase
-          .from('daily_reports')
-          .select('*')
-          .in('class_id', targetQueryIds)
-          .gte('report_date', firstDayStr)
-          .lte('report_date', lastDayStr);
-
-        // Một số bản ghi cũ dùng mã lớp khác với danh sách class_id truy vấn.
-        // Chỉ truy vấn dự phòng theo tháng khi dữ liệu theo mã lớp không có ngày hiện tại.
-        let resolvedCloudReports = cloudReports || [];
-        if (!cErr) {
-          const todayLocal = new Date();
-          const todayKey = `${todayLocal.getFullYear()}-${String(todayLocal.getMonth() + 1).padStart(2, '0')}-${String(todayLocal.getDate()).padStart(2, '0')}`;
-          const shouldCheckToday = todayKey.startsWith(yearMonth) &&
-            !resolvedCloudReports.some((r) => String(r.report_date).split('T')[0] === todayKey);
-          if (shouldCheckToday) {
-            const { data: monthCandidates, error: fallbackError } = await supabase
-              .from('daily_reports')
-              .select('*')
-              .gte('report_date', firstDayStr)
-              .lte('report_date', lastDayStr);
-            if (!fallbackError && monthCandidates) {
-              const normalizeId = (id: unknown) => String(id || '').trim().toLowerCase()
-                .replace(/^c_/, '').replace(/^lớp\s*/i, '');
-              const acceptedIds = new Set(rawTargetIds.map(normalizeId));
-              resolvedCloudReports = monthCandidates.filter((r) => acceptedIds.has(normalizeId(r.class_id)));
-            }
-          }
-        }
-        if (!cErr && resolvedCloudReports.length > 0) {
-          const rawReports = localStorage.getItem(STORAGE_KEYS.REPORTS);
-          let reports: DailyReport[] = rawReports ? JSON.parse(rawReports) : [];
-          const rawValues = localStorage.getItem(STORAGE_KEYS.VALUES);
-          let allValues: DailyReportValue[] = rawValues ? JSON.parse(rawValues) : [];
-
-          resolvedCloudReports.forEach((cRep) => {
-            const cleanDate = String(cRep.report_date).split('T')[0].trim();
-            const repObj = { ...cRep, report_date: cleanDate };
-            const idx = reports.findIndex(
-              (r) =>
-                r.id === cRep.id ||
-                (String(r.class_id).toLowerCase() === String(cRep.class_id).toLowerCase() &&
-                  String(r.report_date).split('T')[0] === cleanDate)
-            );
-            if (idx >= 0) {
-              const oldLocalId = reports[idx].id;
-              const localTs = new Date(reports[idx].updated_at || reports[idx].created_at || 0).getTime();
-              const cloudTs = new Date(cRep.updated_at || cRep.created_at || 0).getTime();
-              // Supabase là nguồn dữ liệu chính: không để localStorage cũ che báo cáo mới.
-              reports[idx] = repObj;
-              if (oldLocalId && oldLocalId !== cRep.id) {
-                allValues.forEach((v) => {
-                  if (v.report_id === oldLocalId) {
-                    v.report_id = cRep.id;
-                  }
-                });
-              }
-            } else {
-              reports.push(repObj);
-            }
-          });
-          // Xóa bản ghi cũ trùng lớp/ngày, giữ bản ghi Supabase mới nhất.
-          const cloudKeys = new Set(resolvedCloudReports.map((r) =>
-            `${String(r.class_id).toLowerCase()}|${String(r.report_date).split('T')[0]}`));
-          reports = reports.filter((r) =>
-            resolvedCloudReports.some((cloud) => cloud.id === r.id) ||
-            !cloudKeys.has(`${String(r.class_id).toLowerCase()}|${String(r.report_date).split('T')[0]}`));
-          localStorage.setItem(STORAGE_KEYS.REPORTS, JSON.stringify(reports));
-
-          const repIds = resolvedCloudReports.map((r) => r.id);
-          if (repIds.length > 0) {
-            const { data: cloudValues } = await supabase
-              .from('daily_report_values')
-              .select('*')
-              .in('report_id', repIds);
-
-            if (cloudValues && cloudValues.length > 0) {
-              cloudValues.forEach((cVal) => {
-                const vIdx = allValues.findIndex(
-                  (v) =>
-                    v.id === cVal.id ||
-                    (v.report_id === cVal.report_id && v.indicator_group_id === cVal.indicator_group_id)
-                );
-                if (vIdx >= 0) {
-                  allValues[vIdx] = cVal;
-                } else {
-                  allValues.push(cVal);
-                }
-              });
-              localStorage.setItem(STORAGE_KEYS.VALUES, JSON.stringify(allValues));
-            }
-          }
-        }
-      } catch (err) {
-        console.warn('Supabase fetch class monthly attendance fallback to local:', err);
-      }
+    const cloudConnected = Boolean(supabase && isSupabaseConnected());
+    let monthlyCloudReports: DailyReport[] | null = null;
+    let monthlyCloudValues: DailyReportValue[] | null = null;
+    if (cloudConnected) {
+      // Hàm này phân trang toàn bộ báo cáo và chỉ tiêu, không bỏ sót các lớp
+      // có class_id khác cách đặt mã trong danh sách lớp.
+      const windowData = await fetchReportWindow(firstDayStr, lastDayStr);
+      monthlyCloudReports = windowData.reports;
+      monthlyCloudValues = windowData.values;
     }
+
+    const rawTargetIds = [classId, classItem?.id, classItem?.class_name, (classItem as any)?.code].filter(Boolean) as string[];
+    const normalizeMonthlyClassId = (id: unknown) => String(id || '').trim().toLowerCase()
+      .replace(/^lớp\s*/i, '').replace(/^c_/, '');
+    const monthlyTargetIds = new Set(rawTargetIds.map(normalizeMonthlyClassId));
 
     const allIndicator = indicators.find((i) => i.code === 'ALL' || i.id === 'ig_all') || indicators[0];
     const boardingIndicator = indicators.find((i) => i.code === 'BOARDING_HALF' || i.id === 'ig_boarding_half' || i.name.toLowerCase().includes('bán trú')) || indicators[1];
@@ -4929,16 +4830,15 @@ export const StorageService = {
       ])
     );
 
-    const rawReports = localStorage.getItem(STORAGE_KEYS.REPORTS);
-    const reports: DailyReport[] = rawReports ? JSON.parse(rawReports) : [];
+    const localRawReports = cloudConnected ? null : localStorage.getItem(STORAGE_KEYS.REPORTS);
+    const reports: DailyReport[] = cloudConnected
+      ? (monthlyCloudReports || [])
+      : (localRawReports ? JSON.parse(localRawReports) : []);
     const monthReports = reports
       .filter((r) => {
         if (!r || !r.report_date) return false;
         const cleanDate = String(r.report_date).split('T')[0].trim();
-        if (!cleanDate.startsWith(yearMonth)) return false;
-        const rCls = String(r.class_id || '').trim().toLowerCase();
-        const rClsClean = rCls.replace(/^c_/, '').replace(/^lớp\s*/i, '');
-        return normValidClassIds.has(rCls) || normValidClassIds.has(rClsClean);
+        return cleanDate.startsWith(yearMonth) && monthlyTargetIds.has(normalizeMonthlyClassId(r.class_id));
       })
       .sort((a, b) => {
         const timeA = new Date(a.updated_at || a.created_at || 0).getTime();
@@ -4946,8 +4846,10 @@ export const StorageService = {
         return timeB - timeA;
       });
 
-    const rawValues = localStorage.getItem(STORAGE_KEYS.VALUES);
-    const allValues: DailyReportValue[] = rawValues ? JSON.parse(rawValues) : [];
+    const localRawValues = cloudConnected ? null : localStorage.getItem(STORAGE_KEYS.VALUES);
+    const allValues: DailyReportValue[] = cloudConnected
+      ? (monthlyCloudValues || [])
+      : (localRawValues ? JSON.parse(localRawValues) : []);
 
     const rows: {
       date: string;
