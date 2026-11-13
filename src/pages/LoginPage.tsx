@@ -460,8 +460,11 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
     <div className="siso-login relative flex w-full flex-col justify-between font-sans">
       <header className="siso-login-header relative z-20 flex w-full items-center justify-between gap-4">
         <div className="flex items-center gap-2.5 sm:gap-3">
-          {/* Vietnam National Emblem Icon */}
+          {/* Huy hiệu lấy từ cấu hình Supabase, giữ biểu tượng mặc định nếu chưa cấu hình */}
           <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-gradient-to-br from-red-600 to-red-700 p-1 flex items-center justify-center shadow-lg shadow-red-900/40 ring-2 ring-yellow-400 shrink-0">
+            {settings?.logo_url ? (
+              <img src={settings.logo_url} alt="Huy hiệu nhà trường" className="w-full h-full rounded-full object-contain" />
+            ) : (
             <svg viewBox="0 0 100 100" className="w-full h-full" fill="none">
               <circle cx="50" cy="50" r="46" fill="#D32F2F" stroke="#FFD54F" strokeWidth="3" />
               {/* Rice ears border */}
@@ -474,6 +477,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
               {/* Cogwheel at base */}
               <rect x="42" y="76" width="16" height="8" rx="2" fill="#FFC107" />
             </svg>
+            )}
           </div>
 
           <div>
@@ -509,6 +513,9 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
               <div className="flex items-center gap-3 sm:gap-3.5 mb-4">
                 {/* Circular Emblem Seal */}
                 <div className="w-13 h-13 sm:w-14 sm:h-14 rounded-full border-2 border-[#005f73] p-0.5 flex items-center justify-center shrink-0 shadow-xs bg-gradient-to-b from-white to-blue-50/40">
+                  {settings?.logo_url ? (
+                    <img src={settings.logo_url} alt="Huy hiệu nhà trường" className="w-full h-full rounded-full object-contain" />
+                  ) : (
                   <svg viewBox="0 0 100 100" className="w-full h-full" fill="none">
                     {/* Outer circle rings */}
                     <circle cx="50" cy="50" r="47" stroke="#005F73" strokeWidth="2" />
@@ -545,6 +552,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                       fill="none"
                     />
                   </svg>
+                  )}
                 </div>
 
                 {/* Title texts */}
