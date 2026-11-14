@@ -2,11 +2,22 @@ import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 import path from 'path';
+import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+
+const iconUrl = (name: string) => `/${name}?v=${createHash('sha256').update(readFileSync(new URL(`./public/${name}`, import.meta.url))).digest('hex').slice(0, 12)}`;
 import {defineConfig} from 'vite';
 
 export default defineConfig(() => {
   return {
     plugins: [
+      {
+        name: 'version-pwa-icons',
+        transformIndexHtml(html) {
+          return html.replace(/href="\/(favicon\.ico|pwa-192x192\.png|apple-touch-icon\.png)"/g,
+            (_match, name) => `href="${iconUrl(name)}"`);
+        },
+      },
       react(), 
       tailwindcss(),
       VitePWA({
@@ -14,6 +25,7 @@ export default defineConfig(() => {
         includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'pwa-192x192.png', 'pwa-512x512.png', 'pwa-maskable-512x512.png', 'icon.svg'],
         manifest: {
           id: '/',
+          lang: 'vi',
           name: 'Báo cáo Sĩ số - PTDTBT THCS Xa Dung',
           short_name: 'Báo cáo Sĩ số',
           description: 'Hệ thống báo cáo sĩ số trường học',
@@ -25,19 +37,19 @@ export default defineConfig(() => {
           scope: '/',
           icons: [
             {
-              src: '/pwa-192x192.png',
+              src: iconUrl('pwa-192x192.png'),
               sizes: '192x192',
               type: 'image/png',
               purpose: 'any',
             },
             {
-              src: '/pwa-512x512.png',
+              src: iconUrl('pwa-512x512.png'),
               sizes: '512x512',
               type: 'image/png',
               purpose: 'any',
             },
             {
-              src: '/pwa-maskable-512x512.png',
+              src: iconUrl('pwa-maskable-512x512.png'),
               sizes: '512x512',
               type: 'image/png',
               purpose: 'maskable',

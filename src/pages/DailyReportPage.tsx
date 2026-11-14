@@ -987,7 +987,7 @@ export const DailyReportPage: React.FC<DailyReportPageProps> = ({ onNavigate }) 
               <button
                 type="button"
                 onClick={handleExportAllClassesMonthly}
-                disabled={exporting || (reportMode === 'daily' && (loading || dailyLoadError))}
+                disabled={exporting}
                 className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-teal-800 bg-teal-100 hover:bg-teal-200 border border-teal-300 shadow-2xs transition-colors disabled:opacity-50 cursor-pointer"
                 title="Xuất 1 file Excel gồm Sheet Tổng hợp và tất cả các Sheet riêng cho từng lớp theo đúng biểu mẫu chuẩn này"
               >
