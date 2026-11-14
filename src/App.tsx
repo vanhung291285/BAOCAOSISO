@@ -1,3 +1,4 @@
+import { OperationsCenterPage } from './pages/OperationsCenterPage';
 import React, { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { SchoolProvider, useSchool } from './contexts/SchoolContext';
@@ -189,6 +190,8 @@ const AppContent: React.FC = () => {
                     : 'py-3.5 sm:py-6 pb-28 sm:pb-8'
                 }`}
               >
+                {currentPath === '/dashboard' && <button type="button" onClick={()=>handleNavigate('/operations')} className="mb-4 flex w-full items-center justify-between gap-3 rounded-2xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-left text-sm font-bold text-indigo-900"><span>Trợ lý dữ liệu · Kiểm tra sĩ số, lớp chưa báo và sai lệch</span><Sparkles className="h-5 w-5 shrink-0"/></button>}
+                {currentPath === '/operations' && <OperationsCenterPage onSelectClass={handleSelectClassForInput} />}
                 {currentPath === '/dashboard' && (
                   <DashboardPage
                     onNavigate={handleNavigate}

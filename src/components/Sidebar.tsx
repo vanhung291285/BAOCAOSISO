@@ -51,6 +51,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   // Navigation Items
   const mainNavItems = [
+    { id: 'operations', label: 'Trợ lý dữ liệu & đối chiếu', path: '/operations', icon: Sparkles, allowed: true, highlight: true },
     {
       id: 'dashboard',
       label: 'Tổng quan',

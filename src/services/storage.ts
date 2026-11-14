@@ -1,3 +1,4 @@
+import { persistBoardingReports } from './boardingPersistence';
 import { persistDailyReport, validateAttendanceValues } from './dailyReportPersistence';
 import { compareSchoolClasses } from '../utils/classSorting';
 import {
@@ -2414,70 +2415,26 @@ export const StorageService = {
 
   async saveBoardingReportsBulk(reports: BoardingDailyReport[], savedBy?: Profile): Promise<void> {
     ensureInitialized();
+    const saved = await persistBoardingReports(getSupabaseClient(), reports);
     const list = await this.getBoardingReports();
-    const now = new Date().toISOString();
-
-    for (const rep of reports) {
-      const idx = list.findIndex((r) => r.id === rep.id || (r.class_id === rep.class_id && r.date === rep.date));
-      const finalReport: BoardingDailyReport = {
-        ...rep,
-        updated_at: now,
-        submitted_at: rep.submitted_at || now,
-      };
-      if (idx >= 0) {
-        list[idx] = finalReport;
-      } else {
-        list.push(finalReport);
-      }
-    }
-
-    localStorage.setItem(STORAGE_KEYS.BOARDING_REPORTS, JSON.stringify(list));
-
-    const supabase = getSupabaseClient();
-    if (supabase && isSupabaseConnected()) {
-      try {
-        await supabase.from('boarding_reports').upsert(reports, { onConflict: 'class_id,date' });
-      } catch (e) {
-        console.warn('Supabase upsert boarding reports bulk error:', e);
-      }
-    }
-
-    notifyRealtimeChange('boarding_reports', { count: reports.length });
+    const keys = new Set(saved.map(r=>`${r.class_id}::${r.date}`));
+    const merged = list.filter(r=>!keys.has(`${r.class_id}::${r.date}`)).concat(saved);
+    safeSetItem(STORAGE_KEYS.BOARDING_REPORTS, merged);
+    invalidateCache('boarding_report_');
+    setCached('boarding_reports_all', merged, 60000);
+    notifyRealtimeChange('boarding_reports', { count: saved.length });
   },
 
   async saveBoardingReport(report: BoardingDailyReport, savedBy?: Profile): Promise<void> {
     ensureInitialized();
+    const [finalReport] = await persistBoardingReports(getSupabaseClient(), [{
+      ...report, updated_at: new Date().toISOString(), submitted_at: report.submitted_at || new Date().toISOString(),
+    }]);
     const list = await this.getBoardingReports();
-    const idx = list.findIndex((r) => r.id === report.id || (r.class_id === report.class_id && r.date === report.date));
-    
-    const now = new Date().toISOString();
-    const finalReport: BoardingDailyReport = {
-      ...report,
-      updated_at: now,
-      submitted_at: report.submitted_at || now,
-    };
-
-    if (idx >= 0) {
-      list[idx] = finalReport;
-    } else {
-      list.push(finalReport);
-    }
-
-    localStorage.setItem(STORAGE_KEYS.BOARDING_REPORTS, JSON.stringify(list));
+    const merged = list.filter(r=>!(r.class_id===finalReport.class_id && r.date===finalReport.date)).concat(finalReport);
+    safeSetItem(STORAGE_KEYS.BOARDING_REPORTS, merged);
     setCached(`boarding_report_${report.class_id}_${report.date}`, finalReport, 60000);
-    setCached('boarding_reports_all', list, 60000);
-
-    // Non-blocking background sync to Supabase
-    const supabase = getSupabaseClient();
-    if (supabase && isSupabaseConnected()) {
-      (async () => {
-        try {
-          await supabase.from('boarding_reports').upsert(finalReport, { onConflict: 'class_id,date' });
-        } catch (e) {
-          console.warn('Supabase upsert boarding report background error:', e);
-        }
-      })();
-    }
+    setCached('boarding_reports_all', merged, 60000);
 
     // Fire-and-forget audit log so UI responds instantly
     if (savedBy) {
@@ -3469,7 +3426,9 @@ export const StorageService = {
     user: Profile,
     valuesByGroup: Record<string, { total: number; present: number; absent: number }>,
     notes?: string,
-    absent_students?: import('../types').AbsentStudent[]
+    absent_students?: import('../types').AbsentStudent[],
+    expectedUpdatedAt?: string | null,
+    requestId?: string
   ): Promise<{ report: DailyReport; values: DailyReportValue[] }> {
     ensureInitialized();
 
@@ -3590,13 +3549,13 @@ export const StorageService = {
     const supabase = getSupabaseClient();
     if (supabase && isSupabaseConnected()) {
       try {
-        const saved = await persistDailyReport(supabase, report, newValues);
+        const saved = await persistDailyReport(supabase, report, newValues, expectedUpdatedAt === undefined ? oldReport?.updated_at ?? null : expectedUpdatedAt, requestId);
         effectiveReportId = saved.report.id;
         Object.assign(report, saved.report);
         newValues.splice(0, newValues.length, ...saved.values);
       } catch (err) {
         console.error('Supabase sync report error:', err);
-        throw new Error('Chưa xác nhận lưu đủ báo cáo và chỉ tiêu trên máy chủ. Giữ nguyên biểu mẫu và thử gửi lại.');
+        throw err;
       }
     } else {
       throw new Error('Kết nối Supabase đã thay đổi. Báo cáo chưa được lưu; vui lòng thử lại.');
