@@ -4,6 +4,14 @@
   "framework": "vite",
   "rewrites": [
     {
+      "source": "/cai-dat",
+      "destination": "/cai-dat/index.html"
+    },
+    {
+      "source": "/cai-dat/",
+      "destination": "/cai-dat/index.html"
+    },
+    {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
     }
