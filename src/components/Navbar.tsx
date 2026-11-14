@@ -53,6 +53,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
   const userDropdownRef = useRef<HTMLDivElement>(null);
+  const utilitiesRef = useRef<HTMLDetailsElement>(null);
 
   // Close user dropdown when clicking outside
   useEffect(() => {
@@ -61,8 +62,23 @@ export const Navbar: React.FC<NavbarProps> = ({
         setUserDropdownOpen(false);
       }
     };
+    const closeUtilities = (event: MouseEvent) => {
+      if (utilitiesRef.current && !utilitiesRef.current.contains(event.target as Node)) utilitiesRef.current.open = false;
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        if (utilitiesRef.current?.open) { utilitiesRef.current.open = false; utilitiesRef.current.querySelector('summary')?.focus(); }
+        setUserDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', closeUtilities);
+    document.addEventListener('keydown', closeOnEscape);
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('mousedown', closeUtilities);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
   }, []);
 
   // Find user's assigned class if GVCN
@@ -84,13 +100,14 @@ export const Navbar: React.FC<NavbarProps> = ({
   };
 
   const handleNav = (path: string) => {
+    if (utilitiesRef.current) utilitiesRef.current.open = false;
     onNavigate(path);
     setMobileMenuOpen(false);
     setUserDropdownOpen(false);
   };
 
   return (
-    <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-xs no-print pt-[env(safe-area-inset-top)]">
+    <header className="siso-navbar sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-xs no-print pt-[env(safe-area-inset-top)]">
       <div className="w-full px-3 sm:px-5 lg:px-6">
         <div className="flex items-center justify-between h-15 gap-2 w-full">
           {/* 1. Left: School Brand, Logo & Titles */}
@@ -138,9 +155,11 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
 
           {/* 2. Middle quick badge & Prominent Links (Desktop) */}
-          <div className="hidden lg:flex min-w-0 shrink items-center gap-1.5 overflow-x-auto xl:gap-2">
+          <details ref={utilitiesRef} className="navbar-utilities hidden lg:block relative shrink-0">
+            <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-bold text-slate-700 hover:bg-slate-100"><Layers className="h-4 w-4" />Thêm<ChevronDown className="h-4 w-4" /></summary>
+            <div className="navbar-utilities-panel">
             {activeYear && (
-              <div className="hidden 2xl:flex items-center gap-1.5 px-3 py-1 bg-slate-50 border border-slate-200/80 rounded-full text-xs font-semibold text-slate-600 shrink-0">
+              <div className="flex items-center gap-1.5 px-3 py-1 bg-slate-50 border border-slate-200/80 rounded-full text-xs font-semibold text-slate-600 shrink-0">
                 <Calendar className="w-3.5 h-3.5 text-blue-600 shrink-0" />
                 <span className="whitespace-nowrap">Năm học: <strong className="text-slate-900">{activeYear.name}</strong></span>
               </div>
@@ -154,7 +173,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               title="Trang thông tin điện tử nhà trường (https://thcsxadung.db.edu.vn/)"
             >
               <Globe className="w-3.5 h-3.5 text-blue-600 group-hover:text-white shrink-0" />
-              <span className="hidden whitespace-nowrap 2xl:inline">Trang TTĐT</span>
+              <span className="whitespace-nowrap">Trang TTĐT</span>
               <ExternalLink className="w-3 h-3 text-blue-400 group-hover:text-white shrink-0" />
             </a>
 
@@ -166,7 +185,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               title="Trang tra cứu kết quả học tập (https://kqht.db.edu.vn/)"
             >
               <GraduationCap className="w-3.5 h-3.5 text-emerald-600 group-hover:text-white shrink-0" />
-              <span className="hidden whitespace-nowrap 2xl:inline">Tra cứu KQHT</span>
+              <span className="whitespace-nowrap">Tra cứu KQHT</span>
               <ExternalLink className="w-3 h-3 text-emerald-400 group-hover:text-white shrink-0" />
             </a>
 
@@ -182,23 +201,24 @@ export const Navbar: React.FC<NavbarProps> = ({
               title="Hệ thống AI Dự báo sớm nguy cơ nghỉ học / bỏ học"
             >
               <Sparkles className="w-3.5 h-3.5 text-amber-500 fill-amber-400 shrink-0" />
-              <span className="hidden whitespace-nowrap 2xl:inline">AI Dự báo bỏ học</span>
+              <span className="whitespace-nowrap">AI Dự báo bỏ học</span>
             </button>
 
             {/* AI Natural Language Assistant (Teacher Vu Van Hung) Button */}
             {onOpenAIAssistant && (
               <button
                 type="button"
-                onClick={onOpenAIAssistant}
+                onClick={() => { if (utilitiesRef.current) utilitiesRef.current.open = false; onOpenAIAssistant(); }}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black bg-gradient-to-r from-indigo-700 via-blue-600 to-indigo-800 text-white shadow-xs hover:shadow-indigo-500/25 hover:scale-[1.02] active:scale-95 transition-all cursor-pointer border border-indigo-400/30 group shrink-0"
                 title="Trợ lý ảo AI do Thầy Vũ Văn Hùng trực tiếp phát triển hỗ trợ GVCN & BGH 24/7"
               >
                 <Bot className="w-3.5 h-3.5 text-amber-300 group-hover:rotate-12 transition-transform shrink-0" />
-                <span className="hidden whitespace-nowrap 2xl:inline">Trợ lý AI Thầy Hùng</span>
+                <span className="whitespace-nowrap">Trợ lý AI Thầy Hùng</span>
                 <Mic className="w-3 h-3 text-indigo-200 shrink-0" />
               </button>
             )}
-          </div>
+            </div>
+          </details>
 
           {/* 3. Right: Notification, PWA, User Profile, Login & Logout */}
           <div className="flex items-center gap-2 sm:gap-2.5 flex-shrink-0">
@@ -317,16 +337,6 @@ export const Navbar: React.FC<NavbarProps> = ({
                   )}
                 </div>
 
-                {/* Direct Logout Button */}
-                <button
-                  type="button"
-                  onClick={logout}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200/90 transition-all cursor-pointer shadow-2xs active:scale-95 shrink-0 whitespace-nowrap"
-                  title="Đăng xuất khỏi hệ thống"
-                >
-                  <LogOut className="w-3.5 h-3.5 text-rose-600 shrink-0" />
-                  <span className="whitespace-nowrap">Đăng xuất</span>
-                </button>
               </div>
             ) : (
               <div className="hidden md:flex items-center gap-2 shrink-0">
