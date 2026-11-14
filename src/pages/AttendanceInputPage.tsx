@@ -1,3 +1,7 @@
+import { AttendanceDraftPanel } from '../components/AttendanceDraftPanel';
+import { draftKey, writeDraft, removeDraft, type AttendanceDraft } from '../services/attendanceDrafts';
+import { getSupabaseCredentials } from '../services/supabase';
+import { AttendanceSaveError } from '../services/dailyReportPersistence';
 import { isStorageQuotaError } from '../utils/safeStorage';
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useSchool } from '../contexts/SchoolContext';
@@ -62,7 +66,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
   onSavedSuccess,
   onNavigate,
 }) => {
-  const { settings, classes, campuses, indicators, students, updateStudent } = useSchool();
+  const { settings, classes, campuses, indicators, students, updateStudent, activeYear } = useSchool();
   const { currentUser, isGVCN, isAdmin, isBGH, logout } = useAuth();
   const { testSound, isSoundEnabled, isAudioBlocked } = useNotifications();
   const [isPlayingSoundTest, setIsPlayingSoundTest] = useState(false);
@@ -213,7 +217,21 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
   const editRevisionRef = useRef(0);
   const activeLoadRef = useRef(0);
   const currentReportKeyRef = useRef('');
-  const markEdited = () => { editRevisionRef.current += 1; };
+  const [dirty, setDirty] = useState(false);
+  const [draftEpoch, setDraftEpoch] = useState(0);
+  const [formScope, setFormScope] = useState('');
+  const [loadError, setLoadError] = useState(false);
+  const [saveConflict, setSaveConflict] = useState(false);
+  const [expectedVersion, setExpectedVersion] = useState<string | null>(null);
+  const pendingSendRef = useRef<{ fingerprint:string; token:string } | null>(null);
+  const markEdited = () => { editRevisionRef.current += 1; setDirty(true); };
+  const currentScope = `${selectedClassId}::${selectedDate}`;
+  const draft: AttendanceDraft = {
+    key: draftKey(getSupabaseCredentials().url, activeYear?.id || '', currentUser?.id || '', selectedClassId, selectedDate),
+    userId: currentUser?.id || '', classId: selectedClassId, date: selectedDate,
+    updatedAt: new Date().toISOString(), baseVersion: expectedVersion,
+    values: formValues, notes, absentStudents,
+  };
 
 
   // Auto-hide toast after 4s
@@ -241,10 +259,13 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
       requestKey === currentReportKeyRef.current &&
       revisionAtStart === editRevisionRef.current;
     setIsLoadingReport(true);
+    setLoadError(false);
     try {
       const { report, values } = await StorageService.getDailyReport(selectedClassId, selectedDate);
       if (!stillCurrent()) return;
       setExistingReport(report || null);
+      setExpectedVersion(report?.updated_at ?? null);
+      setSaveConflict(false);
 
       if (report) {
         setInheritedReport(null);
@@ -428,15 +449,19 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
       }
     } catch (err) {
       console.error('Error loading report for input:', err);
-      if (stillCurrent()) setToastMessage({ text: 'Lỗi tải dữ liệu báo cáo!', type: 'error' });
+      if (stillCurrent()) { setLoadError(true); setToastMessage({ text: 'Không tải được bản máy chủ. Có thể khôi phục bản nháp nhưng cần tải lại dữ liệu trước khi gửi.', type: 'error' }); }
     } finally {
-      if (stillCurrent()) setIsLoadingReport(false);
+      if (requestId === activeLoadRef.current && requestKey === currentReportKeyRef.current) {
+        setIsLoadingReport(false); setFormScope(requestKey);
+        if (revisionAtStart !== editRevisionRef.current) setLoadError(true);
+      }
     }
   }, [selectedClassId, selectedDate, enabledIndicators, classStudents]);
 
   // Set all present (0 absent) for today
   const handleResetAllPresent = () => {
     if (isLocked) return;
+    markEdited();
     setFormValues((prev) => {
       const next: Record<string, { total: number | ''; present: number | ''; absent: number | '' }> = {};
       Object.entries(prev).forEach(([k, v]) => {
@@ -459,6 +484,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
   // Re-inherit previous day data
   const handleReinheritPreviousDay = () => {
     if (isLocked || !inheritedReport) return;
+    markEdited();
     const newVals: Record<string, { total: number | ''; present: number | ''; absent: number | '' }> = {};
     inheritedReport.values.forEach((v) => {
       newVals[v.indicator_group_id] = {
@@ -484,6 +510,8 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
   useEffect(() => {
     const key = `${selectedClassId}::${selectedDate}`;
     if (!selectedClassId || !selectedDate || loadedReportKeyRef.current === key) return;
+    setDirty(false); setSaveConflict(false); setFormScope(''); setExpectedVersion(null);
+    pendingSendRef.current = null;
     loadedReportKeyRef.current = key;
     currentReportKeyRef.current = key;
     ++activeLoadRef.current;
@@ -1159,7 +1187,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
       return;
     }
 
-    if (isSaving || isLocked || !isValid || !currentUser || !selectedClassId) return;
+    if (isSaving || isLoadingReport || loadError || isLocked || !isValid || !currentUser || !selectedClassId) return;
 
     setIsSaving(true);
     try {
@@ -1198,15 +1226,27 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
       });
 
       const targetClassId = selectedClass?.id || selectedClassId;
-      await StorageService.saveDailyReport(
+      const fingerprint = JSON.stringify([targetClassId, selectedDate, cleanedValues, notes, resolvedAbsentStudents, expectedVersion]);
+      if (pendingSendRef.current?.fingerprint !== fingerprint) pendingSendRef.current = { fingerprint, token: crypto.randomUUID() };
+      // Persist retry token before sending: a timeout must not create a duplicate.
+      try { await writeDraft({ ...draft, values: cleanedValues, absentStudents: resolvedAbsentStudents, requestId: pendingSendRef.current.token }); } catch { /* online save can proceed */ }
+      const savedReport = await StorageService.saveDailyReport(
         targetClassId,
         selectedDate,
         currentUser,
         cleanedValues,
         notes,
-        resolvedAbsentStudents
+        resolvedAbsentStudents,
+        expectedVersion,
+        pendingSendRef.current.token
       );
+      setExpectedVersion(savedReport.report.updated_at);
+      setExistingReport(savedReport.report);
+      setDirty(false); setSaveConflict(false);
+      await removeDraft(draft.key).catch(() => {});
+      setDraftEpoch(x => x + 1);
 
+      let boardingSyncFailed = false;
       // Tự động đồng bộ báo ăn sang Sổ chấm cơm bán trú (biểu xử lý) ngay lập tức
       try {
         const validClassKeys = [selectedClassId, selectedClass?.id, selectedClass?.class_name, (selectedClass as any)?.code]
@@ -1317,16 +1357,17 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
           await StorageService.saveBoardingReport(synthReport, currentUser);
         }
       } catch (syncErr) {
+        boardingSyncFailed = true;
         console.warn('Auto sync boarding report error:', syncErr);
       }
 
       setToastMessage({
-        text: existingReport ? 'Đã cập nhật báo cáo thành công!' : 'Đã gửi báo cáo thành công!',
+        text: boardingSyncFailed ? 'Đã lưu sĩ số. Báo ăn chưa đồng bộ; kiểm tra lại mục Báo ăn.' : 'Máy chủ đã xác nhận lưu đủ báo cáo sĩ số.',
         type: 'success',
       });
 
-      // Đối với GVCN, mở modal xác nhận để có thể thoát ngay về cửa sổ đăng nhập
-      if (isGVCN) {
+      // Keep the form visible if the separate boarding sync needs attention.
+      if (isGVCN && !boardingSyncFailed) {
         setShowPostSubmitModal(true);
       }
 
@@ -1338,6 +1379,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
       }
     } catch (err: any) {
       console.error('Error saving report:', err);
+      if (err instanceof AttendanceSaveError && err.kind === 'conflict') setSaveConflict(true);
       setToastMessage({
         text: isStorageQuotaError(err)
           ? 'Bộ nhớ lưu trữ của ứng dụng đã đầy hoặc bị giới hạn. Báo cáo chưa được xác nhận. Hãy giữ màn hình này mở và thử lại.'
@@ -1475,6 +1517,17 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
         </div>
       )}
 
+      <AttendanceDraftPanel key={`${draft.key}:${draftEpoch}`} draft={draft} dirty={dirty} ready={formScope === currentScope && !isLoadingReport && !isSaving}
+        conflict={saveConflict}
+        onReload={() => { setDirty(false); void loadClassReport(); }}
+        onRestore={d => {
+          markEdited(); setFormValues(d.values); setNotes(d.notes); setAbsentStudents(d.absentStudents);
+          setExpectedVersion(d.baseVersion);
+          if(d.requestId) pendingSendRef.current = {
+            token:d.requestId, fingerprint:JSON.stringify([selectedClass?.id || selectedClassId, selectedDate, d.values, d.notes, d.absentStudents, d.baseVersion]),
+          };
+        }} />
+      {loadError && <button type="button" onClick={()=>void loadClassReport()} className="m-3 rounded-lg bg-white px-4 py-2 font-bold text-blue-800 ring-1">Thử tải lại dữ liệu máy chủ</button>}
       {/* 1. HÀNG 1: STICKY HEADER (Tên lớp bên trái, Trạng thái bên phải trên cùng 1 dòng) */}
       <header className="bg-blue-900 text-white px-3 sm:px-4 py-2 sticky top-0 z-30 shadow-md">
         <div className="max-w-5xl mx-auto flex items-center justify-between gap-2">
@@ -2274,9 +2327,9 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
         {absentStudents.length === 0 ? (
           <div className="text-center py-8 px-4 rounded-xl border-2 border-dashed border-emerald-200 bg-emerald-50/30">
             <UserCheck className="w-10 h-10 text-emerald-600 mx-auto mb-2" />
-            <h3 className="text-sm font-black text-emerald-900">Hôm nay lớp đi học đầy đủ 100%</h3>
+            <h3 className="text-sm font-black text-emerald-900">{existingReport && !dirty ? 'Báo cáo đã lưu: danh sách vắng đang trống' : 'Chưa chọn học sinh vắng'}</h3>
             <p className="text-xs text-emerald-700 mt-1 max-w-sm mx-auto">
-              Không có học sinh nào vắng mặt. Khi nhập số vắng ở các khung trên hoặc bấm "Thêm học sinh vắng", danh sách sẽ tự động mở để thầy/cô điền tên và lý do.
+              Danh sách trống chưa xác nhận lớp đi học đủ. Kiểm tra sĩ số, nhập học sinh vắng và lý do rồi gửi để máy chủ xác nhận.
             </p>
           </div>
         ) : (
@@ -2514,7 +2567,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
           rows={3}
           disabled={isLocked}
           value={notes}
-          onChange={(e) => setNotes(e.target.value)}
+          onChange={(e) => { markEdited(); setNotes(e.target.value); }}
           placeholder="Ghi chú thêm về tình hình lớp, học sinh đi viện, hoàn cảnh đặc biệt..."
           className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all placeholder:text-slate-400"
         />
@@ -2602,7 +2655,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
               <button
                 type="button"
                 onClick={handleSubmit}
-                disabled={!isValid || isSaving}
+                disabled={!isValid || isSaving || isLoadingReport || loadError || saveConflict}
                 className={`min-w-0 flex-1 w-0 max-w-full bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold py-3 px-4 rounded-xl shadow-md transition-all flex items-center justify-center gap-2 text-base ${
                   isValid && !isSaving
                     ? 'cursor-pointer shadow-emerald-700/25 active:scale-[0.99]'

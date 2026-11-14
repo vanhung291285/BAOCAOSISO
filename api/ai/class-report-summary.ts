@@ -41,10 +41,10 @@ Thông tin lớp và dữ liệu thực tế:
 - Giọng điệu: ${tone || 'Trang trọng, chuẩn mực hành chính sư phạm'}
 
 Thống kê chuyên cần:
-- Sĩ số lớp: ${attendanceStats?.totalStudents || 35} học sinh
-- Có mặt bình quân: ${attendanceStats?.avgPresent || 34} học sinh/ngày
-- Vắng bình quân: ${attendanceStats?.avgAbsent || 1} học sinh/ngày
-- Tỷ lệ chuyên cần bình quân: ${attendanceStats?.presentRate || 97}%
+- Sĩ số lớp: ${attendanceStats?.totalStudents ?? 'Chưa có dữ liệu'} học sinh
+- Có mặt bình quân: ${attendanceStats?.avgPresent ?? 'Chưa có dữ liệu'} học sinh/ngày
+- Vắng bình quân: ${attendanceStats?.avgAbsent ?? 'Chưa có dữ liệu'} học sinh/ngày
+- Tỷ lệ chuyên cần bình quân: ${attendanceStats?.presentRate ?? 'Chưa có dữ liệu'}%
 - Dữ liệu từng ngày: ${JSON.stringify(attendanceStats?.dayByDay || [])}
 
 Thống kê bán trú:
@@ -105,12 +105,12 @@ Hãy phân tích kỹ lưỡng các số liệu trên và trả về định d�
 
   // Fallback nếu không có key hoặc API lỗi
   const isWeek = periodType === 'WEEK';
-  const totalStudents = attendanceStats?.totalStudents || 35;
-  const avgPresent = attendanceStats?.avgPresent || Math.round(totalStudents * 0.96);
-  const avgAbsent = attendanceStats?.avgAbsent || Math.max(0, totalStudents - avgPresent);
-  const rate = attendanceStats?.presentRate || 96.5;
+  const totalStudents = attendanceStats?.totalStudents ?? 0;
+  const avgPresent = attendanceStats?.avgPresent ?? 0;
+  const avgAbsent = attendanceStats?.avgAbsent ?? 0;
+  const rate = attendanceStats?.presentRate ?? (totalStudents > 0 ? Math.round(avgPresent / totalStudents * 10000) / 100 : 0);
   const totalBoarding = boardingStats?.totalBoarding || 0;
-  const totalMeals = boardingStats?.totalMeals || (totalBoarding * (isWeek ? 14 : 60));
+  const totalMeals = boardingStats?.totalMeals ?? 0;
 
   const absentListStr = (absentDetails || [])
     .slice(0, 6)

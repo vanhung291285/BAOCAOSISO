@@ -1,3 +1,5 @@
+import { persistBoardingReports } from './boardingPersistence';
+import { persistDailyReport, validateAttendanceValues } from './dailyReportPersistence';
 import { compareSchoolClasses } from '../utils/classSorting';
 import {
   Profile,
@@ -48,7 +50,7 @@ import {
   formatDateVN,
   formatDayMonthVN,
 } from '../utils/schoolWeeks';
-import { resolveTeacherName, DEFAULT_CLASS_TEACHER_MAP } from '../utils/exportAttendanceStandardExcel';
+import { resolveTeacherName, DEFAULT_CLASS_TEACHER_MAP } from '../utils/teacherNames';
 import {
   resolveStudentGender,
   inferGenderFromName,
@@ -2413,70 +2415,26 @@ export const StorageService = {
 
   async saveBoardingReportsBulk(reports: BoardingDailyReport[], savedBy?: Profile): Promise<void> {
     ensureInitialized();
+    const saved = await persistBoardingReports(getSupabaseClient(), reports);
     const list = await this.getBoardingReports();
-    const now = new Date().toISOString();
-
-    for (const rep of reports) {
-      const idx = list.findIndex((r) => r.id === rep.id || (r.class_id === rep.class_id && r.date === rep.date));
-      const finalReport: BoardingDailyReport = {
-        ...rep,
-        updated_at: now,
-        submitted_at: rep.submitted_at || now,
-      };
-      if (idx >= 0) {
-        list[idx] = finalReport;
-      } else {
-        list.push(finalReport);
-      }
-    }
-
-    localStorage.setItem(STORAGE_KEYS.BOARDING_REPORTS, JSON.stringify(list));
-
-    const supabase = getSupabaseClient();
-    if (supabase && isSupabaseConnected()) {
-      try {
-        await supabase.from('boarding_reports').upsert(reports, { onConflict: 'class_id,date' });
-      } catch (e) {
-        console.warn('Supabase upsert boarding reports bulk error:', e);
-      }
-    }
-
-    notifyRealtimeChange('boarding_reports', { count: reports.length });
+    const keys = new Set(saved.map(r=>`${r.class_id}::${r.date}`));
+    const merged = list.filter(r=>!keys.has(`${r.class_id}::${r.date}`)).concat(saved);
+    safeSetItem(STORAGE_KEYS.BOARDING_REPORTS, merged);
+    invalidateCache('boarding_report_');
+    setCached('boarding_reports_all', merged, 60000);
+    notifyRealtimeChange('boarding_reports', { count: saved.length });
   },
 
   async saveBoardingReport(report: BoardingDailyReport, savedBy?: Profile): Promise<void> {
     ensureInitialized();
+    const [finalReport] = await persistBoardingReports(getSupabaseClient(), [{
+      ...report, updated_at: new Date().toISOString(), submitted_at: report.submitted_at || new Date().toISOString(),
+    }]);
     const list = await this.getBoardingReports();
-    const idx = list.findIndex((r) => r.id === report.id || (r.class_id === report.class_id && r.date === report.date));
-    
-    const now = new Date().toISOString();
-    const finalReport: BoardingDailyReport = {
-      ...report,
-      updated_at: now,
-      submitted_at: report.submitted_at || now,
-    };
-
-    if (idx >= 0) {
-      list[idx] = finalReport;
-    } else {
-      list.push(finalReport);
-    }
-
-    localStorage.setItem(STORAGE_KEYS.BOARDING_REPORTS, JSON.stringify(list));
+    const merged = list.filter(r=>!(r.class_id===finalReport.class_id && r.date===finalReport.date)).concat(finalReport);
+    safeSetItem(STORAGE_KEYS.BOARDING_REPORTS, merged);
     setCached(`boarding_report_${report.class_id}_${report.date}`, finalReport, 60000);
-    setCached('boarding_reports_all', list, 60000);
-
-    // Non-blocking background sync to Supabase
-    const supabase = getSupabaseClient();
-    if (supabase && isSupabaseConnected()) {
-      (async () => {
-        try {
-          await supabase.from('boarding_reports').upsert(finalReport, { onConflict: 'class_id,date' });
-        } catch (e) {
-          console.warn('Supabase upsert boarding report background error:', e);
-        }
-      })();
-    }
+    setCached('boarding_reports_all', merged, 60000);
 
     // Fire-and-forget audit log so UI responds instantly
     if (savedBy) {
@@ -3468,7 +3426,9 @@ export const StorageService = {
     user: Profile,
     valuesByGroup: Record<string, { total: number; present: number; absent: number }>,
     notes?: string,
-    absent_students?: import('../types').AbsentStudent[]
+    absent_students?: import('../types').AbsentStudent[],
+    expectedUpdatedAt?: string | null,
+    requestId?: string
   ): Promise<{ report: DailyReport; values: DailyReportValue[] }> {
     ensureInitialized();
 
@@ -3476,6 +3436,8 @@ export const StorageService = {
     if (!getSupabaseClient() || !isSupabaseConnected()) {
       throw new Error('Chưa kết nối Supabase. Báo cáo chưa được lưu; vui lòng kết nối lại rồi thử lại.');
     }
+
+    validateAttendanceValues(valuesByGroup);
 
     // Guard: Prevent saving empty report where total is 0
     const maxTotal = Object.values(valuesByGroup).reduce(
@@ -3563,12 +3525,8 @@ export const StorageService = {
       reports.push(report);
     }
     // Cache only after Supabase confirms both report and indicators.
-    const reportStoredLocally = true;
 
     // Update values (xóa sạch mọi giá trị cũ của báo cáo này để tránh rác / lệch số liệu)
-    const rawValues = localStorage.getItem(STORAGE_KEYS.VALUES);
-    let allValues: DailyReportValue[] = rawValues ? JSON.parse(rawValues) : [];
-    allValues = allValues.filter((v) => v.report_id !== reportId && (!prevReportId || v.report_id !== prevReportId));
 
     const newValues: DailyReportValue[] = [];
     Object.entries(valuesByGroup).forEach(([groupId, vals]) => {
@@ -3582,200 +3540,39 @@ export const StorageService = {
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
-      allValues.push(vItem);
       newValues.push(vItem);
     });
 
-    const valuesStoredLocally = true;
 
     // PERSIST DIRECTLY TO SUPABASE WITH FULL FK PROTECTION & ROBUST TIMEOUT
     let effectiveReportId = reportId;
     const supabase = getSupabaseClient();
     if (supabase && isSupabaseConnected()) {
       try {
-        const upsertPromise = (async () => {
-          // 1. Đảm bảo profile người tạo tồn tại trên Supabase để tránh lỗi FK created_by
-          if (user && user.id) {
-            try {
-              await supabase.from('profiles').upsert(user, { onConflict: 'id' });
-            } catch (pErr) {
-              console.warn('Supabase upsert user profile warning:', pErr);
-            }
-          }
-
-          // 1.5. Đảm bảo lớp học tồn tại trên Supabase để tránh lỗi FK class_id (mã lỗi 23503)
-          if (targetClass) {
-            try {
-              await supabase.from('classes').upsert({
-                id: targetClass.id,
-                class_name: targetClass.class_name,
-                grade: targetClass.grade || 6,
-                active: true,
-                sort_order: targetClass.sort_order || 0,
-                homeroom_teacher_id: targetClass.homeroom_teacher_id || user.id,
-                campus_id: targetClass.campus_id || null,
-              }, { onConflict: 'id' });
-            } catch (cErr) {
-              console.warn('Supabase ensure class exists warning:', cErr);
-            }
-          }
-
-          // 2. Tìm ID báo cáo thực tế trên Cloud nếu đã tồn tại cho (class_id, report_date)
-          try {
-            const { data: cloudRep } = await supabase
-              .from('daily_reports')
-              .select('id')
-              .eq('class_id', canonicalClassId)
-              .eq('report_date', cleanReportDate)
-              .maybeSingle();
-            if (cloudRep && cloudRep.id) {
-              effectiveReportId = cloudRep.id;
-            } else if (targetClass?.class_name && targetClass.class_name !== canonicalClassId) {
-              const { data: altCloudRep } = await supabase
-                .from('daily_reports')
-                .select('id')
-                .eq('class_id', targetClass.class_name)
-                .eq('report_date', cleanReportDate)
-                .maybeSingle();
-              if (altCloudRep && altCloudRep.id) {
-                effectiveReportId = altCloudRep.id;
-              }
-            }
-          } catch (e) {
-            console.warn('Supabase check existing report error:', e);
-          }
-
-          let repData: any = {
-            ...report,
-            id: effectiveReportId,
-            class_id: canonicalClassId,
-            report_date: cleanReportDate,
-          };
-
-          let { error: repErr } = await supabase.from('daily_reports').upsert(repData, { onConflict: 'class_id,report_date' });
-
-          // Nếu Supabase báo lỗi chưa có cột (schema cũ) -> loại bỏ các cột mở rộng và thử lại
-          if (repErr && (repErr.message?.includes('reported_time') || repErr.message?.includes('absent_students') || repErr.message?.includes('locked_at') || repErr.code === 'PGRST204')) {
-            const { reported_time: _unused1, absent_students: _unused2, locked_at: _unused3, ...repWithoutExtra } = repData;
-            const retryRes = await supabase.from('daily_reports').upsert(repWithoutExtra, { onConflict: 'class_id,report_date' });
-            repErr = retryRes.error;
-          }
-
-          // Nếu lỗi khóa ngoại người tạo (23503) -> thử lại với created_by = null
-          if (repErr && (repErr.code === '23503' || repErr.message?.includes('foreign key') || repErr.message?.includes('profiles'))) {
-            if (targetClass) {
-              try {
-                await supabase.from('classes').upsert({
-                  id: targetClass.id,
-                  class_name: targetClass.class_name,
-                  grade: targetClass.grade || 6,
-                  active: true,
-                }, { onConflict: 'id' });
-              } catch {}
-            }
-            const repWithoutCreator = { ...repData, created_by: null };
-            const retryRes = await supabase.from('daily_reports').upsert(repWithoutCreator, { onConflict: 'class_id,report_date' });
-            repErr = retryRes.error;
-          }
-
-          if (repErr) {
-            throw repErr;
-          }
-
-          // 3. Chuẩn bị và đẩy daily_report_values với report_id chính xác
-          if (newValues.length > 0) {
-            const cloudValKeyMap = new Map<string, string>();
-            try {
-              const { data: cloudVals } = await supabase
-                .from('daily_report_values')
-                .select('id, indicator_group_id')
-                .eq('report_id', effectiveReportId);
-              if (cloudVals) {
-                cloudVals.forEach((cv) => cloudValKeyMap.set(cv.indicator_group_id, cv.id));
-              }
-            } catch {}
-
-            const cloudValues = newValues.map((v) => ({
-              ...v,
-              id: cloudValKeyMap.get(v.indicator_group_id) || `val_${effectiveReportId}_${v.indicator_group_id}`,
-              report_id: effectiveReportId,
-              total_count: Math.max(0, Number(v.total_count) || 0),
-              present_count: Math.max(0, Number(v.present_count) || 0),
-              absent_count: Math.max(0, Number(v.absent_count) || 0),
-            }));
-
-            let { error: valErr } = await supabase
-              .from('daily_report_values')
-              .upsert(cloudValues, { onConflict: 'report_id,indicator_group_id' });
-
-            // Nếu gặp lỗi FK với indicator_groups, tự động đẩy indicator_groups trước rồi thử lại
-            if (valErr && (valErr.code === '23503' || valErr.message?.includes('indicator_groups'))) {
-              const indicators = await this.getIndicatorGroups();
-              if (indicators.length > 0) {
-                const cleanInds = indicators.map(({ icon: _i, ...rest }) => rest);
-                await supabase.from('indicator_groups').upsert(cleanInds, { onConflict: 'id' });
-                const retryVal = await supabase
-                  .from('daily_report_values')
-                  .upsert(cloudValues, { onConflict: 'report_id,indicator_group_id' });
-                valErr = retryVal.error;
-              }
-            }
-
-            if (valErr) {
-              throw valErr;
-            }
-          }
-        })();
-
-        // Đợi chính xác xác nhận của tất cả lệnh ghi; mỗi HTTP request đã có timeout
-        // và hủy thực sự trong stableSupabaseFetch. Không bỏ rơi lệnh ghi đang chạy.
-        await upsertPromise;
+        const saved = await persistDailyReport(supabase, report, newValues, expectedUpdatedAt === undefined ? oldReport?.updated_at ?? null : expectedUpdatedAt, requestId);
+        effectiveReportId = saved.report.id;
+        Object.assign(report, saved.report);
+        newValues.splice(0, newValues.length, ...saved.values);
       } catch (err) {
         console.error('Supabase sync report error:', err);
-        throw new Error('Chưa xác nhận được báo cáo trên máy chủ. Hãy kiểm tra kết nối và bấm gửi lại.');
+        throw err;
       }
-    } else if (!reportStoredLocally || !valuesStoredLocally) {
-      throw new Error('Bộ nhớ lưu trữ của ứng dụng đã đầy hoặc bị giới hạn. Báo cáo chưa được lưu. Giữ màn hình này mở để thử lại.');
+    } else {
+      throw new Error('Kết nối Supabase đã thay đổi. Báo cáo chưa được lưu; vui lòng thử lại.');
     }
 
     // Cloud writes above succeeded. Local copies are non-authoritative caches only.
     report.id = effectiveReportId;
-    const confirmedReports = reports.map(r => r.id === reportId ? { ...r, id: effectiveReportId } : r);
-    const confirmedValues = allValues.map(v => v.report_id === reportId ? { ...v, report_id: effectiveReportId } : v);
-    safeSetItem(STORAGE_KEYS.REPORTS, confirmedReports);
-    safeSetItem(STORAGE_KEYS.VALUES, confirmedValues);
-
-    // Đảm bảo cập nhật report.id đồng nhất giữa cloud và local
-    if (effectiveReportId !== reportId) {
-      report.id = effectiveReportId;
-      const curRepsRaw = localStorage.getItem(STORAGE_KEYS.REPORTS);
-      if (curRepsRaw) {
-        const curReps: DailyReport[] = JSON.parse(curRepsRaw);
-        const rIdx = curReps.findIndex(
-          (r) =>
-            r.id === reportId ||
-            (matchClassReport(r.class_id, canonicalClassId) && cleanDate(r.report_date) === cleanReportDate)
-        );
-        if (rIdx >= 0) {
-          curReps[rIdx].id = effectiveReportId;
-          curReps[rIdx].class_id = canonicalClassId;
-          safeSetItem(STORAGE_KEYS.REPORTS, curReps);
-        }
-      }
-      const curValsRaw = localStorage.getItem(STORAGE_KEYS.VALUES);
-      if (curValsRaw) {
-        const curVals: DailyReportValue[] = JSON.parse(curValsRaw);
-        curVals.forEach((v) => {
-          if (v.report_id === reportId) {
-            v.report_id = effectiveReportId;
-          }
-        });
-        safeSetItem(STORAGE_KEYS.VALUES, curVals);
-      }
-      newValues.forEach((v) => {
-        v.report_id = effectiveReportId;
-      });
-    }
+    // Merge with the latest cache, so simultaneous saves for other classes are retained.
+    const latestReports: DailyReport[] = JSON.parse(localStorage.getItem(STORAGE_KEYS.REPORTS) || '[]');
+    const latestValues: DailyReportValue[] = JSON.parse(localStorage.getItem(STORAGE_KEYS.VALUES) || '[]');
+    safeSetItem(STORAGE_KEYS.REPORTS, latestReports.filter(r =>
+      r.id !== reportId && r.id !== effectiveReportId &&
+      !(r.class_id === canonicalClassId && cleanDate(r.report_date) === cleanReportDate)
+    ).concat(report));
+    safeSetItem(STORAGE_KEYS.VALUES, latestValues.filter(v =>
+      v.report_id !== reportId && v.report_id !== effectiveReportId
+    ).concat(newValues));
 
     // Đồng bộ ngay lập tức vào memory cache cho cả classId gốc và canonicalClassId
     setCached(`report_${classId}_${cleanReportDate}`, { report, values: newValues }, 60000);

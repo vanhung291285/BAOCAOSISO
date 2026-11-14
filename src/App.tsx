@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+const OperationsCenterPage = lazy(() => import('./pages/OperationsCenterPage').then(m => ({default:m.OperationsCenterPage})));
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { SchoolProvider, useSchool } from './contexts/SchoolContext';
 import { NotificationProvider } from './contexts/NotificationContext';
@@ -6,24 +7,24 @@ import { Navbar } from './components/Navbar';
 import { Sidebar } from './components/Sidebar';
 import { GVCNUnreportedAlertBanner } from './components/GVCNUnreportedAlertBanner';
 import { LoginPage } from './pages/LoginPage';
-import { DashboardPage } from './pages/DashboardPage';
-import { AttendanceInputPage } from './pages/AttendanceInputPage';
-import { DailyReportPage } from './pages/DailyReportPage';
-import { WeeklyReportPage } from './pages/WeeklyReportPage';
-import { MonthlyReportPage } from './pages/MonthlyReportPage';
-import { AttendanceRankingPage } from './pages/AttendanceRankingPage';
-import { ChartsPage } from './pages/ChartsPage';
-import { ClassesManagementPage } from './pages/ClassesManagementPage';
-import { UsersManagementPage } from './pages/UsersManagementPage';
-import { SettingsSchoolPage } from './pages/SettingsSchoolPage';
-import { SettingsCampusesPage } from './pages/SettingsCampusesPage';
-import { SettingsIndicatorsPage } from './pages/SettingsIndicatorsPage';
-import { SettingsReportTemplatePage } from './pages/SettingsReportTemplatePage';
-import { SettingsSupabasePage } from './pages/SettingsSupabasePage';
-import { ProfilePage } from './pages/ProfilePage';
-import { BoardingManagementPage } from './pages/BoardingManagementPage';
-import { AIPredictiveDropoutPage } from './pages/AIPredictiveDropoutPage';
-import { AITeacherAssistantPage } from './pages/AITeacherAssistantPage';
+const DashboardPage = lazy(() => import('./pages/DashboardPage').then(m => ({default:m.DashboardPage})));
+const AttendanceInputPage = lazy(() => import('./pages/AttendanceInputPage').then(m => ({default:m.AttendanceInputPage})));
+const DailyReportPage = lazy(() => import('./pages/DailyReportPage').then(m => ({default:m.DailyReportPage})));
+const WeeklyReportPage = lazy(() => import('./pages/WeeklyReportPage').then(m => ({default:m.WeeklyReportPage})));
+const MonthlyReportPage = lazy(() => import('./pages/MonthlyReportPage').then(m => ({default:m.MonthlyReportPage})));
+const AttendanceRankingPage = lazy(() => import('./pages/AttendanceRankingPage').then(m => ({default:m.AttendanceRankingPage})));
+const ChartsPage = lazy(() => import('./pages/ChartsPage').then(m => ({default:m.ChartsPage})));
+const ClassesManagementPage = lazy(() => import('./pages/ClassesManagementPage').then(m => ({default:m.ClassesManagementPage})));
+const UsersManagementPage = lazy(() => import('./pages/UsersManagementPage').then(m => ({default:m.UsersManagementPage})));
+const SettingsSchoolPage = lazy(() => import('./pages/SettingsSchoolPage').then(m => ({default:m.SettingsSchoolPage})));
+const SettingsCampusesPage = lazy(() => import('./pages/SettingsCampusesPage').then(m => ({default:m.SettingsCampusesPage})));
+const SettingsIndicatorsPage = lazy(() => import('./pages/SettingsIndicatorsPage').then(m => ({default:m.SettingsIndicatorsPage})));
+const SettingsReportTemplatePage = lazy(() => import('./pages/SettingsReportTemplatePage').then(m => ({default:m.SettingsReportTemplatePage})));
+const SettingsSupabasePage = lazy(() => import('./pages/SettingsSupabasePage').then(m => ({default:m.SettingsSupabasePage})));
+const ProfilePage = lazy(() => import('./pages/ProfilePage').then(m => ({default:m.ProfilePage})));
+const BoardingManagementPage = lazy(() => import('./pages/BoardingManagementPage').then(m => ({default:m.BoardingManagementPage})));
+const AIPredictiveDropoutPage = lazy(() => import('./pages/AIPredictiveDropoutPage').then(m => ({default:m.AIPredictiveDropoutPage})));
+const AITeacherAssistantPage = lazy(() => import('./pages/AITeacherAssistantPage').then(m => ({default:m.AITeacherAssistantPage})));
 import { TeacherAIAssistant } from './components/TeacherAIAssistant';
 import { AIAssistantModal } from './components/AIAssistantModal';
 import {
@@ -189,6 +190,9 @@ const AppContent: React.FC = () => {
                     : 'py-3.5 sm:py-6 pb-28 sm:pb-8'
                 }`}
               >
+                <Suspense fallback={<div role="status" className="rounded-2xl bg-white p-8 text-center text-slate-600">Đang tải chức năng…</div>}>
+                {currentPath === '/dashboard' && <button type="button" onClick={()=>handleNavigate('/operations')} className="mb-4 flex w-full items-center justify-between gap-3 rounded-2xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-left text-sm font-bold text-indigo-900"><span>Trợ lý dữ liệu · Kiểm tra sĩ số, lớp chưa báo và sai lệch</span><Sparkles className="h-5 w-5 shrink-0"/></button>}
+                {currentPath === '/operations' && <OperationsCenterPage onSelectClass={handleSelectClassForInput} />}
                 {currentPath === '/dashboard' && (
                   <DashboardPage
                     onNavigate={handleNavigate}
@@ -271,6 +275,7 @@ const AppContent: React.FC = () => {
                 {currentPath === '/settings/supabase' && (isAdmin ? <SettingsSupabasePage /> : <DashboardPage onNavigate={handleNavigate} onSelectClassForInput={handleSelectClassForInput} />)}
 
                 {currentPath === '/profile' && <ProfilePage onNavigate={handleNavigate} />}
+                </Suspense>
               </main>
 
               {/* App Footer */}
