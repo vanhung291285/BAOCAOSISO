@@ -500,73 +500,24 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       <main className="siso-login-main relative z-20 flex-1">
         <div className="siso-login-stage">
           <section className="siso-login-intro" aria-label="Giới thiệu ứng dụng">
-            <p className="siso-eyebrow">QUẢN LÝ NHÀ TRƯỜNG</p>
-            <h2>Sổ báo cáo sĩ số</h2>
-            <p>Điểm danh, theo dõi bán trú và tổng hợp báo cáo theo lớp.</p>
+            <p className="siso-eyebrow">QUẢN LÝ SĨ SỐ HỌC SINH</p>
+            <h2>Mỗi ngày đến lớp,<br />một báo cáo rõ ràng.</h2>
+            <p>Sổ báo cáo sĩ số của {settings?.school_name || 'Trường PTDTBT THCS Xa Dung'}. Điểm danh theo lớp, theo dõi bán trú và tổng hợp báo cáo.</p>
+            <div className="login-feature-list">
+              <div><UserCheck aria-hidden="true" /><span><strong>Báo cáo sĩ số</strong><small>Chọn lớp, kiểm tra số liệu và gửi báo cáo.</small></span></div>
+              <div><Calendar aria-hidden="true" /><span><strong>Theo dõi theo ngày</strong><small>Tra cứu tình hình chuyên cần của lớp.</small></span></div>
+              <div><GraduationCap aria-hidden="true" /><span><strong>Thuận tiện cho giáo viên</strong><small>Sử dụng trên máy tính và điện thoại.</small></span></div>
+            </div>
           </section>
           <div className="siso-login-panel">
           {/* Khung viền kính mờ tinh tế (Bo góc 24px, đổ bóng nhẹ nhàng chuẩn hình gốc) */}
           <div className="siso-login-card w-full">
             {/* Card trắng bên trong: kích thước gọn gàng, không bị thô dày */}
             <div className="siso-login-card-inner w-full rounded-[inherit] bg-white">
-              {/* Header: Logo hình tròn và Tiêu đề ĐĂNG NHẬP */}
-              <div className="flex items-center gap-3 sm:gap-3.5 mb-4">
-                {/* Circular Emblem Seal */}
-                <div className="w-13 h-13 sm:w-14 sm:h-14 rounded-full border-2 border-[#005f73] p-0.5 flex items-center justify-center shrink-0 shadow-xs bg-gradient-to-b from-white to-blue-50/40">
-                  {settings?.logo_url ? (
-                    <img src={settings.logo_url} alt="Huy hiệu nhà trường" className="w-full h-full rounded-full object-contain" />
-                  ) : (
-                  <svg viewBox="0 0 100 100" className="w-full h-full" fill="none">
-                    {/* Outer circle rings */}
-                    <circle cx="50" cy="50" r="47" stroke="#005F73" strokeWidth="2" />
-                    <circle cx="50" cy="50" r="43" stroke="#00897B" strokeWidth="1" strokeDasharray="2 2" />
-
-                    {/* Circular text top */}
-                    <path id="curve" d="M 18,50 A 32,32 0 1,1 82,50" fill="none" />
-                    <text fontSize="7.5" fill="#005F73" fontWeight="900" letterSpacing="0.8">
-                      <textPath href="#curve" startOffset="50%" textAnchor="middle">
-                        HỆ THỐNG QUẢN TRỊ & BÁO CÁO
-                      </textPath>
-                    </text>
-
-                    {/* Shield / Book base */}
-                    <path d="M50 35 L70 44 L50 53 L30 44 Z" fill="#00897B" opacity="0.9" />
-                    <polygon points="50,33 74,44 50,55 26,44" fill="#00897B" />
-                    <path
-                      d="M36 50 L36 60 Q50 68 64 60 L64 50"
-                      stroke="#005F73"
-                      strokeWidth="2.5"
-                      fill="none"
-                    />
-                    <path d="M42 62 Q50 68 58 62" stroke="#00897B" strokeWidth="2" fill="none" />
-
-                    {/* Graduation cap tassel */}
-                    <line x1="70" y1="45" x2="74" y2="58" stroke="#F59E0B" strokeWidth="2" />
-                    <circle cx="74" cy="59" r="2" fill="#F59E0B" />
-
-                    {/* Laurel branches */}
-                    <path
-                      d="M26 62 Q20 50 26 40 M74 62 Q80 50 74 40"
-                      stroke="#00897B"
-                      strokeWidth="1.5"
-                      fill="none"
-                    />
-                  </svg>
-                  )}
-                </div>
-
-                {/* Title texts */}
-                <div className="min-w-0">
-                  <div className="text-[10px] sm:text-[11px] font-bold text-slate-500 uppercase tracking-wider leading-none">
-                    HỆ THỐNG QUẢN TRỊ &amp; BÁO CÁO
-                  </div>
-                  <h1 className="text-xl sm:text-[22px] font-black text-[#0f2d59] tracking-tight leading-tight mt-0.5">
-                    ĐĂNG NHẬP
-                  </h1>
-                  <p className="text-[11px] sm:text-xs text-slate-600 font-normal mt-0.5">
-                    Vui lòng nhập thông tin tài khoản của bạn
-                  </p>
-                </div>
+              <div className="login-form-heading">
+                <p>CỔNG BÁO CÁO NHÀ TRƯỜNG</p>
+                <h1>Đăng nhập</h1>
+                <span>{activeTab === 'GVCN' ? 'Chọn lớp để vào màn hình báo cáo sĩ số.' : 'Dành cho Ban Giám hiệu và quản trị viên.'}</span>
               </div>
 
               {/* Segmented Tab Switcher (Giáo Viên / Nhân Viên vs Ban Giám Hiệu) */}
@@ -587,7 +538,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                       : 'text-slate-600 hover:text-slate-950 hover:bg-white/70'
                   }`}
                 >
-                  Giáo Viên / Nhân Viên
+                  Giáo viên chủ nhiệm
                 </button>
 
                 <button
@@ -610,7 +561,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                       : 'text-slate-600 hover:text-slate-950 hover:bg-white/70'
                   }`}
                 >
-                  Ban Giám Hiệu
+                  Ban Giám hiệu
                 </button>
               </div>
 
@@ -647,6 +598,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                     Mặc định: "Chọn tên lớp"
                    ======================================================== */}
                 <div>
+                  <p className="login-field-label">{activeTab === 'GVCN' ? 'Lớp phụ trách' : 'Tài khoản'}</p>
                   <div className="relative flex items-center border border-slate-200 hover:border-slate-300 focus-within:border-[#00897b] focus-within:ring-2 focus-within:ring-[#00897b]/15 rounded-xl px-3 h-12 bg-slate-50/60 focus-within:bg-white transition-all shadow-2xs">
                     <User className="w-4 h-4 text-slate-400 shrink-0 mr-2.5" />
 
@@ -655,6 +607,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                       <div className="relative flex-1">
                         <select
                           id="login-class-select"
+                          aria-label="Lớp phụ trách"
                           value={selectedClassId}
                           onChange={(e) => handleClassChange(e.target.value)}
                           required
@@ -724,7 +677,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                       {selectedClassId ? (
                         <UserCheck className="w-4 h-4 text-emerald-600 shrink-0 mr-2.5" />
                       ) : (
-                        <Lock className="w-4 h-4 text-slate-400 shrink-0 mr-2.5" />
+                        <User className="w-4 h-4 text-slate-400 shrink-0 mr-2.5" />
                       )}
 
                       <div className="flex-1 flex items-center justify-between min-w-0 pr-1">
@@ -740,12 +693,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                                   : 'bg-amber-100 text-amber-800 border-amber-200'
                               }`}
                             >
-                              {resolvedTeacherName ? 'Đúng GVCN' : 'Chưa phân công'}
+                              {resolvedTeacherName ? 'GVCN' : 'Chưa phân công'}
                             </span>
                           </>
                         ) : (
                           <div className="text-xs sm:text-[13px] text-slate-400 font-medium truncate select-none">
-                            Tên GVCN (Chọn tên lớp để hiển thị)
+                            Tên giáo viên sẽ hiển thị sau khi chọn lớp
                           </div>
                         )}
                       </div>
@@ -781,18 +734,9 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                 </div>
 
                 {/* Row: Ghi nhớ đăng nhập & Quên mật khẩu? */}
-                <div className="flex items-center justify-between text-xs pt-0.5">
+                <div className="login-preferences flex items-center justify-between text-xs pt-0.5">
                   <label className="flex items-center gap-1.5 cursor-pointer select-none">
-                    <div
-                      onClick={() => setRememberLogin(!rememberLogin)}
-                      className={`w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors ${
-                        rememberLogin
-                          ? 'bg-[#00897b] border-[#00897b] text-white'
-                          : 'border-slate-300 bg-white'
-                      }`}
-                    >
-                      {rememberLogin && <Check className="w-2.5 h-2.5 stroke-[3]" />}
-                    </div>
+                    <input type="checkbox" checked={rememberLogin} onChange={e => setRememberLogin(e.target.checked)} className="h-4 w-4 accent-teal-700" />
                     <span className="text-slate-600 font-medium text-[11px] sm:text-xs">
                       Ghi nhớ đăng nhập
                     </span>
@@ -803,7 +747,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                     onClick={() => setShowForgotModal(true)}
                     className="text-[#00897b] hover:text-[#00695c] hover:underline font-medium text-[11px] sm:text-xs cursor-pointer"
                   >
-                    Quên mật khẩu?
+                    {activeTab === 'GVCN' ? 'Cần hỗ trợ?' : 'Quên mật khẩu?'}
                   </button>
                 </div>
 
@@ -814,12 +758,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                     disabled={isSubmitting}
                     className="min-h-12 w-full px-4 rounded-xl bg-gradient-to-r from-[#003B5C] via-[#005B82] to-[#00897B] hover:opacity-95 text-white font-bold text-xs sm:text-sm uppercase tracking-wider shadow-md shadow-teal-900/20 active:scale-[0.99] transition-all cursor-pointer flex items-center justify-center"
                   >
-                    <span>{isSubmitting ? 'ĐANG ĐĂNG NHẬP...' : 'ĐĂNG NHẬP'}</span>
+                    <span>{isSubmitting ? 'Đang đăng nhập…' : activeTab === 'GVCN' ? 'Vào báo cáo sĩ số' : 'Đăng nhập'}</span>
                   </button>
                 </div>
 
                 {/* Hoặc đăng nhập nhanh bằng Google / Microsoft */}
-                <div className="pt-2 text-center">
+                <details className="login-other-options pt-2 text-center"><summary>Lựa chọn đăng nhập khác</summary>
                   <div className="text-[11px] sm:text-xs text-slate-500 flex items-center justify-center gap-2">
                     <span>Hoặc đăng nhập nhanh bằng</span>
 
@@ -881,12 +825,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                       </button>
                     </div>
                   )}
-                </div>
+                </details>
               </form>
             </div>
           </div>
           </div>
-          <nav aria-labelledby="school-links-title">
+          <nav className="login-school-links" aria-labelledby="school-links-title">
             <h2 id="school-links-title" className="mb-2 text-center text-xs font-semibold text-slate-200">
               Liên kết nhà trường
             </h2>

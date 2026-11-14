@@ -368,3 +368,68 @@
   .navbar-utilities summary::-webkit-details-marker { display: none; }
   .navbar-utilities[open] summary { background: #edf4fa; border-color: #a8c2d9; }
 }
+/* Refined school portal login. */
+@media screen {
+  .siso-login { background: #f3f6fa; color: #20354b; }
+  .siso-login-header { max-width: 1180px; padding: 24px 32px; border-bottom: 1px solid #dde5ed; }
+  .siso-login-header .text-white { color: #183e60; text-shadow: none; letter-spacing: .04em; }
+  .siso-login-header .text-slate-300 { color: #5a7086; }
+  .siso-login-header > div:last-child { background: white; border-color: #dce5ed; }
+  .siso-login-header > div:first-child > div:first-child { box-shadow: none; }
+  .siso-login-main { width: min(100%, 1180px); min-height: 0; padding: 36px 32px 24px; }
+  .siso-login-stage { grid-template-columns: minmax(0,1fr) minmax(0,440px); gap: 28px 48px; align-items: center; }
+  .siso-login-intro { text-align: left; color: #556e85; padding: 36px; border: 1px solid #d7e6ee; border-radius: 24px; background: linear-gradient(140deg,#e8f2f6,#edf3f9); }
+  .siso-login-intro h2 { font-size: clamp(28px,3vw,40px); line-height: 1.25; letter-spacing: -.035em; color: #153e60; margin: 14px 0 18px; }
+  .siso-login-intro > p:not(.siso-eyebrow) { font-size: 14px; line-height: 1.8; }
+  .siso-login .siso-eyebrow { font-size: 10px; color: #087c83; letter-spacing: .13em; }
+  .login-feature-list { display: grid; gap: 24px; margin-top: 32px; padding-top: 24px; border-top: 1px solid #ccdde7; }
+  .login-feature-list > div { display: flex; align-items: flex-start; gap: 12px; }
+  .login-feature-list svg { flex-shrink: 0; width: 20px; height: 20px; color: #087e87; margin-top: 2px; }
+  .login-feature-list strong { display: block; font-size: 14px; color: #25465f; font-weight: 700; }
+  .login-feature-list small { display: block; font-size: 12px; line-height: 1.7; margin-top: 3px; }
+  .siso-login-card { border: 1px solid #dae3ec; border-radius: 20px; box-shadow: 0 8px 32px #183b5610; }
+  .siso-login-card-inner { padding: 32px; }
+  .login-form-heading { margin-bottom: 24px; }
+  .login-form-heading > p { font-size: 10px; letter-spacing: .09em; font-weight: 700; color: #758598; }
+  .login-form-heading h1 { font-size: 28px; line-height: 1.3; color: #153e60; font-weight: 750; margin: 8px 0; }
+  .login-form-heading > span { display: block; font-size: 13px; line-height: 1.6; color: #63778b; }
+  .siso-role-switch { padding: 4px; border: 1px solid #e2e8ee; margin-bottom: 24px; }
+  .siso-role-switch button { min-height: 44px; font-weight: 650; font-size: 12px; box-shadow: none; }
+  .login-field-label { margin-bottom: 8px; font-size: 12px; font-weight: 700; color: #304d67; }
+  .siso-login-form > div { margin-bottom: 16px; }
+  .siso-login-form select { min-height: 48px; font-size: 15px; }
+  .siso-login-form button[type='submit'] { min-height: 50px; background: #087f83; box-shadow: 0 3px 8px #087f831a; text-transform: none; letter-spacing: 0; font-size: 14px; }
+  .siso-login-form button[type='submit']:hover { background: #066c72; }
+  .login-preferences { min-height: 40px; gap: 8px; }
+  .login-preferences label { min-height: 40px; }
+  .login-other-options { border-top: 1px solid #e6ecf2; color: #63778b; font-size: 12px; }
+  .login-other-options summary { cursor: pointer; padding: 12px 4px; }
+  .login-other-options > div { margin-top: 8px; }
+  .login-other-options button { min-height: 40px; min-width: 40px; }
+  .login-school-links { grid-column: 1 / -1; border-top: 1px solid #dce5ed; padding-top: 20px; }
+  .login-school-links h2 { text-align: left; color: #62778c; font-size: 11px; margin-bottom: 12px; }
+  .login-school-links > div { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 12px; }
+  .login-school-links a { background: white; border: 1px solid #dce5ed; color: #34536d; min-height: 52px; padding: 12px 16px; }
+  .login-school-links a:hover { background: #e8f2f6; }
+  .login-school-links svg { color: #087f83; }
+  .siso-login-footer { color: #74869a; padding: 16px 24px; font-size: 11px; }
+  @media (max-width: 900px) {
+    .siso-login-stage { grid-template-columns: minmax(0,1fr); max-width: 480px; margin-inline: auto; gap: 20px; }
+    .siso-login-intro { border: 0; background: none; padding: 0; text-align: center; }
+    .siso-login-intro h2 { font-size: 26px; margin: 8px 0; }
+    .siso-login-intro > p:not(.siso-eyebrow), .login-feature-list { display: none; }
+    .login-school-links > div { grid-template-columns: minmax(0,1fr); gap: 8px; }
+    .login-school-links a { grid-column: auto; }
+  }
+  @media (max-width: 639px) {
+    .siso-login-header { padding: calc(16px + env(safe-area-inset-top)) 20px 16px; }
+    .siso-login-header > div:first-child { min-width: 0; }
+    .siso-login-main { padding: 24px 16px 16px; }
+    .siso-login-card-inner { padding: 24px 20px; }
+    .siso-login-intro h2 { font-size: 24px; }
+    .siso-login-intro h2 br { display: none; }
+    .login-form-heading h1 { font-size: 25px; }
+    .siso-login input:not([type='checkbox']), .siso-login select { font-size: 16px; }
+    .siso-role-switch button { font-size: 11px; }
+  }
+}
