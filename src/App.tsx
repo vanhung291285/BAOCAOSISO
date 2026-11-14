@@ -158,7 +158,7 @@ const AppContent: React.FC = () => {
           }}
         />
       ) : (
-        <div className="siso-shell min-h-[100dvh] bg-slate-100/70 flex flex-col font-sans antialiased text-slate-800 selection:bg-blue-600 selection:text-white">
+        <div className={`siso-shell ${sidebarCollapsed ? 'sidebar-compact' : 'sidebar-expanded'} min-h-[100dvh] bg-slate-100/70 flex flex-col font-sans antialiased text-slate-800 selection:bg-blue-600 selection:text-white`}>
           {/* Top Navbar Header */}
           <Navbar
             currentPath={currentPath}

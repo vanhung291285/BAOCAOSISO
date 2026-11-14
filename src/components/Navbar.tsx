@@ -90,7 +90,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   };
 
   return (
-    <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-xs no-print pt-[env(safe-area-inset-top)]">
+    <header className="siso-navbar sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-xs no-print pt-[env(safe-area-inset-top)]">
       <div className="w-full px-3 sm:px-5 lg:px-6">
         <div className="flex items-center justify-between h-15 gap-2 w-full">
           {/* 1. Left: School Brand, Logo & Titles */}

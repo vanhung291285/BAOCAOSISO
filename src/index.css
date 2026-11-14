@@ -269,3 +269,93 @@
     .baocaosiso-mobile-menu { max-height: min(82dvh, 720px); overscroll-behavior: contain; }
   }
 }
+
+/* Consistent workspace and touch-first reporting. */
+@media screen {
+  :root { color-scheme: light; }
+  body { margin: 0; line-height: 1.5; background: #f3f6fa; }
+  :is(button, a, input, select, textarea):focus-visible { outline: 3px solid #0e8795; outline-offset: 3px; }
+  .siso-shell { color: #20334b; }
+  .siso-navbar { box-shadow: 0 1px 8px #183b5610; }
+  .baocaosiso-sidebar { background: #eef4f9 !important; border-color: #dae4ee !important; }
+  .baocaosiso-sidebar button.bg-blue-600 { background: #164c75 !important; box-shadow: none; }
+  .baocaosiso-mobile-menu { background: #f7fafc !important; }
+  .attendance-workspace { border-radius: 20px; background: #f4f7fa; }
+  .attendance-header { background: #153e60; padding-block: 16px; border-radius: 20px 20px 0 0; position: relative; box-shadow: none; }
+  .attendance-header button { min-width: 40px; min-height: 40px; }
+  .attendance-toolbar { padding-block: 14px; }
+  .attendance-toolbar button, .attendance-toolbar a { min-height: 40px; }
+  .attendance-main { padding-top: 20px; }
+  .attendance-indicators { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+  .attendance-indicators > :first-child { grid-column: 1 / -1; }
+  .attendance-indicators > * { margin-block: 0 !important; }
+  .attendance-indicator { background: white; border: 1px solid #d9e3ed; box-shadow: 0 3px 12px #17385106; padding: 20px; }
+  .attendance-counts input { min-height: 56px; font-variant-numeric: tabular-nums; }
+  .attendance-absences { border-width: 1px; border-color: #e5dce0; box-shadow: 0 3px 12px #17385106; }
+  .student-search { display: grid; gap: 6px; margin-block: 12px; font-size: 12px; font-weight: 700; color: #42576e; }
+  .student-search input { width: 100%; min-height: 46px; padding: 10px 12px; border: 1px solid #cbd8e4; border-radius: 10px; background: white; font-size: 16px; font-weight: 400; }
+  .attendance-roster { max-height: 240px; overscroll-behavior: contain; }
+  .attendance-roster button { min-height: 44px; padding: 10px 12px; text-align: left; }
+  .attendance-savebar { box-shadow: 0 -4px 24px #193b5a12; }
+  .attendance-savebar button { min-height: 48px; }
+  .siso-content :is(input,select,textarea) { scroll-margin-block: 100px; }
+  @media (min-width: 1024px) {
+    .siso-login-main { width: min(100%, 72rem); min-height: 72dvh; padding: 3rem; }
+    .siso-login-stage { grid-template-columns: minmax(0, 1fr) minmax(0, 27rem); align-items: center; gap: 5rem; }
+    .siso-login-intro { text-align: left; }
+    .siso-login-intro h2 { font-size: 3.5rem; line-height: 1.15; }
+    .siso-login-intro > p:last-child { font-size: 1rem; line-height: 1.8; max-width: 29rem; }
+  }
+  @media (max-width: 639px) {
+    .siso-navbar h1 { font-size: 11px; }
+    .siso-navbar h1 + div { font-size: 10px; }
+    .siso-content:has(.attendance-workspace) { padding-inline: 0; padding-top: 0; }
+    .attendance-workspace, .attendance-header { border-radius: 0; }
+    .attendance-header { padding: 12px; }
+    .attendance-toolbar { padding: 12px; }
+    .attendance-toolbar > div > :last-child { flex-wrap: wrap; }
+    .attendance-toolbar > div > :last-child > :first-child { flex-basis: 100%; }
+    .attendance-toolbar > div > :last-child > :last-child { width: 100%; justify-content: flex-end; padding-top: 6px; }
+    .attendance-toolbar button { font-size: 12px; }
+    .attendance-main { padding: 14px 12px 80px; }
+    .attendance-indicators { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+    .attendance-indicator { padding: 16px 12px; border-radius: 16px; }
+    .attendance-counts { gap: 8px; }
+    .attendance-counts > div { padding: 8px; min-width: 0; }
+    .attendance-counts input { font-size: 28px; min-height: 56px; width: 100%; }
+    .attendance-absences { padding: 16px 12px; }
+    .attendance-roster { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .attendance-roster button { min-width: 0; overflow-wrap: anywhere; font-size: 13px; }
+    .attendance-workspace :is(input,select,textarea):not([inputmode='numeric']) { font-size: 16px; }
+    .attendance-workspace :is(input,select):not([type='checkbox']):not([type='radio']) { min-height: 44px; }
+    .attendance-savebar { padding-inline: 12px; }
+    .attendance-savebar > div > :last-child { flex-wrap: wrap; }
+    .attendance-savebar > div > :last-child > :first-child:not(button) { display: flex; flex-basis: 100%; font-size: 12px; }
+    .baocaosiso-mobile-menu :is(button,a) { min-height: 44px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+  }
+}
+@media screen {
+  .attendance-guide { display: flex; justify-content: space-between; align-items: center; gap: 20px; padding: 4px 0 18px; }
+  .attendance-kicker { font-size: 10px; letter-spacing: .12em; color: #087d88; font-weight: 800; }
+  .attendance-guide h1 { font-size: 24px; font-weight: 800; letter-spacing: -.025em; color: #173c5e; margin-block: 4px; }
+  .attendance-guide p:not(.attendance-kicker) { font-size: 13px; color: #576d82; max-width: 36rem; }
+  .attendance-guide nav { display: flex; flex-wrap: wrap; gap: 8px; }
+  .attendance-guide nav button { display: inline-flex; align-items: center; min-height: 44px; padding: 8px 12px; background: white; border: 1px solid #d6e2eb; border-radius: 10px; font-size: 12px; font-weight: 700; color: #164c75; }
+  #attendance-counts, #attendance-absences, #attendance-notes { scroll-margin-top: 90px; }
+  .attendance-workspace > section[aria-live] { margin-inline: 12px; font-size: 12px; border-color: #d9e5ed; background: #edf4f8; }
+  @media (min-width: 1024px) {
+    .sidebar-expanded .attendance-savebar { left: 256px; width: calc(100% - 256px); }
+    .sidebar-compact .attendance-savebar { left: 72px; width: calc(100% - 72px); }
+  }
+  @media (max-width: 639px) {
+    .attendance-guide { align-items: stretch; flex-direction: column; gap: 12px; }
+    .attendance-guide h1 { font-size: 22px; }
+    .attendance-guide nav { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 6px; }
+    .attendance-guide nav button { padding: 8px 6px; justify-content: center; text-align: center; font-size: 11px; }
+    .attendance-roster button { flex-wrap: wrap; }
+    .attendance-counts > div > div:first-child { height: auto; min-height: 32px; flex-wrap: wrap; }
+  }
+}

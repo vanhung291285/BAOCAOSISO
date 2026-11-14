@@ -53,6 +53,8 @@ import {
 import { getIndicatorMeta } from '../utils/indicatorIcons';
 import { exportMonthlyBoardingExcel } from '../utils/exportBoardingExcel';
 
+const normalizeStudentSearch = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/gi, 'd').toLowerCase();
+
 interface AttendanceInputPageProps {
   initialClassId?: string;
   initialDate?: string;
@@ -202,6 +204,8 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
   const [formValues, setFormValues] = useState<Record<string, { total: number | ''; present: number | ''; absent: number | '' }>>({});
   const [absentStudents, setAbsentStudents] = useState<AbsentStudent[]>([]);
   const [notes, setNotes] = useState<string>('');
+  const [studentSearch, setStudentSearch] = useState('');
+  useEffect(() => setStudentSearch(''), [selectedClassId]);
   const [showResetConfirm, setShowResetConfirm] = useState<boolean>(false);
   const [showQuickAddModal, setShowQuickAddModal] = useState<boolean>(false);
 
@@ -1494,7 +1498,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
   }, [absentStudents]);
 
   return (
-    <div className="min-h-screen w-full min-w-0 max-w-full overflow-x-hidden bg-slate-50 text-slate-800 pb-36 sm:pb-28">
+    <div className="attendance-workspace min-h-screen w-full min-w-0 max-w-full overflow-x-hidden bg-slate-50 text-slate-800 pb-36 sm:pb-28">
       {/* Toast Notification */}
       {toastMessage && (
         <div
@@ -1517,19 +1521,8 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
         </div>
       )}
 
-      <AttendanceDraftPanel key={`${draft.key}:${draftEpoch}`} draft={draft} dirty={dirty} ready={formScope === currentScope && !isLoadingReport && !isSaving}
-        conflict={saveConflict}
-        onReload={() => { setDirty(false); void loadClassReport(); }}
-        onRestore={d => {
-          markEdited(); setFormValues(d.values); setNotes(d.notes); setAbsentStudents(d.absentStudents);
-          setExpectedVersion(d.baseVersion);
-          if(d.requestId) pendingSendRef.current = {
-            token:d.requestId, fingerprint:JSON.stringify([selectedClass?.id || selectedClassId, selectedDate, d.values, d.notes, d.absentStudents, d.baseVersion]),
-          };
-        }} />
-      {loadError && <button type="button" onClick={()=>void loadClassReport()} className="m-3 rounded-lg bg-white px-4 py-2 font-bold text-blue-800 ring-1">Thử tải lại dữ liệu máy chủ</button>}
       {/* 1. HÀNG 1: STICKY HEADER (Tên lớp bên trái, Trạng thái bên phải trên cùng 1 dòng) */}
-      <header className="bg-blue-900 text-white px-3 sm:px-4 py-2 sticky top-0 z-30 shadow-md">
+      <header className="attendance-header bg-blue-900 text-white px-3 sm:px-4 py-2 sticky top-0 z-30 shadow-md">
         <div className="max-w-5xl mx-auto flex items-center justify-between gap-2">
           {/* Trái: Nút Thoát + Tên Lớp */}
           <div className="flex items-center gap-2 min-w-0">
@@ -1605,7 +1598,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
             ) : existingReport ? (
               <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-emerald-600 text-white shadow-xs gap-1 border border-emerald-500">
                 <CheckCircle2 className="w-3 h-3 stroke-[3]" />
-                <span>Đã nộp{existingReport.reported_time ? ` (${existingReport.reported_time})` : ''}</span>
+                <span>{dirty ? 'Chưa lưu thay đổi' : 'Đã nộp'}{!dirty && existingReport.reported_time ? ` (${existingReport.reported_time})` : ''}</span>
               </span>
             ) : (
               <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-amber-500 text-white shadow-xs gap-1 border border-amber-400">
@@ -1617,7 +1610,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
       </header>
 
       {/* 2. HÀNG 2: COMPACT TOOLBAR (Cụm chọn ngày + Thanh chuyển tab dạng Slider nhỏ gọn) */}
-      <div className="bg-white border-b border-slate-200 px-3 py-2 sm:px-4 shadow-2xs">
+      <div className="attendance-toolbar bg-white border-b border-slate-200 px-3 py-2 sm:px-4 shadow-2xs">
         <div className="max-w-5xl mx-auto space-y-1.5">
           {/* Cụm chọn ngày siêu gọn gàng */}
           <div className="flex items-center justify-between gap-1.5">
@@ -1744,8 +1737,20 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
         </div>
       </div>
 
+      <AttendanceDraftPanel key={`${draft.key}:${draftEpoch}`} draft={draft} dirty={dirty} ready={formScope === currentScope && !isLoadingReport && !isSaving}
+        conflict={saveConflict}
+        onReload={() => { setDirty(false); void loadClassReport(); }}
+        onRestore={d => {
+          markEdited(); setFormValues(d.values); setNotes(d.notes); setAbsentStudents(d.absentStudents);
+          setExpectedVersion(d.baseVersion);
+          if(d.requestId) pendingSendRef.current = {
+            token:d.requestId, fingerprint:JSON.stringify([selectedClass?.id || selectedClassId, selectedDate, d.values, d.notes, d.absentStudents, d.baseVersion]),
+          };
+        }} />
+      {loadError && <button type="button" onClick={()=>void loadClassReport()} className="m-3 rounded-lg bg-white px-4 py-2 font-bold text-blue-800 ring-1">Thử tải lại dữ liệu máy chủ</button>}
+
       {/* 3. KHU VỰC NỘI DUNG CHÍNH (ĐƯA SỐ LIỆU LÊN TRÊN CÙNG) */}
-      <main className="w-full max-w-5xl min-w-0 mx-auto px-3 sm:px-4 pt-3 space-y-3.5">
+      <main className="attendance-main w-full max-w-5xl min-w-0 mx-auto px-3 sm:px-4 pt-3 space-y-3.5">
         {/* Banner thông báo khi báo cáo bị khóa */}
         {isLocked && (
           <div className="p-2.5 rounded-xl bg-slate-100 border border-slate-300 flex items-center gap-2.5 text-xs text-slate-700">
@@ -1766,7 +1771,11 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
         )}
 
       {/* Main Indicators Form Cards - PHÂN BIỆT MÀU SẮC RÕ RÀNG TỪNG KHU VỰC */}
-      <div className="space-y-4 mb-5">
+      <section className="attendance-guide" aria-label="Hướng dẫn báo cáo">
+        <div><p className="attendance-kicker">BÁO CÁO HẰNG NGÀY</p><h1>Điểm danh lớp {selectedClass?.class_name || '…'}</h1><p>Kiểm tra ngày, đối chiếu sĩ số và ghi đủ lý do vắng trước khi gửi.</p></div>
+        <nav aria-label="Các bước báo cáo"><button type="button" onClick={() => document.getElementById('attendance-counts')?.scrollIntoView({ block: 'start' })}>1. Sĩ số</button><button type="button" onClick={() => document.getElementById('attendance-absences')?.scrollIntoView({ block: 'start' })}>2. Học sinh vắng</button><button type="button" onClick={() => document.getElementById('attendance-notes')?.scrollIntoView({ block: 'start' })}>3. Ghi chú</button></nav>
+      </section>
+      <div id="attendance-counts" className="attendance-indicators space-y-4 mb-5">
         {enabledIndicators.map((indicator, idx) => {
           const isPrimary = idx === 0;
           const meta = getIndicatorMeta(indicator, isPrimary);
@@ -1806,17 +1815,17 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
             : 'bg-slate-100 text-slate-800 border border-slate-300';
 
           const tagLabel = isPrimary
-            ? '👥 CHỈ TIÊU CHÍNH CẢ LỚP'
+            ? 'TOÀN LỚP'
             : isBoarding
-            ? '🍽️ BÁN TRÚ (ĂN CẢ NGÀY)'
+            ? 'BÁN TRÚ'
             : isNgoaiTru
-            ? '🏡 NGOẠI TRÚ (KHÔNG ĂN BÁN TRÚ)'
+            ? 'NGOẠI TRÚ'
             : 'CHỈ TIÊU BÁO CÁO';
 
           return (
             <div
               key={indicator.id}
-              className={`rounded-2xl transition-all ${cardThemeClass} p-3.5 sm:p-5 relative overflow-hidden`}
+              className={`attendance-indicator rounded-2xl transition-all ${cardThemeClass} p-3.5 sm:p-5 relative overflow-hidden`}
             >
               {/* Top Accent Strip */}
               <div
@@ -1855,7 +1864,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                 {/* Quick Percentage Progress */}
                 {totalNum > 0 && (
                   <div className="flex items-center gap-1.5 self-start sm:self-auto bg-white px-3 py-1.5 rounded-xl border border-slate-200 shadow-2xs">
-                    <span className="text-[11px] font-bold text-slate-500">Tỷ lệ duy trì:</span>
+                    <span className="text-[11px] font-bold text-slate-500">Có mặt / sĩ số:</span>
                     <span
                       className={`text-xs sm:text-sm font-black ${
                         presentRate >= 95
@@ -1872,7 +1881,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
               </div>
 
               {/* Number Inputs Grid - 3 Columns: Sĩ số (Tổng), Có mặt, Vắng */}
-              <div className="grid grid-cols-3 gap-2 sm:gap-3.5">
+              <div className="attendance-counts grid grid-cols-3 gap-2 sm:gap-3.5">
                 {/* 1. Tổng số (Sĩ số) */}
                 <div className="bg-slate-50/90 p-2.5 sm:p-3 rounded-xl border border-slate-200 flex flex-col shadow-2xs">
                   <div className="flex items-center justify-between h-5 sm:h-6 mb-1.5">
@@ -1894,6 +1903,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                     spellCheck={false}
                     disabled={isLocked}
                     placeholder="0"
+                    aria-label={`${indicator.name} · Sĩ số`}
                     value={vals.total === '' ? '' : vals.total}
                     onFocus={() => {
                       if (vals.total === 0) {
@@ -1943,6 +1953,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                     spellCheck={false}
                     disabled={isLocked || inputMode === 'MODE_2_TOTAL_ABSENT'}
                     placeholder="0"
+                    aria-label={`${indicator.name} · Có mặt`}
                     value={vals.present === '' ? '' : vals.present}
                     onFocus={() => {
                       if (vals.present === 0) {
@@ -1994,6 +2005,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                     spellCheck={false}
                     disabled={isLocked || inputMode === 'MODE_1_TOTAL_PRESENT'}
                     placeholder="0"
+                    aria-label={`${indicator.name} · Vắng`}
                     value={vals.absent === '' ? '' : vals.absent}
                     onFocus={() => {
                       if (vals.absent === 0) {
@@ -2174,7 +2186,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
       })()}
 
       {/* Absent Students Card - MÀU ĐỎ HỒNG ROSE RÕ NÉT */}
-      <div className="bg-white rounded-2xl border-2 border-rose-200 shadow-xs p-4 sm:p-6 mb-5">
+      <div id="attendance-absences" className="attendance-absences bg-white rounded-2xl border-2 border-rose-200 shadow-xs p-4 sm:p-6 mb-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 pb-3 border-b border-rose-100">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-rose-500 to-red-600 text-white flex items-center justify-center font-bold text-sm shadow-xs">
@@ -2263,8 +2275,12 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                 ({availableStudentsForAbsent.length}/{classStudents.length} em chưa chọn)
               </span>
             </div>
-            <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto pr-1">
-              {classStudents.map((st) => {
+            <label className="student-search">
+              <span>Tìm học sinh trong lớp</span>
+              <input type="search" value={studentSearch} onChange={e => setStudentSearch(e.target.value)} placeholder="Nhập tên học sinh…" autoComplete="off" />
+            </label>
+            <div className="attendance-roster flex flex-wrap gap-1.5 max-h-36 overflow-y-auto pr-1">
+              {classStudents.filter(st => normalizeStudentSearch(st.full_name || '').includes(normalizeStudentSearch(studentSearch).trim())).map((st) => {
                 const normName = (st.full_name || '').trim().toLowerCase();
                 const sameNameStudents = classStudents.filter(
                   (s) => (s.full_name || '').trim().toLowerCase() === normName
@@ -2320,6 +2336,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                 );
               })}
             </div>
+            {studentSearch.trim() && !classStudents.some(st => normalizeStudentSearch(st.full_name || '').includes(normalizeStudentSearch(studentSearch).trim())) && <p role="status" className="mt-3 text-sm text-slate-600">Không tìm thấy học sinh. Thử tìm bằng tên ngắn hơn.</p>}
           </div>
         )}
 
@@ -2568,6 +2585,8 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
           disabled={isLocked}
           value={notes}
           onChange={(e) => { markEdited(); setNotes(e.target.value); }}
+          id="attendance-notes"
+          aria-label="Ghi chú báo cáo sĩ số"
           placeholder="Ghi chú thêm về tình hình lớp, học sinh đi viện, hoàn cảnh đặc biệt..."
           className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all placeholder:text-slate-400"
         />
@@ -2606,7 +2625,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
       </main>
 
       {/* 4. Sticky Footer Action (Cố định nút Gửi báo cáo ở đáy màn hình di động) */}
-      <div className="fixed bottom-0 left-0 right-0 w-full max-w-full box-border overflow-hidden bg-white border-t border-slate-200 px-3 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] sm:p-4 shadow-lg z-40">
+      <div className="attendance-savebar fixed bottom-0 left-0 right-0 w-full max-w-full box-border overflow-hidden bg-white border-t border-slate-200 px-3 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] sm:p-4 shadow-lg z-40">
         <div className="w-full max-w-5xl min-w-0 mx-auto flex flex-col gap-2">
           {/* Validation Error Notice if invalid */}
           {!isLocked && !isValid && validationResult.error && (
@@ -2623,9 +2642,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
               {isLocked ? (
                 <strong className="text-slate-600 font-bold">Đã khóa sổ</strong>
               ) : existingReport ? (
-                <strong className="text-emerald-700 font-bold">
-                  Đã nộp ({existingReport.reported_time || formatDateVN(existingReport.updated_at.split('T')[0])})
-                </strong>
+                <strong className={dirty ? "text-amber-800 font-bold" : "text-emerald-700 font-bold"}>{dirty ? "Có thay đổi chưa lưu" : `Đã nộp (${existingReport.reported_time || formatDateVN(existingReport.updated_at.split('T')[0])})`}</strong>
               ) : (
                 <strong className="text-amber-600 font-bold">Chưa nộp báo cáo</strong>
               )}
@@ -2641,7 +2658,7 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
                 title="Bấm nếu trước đó báo nhầm để đưa về trạng thái chưa báo"
               >
                 <RotateCcw className="w-3.5 h-3.5 text-rose-600 stroke-[2.5]" />
-                <span className="hidden xs:inline">Reset nhầm</span>
+                <span className="hidden xs:inline">Báo nhầm</span>
               </button>
             )}
 
