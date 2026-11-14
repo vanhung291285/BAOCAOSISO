@@ -11,6 +11,9 @@
 - Trợ lý hội thoại dùng số liệu xác nhận; không gọi dịch vụ AI bên ngoài cho danh sách học sinh. Câu hỏi vượt kỳ dữ liệu được báo thiếu dữ liệu.
 - Không dùng mẫu 35 học sinh, 240 bán trú hoặc 100% để thay thế dữ liệu thiếu trong trợ lý hội thoại mới.
 
+- Tải các màn hình theo nhu cầu, tách thư viện xuất Excel khỏi luồng dữ liệu khởi động.
+- Báo cáo không đoán tên GVCN từ tên lớp; thiếu cấu hình thì hiển thị Chưa phân công.
+
 ## SQL
 migrations/20261114_atomic_attendance.sql là migration bổ sung. Không chạy lại toàn bộ supabase_schema.sql trên cơ sở dữ liệu đang dùng.
 Migration đã áp dụng tại dự án BAOCAOSISO (edgtwioobiqzhajsmkqy) ngày 14/11/2026.

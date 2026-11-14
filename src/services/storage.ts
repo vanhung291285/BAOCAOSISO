@@ -50,7 +50,7 @@ import {
   formatDateVN,
   formatDayMonthVN,
 } from '../utils/schoolWeeks';
-import { resolveTeacherName, DEFAULT_CLASS_TEACHER_MAP } from '../utils/exportAttendanceStandardExcel';
+import { resolveTeacherName, DEFAULT_CLASS_TEACHER_MAP } from '../utils/teacherNames';
 import {
   resolveStudentGender,
   inferGenderFromName,
