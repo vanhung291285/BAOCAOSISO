@@ -31,7 +31,7 @@ export const GVCNUnreportedAlertBanner: React.FC<GVCNUnreportedAlertBannerProps>
   currentPath,
 }) => {
   const { currentUser, isGVCN } = useAuth();
-  const { classes } = useSchool();
+  const { classes, settings, indicators } = useSchool();
   const {
     urgentAttendanceReminder,
     markAsRead,
@@ -50,36 +50,44 @@ export const GVCNUnreportedAlertBanner: React.FC<GVCNUnreportedAlertBannerProps>
     todayReminders: number;
     totalReminders: number;
     unreportedDays: number;
-  }>({ todayReminders: 1, totalReminders: 1, unreportedDays: 1 });
+  }>({ todayReminders: 0, totalReminders: 0, unreportedDays: 0 });
 
+  const [requiresReport,setRequiresReport] = useState(false);
   const assignedClass = classes.find((c) => c.id === currentUser?.assigned_class_id);
 
-  // Kiểm tra trạng thái đã nộp báo cáo sĩ số của lớp hôm nay
+  // Never infer a missing report from a stale local cache or a network error.
   useEffect(() => {
-    if (assignedClass) {
-      const todayStr = getTodayDateStr();
-      const checkReport = () => {
-        const local = StorageService.getLocalDailyReport(assignedClass.id, todayStr);
-        if (local.report && (local.report.status === 'SUBMITTED' || local.report.status === 'LOCKED')) {
-          setHasReportedToday(true);
-        } else {
-          setHasReportedToday(false);
-        }
-      };
-      checkReport();
-      const unsub = subscribeRealtime(checkReport);
-      return unsub;
-    }
-  }, [assignedClass]);
+    let active=true;
+    let request=0;
+    if(!assignedClass) return;
+    const today=getTodayDateStr();
+    const weekday=new Date(`${today}T12:00:00+07:00`).getUTCDay();
+    const check=async()=>{
+      const id=++request;
+      setHasReportedToday(null);
+      try {
+        const [result,offDays]=await Promise.all([StorageService.getDailyReport(assignedClass.id,today),StorageService.getOffDays()]);
+        if(!active||id!==request)return;
+        const off=offDays.some(d=>d.date===today&&(!d.applies_to||d.applies_to==='ALL'||d.applies_to===assignedClass.campus_id));
+        setRequiresReport(!off&&weekday!==0&&(weekday!==6||settings?.allow_gvcn_report_saturday===true));
+        const mainIds=new Set(indicators.filter(i=>i.code==='ALL').map(i=>i.id));
+        const main=result.values.find(v=>mainIds.has(v.indicator_group_id));
+        setHasReportedToday(!!result.report&&['SUBMITTED','LOCKED'].includes(result.report.status)&&!!main&&main.total_count>0&&main.present_count+main.absent_count===main.total_count);
+      } catch {if(active&&id===request){setHasReportedToday(null);setRequiresReport(false);}}
+    };
+    void check();
+    const unsubscribe=subscribeRealtime(event=>{if(['daily_reports','school_off_days','all'].includes(event.table))void check();});
+    return()=>{active=false;unsubscribe();};
+  },[assignedClass,settings?.allow_gvcn_report_saturday,indicators]);
 
   useEffect(() => {
     if (assignedClass) {
       StorageService.getClassUnreportedStats(assignedClass.id, currentUser?.id)
         .then((res) => {
           setUnreportedStats({
-            todayReminders: Math.max(1, res.todayReminders),
-            totalReminders: Math.max(1, res.totalReminders),
-            unreportedDays: Math.max(1, res.unreportedDays),
+            todayReminders: res.todayReminders,
+            totalReminders: res.totalReminders,
+            unreportedDays: res.unreportedDays,
           });
         })
         .catch(console.error);
@@ -87,7 +95,7 @@ export const GVCNUnreportedAlertBanner: React.FC<GVCNUnreportedAlertBannerProps>
   }, [assignedClass, currentUser]);
 
   // Nếu không phải GVCN hoặc không có lớp hoặc đã nộp báo cáo hôm nay hoặc đã tạm ẩn -> không hiển thị
-  if (!isGVCN || !assignedClass || hasReportedToday === true || dismissed) {
+  if (!isGVCN || !assignedClass || hasReportedToday !== false || !requiresReport || settings?.enable_auto_reminder === false || dismissed) {
     return null;
   }
 

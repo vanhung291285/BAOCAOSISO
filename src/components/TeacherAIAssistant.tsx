@@ -144,7 +144,7 @@ export const TeacherAIAssistant: React.FC<TeacherAIAssistantProps> = ({
     {
       id: 'welcome',
       sender: 'ai',
-      text: `Xin chào ${currentUser?.full_name ? `Thầy/Cô ${currentUser.full_name}` : 'quý Thầy/Cô và Ban Giám Hiệu'}! 👋\n\nTôi là **Trợ lý ảo AI do Thầy Vũ Văn Hùng trực tiếp phát triển** để đồng hành, hỗ trợ Giáo viên Chủ nhiệm (GVCN) và Ban Giám Hiệu (BGH) Trường PTDTBT THCS Xa Dung 24/7.\n\nThầy/Cô có thể hỏi đáp nhanh về **tra cứu học sinh, danh sách lớp, GVCN phụ trách, học sinh vắng hôm nay, quy chế hạn chót nộp báo cáo (trước 07h30 sáng), quy chế chấm ăn bán trú, đồng bộ Supabase Cloud** hoặc tra cứu tức thì số liệu toàn trường bằng bàn phím hoặc giọng nói!`,
+      text: `Xin chào ${currentUser?.full_name || 'Thầy/Cô'}! Tôi hỗ trợ tra cứu sĩ số, lớp chưa báo, học sinh vắng, kiểm tra chênh lệch và giải thích quy trình báo cáo trong phạm vi được giao. Câu trả lời số liệu có ngày và thời điểm đối chiếu máy chủ. Thầy/Cô có thể mở Trợ lý dữ liệu để chọn ngày và xem căn cứ.`,
       timestamp: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
       suggestedQuestions: [
         'Hôm nay có học sinh nào vắng không?',

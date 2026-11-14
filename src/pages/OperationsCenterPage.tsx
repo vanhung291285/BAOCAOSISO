@@ -3,7 +3,7 @@ import {useSchool} from '../contexts/SchoolContext';
 import {useAuth} from '../contexts/AuthContext';
 import {loadOperationsData} from '../services/operationsData';
 import {buildOperationsSnapshot,operationsBrief,answerOperationsQuestion,type OperationsSnapshot} from '../services/operationsInsights';
-import {getTodayDateStr,formatDateVN} from '../utils/schoolWeeks';
+import {getTodayDateStr,formatDateVN,addDaysToDateStr} from '../utils/schoolWeeks';
 import {matchClassReport} from '../utils/studentUtils';
 import {RefreshCw,Sparkles,ClipboardCheck,ArrowRight,Copy,AlertTriangle,CheckCircle2,Search} from 'lucide-react';
 interface Props {onSelectClass:(classId:string,date:string)=>void;}
@@ -51,7 +51,7 @@ export function OperationsCenterPage({onSelectClass}:Props) {
       <h1 className="text-2xl font-extrabold sm:text-3xl">Nắm tình hình. Kiểm tra đúng. Xử lý kịp thời.</h1>
       <p className="mt-3 max-w-2xl text-sm leading-6 text-blue-100">Sĩ số, lớp chưa báo và các chênh lệch được đối chiếu từ máy chủ. Mỗi kết quả gắn với ngày và phạm vi dữ liệu đang chọn.</p>
       <div className="mt-5 flex flex-wrap items-end gap-3">
-        <label className="text-xs font-bold">Ngày báo cáo<input aria-label="Ngày báo cáo" type="date" value={date} onChange={e=>{if(e.target.value)setDate(e.target.value);}} className="mt-1 block rounded-xl bg-white px-3 py-2.5 text-sm text-slate-900"/></label>
+        <button type="button" aria-label="Ngày trước" onClick={()=>setDate(d=>addDaysToDateStr(d,-1))} className="rounded-xl bg-blue-700 px-3 py-2.5 text-sm font-bold">←</button><label className="text-xs font-bold">Ngày báo cáo<input aria-label="Ngày báo cáo" type="date" value={date} onInput={e=>{if(e.currentTarget.value)setDate(e.currentTarget.value);}} onChange={e=>{if(e.target.value)setDate(e.target.value);}} className="mt-1 block rounded-xl bg-white px-3 py-2.5 text-sm text-slate-900"/></label><button type="button" aria-label="Ngày sau" onClick={()=>setDate(d=>addDaysToDateStr(d,1))} className="rounded-xl bg-blue-700 px-3 py-2.5 text-sm font-bold">→</button>
         {!isGVCN&&<label className="text-xs font-bold">Phân hiệu<select aria-label="Phân hiệu" value={campus} onChange={e=>setCampus(e.target.value)} className="mt-1 block max-w-56 rounded-xl bg-white px-3 py-2.5 text-sm text-slate-900"><option value="all">Tất cả phân hiệu</option>{campuses.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>}
         <label className="text-xs font-bold">Lớp<select aria-label="Lớp" value={classFilter} onChange={e=>setClassFilter(e.target.value)} className="mt-1 block rounded-xl bg-white px-3 py-2.5 text-sm text-slate-900"><option value="all">{isGVCN?'Lớp được giao':'Tất cả lớp'}</option>{visibleClasses.map(c=><option key={c.id} value={c.id}>{c.class_name}</option>)}</select></label>
         <button type="button" disabled={loading} onClick={()=>setRevision(x=>x+1)} className="flex items-center gap-2 rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-bold disabled:opacity-50"><RefreshCw size={16} className={loading?'animate-spin':''}/>Làm mới</button>
@@ -64,7 +64,7 @@ export function OperationsCenterPage({onSelectClass}:Props) {
     {error&&<div role="alert" className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-rose-800">{error} <button type="button" className="ml-2 underline" onClick={()=>setRevision(x=>x+1)}>Thử lại</button></div>}
     {loading&&<div role="status" className="rounded-2xl bg-white p-10 text-center text-slate-600">Đang đối chiếu dữ liệu máy chủ…</div>}
     {snapshot&&!loading&&<>
-      <p className="text-xs text-slate-500">Nguồn: daily_reports, daily_report_values{!warning?' và boarding_reports':''} · Ngày {formatDateVN(snapshot.date)} · {snapshot.rows.length} lớp · Kiểm tra {new Date(snapshot.checkedAt).toLocaleTimeString('vi-VN')} · Năm học {activeYear?.name||'theo cấu hình lớp'}</p>
+      <p className="text-xs text-slate-500">Nguồn: Báo cáo sĩ số{!warning?' và báo ăn':''} đã lưu trên máy chủ · Ngày {formatDateVN(snapshot.date)} · {snapshot.rows.length} lớp · Kiểm tra {new Date(snapshot.checkedAt).toLocaleTimeString('vi-VN',{timeZone:'Asia/Ho_Chi_Minh'})} · Năm học {activeYear?.name||'theo cấu hình lớp'}</p>
       {warning&&<p role="status" className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">{warning}</p>}
       {tab==='overview'&&<>
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">

@@ -1366,8 +1366,8 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
         type: 'success',
       });
 
-      // Đối với GVCN, mở modal xác nhận để có thể thoát ngay về cửa sổ đăng nhập
-      if (isGVCN) {
+      // Keep the form visible if the separate boarding sync needs attention.
+      if (isGVCN && !boardingSyncFailed) {
         setShowPostSubmitModal(true);
       }
 
@@ -2327,9 +2327,9 @@ export const AttendanceInputPage: React.FC<AttendanceInputPageProps> = ({
         {absentStudents.length === 0 ? (
           <div className="text-center py-8 px-4 rounded-xl border-2 border-dashed border-emerald-200 bg-emerald-50/30">
             <UserCheck className="w-10 h-10 text-emerald-600 mx-auto mb-2" />
-            <h3 className="text-sm font-black text-emerald-900">Hôm nay lớp đi học đầy đủ 100%</h3>
+            <h3 className="text-sm font-black text-emerald-900">{existingReport && !dirty ? 'Báo cáo đã lưu: danh sách vắng đang trống' : 'Chưa chọn học sinh vắng'}</h3>
             <p className="text-xs text-emerald-700 mt-1 max-w-sm mx-auto">
-              Không có học sinh nào vắng mặt. Khi nhập số vắng ở các khung trên hoặc bấm "Thêm học sinh vắng", danh sách sẽ tự động mở để thầy/cô điền tên và lý do.
+              Danh sách trống chưa xác nhận lớp đi học đủ. Kiểm tra sĩ số, nhập học sinh vắng và lý do rồi gửi để máy chủ xác nhận.
             </p>
           </div>
         ) : (
