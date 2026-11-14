@@ -1,0 +1,7 @@
+BO BIEU TUONG BAOCAOSISO - iPhone / Android / Website
+
+Chep 6 tep anh vao thu muc public/ cua du an BAOCAOSISO, ghi de cac tep cung ten.
+Khong thay dev-sw.js: day la service worker, khong phai tep bieu tuong.
+Kiem tra index.html co link favicon.ico va apple-touch-icon.png; manifest PWA phai tro den pwa-192x192.png, pwa-512x512.png va maskable neu co.
+Commit len GitHub, cho Vercel deploy, xoa loi tat PWA cu va them lai tren dien thoai.
+Luu y: icon.svg la SVG tu chua anh PNG, de giu dung hinh da chon.
