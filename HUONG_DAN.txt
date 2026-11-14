@@ -1,0 +1,1 @@
+Thay 6 tep o thu muc goc VA 6 tep trong public/ bang cac tep tuong ung. Khong thay file nao khac.
