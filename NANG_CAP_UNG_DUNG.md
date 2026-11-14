@@ -16,9 +16,9 @@
 
 ## SQL
 migrations/20261114_atomic_attendance.sql là migration bổ sung. Không chạy lại toàn bộ supabase_schema.sql trên cơ sở dữ liệu đang dùng.
-Migration đã áp dụng tại dự án BAOCAOSISO (edgtwioobiqzhajsmkqy) ngày 14/11/2026.
+Migration đã áp dụng tại dự án được người dùng chọn.
 Đã chạy thử RPC với vai trò anon trong giao dịch ROLLBACK: lưu, giữ khóa chính, gửi lại cùng mã lần gửi và từ chối phiên bản cũ.
-Sau migration và kiểm thử: 43 lớp, 1.692 học sinh, 1.953 báo cáo, 5.326 dòng chỉ tiêu; không lưu bản ghi kiểm thử.
+Đã đối chiếu số lượng dữ liệu trước/sau; không lưu bản ghi kiểm thử.
 
 ## Cách dùng
 1. Mở Tổng quan → Trợ lý dữ liệu, hoặc chọn mục Trợ lý dữ liệu & đối chiếu ở menu.
