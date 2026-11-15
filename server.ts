@@ -1,3 +1,4 @@
+import staffChatHandler from './api/staff-chat';
 import studentRemarksHandler from './api/ai/student-periodic-remarks';
 import classReportHandler from './api/ai/class-report-summary';
 import individualAssessmentHandler from './api/ai/individual-assessment';
@@ -862,6 +863,7 @@ app.post('/api/ai/individual-assessment', individualAssessmentHandler);
  * Endpoint 3: Natural Language AI Assistant (Chatbot & Voice Commands)
  */
 app.post('/api/ai/chat-assistant', chatAssistantHandler);
+app.post('/api/staff-chat', staffChatHandler);
 
 /**
  * Endpoint 4: AI Boarding Meal Optimizer & 7-Day Forecast

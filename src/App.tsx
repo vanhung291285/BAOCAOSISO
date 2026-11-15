@@ -25,6 +25,7 @@ const ProfilePage = lazy(() => import('./pages/ProfilePage').then(m => ({default
 const BoardingManagementPage = lazy(() => import('./pages/BoardingManagementPage').then(m => ({default:m.BoardingManagementPage})));
 const AIPredictiveDropoutPage = lazy(() => import('./pages/AIPredictiveDropoutPage').then(m => ({default:m.AIPredictiveDropoutPage})));
 const AITeacherAssistantPage = lazy(() => import('./pages/AITeacherAssistantPage').then(m => ({default:m.AITeacherAssistantPage})));
+import { StaffChat } from './components/StaffChat';
 import { TeacherAIAssistant } from './components/TeacherAIAssistant';
 import { AIAssistantModal } from './components/AIAssistantModal';
 import {
@@ -399,6 +400,7 @@ const AppContent: React.FC = () => {
             <button type="button" onClick={()=>{setShowAIGreeting(false);setIsAIAssistantOpen(true);}} className="mt-3 rounded-xl bg-blue-50 px-3 py-2 font-bold text-blue-800">Trò chuyện với trợ lý →</button>
           </aside>}
           {!isAIAssistantOpen && <button type="button" aria-label="Mở hộp chat trợ lý AI" aria-expanded={isAIAssistantOpen} onClick={()=>setIsAIAssistantOpen(true)} className="fixed bottom-[calc(5rem+env(safe-area-inset-bottom))] md:bottom-5 right-4 z-40 flex items-center gap-2 rounded-full bg-gradient-to-r from-blue-700 to-indigo-700 px-4 py-3 text-sm font-bold text-white shadow-xl ring-2 ring-white hover:from-blue-800 hover:to-indigo-800"><Sparkles className="h-5 w-5"/><span>Hỏi trợ lý AI</span></button>}
+          <StaffChat hidden={isAIAssistantOpen} onOpen={()=>{setShowAIGreeting(false);setIsAIAssistantOpen(false);}}/>
           {/* Global Teacher AI Assistant (Thầy Vũ Văn Hùng) */}
           <TeacherAIAssistant
             isOpen={isAIAssistantOpen}
