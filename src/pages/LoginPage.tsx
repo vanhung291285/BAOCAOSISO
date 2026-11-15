@@ -576,12 +576,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                    ======================================================== */}
                 <div>
                   <p className="login-field-label">{activeTab === 'GVCN' ? 'Lớp phụ trách' : 'Tài khoản'}</p>
-                  <div className="relative flex items-center border border-slate-200 hover:border-slate-300 focus-within:border-[#00897b] focus-within:ring-2 focus-within:ring-[#00897b]/15 rounded-xl px-3 h-12 bg-slate-50/60 focus-within:bg-white transition-all shadow-2xs">
+                  <div className="login-field relative flex items-center border border-slate-200 hover:border-slate-300 focus-within:border-[#00897b] focus-within:ring-2 focus-within:ring-[#00897b]/15 rounded-xl px-3 h-12 bg-slate-50/60 focus-within:bg-white transition-all shadow-2xs">
                     <User className="w-4 h-4 text-slate-400 shrink-0 mr-2.5" />
 
                     {activeTab === 'GVCN' ? (
                       /* GVCN: TÊN LỚP (Mặc định: "Chọn tên lớp") */
-                      <div className="relative flex-1">
+                      <div className="login-class-control relative flex-1 min-w-0 h-full">
                         <select
                           id="login-class-select"
                           aria-label="Lớp phụ trách"
@@ -682,7 +682,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                     </div>
                   ) : (
                     /* ADMIN: MẬT KHẨU */
-                    <div className="relative flex items-center border border-slate-200 hover:border-slate-300 focus-within:border-[#00897b] focus-within:ring-2 focus-within:ring-[#00897b]/15 rounded-xl px-3 h-12 bg-slate-50/60 focus-within:bg-white transition-all shadow-2xs">
+                    <div className="login-field relative flex items-center border border-slate-200 hover:border-slate-300 focus-within:border-[#00897b] focus-within:ring-2 focus-within:ring-[#00897b]/15 rounded-xl px-3 h-12 bg-slate-50/60 focus-within:bg-white transition-all shadow-2xs">
                       <Lock className="w-4 h-4 text-slate-400 shrink-0 mr-2.5" />
                       <input
                         id="login-admin-password"
