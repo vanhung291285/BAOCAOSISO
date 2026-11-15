@@ -368,7 +368,7 @@ export const AIPredictiveDropoutPage: React.FC<AIPredictiveDropoutPageProps> = (
               </span>
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-white/10 text-white border border-white/20 backdrop-blur-md">
                 <Brain className="w-3.5 h-3.5 text-indigo-300" />
-                Mô hình: Gemini 3.8 Flash
+                Mô hình: Gemini 3.1 Flash Lite
               </span>
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
                 <Calendar className="w-3.5 h-3.5" />
@@ -838,7 +838,7 @@ export const AIPredictiveDropoutPage: React.FC<AIPredictiveDropoutPageProps> = (
                 <span>BÁO CÁO CHIẾN LƯỢC AI DỰ BÁO TOÀN TRƯỜNG</span>
               </h2>
               <p className="text-xs text-slate-500 mt-0.5">
-                Được tổng hợp và phân tích chuyên sâu bởi mô hình Gemini 3.8 Flash dựa trên toàn bộ dữ liệu chuyên cần trường PTDTBT THCS Xa Dung
+                Được tổng hợp và phân tích chuyên sâu bởi mô hình Gemini 3.1 Flash Lite dựa trên toàn bộ dữ liệu chuyên cần trường PTDTBT THCS Xa Dung
               </p>
             </div>
 
@@ -856,7 +856,7 @@ export const AIPredictiveDropoutPage: React.FC<AIPredictiveDropoutPageProps> = (
           {isGeneratingSchoolReport ? (
             <div className="bg-white rounded-2xl p-12 text-center border border-slate-200 shadow-xs">
               <Brain className="w-10 h-10 text-indigo-600 animate-bounce mx-auto mb-3" />
-              <div className="text-sm font-bold text-slate-900">Gemini 3.8 Flash đang phân tích dữ liệu chuyên cần toàn trường...</div>
+              <div className="text-sm font-bold text-slate-900">Gemini 3.1 Flash Lite đang phân tích dữ liệu chuyên cần toàn trường...</div>
               <div className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
                 Hệ thống đang xâu chuỗi dữ liệu vắng của {students.length} học sinh qua các ngày học, đối chiếu đặc thù bản làng và mùa vụ vùng cao Điện Biên.
               </div>
@@ -1000,7 +1000,7 @@ export const AIPredictiveDropoutPage: React.FC<AIPredictiveDropoutPageProps> = (
               <Brain className="w-12 h-12 text-slate-300 mx-auto" />
               <div className="text-sm font-bold text-slate-800">Chưa có báo cáo chiến lược AI cho toàn trường</div>
               <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                Nhấp vào nút bên dưới để mô hình Gemini 3.8 Flash tổng hợp dữ liệu chuyên cần và đưa ra khuyến nghị chiến lược.
+                Nhấp vào nút bên dưới để mô hình Gemini 3.1 Flash Lite tổng hợp dữ liệu chuyên cần và đưa ra khuyến nghị chiến lược.
               </p>
               <button
                 type="button"
@@ -1156,7 +1156,7 @@ export const AIPredictiveDropoutPage: React.FC<AIPredictiveDropoutPageProps> = (
               {isGeneratingAIPlan ? (
                 <div className="py-12 text-center space-y-3">
                   <Brain className="w-10 h-10 text-indigo-600 animate-spin mx-auto" />
-                  <div className="font-bold text-slate-800">Gemini 3.8 Flash đang xây dựng kế hoạch cá nhân hóa...</div>
+                  <div className="font-bold text-slate-800">Gemini 3.1 Flash Lite đang xây dựng kế hoạch cá nhân hóa...</div>
                   <p className="text-xs text-slate-400 max-w-md mx-auto">
                     Mô hình đang phân tích các lý do vắng gần nhất, yếu tố gia đình bản {selectedStudentForAI.student.address || selectedStudentForAI.student.village} để gợi ý kịch bản vận động khéo léo nhất.
                   </p>
@@ -1186,7 +1186,7 @@ export const AIPredictiveDropoutPage: React.FC<AIPredictiveDropoutPageProps> = (
                         PHÂN TÍCH NGUYÊN NHÂN GỐC RỄ
                       </span>
                       <span className="text-xs font-black px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-300">
-                        Xác suất bỏ học: {aiIndividualPlan.dropoutProbability}%
+                        Xác suất bỏ học: chưa có mô hình kiểm định
                       </span>
                     </div>
                     <p className="text-xs sm:text-sm text-slate-800 leading-relaxed font-medium">

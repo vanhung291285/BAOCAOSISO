@@ -1,0 +1,4 @@
+import { structuredHandler } from '../../server/ai/structured';
+export default structuredHandler(b=>typeof b.student?.full_name==='string'&&b.absenceHistory&&Array.isArray(b.absenceHistory.recentAbsences)&&typeof b.riskScore==='number',{
+ studentName:'Tên học sinh',riskLevel:'Mức cảnh báo cần giáo viên xác minh',dropoutProbability:null,rootCauseAnalysis:'Chỉ nêu nguyên nhân được ghi nhận; giả thuyết phải ghi cần xác minh',warningSignals:['Dấu hiệu từ dữ liệu'],interventionRoadmap:[{step:1,phase:'Đề xuất',actor:'Người phụ trách',action:'Hành động đề xuất'}],familyDialogueScript:{recommendedApproaches:['Gợi ý trao đổi tôn trọng'],avoidTopics:['Tránh quy kết'],sampleOpening:'Lời mở đầu đề xuất'},officialActionForm:{proposedAction:'Đề xuất',priority:'Ưu tiên theo dữ liệu',notesForTeacher:'Giáo viên kiểm tra trước khi sử dụng'}
+},(d,b)=>({...d,studentName:b.student.full_name,dropoutProbability:null}));

@@ -50,7 +50,7 @@ interface StudentRemarkItem {
   category: 'EXCELLENT' | 'GOOD' | 'NEEDS_IMPROVEMENT' | 'SPECIAL_ATTENTION';
   categoryLabel: string;
   remarkText: string;
-  conductSuggestion: 'Tốt' | 'Khá' | 'Đạt';
+  conductSuggestion: 'Tốt' | 'Khá' | 'Đạt' | 'Chưa đánh giá';
   strengths: string;
   notesForParent: string;
 }
@@ -148,6 +148,7 @@ export const AITeacherAssistantPage: React.FC<AITeacherAssistantPageProps> = ({
   });
 
   // Loaded Class Data State
+  const [aiError, setAiError] = useState('');
   const [loadingStats, setLoadingStats] = useState(false);
   const [classStudents, setClassStudents] = useState<Student[]>([]);
   const [attendanceData, setAttendanceData] = useState<{
@@ -157,10 +158,10 @@ export const AITeacherAssistantPage: React.FC<AITeacherAssistantPageProps> = ({
     presentRate: number;
     dayByDay: Array<{ date: string; dayLabel: string; present: number; absent: number; rate: number }>;
   }>({
-    totalStudents: 35,
-    avgPresent: 34,
-    avgAbsent: 1,
-    presentRate: 97.1,
+    totalStudents: 0,
+    avgPresent: 0,
+    avgAbsent: 0,
+    presentRate: 0,
     dayByDay: [],
   });
   const [boardingData, setBoardingData] = useState<{
@@ -356,7 +357,7 @@ export const AITeacherAssistantPage: React.FC<AITeacherAssistantPageProps> = ({
       const allValues: DailyReportValue[] = rawValues ? JSON.parse(rawValues) : [];
 
       const classReports = allReports.filter((r) => {
-        if (!r || !r.report_date) return false;
+        if (!r || !r.report_date || !['SUBMITTED','LOCKED'].includes(r.status)) return false;
         const cleanD = String(r.report_date).split('T')[0];
         const matchCls = matchClassReport(r.class_id, currentClass.id, currentClass.class_name);
         return matchCls && cleanD >= startDate && cleanD <= endDate;
@@ -436,7 +437,7 @@ export const AITeacherAssistantPage: React.FC<AITeacherAssistantPageProps> = ({
               studentsOfClass.length,
               (currentClass as any).student_count || 0,
               (currentClass as any).total_students || 0,
-              36
+              0
             );
 
         if (total > maxReportedTotal) {
@@ -447,7 +448,7 @@ export const AITeacherAssistantPage: React.FC<AITeacherAssistantPageProps> = ({
           ? mainVal.absent_count 
           : (Array.isArray(r.absent_students) ? r.absent_students.length : 0);
         const present = Math.max(0, total - absent);
-        const rate = total > 0 ? Math.round((present / total) * 1000) / 10 : 100;
+        const rate = total > 0 ? Math.round((present / total) * 1000) / 10 : 0;
 
         sumTotal += total;
         sumPresent += present;
@@ -490,11 +491,11 @@ export const AITeacherAssistantPage: React.FC<AITeacherAssistantPageProps> = ({
         (currentClass as any).student_count || 0,
         (currentClass as any).total_students || 0,
         classReports.length > 0 ? Math.round(sumTotal / dayCount) : 0,
-        36
+        0
       );
-      const avgPresent = classReports.length > 0 ? Math.round((sumPresent / dayCount) * 10) / 10 : totalStudents;
+      const avgPresent = classReports.length > 0 ? Math.round((sumPresent / dayCount) * 10) / 10 : 0;
       const avgAbsent = classReports.length > 0 ? Math.round((sumAbsent / dayCount) * 10) / 10 : 0;
-      const overallRate = sumTotal > 0 ? Math.round((sumPresent / sumTotal) * 1000) / 10 : 100;
+      const overallRate = sumTotal > 0 ? Math.round((sumPresent / sumTotal) * 1000) / 10 : 0;
 
       setAttendanceData({
         totalStudents,
@@ -533,13 +534,13 @@ export const AITeacherAssistantPage: React.FC<AITeacherAssistantPageProps> = ({
         totDi += br.dinner_count || 0;
       });
 
-      const totalMeals = totBf + totLu + totDi || (bCount > 0 ? bCount * (periodType === 'WEEK' ? 14 : 60) : 0);
+      const totalMeals = totBf + totLu + totDi;
 
       setBoardingData({
         totalBoarding: bCount,
-        totalBreakfast: totBf || Math.round(totalMeals * 0.3),
-        totalLunch: totLu || Math.round(totalMeals * 0.45),
-        totalDinner: totDi || Math.round(totalMeals * 0.25),
+        totalBreakfast: totBf,
+        totalLunch: totLu,
+        totalDinner: totDi,
         totalMeals,
       });
 
@@ -551,7 +552,7 @@ export const AITeacherAssistantPage: React.FC<AITeacherAssistantPageProps> = ({
           studentName: name,
           absentCount: val.absentCount,
           reasons: Array.from(val.reasons),
-          address: val.address || stdMatch?.address || stdMatch?.village || 'Bản vùng cao',
+          address: val.address || stdMatch?.address || stdMatch?.village || 'Chưa có dữ liệu',
           isBoarding: stdMatch?.isBoarding || stdMatch?.is_boarding || val.isBoarding,
         });
       });
@@ -569,11 +570,15 @@ export const AITeacherAssistantPage: React.FC<AITeacherAssistantPageProps> = ({
     loadClassData();
   }, [loadClassData]);
 
-  // Generate Report via AI Service (supports both Server API and Vercel Static Fallback)
+  // Generate Report via AI Service (server API)
   const handleGenerateAIReport = async () => {
+    setAiError('');
+    setGeneratedReport(null);
+    setEditableDocText('');
     setIsGeneratingReport(true);
     setCopiedReport(false);
     try {
+      if (!attendanceData.dayByDay.length) throw new Error('Chưa có báo cáo sĩ số đã gửi trong kỳ đã chọn. Vui lòng kiểm tra dữ liệu trước khi tạo báo cáo.');
       const data = await aiTeacherAssistantService.generateClassReport({
         className: currentClass.class_name,
         teacherName,
@@ -592,45 +597,31 @@ export const AITeacherAssistantPage: React.FC<AITeacherAssistantPageProps> = ({
         setEditableDocText(data.fullDocumentText || '');
       }
     } catch (err) {
-      console.error('Failed to generate AI report:', err);
+      setAiError(err instanceof Error ? err.message : 'Chưa tạo được báo cáo AI.');
     } finally {
       setIsGeneratingReport(false);
     }
   };
 
-  // Generate Student Remarks via AI Service (supports both Server API and Vercel Static Fallback)
+  // Generate Student Remarks via AI Service (server API)
   const handleGenerateStudentRemarks = async () => {
+    setAiError('');
+    setStudentRemarks([]);
     setIsGeneratingRemarks(true);
     setCopiedAllRemarks(false);
     try {
-      const targetCount = Math.max(classStudents.length, attendanceData.totalStudents, (currentClass as any).student_count || 0, 36);
-      const effectiveStudents = [...classStudents];
-      if (effectiveStudents.length < targetCount) {
-        const missingCount = targetCount - effectiveStudents.length;
-        for (let i = 1; i <= missingCount; i++) {
-          const idx = effectiveStudents.length + 1;
-          effectiveStudents.push({
-            id: `std_auto_${currentClass.id}_${idx}`,
-            class_id: currentClass.id,
-            full_name: `Học sinh ${idx}`,
-            gender: idx % 2 === 0 ? 'Nữ' : 'Nam',
-            address: 'Bản Xa Dung',
-            isBoarding: true,
-            created_at: new Date().toISOString(),
-          });
-        }
-      }
-
+      if (!classStudents.length || !attendanceData.dayByDay.length) throw new Error('Chưa có danh sách học sinh hoặc báo cáo đã gửi trong kỳ đã chọn.');
+      const effectiveStudents = classStudents;
       const studentsToEvaluate = effectiveStudents.map((s) => {
         const absentMatch = absentStudentsList.find((a) => a.studentName.toLowerCase() === s.full_name.toLowerCase());
         return {
           id: s.id,
           full_name: s.full_name,
           gender: s.gender,
-          address: s.address || s.village || 'Bản Xa Dung',
+          address: s.address || s.village || '',
           isBoarding: Boolean(s.isBoarding || s.is_boarding),
           absentCount: absentMatch?.absentCount || 0,
-          consecutiveAbsences: 0,
+
           absentReasons: absentMatch?.reasons || [],
         };
       });
@@ -645,7 +636,7 @@ export const AITeacherAssistantPage: React.FC<AITeacherAssistantPageProps> = ({
         setStudentRemarks(data.remarks);
       }
     } catch (err) {
-      console.error('Failed to generate student remarks:', err);
+      setAiError(err instanceof Error ? err.message : 'Chưa tạo được nhận xét AI.');
     } finally {
       setIsGeneratingRemarks(false);
     }
@@ -769,6 +760,7 @@ export const AITeacherAssistantPage: React.FC<AITeacherAssistantPageProps> = ({
 
   return (
     <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+      {aiError && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-red-700">{aiError}</div>}
       {/* Hero Header */}
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-blue-700 via-indigo-700 to-sky-700 text-white p-6 sm:p-8 shadow-lg">
         <div className="absolute -right-8 -bottom-8 opacity-10 pointer-events-none">
@@ -778,7 +770,7 @@ export const AITeacherAssistantPage: React.FC<AITeacherAssistantPageProps> = ({
           <div className="space-y-2 max-w-3xl">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/15 backdrop-blur-md text-xs font-semibold text-sky-100 border border-white/20">
               <Bot className="w-3.5 h-3.5 text-yellow-300 animate-pulse" />
-              <span>Trợ lý AI Chủ nhiệm Sư phạm • Gemini 3.8 Flash</span>
+              <span>Trợ lý AI Chủ nhiệm Sư phạm • Gemini 3.1 Flash Lite</span>
               <span className="bg-yellow-400 text-blue-900 text-[10px] font-extrabold px-1.5 py-0.5 rounded">MỚI</span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-black tracking-tight">

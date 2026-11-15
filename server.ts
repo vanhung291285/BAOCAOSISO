@@ -1,3 +1,7 @@
+import studentRemarksHandler from './api/ai/student-periodic-remarks';
+import classReportHandler from './api/ai/class-report-summary';
+import individualAssessmentHandler from './api/ai/individual-assessment';
+import dropoutPredictionHandler from './api/ai/dropout-prediction';
 import chatAssistantHandler from './api/ai/chat-assistant';
 import express from 'express';
 import { GoogleGenAI } from '@google/genai';
@@ -847,128 +851,12 @@ function generateFallbackMealForecast(
 /**
  * Endpoint 1: General School-wide Dropout Risk Analysis & Forecast
  */
-app.post('/api/ai/dropout-prediction', async (req, res) => {
-  const { schoolName, activeYear, totalStudents, stats, highRiskStudents, recentAbsentRecords } = req.body;
-
-  try {
-    const prompt = `
-Bạn là Chuyên gia AI Cố vấn Giáo dục và Tâm lý học đường chuyên về các trường Phổ thông Dân tộc Bán trú (PTDTBT) vùng cao Tây Bắc Việt Nam (đặc biệt là tỉnh Điện Biên).
-Nhiệm vụ của bạn là phân tích dữ liệu chuyên cần lịch sử của trường "${schoolName || 'Trường PTDTBT THCS Xa Dung'}" (Năm học: ${activeYear || '2026-2027'}) và đưa ra BÁO CÁO DỰ BÁO SỚM NGUY CƠ NGHỈ HỌC / BỎ HỌC (Early Warning & Predictive Report).
-
-Dữ liệu đầu vào:
-- Tổng số học sinh toàn trường: ${totalStudents || 'Chưa rõ'}
-- Thống kê rủi ro:
-  + Số học sinh nguy cơ nghiêm trọng (Critical): ${stats?.criticalCount || 0}
-  + Số học sinh nguy cơ cao (High): ${stats?.highCount || 0}
-  + Số học sinh nguy cơ trung bình (Moderate): ${stats?.moderateCount || 0}
-- Danh sách học sinh có chỉ số rủi ro cao nhất:
-${JSON.stringify(highRiskStudents || [], null, 2)}
-- Các bản làng có số lượt vắng nhiều nhất:
-${JSON.stringify(recentAbsentRecords || [], null, 2)}
-
-Hãy phân tích và trả về định dạng JSON hợp lệ (không kèm markdown ngoài JSON):
-{
-  "summary": "Tóm tắt ngắn gọn tình hình chuyên cần và mức độ rủi ro bỏ học chung của nhà trường",
-  "overallRiskLevel": "LOW" | "MODERATE" | "HIGH" | "CRITICAL",
-  "keyPatterns": [
-    {
-      "patternName": "Tên quy luật",
-      "description": "Mô tả chi tiết",
-      "affectedGroups": "Nhóm bị ảnh hưởng"
-    }
-  ],
-  "topRiskFactors": ["Yếu tố 1", "Yếu tố 2", "Yếu tố 3"],
-  "villageHotspots": [
-    {
-      "villageName": "Tên bản",
-      "riskAssessment": "Đánh giá chi tiết"
-    }
-  ],
-  "recommendationsForBGH": ["Khuyến nghị 1", "Khuyến nghị 2", "Khuyến nghị 3"],
-  "recommendationsForGVCN": ["Khuyến nghị 1", "Khuyến nghị 2", "Khuyến nghị 3"],
-  "fourWeekForecast": "Dự báo sĩ số 4 tuần tới"
-}
-    `.trim();
-
-    const fallback = () => generateFallbackSchoolReport(
-      schoolName || 'Trường PTDTBT THCS Xa Dung',
-      activeYear || '2026-2027',
-      stats,
-      highRiskStudents || []
-    );
-
-    const data = await callGeminiStructuredJson(prompt, fallback, 0.35);
-    res.json({ success: true, data });
-  } catch (err: any) {
-    const fallbackData = generateFallbackSchoolReport(
-      schoolName || 'Trường PTDTBT THCS Xa Dung',
-      activeYear || '2026-2027',
-      stats,
-      highRiskStudents || []
-    );
-    res.json({ success: true, data: fallbackData });
-  }
-});
+app.post('/api/ai/dropout-prediction', dropoutPredictionHandler);
 
 /**
  * Endpoint 2: Individual Student Dropout Risk Assessment & Personalized Intervention Plan
  */
-app.post('/api/ai/individual-assessment', async (req, res) => {
-  const { student, absenceHistory, riskScore, schoolName } = req.body;
-
-  try {
-    const prompt = `
-Bạn là Chuyên gia AI Tâm lý Giáo dục học đường và Công tác Dân vận cơ sở của trường PTDTBT THCS Xa Dung (Điện Biên).
-Hãy phân tích hồ sơ chuyên cần của học sinh sau đây và lập KẾ HOẠCH CAN THIỆP & VẬN ĐỘNG HỌC SINH ĐI HỌC TRỞ LẠI:
-
-Thông tin học sinh:
-- Họ và tên: ${student.full_name}
-- Lớp: ${student.class_name || student.class_id}
-- Bản / Địa chỉ: ${student.address || student.village || 'Vùng cao Xa Dung'}
-- Loại hình: ${student.isBoarding ? 'Học sinh BÁN TRÚ' : 'Học sinh NGOẠI TRÚ'}
-- Giới tính: ${student.gender || 'Chưa rõ'}
-- Điểm rủi ro dự báo hiện tại: ${riskScore || 0}%
-- Tổng số ngày vắng trong tháng: ${absenceHistory?.totalDaysAbsent || 0} ngày
-- Chuỗi vắng liên tiếp gần nhất: ${absenceHistory?.consecutiveAbsences || 0} ngày
-- Lịch sử các ngày vắng và lý do ghi nhận:
-${JSON.stringify(absenceHistory?.recentAbsences || [], null, 2)}
-
-Hãy trả về định dạng JSON hợp lệ:
-{
-  "studentName": "${student.full_name}",
-  "riskLevel": "THẤP" | "TRUNG BÌNH" | "CAO" | "NGHIÊM TRỌNG",
-  "dropoutProbability": number,
-  "rootCauseAnalysis": "Phân tích tâm lý và nguyên nhân tiềm ẩn",
-  "warningSignals": ["Dấu hiệu 1", "Dấu hiệu 2"],
-  "interventionRoadmap": [
-    {
-      "step": 1,
-      "phase": "Giai đoạn",
-      "actor": "Người thực hiện",
-      "action": "Hành động cụ thể"
-    }
-  ],
-  "familyDialogueScript": {
-    "recommendedApproaches": ["Điều nên nói 1", "Điều nên nói 2"],
-    "avoidTopics": ["Điều nên tránh 1", "Điều nên tránh 2"],
-    "sampleOpening": "Câu chào mở đầu"
-  },
-  "officialActionForm": {
-    "proposedAction": "Đề xuất hành động",
-    "priority": "Khẩn cấp (trong ngày)" | "Ưu tiên cao (trong 48h)" | "Theo dõi sát",
-    "notesForTeacher": "Lưu ý cho giáo viên"
-  }
-}
-    `.trim();
-
-    const fallback = () => generateFallbackIndividualPlan(student, absenceHistory, riskScore);
-    const data = await callGeminiStructuredJson(prompt, fallback, 0.35);
-    res.json({ success: true, data });
-  } catch (err: any) {
-    const fallbackData = generateFallbackIndividualPlan(student, absenceHistory, riskScore);
-    res.json({ success: true, data: fallbackData });
-  }
-});
+app.post('/api/ai/individual-assessment', individualAssessmentHandler);
 
 /**
  * Endpoint 3: Natural Language AI Assistant (Chatbot & Voice Commands)
@@ -1251,162 +1139,12 @@ function generateFallbackStudentRemarks(className: string, periodType: string, s
 /**
  * Endpoint 5: AI Teacher Assistant - Class Weekly/Monthly Summary Report Generator
  */
-app.post('/api/ai/class-report-summary', async (req, res) => {
-  const {
-    className,
-    teacherName,
-    schoolName,
-    periodType,
-    periodLabel,
-    attendanceStats,
-    boardingStats,
-    absentDetails,
-    specialNotes,
-    tone,
-  } = req.body;
-
-  try {
-    const prompt = `
-Bạn là Trợ lý AI Cố vấn Quản lý Lớp học và Giáo dục học đường chuyên hỗ trợ Giáo viên Chủ nhiệm (GVCN) tại các trường Phổ thông Dân tộc Bán trú (PTDTBT) Việt Nam (đặc biệt là huyện vùng cao Điện Biên Đông, tỉnh Điện Biên).
-Nhiệm vụ của bạn là tổng hợp toàn bộ số liệu điểm danh, chấm ăn bán trú, học sinh vắng và ghi chú hàng ngày của lớp "${className || '6A11'}" trong "${periodLabel || 'Tuần này'}" thành một BÁO CÁO CÔNG TÁC CHỦ NHIỆM HOÀN CHỈNH, CHUẨN THỂ THỨC HÀNH CHÍNH GIÁO DỤC gửi Ban Giám hiệu nhà trường.
-
-Thông tin lớp và dữ liệu thực tế:
-- Trường: ${schoolName || 'Trường PTDTBT THCS Xa Dung'}
-- Lớp: ${className}
-- GVCN: ${teacherName || 'Giáo viên Chủ nhiệm'}
-- Kỳ báo cáo: ${periodLabel} (${periodType === 'WEEK' ? 'Báo cáo Tuần' : 'Báo cáo Tháng'})
-- Giọng điệu: ${tone || 'Trang trọng, chuẩn mực hành chính sư phạm'}
-
-Thống kê chuyên cần:
-- Sĩ số lớp: ${attendanceStats?.totalStudents || 35} học sinh
-- Có mặt bình quân: ${attendanceStats?.avgPresent || 34} học sinh/ngày
-- Vắng bình quân: ${attendanceStats?.avgAbsent || 1} học sinh/ngày
-- Tỷ lệ chuyên cần bình quân: ${attendanceStats?.presentRate || 97}%
-- Dữ liệu từng ngày: ${JSON.stringify(attendanceStats?.dayByDay || [])}
-
-Thống kê bán trú:
-- Số học sinh bán trú: ${boardingStats?.totalBoarding || 0} em
-- Tổng số suất ăn đã phục vụ: ${boardingStats?.totalMeals || 0} suất (Sáng: ${boardingStats?.totalBreakfast || 0}, Trưa: ${boardingStats?.totalLunch || 0}, Tối: ${boardingStats?.totalDinner || 0})
-
-Học sinh vắng nhiều / cần lưu ý:
-${JSON.stringify(absentDetails || [], null, 2)}
-
-Ghi chú nhật ký trong kỳ của GVCN:
-${JSON.stringify(specialNotes || [], null, 2)}
-
-Hãy phân tích kỹ lưỡng các số liệu trên và trả về định dạng JSON hợp lệ (không kèm markdown ngoài JSON):
-{
-  "reportTitle": "Tiêu đề báo cáo chuẩn",
-  "recipient": "Ban Giám hiệu Trường PTDTBT THCS Xa Dung",
-  "overview": "Đoạn văn tóm tắt tổng quan tình hình lớp trong kỳ báo cáo (ngắn gọn, đủ ý)",
-  "attendanceAnalysis": "Phân tích cụ thể về chuyên cần, số liệu, tỷ lệ %, sự biến động đầu tuần và cuối tuần",
-  "boardingAnalysis": "Đánh giá công tác ăn ở bán trú, nề nếp sinh hoạt phòng ở và vệ sinh an toàn",
-  "specialAttentionCases": [
-    {
-      "studentName": "Họ và tên",
-      "village": "Bản",
-      "absentCount": number,
-      "reasons": "Lý do",
-      "interventionTaken": "Biện pháp GVCN đã thực hiện phối hợp gia đình/trưởng bản"
-    }
-  ],
-  "classStrengths": ["Điểm mạnh 1", "Điểm mạnh 2", "Điểm mạnh 3"],
-  "classChallenges": ["Khó khăn 1", "Khó khăn 2"],
-  "recommendationsToBGH": ["Đề xuất 1", "Đề xuất 2"],
-  "fullDocumentText": "Toàn văn bản báo cáo hoàn chỉnh từ Quốc hiệu, Tiêu ngữ, Kính gửi, các mục I, II, III, IV, V đến Ký tên GVCN để GVCN có thể sao chép trực tiếp vào văn bản gửi BGH."
-}
-    `.trim();
-
-    const fallback = () => generateFallbackClassReport(
-      className || '6A11',
-      teacherName || 'Lò Thị Thắm',
-      schoolName || 'Trường PTDTBT THCS Xa Dung',
-      periodType || 'WEEK',
-      periodLabel || 'Tuần này',
-      attendanceStats,
-      boardingStats,
-      absentDetails || [],
-      specialNotes || [],
-      tone
-    );
-
-    const data = await callGeminiStructuredJson(prompt, fallback, 0.35);
-    res.json({ success: true, data });
-  } catch (err: any) {
-    const fallback = generateFallbackClassReport(
-      className || '6A11',
-      teacherName || 'Lò Thị Thắm',
-      schoolName || 'Trường PTDTBT THCS Xa Dung',
-      periodType || 'WEEK',
-      periodLabel || 'Tuần này',
-      attendanceStats,
-      boardingStats,
-      absentDetails || [],
-      specialNotes || [],
-      tone
-    );
-    res.json({ success: true, data: fallback });
-  }
-});
+app.post('/api/ai/class-report-summary', classReportHandler);
 
 /**
  * Endpoint 6: AI Teacher Assistant - Periodic Pedagogical Student Remarks Generator
  */
-app.post('/api/ai/student-periodic-remarks', async (req, res) => {
-  const { className, periodType, studentsData, classOverallContext } = req.body;
-
-  try {
-    const prompt = `
-Bạn là Chuyên gia AI Tâm lý Sư phạm và Đánh giá Học sinh Trung học Cơ sở theo tinh thần Thông tư 22/2021/TT-BGDĐT của Bộ Giáo dục và Đào tạo Việt Nam.
-Nhiệm vụ của bạn là xem xét dữ liệu chuyên cần, nề nếp bán trú, lịch sử đi học và địa bàn cư trú của từng học sinh lớp "${className || '6A11'}" và tự động viết LỜI NHẬN XÉT ĐỊNH KỲ CHUẨN MỰC SƯ PHẠM (${periodType || 'Định kỳ'}).
-
-Nguyên tắc viết nhận xét sư phạm:
-1. Mang tính nhân văn, khuyến khích sự tiến bộ của học sinh, không dùng từ ngữ xúc phạm hoặc tiêu cực nặng nề.
-2. Với học sinh chuyên cần tốt (0-1 buổi vắng): Khen ngợi tinh thần tự giác, ý thức kỷ luật, nề nếp sinh hoạt.
-3. Với học sinh vắng từ 2-4 buổi: Nhắc nhở chân thành, khuyên rèn luyện sức khỏe, đi học đều đặn để không hổng kiến thức.
-4. Với học sinh vắng nhiều (>4 buổi hoặc vắng liên tiếp): Cảnh báo nhẹ nhàng, đề nghị gia đình tại bản làng phối hợp chặt chẽ với nhà trường.
-5. Ngắn gọn, súc tích (khoảng 2 - 4 câu/em), phù hợp để đưa vào Sổ liên lạc điện tử / VnEdu / SMAS.
-
-Dữ liệu học sinh cần nhận xét:
-${JSON.stringify((studentsData || []).slice(0, 50), null, 2)}
-
-Hãy trả về định dạng JSON hợp lệ:
-{
-  "className": "${className}",
-  "periodType": "${periodType}",
-  "summaryClassRemarks": "Nhận xét tổng thể về nề nếp chuyên cần của cả lớp trong kỳ",
-  "remarks": [
-    {
-      "studentId": "ID học sinh",
-      "studentName": "Họ và tên",
-      "category": "EXCELLENT" | "GOOD" | "NEEDS_IMPROVEMENT" | "SPECIAL_ATTENTION",
-      "categoryLabel": "Chuyên cần xuất sắc" | "Chuyên cần tốt" | "Cần nhắc nhở chuyên cần" | "Cần phối hợp gia đình",
-      "remarkText": "Lời nhận xét chuẩn mực sư phạm gửi học sinh và phụ huynh",
-      "conductSuggestion": "Tốt" | "Khá" | "Đạt",
-      "strengths": "Ưu điểm nổi bật",
-      "notesForParent": "Lời nhắn riêng cho phụ huynh"
-    }
-  ]
-}
-    `.trim();
-
-    const fallback = () => generateFallbackStudentRemarks(
-      className || '6A11',
-      periodType || 'MONTH',
-      studentsData || []
-    );
-
-    const data = await callGeminiStructuredJson(prompt, fallback, 0.3);
-    res.json({ success: true, data });
-  } catch (err: any) {
-    const fallback = generateFallbackStudentRemarks(
-      className || '6A11',
-      periodType || 'MONTH',
-      studentsData || []
-    );
-    res.json({ success: true, data: fallback });
-  }
-});
+app.post('/api/ai/student-periodic-remarks', studentRemarksHandler);
 
 // Vite middleware in dev or static files in production
 const isProduction = process.env.NODE_ENV === 'production';

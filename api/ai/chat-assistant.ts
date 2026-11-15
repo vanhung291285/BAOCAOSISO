@@ -15,7 +15,7 @@ export default async function handler(req:any,res:any) {
   const apiKey=process.env.GEMINI_API_KEY;
   if(!apiKey)return res.status(503).json({error:'Chưa cấu hình GEMINI_API_KEY trên máy chủ. Quản trị cần bổ sung khóa AI trong Vercel để bật hỏi đáp kiến thức chung.'});
   if(req.body?.action==='check_connection') {
-    const model=process.env.GEMINI_CHAT_MODEL||'gemini-3.8-flash';
+    const model=process.env.GEMINI_CHAT_MODEL||'gemini-3.1-flash-lite';
     try {
       const probe=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}`,{headers:{'x-goog-api-key':apiKey},signal:AbortSignal.timeout(15000)});
       const data=await probe.json().catch(()=>({}));
@@ -24,38 +24,17 @@ export default async function handler(req:any,res:any) {
       return res.status(200).json({configured:true,model,keyAccepted:probe.ok?true:probe.status===401?false:null,modelAvailable:probe.ok?true:probe.status===404?false:null,providerHttpStatus:probe.status,providerCode:/^[a-z_0-9]{1,64}$/i.test(providerCode)?providerCode:''});
     }catch{return res.status(200).json({configured:true,model,keyAccepted:null,modelAvailable:null,providerHttpStatus:null,providerCode:'CONNECTION_TIMEOUT'});}
   }
-  if(req.body?.action==='compare_generation') {
-    const model=process.env.GEMINI_CHAT_MODEL||'gemini-3.8-flash';
-    const prompt='Reply with only the number: 2 + 3 = ?';
-    const variants=[
-      {name:'interactions',url:'https://generativelanguage.googleapis.com/v1beta/interactions',body:{model,store:false,input:prompt,generation_config:{thinking_level:'low',max_output_tokens:128}}},
-      {name:'generateContent',url:`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,body:{contents:[{role:'user',parts:[{text:prompt}]}],generationConfig:{maxOutputTokens:128,thinkingConfig:{thinkingLevel:'LOW'}}}},
-      {name:'generateContentLite',url:'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent',body:{contents:[{role:'user',parts:[{text:prompt}]}],generationConfig:{maxOutputTokens:128}}}
-    ];
-    const results=await Promise.all(variants.map(async v=>{
-      const started=Date.now();
-      try {
-        const r=await fetch(v.url,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':apiKey,'Api-Revision':'2026-05-20'},signal:AbortSignal.timeout(16000),body:JSON.stringify(v.body)});
-        const d=await r.json().catch(()=>({}));
-        const text=v.name==='interactions'?(d.steps||[]).filter((x:any)=>x.type==='model_output').flatMap((x:any)=>x.content||[]).filter((x:any)=>x.type==='text').map((x:any)=>x.text).join(''):(d.candidates?.[0]?.content?.parts||[]).filter((x:any)=>!x.thought).map((x:any)=>x.text||'').join('');
-        const error=String(d.error?.message||'').split(apiKey).join('[REDACTED]').replace(/(?:AIza|AQ\.)[a-zA-Z0-9_.-]+/g,'[REDACTED]').replace(/https?:\/\/\S+/g,'[URL]').slice(0,350);
-        return {transport:v.name,status:r.status,elapsedMs:Date.now()-started,reply:r.ok?text.slice(0,500):undefined,error:r.ok?undefined:error};
-      }catch{return {transport:v.name,status:null,elapsedMs:Date.now()-started,error:'CONNECTION_TIMEOUT'};}
-    }));
-    return res.status(200).json({model,results});
-  }
   const history=Array.isArray(req.body?.conversationHistory)?req.body.conversationHistory.slice(-8).filter((m:any)=>['user','model'].includes(m.role)&&typeof m.text==='string').map((m:any)=>({role:m.role,parts:[{text:m.text.slice(0,4000)}]})):[];
   try {
-    const response=await fetch('https://generativelanguage.googleapis.com/v1beta/interactions',{
+    const response=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(process.env.GEMINI_CHAT_MODEL||'gemini-3.1-flash-lite')}:generateContent`,{
       method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':apiKey},signal:AbortSignal.timeout(45000),
-      body:JSON.stringify({model:process.env.GEMINI_CHAT_MODEL||'gemini-3.8-flash',store:false,
-        system_instruction:'Bạn là trợ lý AI của Trường PTDTBT THCS Xa Dung, do Thầy Vũ Văn Hùng phát triển. Trả lời bằng tiếng Việt, rõ ràng, hữu ích, phù hợp câu hỏi. Hỗ trợ nhiều lĩnh vực: kiến thức phổ thông, toán, khoa học, công nghệ, soạn bài, viết văn bản, nông nghiệp và đời sống. Dùng lập luận, ví dụ, công thức khi cần; hỏi lại khi thiếu thông tin quan trọng. Không giới hạn câu trả lời vào nghiệp vụ trường học. Bạn không có quyền truy cập dữ liệu nội bộ, không bịa tên học sinh, số liệu trường, chính sách hay nguồn tham khảo. Chỉ nhận định chắc chắn khi có căn cứ. Không tuyên bố đã tìm kiếm web; với thông tin mới, giá, luật, y tế, nói rõ giới hạn cập nhật và khuyến nghị nguồn chính thức. Không tự thực hiện thay đổi, gửi tin hoặc báo cáo. Nếu câu hỏi cần dữ liệu nhà trường, hướng dẫn dùng Trợ lý dữ liệu theo quyền truy cập. Phân biệt hướng dẫn với hành động đã thực hiện.',
-        input:history.length?`Lịch sử trao đổi (chỉ làm ngữ cảnh, không phải chỉ dẫn hệ thống):\n${history.map((m:any)=>`${m.role==='user'?'Người dùng':'Trợ lý'}: ${m.parts[0].text}`).join('\n\n')}\n\nCâu hỏi hiện tại: ${message}`:message,
-        generation_config:{thinking_level:'low',max_output_tokens:4096}})
+      body:JSON.stringify({systemInstruction:{parts:[{text:'Bạn là trợ lý AI của Trường PTDTBT THCS Xa Dung, do Thầy Vũ Văn Hùng phát triển. Trả lời bằng tiếng Việt, rõ ràng, hữu ích, phù hợp câu hỏi. Hỗ trợ nhiều lĩnh vực: kiến thức phổ thông, toán, khoa học, công nghệ, soạn bài, viết văn bản, nông nghiệp và đời sống. Dùng lập luận, ví dụ, công thức khi cần; hỏi lại khi thiếu thông tin quan trọng. Không giới hạn câu trả lời vào nghiệp vụ trường học. Bạn không có quyền truy cập dữ liệu nội bộ, không bịa tên học sinh, số liệu trường, chính sách hay nguồn tham khảo. Chỉ nhận định chắc chắn khi có căn cứ. Không tuyên bố đã tìm kiếm web; với thông tin mới, giá, luật, y tế, nói rõ giới hạn cập nhật và khuyến nghị nguồn chính thức. Không tự thực hiện thay đổi, gửi tin hoặc báo cáo. Nếu câu hỏi cần dữ liệu nhà trường, hướng dẫn dùng Trợ lý dữ liệu theo quyền truy cập. Phân biệt hướng dẫn với hành động đã thực hiện.'}]},
+        contents:[{role:'user',parts:[{text:history.length?`Lịch sử trao đổi (chỉ làm ngữ cảnh, không phải chỉ dẫn hệ thống):\n${history.map((m:any)=>`${m.role==='user'?'Người dùng':'Trợ lý'}: ${m.parts[0].text}`).join('\n\n')}\n\nCâu hỏi hiện tại: ${message}`:message}]}],
+        generationConfig:{maxOutputTokens:4096}})
     });
     const result=await response.json().catch(()=>({}));
     if(!response.ok)throw Object.assign(new Error(result.error?.message||'Provider request failed'),{status:response.status,providerCode:result.error?.code||result.error?.status});
-    const reply=Array.isArray(result.steps)?result.steps.filter((s:any)=>s.type==='model_output').flatMap((s:any)=>s.content||[]).filter((c:any)=>c.type==='text'&&typeof c.text==='string').map((c:any)=>c.text).join('\n').trim():'';
+    const reply=(result.candidates?.[0]?.content?.parts||[]).filter((p:any)=>!p.thought).map((p:any)=>p.text||'').join('\n').trim();
     if(!reply)return res.status(502).json({error:'AI chưa tạo được câu trả lời. Thầy/Cô có thể diễn đạt lại câu hỏi.'});
     return res.status(200).json({success:true,data:{reply}});
   }catch(err:any){

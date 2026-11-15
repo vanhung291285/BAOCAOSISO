@@ -34,13 +34,13 @@ test('AI endpoint reports missing configuration instead of fabricating a model r
  const response:any={code:0,body:null,setHeader(){},status(n:number){this.code=n;return this;},json(b:unknown){this.body=b;return this;}};
  try{await chatHandler({method:'POST',headers:{host:'localhost'},body:{message:'Giải thích quang hợp'}},response);assert.equal(response.code,503);assert.match(response.body.error,/GEMINI_API_KEY/);}finally{if(before!==undefined)process.env.GEMINI_API_KEY=before;}
 });
-test('Interactions response returns final text, not thought content, without storing the conversation',async()=>{
+test('GenerateContent returns final text and excludes thought parts',async()=>{
  const before=process.env.GEMINI_API_KEY,originalFetch=globalThis.fetch;
  process.env.GEMINI_API_KEY='test-placeholder';
  let sent:any;
- globalThis.fetch=async(_url:any,options:any)=>{sent=JSON.parse(options.body);return new Response(JSON.stringify({status:'completed',steps:[{type:'thought',summary:[{type:'text',text:'internal'}]},{type:'model_output',content:[{type:'text',text:'Tỉ lệ thức là đẳng thức của hai tỉ số.'}]}]}),{status:200,headers:{'Content-Type':'application/json'}});};
+ globalThis.fetch=async(_url:any,options:any)=>{sent=JSON.parse(options.body);return new Response(JSON.stringify({candidates:[{content:{parts:[{thought:true,text:'internal'},{text:'Tỉ lệ thức là đẳng thức của hai tỉ số.'}]}}]}),{status:200,headers:{'Content-Type':'application/json'}});};
  const response:any={code:0,body:null,setHeader(){},status(n:number){this.code=n;return this;},json(b:unknown){this.body=b;return this;}};
- try{await chatHandler({method:'POST',headers:{host:'localhost','x-forwarded-for':'test-interaction'},body:{message:'Tỉ lệ thức là gì?'}},response);assert.equal(response.code,200);assert.match(response.body.data.reply,/đẳng thức/);assert.doesNotMatch(response.body.data.reply,/internal/);assert.equal(sent.store,false);assert.equal(sent.generation_config.thinking_level,'low');}finally{globalThis.fetch=originalFetch;if(before===undefined)delete process.env.GEMINI_API_KEY;else process.env.GEMINI_API_KEY=before;}
+ try{await chatHandler({method:'POST',headers:{host:'localhost','x-forwarded-for':'test-interaction'},body:{message:'Tỉ lệ thức là gì?'}},response);assert.equal(response.code,200);assert.match(response.body.data.reply,/đẳng thức/);assert.doesNotMatch(response.body.data.reply,/internal/);assert.equal(sent.generationConfig.maxOutputTokens,4096);}finally{globalThis.fetch=originalFetch;if(before===undefined)delete process.env.GEMINI_API_KEY;else process.env.GEMINI_API_KEY=before;}
 });
 test('provider credential errors are classified without exposing provider response details',async()=>{
  const before=process.env.GEMINI_API_KEY,originalFetch=globalThis.fetch;
@@ -52,7 +52,7 @@ test('provider credential errors are classified without exposing provider respon
 test('connection probe checks model metadata separately from generation and never returns credentials',async()=>{
  const before=process.env.GEMINI_API_KEY,originalFetch=globalThis.fetch;
  process.env.GEMINI_API_KEY='test-placeholder';
- globalThis.fetch=async(url:any)=>{assert.match(String(url),/\/v1beta\/models\/gemini-3.8-flash$/);return new Response(JSON.stringify({name:'models/gemini-3.8-flash'}),{status:200});};
+ globalThis.fetch=async(url:any)=>{assert.match(String(url),/\/v1beta\/models\/gemini-3.1-flash-lite$/);return new Response(JSON.stringify({name:'models/gemini-3.1-flash-lite'}),{status:200});};
  const response:any={code:0,body:null,setHeader(){},status(n:number){this.code=n;return this;},json(b:unknown){this.body=b;return this;}};
  try{await chatHandler({method:'POST',headers:{host:'localhost','x-forwarded-for':'test-probe'},body:{message:'Kiểm tra kết nối',action:'check_connection'}},response);assert.equal(response.body.keyAccepted,true);assert.equal(response.body.modelAvailable,true);assert.equal(response.body.providerHttpStatus,200);assert.doesNotMatch(JSON.stringify(response.body),/test-placeholder/);}finally{globalThis.fetch=originalFetch;if(before===undefined)delete process.env.GEMINI_API_KEY;else process.env.GEMINI_API_KEY=before;}
 });
