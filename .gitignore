@@ -6,3 +6,12 @@ dev-dist/
 !.env.example
 *.log
 .vercel/
+
+# Generated copies belong in public/, not the repository root.
+/assets/aistudio/
+/apple-touch-icon.png
+/favicon.ico
+/icon.svg
+/pwa-*.png
+/sw.js
+/dev-sw.js
