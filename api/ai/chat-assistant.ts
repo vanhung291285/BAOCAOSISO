@@ -24,6 +24,26 @@ export default async function handler(req:any,res:any) {
       return res.status(200).json({configured:true,model,keyAccepted:probe.ok?true:probe.status===401?false:null,modelAvailable:probe.ok?true:probe.status===404?false:null,providerHttpStatus:probe.status,providerCode:/^[a-z_0-9]{1,64}$/i.test(providerCode)?providerCode:''});
     }catch{return res.status(200).json({configured:true,model,keyAccepted:null,modelAvailable:null,providerHttpStatus:null,providerCode:'CONNECTION_TIMEOUT'});}
   }
+  if(req.body?.action==='compare_generation') {
+    const model=process.env.GEMINI_CHAT_MODEL||'gemini-3.8-flash';
+    const prompt='Reply with only the number: 2 + 3 = ?';
+    const variants=[
+      {name:'interactions',url:'https://generativelanguage.googleapis.com/v1beta/interactions',body:{model,store:false,input:prompt,generation_config:{thinking_level:'low',max_output_tokens:128}}},
+      {name:'generateContent',url:`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,body:{contents:[{role:'user',parts:[{text:prompt}]}],generationConfig:{maxOutputTokens:128,thinkingConfig:{thinkingLevel:'LOW'}}}},
+      {name:'generateContentLite',url:'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent',body:{contents:[{role:'user',parts:[{text:prompt}]}],generationConfig:{maxOutputTokens:128}}}
+    ];
+    const results=await Promise.all(variants.map(async v=>{
+      const started=Date.now();
+      try {
+        const r=await fetch(v.url,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':apiKey,'Api-Revision':'2026-05-20'},signal:AbortSignal.timeout(16000),body:JSON.stringify(v.body)});
+        const d=await r.json().catch(()=>({}));
+        const text=v.name==='interactions'?(d.steps||[]).filter((x:any)=>x.type==='model_output').flatMap((x:any)=>x.content||[]).filter((x:any)=>x.type==='text').map((x:any)=>x.text).join(''):(d.candidates?.[0]?.content?.parts||[]).filter((x:any)=>!x.thought).map((x:any)=>x.text||'').join('');
+        const error=String(d.error?.message||'').split(apiKey).join('[REDACTED]').replace(/(?:AIza|AQ\.)[a-zA-Z0-9_.-]+/g,'[REDACTED]').replace(/https?:\/\/\S+/g,'[URL]').slice(0,350);
+        return {transport:v.name,status:r.status,elapsedMs:Date.now()-started,reply:r.ok?text.slice(0,500):undefined,error:r.ok?undefined:error};
+      }catch{return {transport:v.name,status:null,elapsedMs:Date.now()-started,error:'CONNECTION_TIMEOUT'};}
+    }));
+    return res.status(200).json({model,results});
+  }
   const history=Array.isArray(req.body?.conversationHistory)?req.body.conversationHistory.slice(-8).filter((m:any)=>['user','model'].includes(m.role)&&typeof m.text==='string').map((m:any)=>({role:m.role,parts:[{text:m.text.slice(0,4000)}]})):[];
   try {
     const response=await fetch('https://generativelanguage.googleapis.com/v1beta/interactions',{
