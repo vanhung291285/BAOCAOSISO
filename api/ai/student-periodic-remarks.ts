@@ -1,4 +1,4 @@
-import { structuredHandler } from '../../server/ai/structured';
+import { structuredHandler } from '../../server/ai/structured.js';
 export default structuredHandler(b=>typeof b.className==='string'&&Array.isArray(b.studentsData)&&b.studentsData.length>0&&b.studentsData.length<=60,{
  summaryClassRemarks:'Nhận xét dựa trên dữ liệu, không suy diễn rèn luyện',remarks:[{studentId:'id gốc',studentName:'Tên gốc',category:'GOOD',categoryLabel:'Nhận xét chuyên cần cần giáo viên kiểm tra',remarkText:'Nhận xét có căn cứ; thiếu tổng số buổi thì không tính tỷ lệ',conductSuggestion:'Chưa đánh giá',strengths:'Chỉ điểm được ghi nhận hoặc Chưa có dữ liệu',notesForParent:'Gợi ý phối hợp, không quy kết'}]
 },(d,b)=>{

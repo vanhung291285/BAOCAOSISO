@@ -1,4 +1,4 @@
-import { structuredHandler } from '../../server/ai/structured';
+import { structuredHandler } from '../../server/ai/structured.js';
 export default structuredHandler(b=>typeof b.className==='string'&&['WEEK','MONTH'].includes(b.periodType)&&b.attendanceStats&&Array.isArray(b.absentDetails),{
  reportTitle:'Dự thảo báo cáo công tác chủ nhiệm',recipient:'Ban Giám hiệu',overview:'Tổng quan có căn cứ',attendanceAnalysis:'Chuyên cần dựa trên số liệu; không tính ngày chưa báo là có mặt',boardingAnalysis:'Chỉ phân tích suất ăn đã ghi nhận; không khẳng định an toàn, chất lượng khi thiếu dữ liệu',specialAttentionCases:[{studentName:'Tên trong dữ liệu',village:'Địa chỉ được cung cấp hoặc Chưa có dữ liệu',absentCount:0,reasons:'Lý do được ghi nhận hoặc Chưa có dữ liệu',interventionTaken:'Chỉ việc có ghi nhận đã thực hiện hoặc Chưa có dữ liệu'}],classStrengths:['Điểm có bằng chứng'],classChallenges:['Khó khăn có bằng chứng'],recommendationsToBGH:['Đề xuất'],fullDocumentText:'Toàn văn dự thảo; ghi rõ thiếu dữ liệu và đề xuất, không bịa số liệu'
 });
