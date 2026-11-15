@@ -4086,7 +4086,7 @@ export const StorageService = {
       // Sĩ số dự phòng từ danh sách học sinh thực tế của lớp
       const rosterStudents = students.filter((s) => isStudentInClass(s.class_id, cls.id, cls.class_name));
       const rosterCount = rosterStudents.length;
-      const defaultTotal = rosterCount > 0 ? rosterCount : 35;
+      const defaultTotal = rosterCount;
 
       const values: Record<string, { total: number; present: number; absent: number; rate: number }> = {};
 
@@ -4107,30 +4107,12 @@ export const StorageService = {
         let present = val ? Number(val.present_count) || 0 : 0;
         let absent = val ? Number(val.absent_count) || 0 : 0;
 
-        // TỰ ĐỘNG CẬP NHẬT TRẠNG THÁI MẶC ĐỊNH SĨ SỐ CHUẨN KHI SANG NGÀY MỚI (CHƯA CÓ BÁO CÁO MỚI)
-        if (!isReported || total <= 0) {
-          const isMain = ig.code === 'ALL' || ig.id === 'ig_all' || ig === indicators[0];
-          const isBoarding = ig.code === 'BOARDING_HALF' || ig.code === 'BOARDING' || ig.id === 'ig_boarding_half' || ig.id === 'ig_boarding' || ig.name.toLowerCase().includes('bán trú');
-          const isDay = ig.code === 'NON_BOARDING' || ig.code === 'DAY' || ig.id === 'ig_day' || ig.name.toLowerCase().includes('ngoại trú');
-
-          if (isMain) {
-            total = defaultTotal;
-            absent = isReported ? absentList.length : 0;
-            present = Math.max(0, total - absent);
-          } else if (isBoarding) {
-            const bAbsent = isReported ? absentList.filter((s) => s.isBoarding === true || s.is_boarding === true).length : 0;
-            const bRoster = rosterStudents.filter((s) => s.isBoarding === true || (s as any).is_boarding === true).length;
-            total = bRoster > 0 ? bRoster : Math.max(bAbsent, 0);
-            absent = bAbsent;
-            present = Math.max(0, total - absent);
-          } else if (isDay) {
-            const bRoster = rosterStudents.filter((s) => s.isBoarding === true || (s as any).is_boarding === true).length;
-            const bTotal = bRoster > 0 ? bRoster : 0;
-            const bAbsent = isReported ? absentList.filter((s) => s.isBoarding === true || s.is_boarding === true).length : 0;
-            total = Math.max(0, defaultTotal - bTotal);
-            absent = isReported ? Math.max(0, absentList.length - bAbsent) : 0;
-            present = Math.max(0, total - absent);
-          }
+        // Roster size is descriptive only. Missing/unsubmitted values never imply attendance.
+        if (!isReported || !val) {
+          const isMain = ig.code === 'ALL' || ig.id === 'ig_all';
+          total = !isReported && isMain ? defaultTotal : 0;
+          present = 0;
+          absent = 0;
         }
 
         const rate = total > 0 ? Math.round((absent / total) * 1000) / 10 : 0;

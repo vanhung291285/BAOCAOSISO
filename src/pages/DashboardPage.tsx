@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useSchool } from '../contexts/SchoolContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useNotifications } from '../contexts/NotificationContext';
 import { StorageService, subscribeRealtime } from '../services/storage';
-import { ClassReportRow, ReportStatus, ClassAttendanceRank, DailyReport } from '../types';
+import { ClassReportRow, ReportStatus, ClassAttendanceRank, DailyReport, SchoolOffDay } from '../types';
 import { AIPredictiveService } from '../services/aiPredictiveService';
 import { DateNavigator } from '../components/DateNavigator';
 import { CampusSelector } from '../components/CampusSelector';
@@ -47,7 +47,9 @@ import {
   Home,
   FileText,
 } from 'lucide-react';
-import { formatDateVN } from '../utils/schoolWeeks';
+import { getSupabaseClient } from '../services/supabase';
+import { attendanceDayOff, gradeAttendanceStats } from '../services/gradeAttendanceStats';
+import { getTodayDateStr, formatDateVN } from '../utils/schoolWeeks';
 
 interface DashboardPageProps {
   onNavigate: (path: string) => void;
@@ -66,13 +68,10 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSele
     return campus ? campus.name : 'Khu chính';
   };
 
-  const [selectedDate, setSelectedDate] = useState(() => {
-    const d = new Date();
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  });
+  const [selectedDate, setSelectedDate] = useState(getTodayDateStr);
+  const [offDays, setOffDays] = useState<SchoolOffDay[]>([]);
+  const [loadError, setLoadError] = useState('');
+  const loadRequest = useRef(0);
 
   const [aggregateData, setAggregateData] = useState<{
     date: string;
@@ -127,13 +126,22 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSele
   }, [aiRisks]);
 
   const loadData = async (dateStr: string, campusId: string) => {
+    const request = ++loadRequest.current;
+    setLoading(true); setLoadError(''); setAggregateData(null);
     try {
-      const data = await StorageService.getDailyAggregate(dateStr, campusId === 'all' ? undefined : campusId);
-      setAggregateData(data);
+      const db = getSupabaseClient();
+      if (!db) throw new Error('Chưa kết nối máy chủ.');
+      const [data, calendar] = await Promise.all([
+        StorageService.getDailyAggregate(dateStr, campusId === 'all' ? undefined : campusId),
+        db.from('school_off_days').select('*'),
+      ]);
+      if (calendar.error) throw new Error('Không tải được lịch nghỉ từ máy chủ.');
+      if (request !== loadRequest.current) return;
+      setOffDays(calendar.data || []); setAggregateData(data);
     } catch (err) {
-      console.error('Failed to load daily aggregate:', err);
+      if (request === loadRequest.current) setLoadError(err instanceof Error ? err.message : 'Không tải được số liệu.');
     } finally {
-      setLoading(false);
+      if (request === loadRequest.current) setLoading(false);
     }
   };
 
@@ -155,7 +163,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSele
     // Debounced realtime subscription to prevent lag during concurrent rush hours
     let debounceTimer: any = null;
     const unsub = subscribeRealtime((event) => {
-      if (['daily_reports', 'daily_report_values', 'classes', 'notifications', 'all'].includes(event?.table)) {
+      if (['daily_reports', 'daily_report_values', 'classes', 'notifications', 'school_off_days', 'settings', 'all'].includes(event?.table)) {
         if (debounceTimer) clearTimeout(debounceTimer);
         debounceTimer = setTimeout(() => {
           loadData(selectedDate, selectedCampus);
@@ -273,40 +281,12 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSele
     ? Math.round((aggregateData.reportedClasses / (aggregateData.totalClasses || 1)) * 100)
     : 0;
 
-  // Grade-by-grade stats for visualization
-  const gradeStats = useMemo(() => {
-    if (!aggregateData) return [];
-    const grades = [6, 7, 8, 9];
-    return grades.map((g) => {
-      const gradeRows = aggregateData.rows.filter((r) => r.classItem.grade === g);
-      const totalClasses = gradeRows.length;
-      const reportedClasses = gradeRows.filter((r) => r.status === 'REPORTED' || r.status === 'LOCKED').length;
-      let totalStudents = 0;
-      let presentStudents = 0;
-      let absentStudents = 0;
-
-      gradeRows.forEach((r) => {
-        const firstInd = enabledIndicators[0]?.id;
-        if (firstInd && r.values[firstInd]) {
-          totalStudents += r.values[firstInd].total || 0;
-          presentStudents += r.values[firstInd].present || 0;
-          absentStudents += r.values[firstInd].absent || 0;
-        }
-      });
-
-      const rate = totalStudents > 0 ? ((presentStudents / totalStudents) * 100).toFixed(1) : '0';
-
-      return {
-        grade: g,
-        totalClasses,
-        reportedClasses,
-        totalStudents,
-        presentStudents,
-        absentStudents,
-        rate: Number(rate),
-      };
-    });
-  }, [aggregateData, enabledIndicators]);
+  // Use only submitted, valid ALL totals for the selected date; never roster defaults.
+  const gradeStats = useMemo(() => gradeAttendanceStats(
+    aggregateData?.rows || [], indicators.find(i => i.enabled && i.code === 'ALL')?.id,
+    selectedDate, offDays, settings?.allow_gvcn_report_saturday === true,
+  ), [aggregateData, indicators, selectedDate, offDays, settings?.allow_gvcn_report_saturday]);
+  const selectedDayOff = attendanceDayOff(selectedDate, selectedCampus === 'all' ? undefined : selectedCampus, offDays, settings?.allow_gvcn_report_saturday === true);
 
   // GVCN assigned class helper
   const myAssignedClass = useMemo(() => {
@@ -1163,7 +1143,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSele
               <span>THỐNG KÊ SĨ SỐ THEO KHỐI LỚP</span>
             </h2>
             <p className="text-xs text-slate-500 mt-0.5">
-              So sánh tỷ lệ chuyên cần và số lượng học sinh có mặt hôm nay
+              Ngày {formatDateVN(selectedDate)} · Chỉ tính các lớp đã nộp báo cáo hợp lệ; không lấy sĩ số danh sách làm số có mặt.
             </p>
           </div>
 
@@ -1177,9 +1157,10 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSele
           </button>
         </div>
 
+        {!loading && !loadError && selectedDayOff && <p className="rounded-xl bg-slate-100 p-3 text-sm text-slate-700">{selectedDayOff} · Không lấy số học sinh trong danh sách làm số có mặt.</p>}
         {/* Visual Bar Chart Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          {gradeStats.map((stat) => (
+          {loading ? <p role="status" className="col-span-full text-sm text-slate-600">Đang đối chiếu báo cáo và lịch nghỉ…</p> : loadError ? <div role="alert" className="col-span-full rounded-xl bg-amber-50 p-4 text-sm text-amber-900">{loadError}<button type="button" className="ml-3 font-bold underline" onClick={() => void loadData(selectedDate, selectedCampus)}>Thử tải lại</button></div> : gradeStats.map((stat) => (
             <div
               key={stat.grade}
               className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/50 space-y-2.5 flex flex-col justify-between"
@@ -1193,19 +1174,20 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSele
                     ? 'bg-emerald-100 text-emerald-800'
                     : 'bg-amber-100 text-amber-900'
                 }`}>
-                  {stat.reportedClasses}/{stat.totalClasses} nộp
+                  {stat.isOffDay ? 'Ngày nghỉ' : `${stat.reportedClasses}/${stat.eligibleClasses} nộp hợp lệ`}
                 </span>
               </div>
 
               <div>
+                <p className="mb-2 text-[11px] text-slate-600">{stat.isOffDay ? 'Không thống kê chuyên cần trong ngày nghỉ.' : stat.reportedClasses === 0 ? 'Chưa có báo cáo hợp lệ.' : 'Số liệu của các lớp đã nộp hợp lệ.'}{!stat.isOffDay && stat.offClasses > 0 ? ` Có ${stat.offClasses} lớp nghỉ theo lịch.` : ''}</p>
                 <div className="flex items-baseline justify-between">
                   <span className="text-xs text-slate-500 font-medium">Chuyên cần:</span>
-                  <span className="text-lg font-black text-blue-800 tabular-nums">{stat.rate}%</span>
+                  <span className="text-lg font-black text-blue-800 tabular-nums">{stat.rate === null ? '—' : `${stat.rate}%`}</span>
                 </div>
                 <div className="w-full bg-slate-200 rounded-full h-2 mt-1 overflow-hidden">
                   <div
                     className="bg-blue-600 h-2 rounded-full transition-all duration-500"
-                    style={{ width: `${stat.rate}%` }}
+                    style={{ width: `${stat.rate ?? 0}%` }}
                   />
                 </div>
               </div>
