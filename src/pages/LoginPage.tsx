@@ -459,34 +459,11 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
   return (
     <div className="siso-login relative flex w-full flex-col justify-between font-sans">
       <header className="siso-login-header relative z-20 flex w-full items-center justify-between gap-4">
-        <div className="flex items-center gap-2.5 sm:gap-3">
-          {/* Huy hiệu lấy từ cấu hình Supabase, giữ biểu tượng mặc định nếu chưa cấu hình */}
-          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-gradient-to-br from-red-600 to-red-700 p-1 flex items-center justify-center shadow-lg shadow-red-900/40 ring-2 ring-yellow-400 shrink-0">
-            {settings?.logo_url ? (
-              <img src={settings.logo_url} alt="Huy hiệu nhà trường" className="w-full h-full rounded-full object-contain" />
-            ) : (
-            <svg viewBox="0 0 100 100" className="w-full h-full" fill="none">
-              <circle cx="50" cy="50" r="46" fill="#D32F2F" stroke="#FFD54F" strokeWidth="3" />
-              {/* Rice ears border */}
-              <circle cx="50" cy="50" r="38" stroke="#FFCA28" strokeWidth="2" strokeDasharray="3 2" />
-              {/* Gold star */}
-              <polygon
-                points="50,22 58,38 76,40 62,53 66,71 50,62 34,71 38,53 24,40 42,38"
-                fill="#FFEB3B"
-              />
-              {/* Cogwheel at base */}
-              <rect x="42" y="76" width="16" height="8" rx="2" fill="#FFC107" />
-            </svg>
-            )}
-          </div>
-
-          <div>
-            <div className="text-white text-xs sm:text-[13px] font-black tracking-wider uppercase drop-shadow-sm leading-tight">
-              SỞ GIÁO DỤC VÀ ĐÀO TẠO
-            </div>
-            <div className="text-slate-300 text-[10px] sm:text-xs font-semibold drop-shadow-sm">
-              {settings?.school_name || 'TRƯỜNG PTDTBT THCS XA DUNG'}
-            </div>
+        <div className="school-login-brand">
+          <img src="/school-xa-dung-logo.webp" width="72" height="72" alt="Logo Trường PTDTBT THCS Xa Dung - xã Xa Dung - tỉnh Điện Biên" className="school-login-logo" />
+          <div className="school-login-identity">
+            <p>TRƯỜNG PTDTBT THCS XA DUNG</p>
+            <span>Xã Xa Dung · Tỉnh Điện Biên</span>
           </div>
         </div>
 
