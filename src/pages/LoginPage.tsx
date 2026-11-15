@@ -50,7 +50,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
 
   // GVCN Form State: Tên Lớp & Tên GVCN (Mặc định rỗng: "Chọn tên lớp")
   const [selectedClassId, setSelectedClassId] = useState<string>('');
-  const [accountPassword,setAccountPassword]=useState('');
   const [selectedTeacherId, setSelectedTeacherId] = useState<string>('');
   const [rememberLogin, setRememberLogin] = useState<boolean>(true);
 
@@ -326,7 +325,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
           try { localStorage.setItem('sso_saved_active_tab', 'GVCN'); } catch {}
         }
 
-        await switchUser(targetTeacherId, teacher, accountPassword || undefined);
+        await switchUser(targetTeacherId, teacher);
         onLoginSuccess('/attendance');
       } else {
         // ADMIN / BGH login
@@ -700,7 +699,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                 </div>
 
                 {/* Row: Ghi nhớ đăng nhập & Quên mật khẩu? */}
-                {activeTab==='GVCN'&&<label className="block text-xs font-bold text-slate-700">Mật khẩu tài khoản <span className="font-normal text-slate-500">(để dùng tin nhắn)</span><input type="password" autoComplete="current-password" maxLength={128} value={accountPassword} onChange={e=>setAccountPassword(e.target.value)} placeholder="Bỏ trống nếu chỉ báo cáo sĩ số" className="mt-2 h-12 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-base focus:border-teal-600 focus:outline-none"/><span className="mt-1 block font-normal leading-5 text-slate-500">Đăng nhập một lần; không cần nhập lại trong chat. Tài khoản do quản trị kích hoạt.</span></label>}
                 <div className="login-preferences flex items-center justify-between text-xs pt-0.5">
                   <label className="flex items-center gap-1.5 cursor-pointer select-none">
                     <input type="checkbox" checked={rememberLogin} onChange={e => setRememberLogin(e.target.checked)} className="h-4 w-4 accent-teal-700" />

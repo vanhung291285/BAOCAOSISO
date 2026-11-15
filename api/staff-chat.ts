@@ -1,3 +1,5 @@
+import {teacherToken,verifyTeacherToken} from '../server/chat/teacherSession.js';
+import {getTeacherIdentity,ensureTeacherAccount} from '../server/chat/teacherAccounts.js';
 import { createClient } from '@supabase/supabase-js';
 import { createHash, randomUUID } from 'node:crypto';
 import {readSessionToken,sessionCookie} from '../server/chat/session.js';
@@ -22,6 +24,13 @@ export default async function handler(req:any,res:any) {
    const ready=check(await db.from('staff_chat_accounts').select('id').eq('is_admin',true).eq('enabled',true).limit(1));
    return res.status(200).json({ready:ready.length>0});
   }
+  if(body.action==='teacher-session'){
+   if(typeof body.profileId!=='string'||!body.profileId||body.profileId.length>128||typeof body.classId!=='string'||!body.classId||body.classId.length>128)return res.status(400).json({error:'Chưa xác định được lớp và GVCN.'});
+   const {profile,cls}=await getTeacherIdentity(db,body.profileId,body.classId);
+   const account=await ensureTeacherAccount(db,profile);
+   res.setHeader('Set-Cookie',sessionCookie(teacherToken({accountId:account.id,profileId:profile.id,classId:cls.id},key),3600,secure));
+   return res.status(200).json({account,identityMode:'CLASS_SELECTION'});
+  }
   if(body.action==='login'){
    const loginAllowed=check(await db.rpc('staff_chat_allow_request',{p_key:createHash('sha256').update(`account-login:${String(body.profileId).slice(0,128)}`).digest('hex'),p_limit:6,p_window:60}));
    if(!loginAllowed)return res.status(429).json({error:'Tài khoản thử đăng nhập quá nhiều lần. Vui lòng đợi một phút.'});
@@ -37,10 +46,19 @@ export default async function handler(req:any,res:any) {
   }
   const token=readSessionToken(req.headers);
   if(!token||token.length>6000)return res.status(401).json({error:'Vui lòng đăng nhập tài khoản ở trang chính.'});
-  const verified=await db.auth.getUser(token);
-  if(verified.error||!verified.data.user)return res.status(401).json({error:'Phiên tài khoản hết hạn. Vui lòng đăng nhập lại ở trang chính.'});
-  const account=check(await db.from('staff_chat_accounts').select('*').eq('id',verified.data.user.id).eq('enabled',true).maybeSingle());
-  if(!account)return res.status(403).json({error:'Tài khoản chat chưa được cấp quyền hoặc đã bị tạm khóa.'});
+  let account:any;
+  if(token.startsWith('gvcn.')){
+   const teacher=verifyTeacherToken(token,key);
+   if(!teacher)return res.status(401).json({error:'Phiên GVCN hết hạn. Đang kết nối lại.'});
+   await getTeacherIdentity(db,teacher.profileId,teacher.classId);
+   account=check(await db.from('staff_chat_accounts').select('*').eq('id',teacher.accountId).eq('enabled',true).maybeSingle());
+   if(!account||account.is_admin||account.role_label!=='GVCN'||account.profile_id!==teacher.profileId)return res.status(403).json({error:'Tài khoản GVCN không được cấp quyền này.'});
+  }else{
+   const verified=await db.auth.getUser(token);
+   if(verified.error||!verified.data.user)return res.status(401).json({error:'Phiên tài khoản hết hạn. Vui lòng đăng nhập lại ở trang chính.'});
+   account=check(await db.from('staff_chat_accounts').select('*').eq('id',verified.data.user.id).eq('enabled',true).maybeSingle());
+   if(!account)return res.status(403).json({error:'Tài khoản chat chưa được cấp quyền hoặc đã bị tạm khóa.'});
+  }
   if(body.profileId!==account.profile_id)return res.status(409).json({error:'Phiên đăng nhập không khớp tài khoản đang chọn. Vui lòng đăng nhập lại.'});
   const accountAllowed=check(await db.rpc('staff_chat_allow_request',{p_key:`api:${account.id}`,p_limit:100,p_window:60}));
   if(!accountAllowed)return res.status(429).json({error:'Tài khoản thao tác quá nhanh. Vui lòng đợi một phút.'});
@@ -87,10 +105,17 @@ export default async function handler(req:any,res:any) {
    const accounts=check(await db.from('staff_chat_accounts').select('id,profile_id,display_name,role_label,enabled,is_admin'));
    return res.status(200).json({profiles,accounts});
   }
+  if(body.action==='enable-teacher'){
+   if(!account.is_admin)return res.status(403).json({error:'Chỉ quản trị được kích hoạt người nhận.'});
+   if(typeof body.targetProfileId!=='string'||body.targetProfileId.length>128)return res.status(400).json({error:'Tài khoản không hợp lệ.'});
+   const {profile}=await getTeacherIdentity(db,body.targetProfileId);
+   const target=await ensureTeacherAccount(db,profile);
+   return res.status(200).json({ok:true,account:target});
+  }
   if(body.action==='provision'){
    if(!account.is_admin)return res.status(403).json({error:'Chỉ quản trị chat được cấp tài khoản.'});
-   if(typeof body.profileId!=='string'||typeof body.password!=='string'||body.password.length<10||body.password.length>128)return res.status(400).json({error:'Mật khẩu tài khoản cần từ 10 đến 128 ký tự.'});
-   const profile=check(await db.from('profiles').select('id,full_name,role').eq('id',body.profileId).eq('active',true).maybeSingle());
+   if(typeof body.targetProfileId!=='string'||typeof body.password!=='string'||body.password.length<10||body.password.length>128)return res.status(400).json({error:'Mật khẩu tài khoản cần từ 10 đến 128 ký tự.'});
+   const profile=check(await db.from('profiles').select('id,full_name,role').eq('id',body.targetProfileId).eq('active',true).maybeSingle());
    if(!profile)return res.status(404).json({error:'Không tìm thấy tài khoản đang hoạt động.'});
    const existing=check(await db.from('staff_chat_accounts').select('*').eq('profile_id',profile.id).maybeSingle());
    if(existing){check(await db.auth.admin.updateUserById(existing.id,{password:body.password}));return res.status(200).json({ok:true});}
@@ -102,6 +127,7 @@ export default async function handler(req:any,res:any) {
   }
   return res.status(400).json({error:'Thao tác không hợp lệ.'});
  }catch(e:any){
+  if(['NOT_ASSIGNED_TEACHER','TEACHER_CHAT_DISABLED'].includes(e?.message))return res.status(403).json({error:e.message==='NOT_ASSIGNED_TEACHER'?'Lớp chưa có hồ sơ GVCN đang hoạt động. Quản trị kiểm tra phân công lớp.':'Tài khoản chat GVCN đã bị tạm khóa hoặc không hợp lệ.'});
   const missing=['42P01','42883','PGRST202','PGRST205'].includes(e?.code);
   return res.status(503).json({error:missing?'Chat chưa được khởi tạo trong Supabase. Quản trị cần chạy bản SQL thiết lập chat.':'Không kết nối được máy chủ chat. Vui lòng thử lại; tin chưa được xác nhận gửi.'});
  }

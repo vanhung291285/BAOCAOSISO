@@ -6,8 +6,8 @@
 - Nhắn riêng giữa hai tài khoản, thông báo toàn trường chỉ quản trị chat được gửi.
 - Đếm chưa đọc, tự cập nhật (5 giây khi mở, 15 giây khi đóng), 100 tin gần nhất mỗi cuộc trò chuyện.
 - Chỉ xác nhận gửi sau khi máy chủ lưu. Gửi lại cùng nội dung sau gián đoạn mạng dùng cùng mã gửi, tránh trùng tin.
-- Quản trị kích hoạt tài khoản và mật khẩu đăng nhập chính cho từng giáo viên. Không có mật khẩu chat riêng. Không gửi email hoặc tin nhắn tự động khi cấp tài khoản.
-- Chat dùng chung phiên xác thực của trang đăng nhập chính. Cookie HttpOnly/Secure/SameSite giữ phiên tối đa một giờ và được xóa khi đăng xuất. Chat không có ô mật khẩu hoặc màn hình đăng nhập riêng. Chọn lớp không kèm xác thực vẫn báo cáo sĩ số được, nhưng không đọc/gửi tin riêng.
+- GVCN chỉ chọn lớp là tự kết nối chat, không cần mật khẩu. Máy chủ đối chiếu hồ sơ GVCN và lớp được phân công; không gửi email, không cấp mật khẩu cho giáo viên.
+- Phiên GVCN tự tạo và tự nối lại sau khi hết hạn; cookie HttpOnly/Secure/SameSite tồn tại tối đa một giờ. Quản trị vẫn dùng phiên đăng nhập chính đã xác thực. GVCN không thể tự nhận quyền quản trị, cấp tài khoản hoặc phát thông báo toàn trường.
 
 ## Kích hoạt lần đầu trên Supabase
 
@@ -26,7 +26,9 @@ WHERE id='ID_HO_SO_QUAN_TRI' AND role='ADMIN' AND active=true;
 
 Cần đúng hồ sơ quản trị đang dùng để đăng nhập ứng dụng. Quyền quản trị chat được gán riêng tại đây, không suy ra từ vai trò do trình duyệt gửi lên.
 
-5. Đăng nhập tài khoản quản trị ở trang chính bằng mật khẩu Supabase Auth. Mở Tin nhắn sẽ tự dùng phiên đó. Chọn Cấp tài khoản nhắn tin → chọn giáo viên → đặt mật khẩu tài khoản và cấp riêng cho đúng người. GVCN chọn lớp và nhập mật khẩu tài khoản một lần tại trang đăng nhập chính. Không nhập lại trong khung chat. Biểu tượng Tin nhắn hiển thị chấm đỏ và tổng số chưa đọc, tự cập nhật kể cả khi khung chat đóng. Các mã quản trị cũ chỉ dùng cho báo cáo sĩ số, không cấp phiên tin nhắn.
+5. Đăng nhập tài khoản quản trị ở trang chính bằng mật khẩu Supabase Auth. Chat tự dùng phiên đó. GVCN chỉ chọn lớp tại trang chính rồi mở Tin nhắn, không nhập mật khẩu ở bất kỳ bước nào. Tài khoản GVCN tự xuất hiện khi giáo viên vào ứng dụng. Quản trị có thể chọn Cấp tài khoản nhắn tin → GVCN → Kích hoạt GVCN không mật khẩu để người nhận xuất hiện trước lần truy cập đầu tiên.
+
+Biểu tượng Tin nhắn hiển thị chấm đỏ và tổng số chưa đọc; tự cập nhật cả khi khung chat đóng.
 
 ## Kiểm tra sau kích hoạt
 
@@ -37,8 +39,8 @@ Cần đúng hồ sơ quản trị đang dùng để đăng nhập ứng dụng.
 
 ## Phân quyền và giới hạn
 
-Mọi yêu cầu đọc/gửi được xác minh bằng Supabase Auth ở máy chủ. Bảng chat và hàm SQL chỉ dành cho service_role. Quản trị chat cũng không có API đọc hộp thư giữa hai người khác. Người quản lý trực tiếp Supabase vẫn có quyền quản trị dữ liệu.
+Quản trị được xác minh bằng Supabase Auth; phiên GVCN được máy chủ ký và giới hạn theo lớp được chọn. GVCN không được nâng quyền qua nội dung gửi từ trình duyệt. Bảng chat và hàm SQL chỉ dành cho service_role. Quản trị chat cũng không có API đọc hộp thư giữa hai người khác. Người quản lý trực tiếp Supabase vẫn có quyền quản trị dữ liệu.
 
-Không dùng chọn lớp làm bằng chứng danh tính. Không có endpoint công khai tự nhận quyền quản trị. Chỉ SQL quản trị mới cấp được quản trị chat đầu tiên hoặc thay quyền này. Muốn khóa tài khoản chat, đặt `staff_chat_accounts.enabled=false` trong Supabase; việc này có hiệu lực cho yêu cầu tiếp theo.
+**Chế độ GVCN không mật khẩu được chủ ứng dụng yêu cầu sau khi biết giới hạn:** chọn lớp không xác minh người dùng thực tế. Bất kỳ ai chọn đúng lớp cũng có thể đọc và gửi tin dưới tên GVCN lớp đó; đây là hộp thư theo lớp, không bảo đảm bí mật cá nhân. Không dùng để gửi mật khẩu hoặc thông tin nhạy cảm. Giao diện ghi rõ định danh theo lớp đã chọn. Không có endpoint công khai tự nhận quyền quản trị. Chỉ SQL quản trị mới cấp được quản trị chat đầu tiên hoặc thay quyền này. Muốn khóa tài khoản chat, đặt `staff_chat_accounts.enabled=false` trong Supabase; việc này có hiệu lực cho yêu cầu tiếp theo.
 
 Hiện chưa có tệp đính kèm, cuộc gọi, push notification khi đóng ứng dụng, sửa/xóa tin hoặc tải lịch sử cũ hơn 100 tin. Không khẳng định đã có người nhận đọc tin vì chức năng hiện chỉ theo dõi chưa đọc của từng người dùng.
