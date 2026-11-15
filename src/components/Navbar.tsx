@@ -125,21 +125,13 @@ export const Navbar: React.FC<NavbarProps> = ({
               className="flex min-w-0 items-center gap-2 cursor-pointer select-none group"
               onClick={() => handleNav('/dashboard')}
             >
-              <div
-                className="w-9 h-9 rounded-xl flex items-center justify-center text-white shadow-sm flex-shrink-0 transition-transform group-hover:scale-105"
-                style={{ backgroundColor: settings?.primary_color || '#1e40af' }}
-              >
-                {settings?.logo_url ? (
-                  <img
-                    src={settings.logo_url}
-                    alt="Logo"
-                    className="w-7 h-7 object-contain rounded-lg"
-                    referrerPolicy="no-referrer"
-                  />
-                ) : (
-                  <School className="w-5 h-5" />
-                )}
-              </div>
+              <img
+                src="/school-xa-dung-logo.webp"
+                width="44"
+                height="44"
+                alt="Logo Trường PTDTBT THCS Xa Dung - xã Xa Dung - tỉnh Điện Biên"
+                className="h-11 w-11 shrink-0 object-contain transition-transform group-hover:scale-105"
+              />
 
               <div className="flex flex-col justify-center min-w-0">
                 <div className="min-w-0">
