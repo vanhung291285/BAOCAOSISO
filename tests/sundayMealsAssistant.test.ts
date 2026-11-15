@@ -49,3 +49,10 @@ test('provider credential errors are classified without exposing provider respon
  const response:any={code:0,body:null,setHeader(){},status(n:number){this.code=n;return this;},json(b:unknown){this.body=b;return this;}};
  try{await chatHandler({method:'POST',headers:{host:'localhost','x-forwarded-for':'test-provider-error'},body:{message:'Xin chào'}},response);assert.equal(response.body.code,'INVALID_API_KEY');assert.doesNotMatch(JSON.stringify(response.body),/sensitive-provider-debug|test-placeholder/);}finally{globalThis.fetch=originalFetch;if(before===undefined)delete process.env.GEMINI_API_KEY;else process.env.GEMINI_API_KEY=before;}
 });
+test('connection probe checks model metadata separately from generation and never returns credentials',async()=>{
+ const before=process.env.GEMINI_API_KEY,originalFetch=globalThis.fetch;
+ process.env.GEMINI_API_KEY='test-placeholder';
+ globalThis.fetch=async(url:any)=>{assert.match(String(url),/\/v1beta\/models\/gemini-3.8-flash$/);return new Response(JSON.stringify({name:'models/gemini-3.8-flash'}),{status:200});};
+ const response:any={code:0,body:null,setHeader(){},status(n:number){this.code=n;return this;},json(b:unknown){this.body=b;return this;}};
+ try{await chatHandler({method:'POST',headers:{host:'localhost','x-forwarded-for':'test-probe'},body:{message:'Kiểm tra kết nối',action:'check_connection'}},response);assert.equal(response.body.keyAccepted,true);assert.equal(response.body.modelAvailable,true);assert.equal(response.body.providerHttpStatus,200);assert.doesNotMatch(JSON.stringify(response.body),/test-placeholder/);}finally{globalThis.fetch=originalFetch;if(before===undefined)delete process.env.GEMINI_API_KEY;else process.env.GEMINI_API_KEY=before;}
+});

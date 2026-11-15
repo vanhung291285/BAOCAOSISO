@@ -14,6 +14,16 @@ export default async function handler(req:any,res:any) {
   if(typeof message!=='string'||!message.trim()||message.length>6000)return res.status(400).json({error:'Vui lòng nhập câu hỏi tối đa 6.000 ký tự.'});
   const apiKey=process.env.GEMINI_API_KEY;
   if(!apiKey)return res.status(503).json({error:'Chưa cấu hình GEMINI_API_KEY trên máy chủ. Quản trị cần bổ sung khóa AI trong Vercel để bật hỏi đáp kiến thức chung.'});
+  if(req.body?.action==='check_connection') {
+    const model=process.env.GEMINI_CHAT_MODEL||'gemini-3.8-flash';
+    try {
+      const probe=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}`,{headers:{'x-goog-api-key':apiKey},signal:AbortSignal.timeout(15000)});
+      const data=await probe.json().catch(()=>({}));
+      // Only report non-secret connection metadata. Never return the key or raw provider body.
+      const providerCode=typeof data.error?.status==='string'?data.error.status:typeof data.error?.code==='string'?data.error.code:'';
+      return res.status(200).json({configured:true,model,keyAccepted:probe.ok?true:probe.status===401?false:null,modelAvailable:probe.ok?true:probe.status===404?false:null,providerHttpStatus:probe.status,providerCode:/^[a-z_0-9]{1,64}$/i.test(providerCode)?providerCode:''});
+    }catch{return res.status(200).json({configured:true,model,keyAccepted:null,modelAvailable:null,providerHttpStatus:null,providerCode:'CONNECTION_TIMEOUT'});}
+  }
   const history=Array.isArray(req.body?.conversationHistory)?req.body.conversationHistory.slice(-8).filter((m:any)=>['user','model'].includes(m.role)&&typeof m.text==='string').map((m:any)=>({role:m.role,parts:[{text:m.text.slice(0,4000)}]})):[];
   try {
     const response=await fetch('https://generativelanguage.googleapis.com/v1beta/interactions',{
@@ -24,7 +34,7 @@ export default async function handler(req:any,res:any) {
         generation_config:{thinking_level:'low',max_output_tokens:4096}})
     });
     const result=await response.json().catch(()=>({}));
-    if(!response.ok)throw Object.assign(new Error(result.error?.message||'Provider request failed'),{status:response.status});
+    if(!response.ok)throw Object.assign(new Error(result.error?.message||'Provider request failed'),{status:response.status,providerCode:result.error?.code||result.error?.status});
     const reply=Array.isArray(result.steps)?result.steps.filter((s:any)=>s.type==='model_output').flatMap((s:any)=>s.content||[]).filter((c:any)=>c.type==='text'&&typeof c.text==='string').map((c:any)=>c.text).join('\n').trim():'';
     if(!reply)return res.status(502).json({error:'AI chưa tạo được câu trả lời. Thầy/Cô có thể diễn đạt lại câu hỏi.'});
     return res.status(200).json({success:true,data:{reply}});
@@ -32,12 +42,14 @@ export default async function handler(req:any,res:any) {
     const status=Number(err?.status||err?.code);
     // Classify provider failures without returning raw messages, URLs or credentials.
     const detail=String(err?.message||'').toLowerCase();
-    const reason= /api.key.*(invalid|not valid|expired)|api_key_invalid/.test(detail) ? 'INVALID_API_KEY'
+    const reason= /overload|high demand|capacity|temporarily unavailable|service unavailable/.test(detail) ? 'SERVICE_UNAVAILABLE'
+      : /api.key.*(invalid|not valid|expired)|api_key_invalid/.test(detail) ? 'INVALID_API_KEY'
       : status===401||status===403 ? 'ACCESS_DENIED'
       : status===404 ? 'MODEL_UNAVAILABLE'
       : status===429 ? 'QUOTA_EXCEEDED'
       : status===504||/timeout|timed out|abort/.test(detail) ? 'TIMEOUT' : 'PROVIDER_ERROR';
     const errors:Record<string,string>={
+      SERVICE_UNAVAILABLE:'Dịch vụ Google Gemini đang quá tải hoặc tạm thời không khả dụng (503). Không phải lỗi thiếu khóa trên Vercel.',
       INVALID_API_KEY:'Khóa Gemini hiện tại không hợp lệ hoặc đã hết hiệu lực. Quản trị cần cập nhật GEMINI_API_KEY trên Vercel.',
       ACCESS_DENIED:'Google từ chối quyền sử dụng khóa AI. Quản trị kiểm tra quyền API và giới hạn của khóa trong Google AI Studio.',
       MODEL_UNAVAILABLE:'Mô hình AI đang chọn không khả dụng. Quản trị kiểm tra GEMINI_CHAT_MODEL trên Vercel.',
@@ -45,7 +57,9 @@ export default async function handler(req:any,res:any) {
       TIMEOUT:'AI phản hồi quá chậm. Vui lòng thử câu hỏi ngắn hơn.',
       PROVIDER_ERROR:'Dịch vụ AI tạm thời chưa phản hồi. Vui lòng thử lại sau.'
     };
-    console.warn('chat-assistant provider failure',{status:Number.isFinite(status)?status:0,reason});
+    const providerCode=String(err?.providerCode||'');
+    const safeMessage=String(err?.message||'').split(apiKey).join('[REDACTED]').replace(/(?:AIza|AQ\.)[a-zA-Z0-9_.-]+/g,'[REDACTED]').replace(/https?:\/\/\S+/g,'[URL]').slice(0,600);
+    console.warn('chat-assistant provider failure',{status:Number.isFinite(status)?status:0,reason,providerCode:/^[a-z_0-9]{1,64}$/i.test(providerCode)?providerCode:'',message:safeMessage});
     return res.status(status===429?429:502).json({error:errors[reason],code:reason});
   }
 }
