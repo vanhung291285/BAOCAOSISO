@@ -1,3 +1,8 @@
+import {plannedMeals} from '../services/mealPlanning';
+import {StorageService} from '../services/storage';
+import {getSupabaseClient} from '../services/supabase';
+import {getTodayDateStr,addDaysToDateStr} from '../utils/schoolWeeks';
+import {matchClassReport} from '../utils/studentUtils';
 import React, { useState, useEffect, useMemo } from 'react';
 import { useSchool } from '../contexts/SchoolContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -56,7 +61,7 @@ interface MealForecastData {
 }
 
 export const AIBoardingMealForecastTab: React.FC = () => {
-  const { settings, activeYear, students } = useSchool();
+  const { settings, activeYear, students, classes } = useSchool();
   const { currentUser, isBGH, isAdmin } = useAuth();
 
   const [isLoading, setIsLoading] = useState(false);
@@ -68,131 +73,46 @@ export const AIBoardingMealForecastTab: React.FC = () => {
   const [meatPortionGram, setMeatPortionGram] = useState<number>(80); // 80g / suất
   const [vegPortionGram, setVegPortionGram] = useState<number>(180); // 180g / suất
 
-  // Total enrolled boarding students
-  const totalBoardingStudents = useMemo(() => {
-    const list = students.filter((s) => s.isBoarding === true || (s as any).is_boarding === true);
-    return list.length > 0 ? list.length : 240;
-  }, [students]);
-
-  // Generate 7 upcoming days starting from tomorrow or today
-  const upcomingDays = useMemo(() => {
-    const days = [];
-    const now = new Date();
-    const dayNames = ['Chủ nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'];
-
-    for (let i = 0; i < 7; i++) {
-      const d = new Date(now);
-      d.setDate(now.getDate() + i);
-      const dateStr = d.toISOString().split('T')[0];
-      const dayIndex = d.getDay();
-      days.push({
-        date: dateStr,
-        dayOfWeek: dayNames[dayIndex],
-        isMonday: dayIndex === 1,
-        isFriday: dayIndex === 5,
-        isWeekend: dayIndex === 0 || dayIndex === 6,
-      });
-    }
-    return days;
-  }, []);
-
-  const fetchForecast = async () => {
-    setIsLoading(true);
-    setError(null);
-
+  const scope=useMemo(()=>classes.filter(c=>c.active&&(!activeYear||c.school_year_id===activeYear.id)&&
+    (currentUser?.role!=='GVCN'||c.homeroom_teacher_id===currentUser.id||!!currentUser.assigned_class_id&&matchClassReport(currentUser.assigned_class_id,c))),[classes,activeYear?.id,currentUser?.id,currentUser?.role,currentUser?.assigned_class_id]);
+  const totalBoardingStudents=students.filter(s=>s.isBoarding&&scope.some(c=>matchClassReport(s.class_id,c))).length;
+  const upcomingDays=useMemo(()=>Array.from({length:7},(_,i)=>{
+    const date=addDaysToDateStr(getTodayDateStr(),i);
+    const dayIndex=new Date(`${date}T12:00:00+07:00`).getUTCDay();
+    return {date,dayOfWeek:['Chủ nhật','Thứ 2','Thứ 3','Thứ 4','Thứ 5','Thứ 6','Thứ 7'][dayIndex]};
+  }),[]);
+  const fetchForecast=async()=>{
+    setIsLoading(true);setError(null);setForecastData(null);
     try {
-      const res = await fetch('/api/ai/boarding-meal-forecast', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          schoolName: settings?.school_name || 'Trường PTDTBT THCS Xa Dung',
-          activeYear: activeYear?.name || '2026-2027',
-          totalBoardingStudents,
-          upcomingDays,
-        }),
-      });
-
-      const contentType = res.headers.get('content-type');
-      if (!res.ok || !contentType || !contentType.includes('application/json')) {
-        throw new Error('Static hosting fallback');
-      }
-
-      const data = await res.json();
-      if (!data.success) {
-        throw new Error(data.error || 'Lỗi khi dự báo suất ăn AI');
-      }
-      setForecastData(data.data);
-    } catch (err: any) {
-      console.warn('Using client-side predictive fallback:', err);
-      const dailyForecasts = upcomingDays.map((d: any) => {
-        let breakfast = Math.round(totalBoardingStudents * 0.85);
-        let lunch = Math.round(totalBoardingStudents * 0.95);
-        let dinner = Math.round(totalBoardingStudents * 0.92);
-        let notes = 'Bữa ăn ổn định theo sĩ số thực tế.';
-
-        if (d.isMonday) {
-          breakfast = Math.round(totalBoardingStudents * 0.70);
-          notes = 'Học sinh từ bản xa lên muộn, suất ăn sáng giảm nhẹ.';
-        } else if (d.isFriday) {
-          dinner = Math.round(totalBoardingStudents * 0.30);
-          notes = 'Học sinh về bản nghỉ cuối tuần, bữa tối giảm mạnh.';
-        } else if (d.isWeekend) {
-          breakfast = Math.round(totalBoardingStudents * 0.12);
-          lunch = Math.round(totalBoardingStudents * 0.15);
-          dinner = Math.round(totalBoardingStudents * 0.12);
-          notes = 'Chỉ phục vụ học sinh bán trú ở lại trường cuối tuần.';
+      const client=getSupabaseClient();
+      if(!client) throw new Error('Chưa kết nối máy chủ; chưa thể đối chiếu đăng ký suất ăn.');
+      const offDays=await StorageService.getOffDays();
+      const reports=[];
+      if(scope.length) {
+        for(let offset=0;;offset+=500) {
+          const {data,error}=await client.from('boarding_reports').select('class_id,date,status,total_boarding_students,breakfast_count,lunch_count,dinner_count,updated_at')
+            .gte('date',upcomingDays[0].date).lte('date',upcomingDays[6].date).in('class_id',scope.map(c=>c.id)).order('id').range(offset,offset+499);
+          if(error) throw new Error('Không tải được đăng ký suất ăn. Vui lòng thử lại.');
+          reports.push(...(data||[]));if((data?.length||0)<500)break;
         }
-        return {
-          date: d.date,
-          dayOfWeek: d.dayOfWeek,
-          predictedBreakfast: breakfast,
-          predictedLunch: lunch,
-          predictedDinner: dinner,
-          confidence: 94,
-          notes,
-        };
+      }
+      const dailyForecasts=upcomingDays.map(d=>{
+        const p=plannedMeals(d.date,scope,reports,settings||{},offDays);
+        return {...d,predictedBreakfast:p.breakfast,predictedLunch:p.lunch,predictedDinner:p.dinner,confidence:0,notes:p.notes};
       });
-
-      let totalB = 0, totalL = 0, totalD = 0;
-      dailyForecasts.forEach(f => {
-        totalB += f.predictedBreakfast;
-        totalL += f.predictedLunch;
-        totalD += f.predictedDinner;
-      });
-
-      setForecastData({
-        dailyForecasts,
-        totalWeeklyMeals: {
-          breakfast: totalB,
-          lunch: totalL,
-          dinner: totalD,
-          grandTotal: totalB + totalL + totalD
-        },
-        ingredientEstimates: {
-          riceKg: Math.round(((totalL + totalD) * 160 + totalB * 80) / 1000),
-          meatKg: Math.round(((totalL + totalD) * 75) / 1000),
-          fishOrEggEstimate: `${Math.round(totalL * 0.5)} quả trứng / ${Math.round(totalL * 0.3)} kg cá`,
-          vegetablesKg: Math.round(((totalL + totalD) * 120) / 1000),
-          tofuKg: 25,
-          cookingOilLiters: 15,
-          saltAndSpicesKg: 8
-        },
-        wasteReductionTips: [
-          'Điều chỉnh lượng gạo nấu buổi sáng thứ Hai thấp hơn 25-30% do học sinh di chuyển từ các bản xa về trường.',
-          'Chuẩn bị dư nguyên liệu cho bữa trưa và tối các ngày giữa tuần (Thứ 3 đến Thứ 5) với 95-98% sĩ số bám lớp.',
-          'Giảm lượng thực phẩm tươi sống cho bữa tối thứ Sáu khi học sinh tan học về bản với gia đình.'
-        ],
-        kitchenSummary: 'Tổng hợp định lượng dự báo tuần đảm bảo cân đối dinh dưỡng và chống lãng phí thực phẩm.'
-      });
-      setError(null);
-    } finally {
-      setIsLoading(false);
-    }
+      const sum=(key:'predictedBreakfast'|'predictedLunch'|'predictedDinner')=>dailyForecasts.reduce((n,d)=>n+d[key],0);
+      const breakfast=sum('predictedBreakfast'),lunch=sum('predictedLunch'),dinner=sum('predictedDinner');
+      setForecastData({dailyForecasts,totalWeeklyMeals:{breakfast,lunch,dinner,grandTotal:breakfast+lunch+dinner},
+        ingredientEstimates:{riceKg:0,meatKg:0,fishOrEggEstimate:'Chưa thiết lập định lượng',vegetablesKg:0,tofuKg:0,cookingOilLiters:0,saltAndSpicesKg:0},
+        wasteReductionTips:['Chỉ đặt thực phẩm theo số đăng ký đã xác nhận.','Ngày chưa đủ báo ăn cần đối chiếu với GVCN trước khi chốt bếp.','Ngày nghỉ và bữa ăn tắt trong cấu hình không phát sinh suất ăn.'],
+        kitchenSummary:'Dự trù từ đăng ký đã nộp và định lượng đang chọn; không tự suy ra suất ăn từ sĩ số.'});
+    }catch(e:any){setError(e.message||'Không tải được dữ liệu suất ăn.');}
+    finally{setIsLoading(false);}
   };
 
   useEffect(() => {
     fetchForecast();
-  }, [totalBoardingStudents]);
+  }, [scope, settings]);
 
   // Recalculate ingredient estimates based on user custom sliders
   const dynamicIngredients = useMemo(() => {
@@ -262,7 +182,7 @@ export const AIBoardingMealForecastTab: React.FC = () => {
             <div className="flex flex-wrap items-center gap-2">
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-amber-400 text-slate-950 shadow-sm">
                 <Sparkles className="w-3.5 h-3.5 text-slate-950 animate-pulse" />
-                AI TỐI ƯU HÓA SUẤT ĂN BÁN TRÚ
+                KẾ HOẠCH SUẤT ĂN BÁN TRÚ
               </span>
               <span className="text-xs font-bold text-amber-200">
                 Quy mô: <strong>{totalBoardingStudents} học sinh bán trú</strong>
@@ -270,12 +190,11 @@ export const AIBoardingMealForecastTab: React.FC = () => {
             </div>
 
             <h2 className="text-lg sm:text-2xl font-black uppercase tracking-tight">
-              DỰ BÁO SUẤT ĂN & CÂN ĐỐI NGUYÊN LIỆU NHÀ BẾP TỰ ĐỘNG
+              KẾ HOẠCH SUẤT ĂN & DỰ TRÙ NGUYÊN LIỆU NHÀ BẾP
             </h2>
 
             <p className="text-xs sm:text-sm text-amber-100/90 leading-relaxed font-normal">
-              Ứng dụng AI phân tích chu kỳ ăn thực tế của học sinh vùng cao (đặc thù giảm ăn sáng thứ Hai do lên trường muộn, giảm ăn tối thứ Sáu do về bản sớm), tự động tính toán số suất ăn và ước tính chính xác khối lượng gạo, thịt, rau củ để tránh lãng phí thực phẩm.
-            </p>
+              Tổng hợp đăng ký báo ăn đã nộp, đối chiếu lịch ăn từng ngày. Ngày nghỉ không tự phát sinh suất ăn; ngày chưa có đăng ký được ghi rõ, không coi sĩ số là số học sinh ăn.</p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5 shrink-0">
@@ -296,7 +215,7 @@ export const AIBoardingMealForecastTab: React.FC = () => {
               className="inline-flex items-center gap-2 px-4 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl text-xs font-black transition-all shadow-md cursor-pointer disabled:opacity-40"
             >
               <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-              <span>Cập nhật dự báo AI</span>
+              <span>Đối chiếu đăng ký</span>
             </button>
           </div>
         </div>
@@ -305,7 +224,7 @@ export const AIBoardingMealForecastTab: React.FC = () => {
       {isLoading ? (
         <div className="bg-white rounded-2xl p-12 text-center border border-slate-200 shadow-xs space-y-3">
           <Utensils className="w-10 h-10 text-amber-600 animate-bounce mx-auto" />
-          <div className="text-sm font-bold text-slate-900">Gemini 3.8 Flash đang tính toán dự báo suất ăn 7 ngày tới...</div>
+          <div className="text-sm font-bold text-slate-900">Đang đối chiếu lịch ăn và đăng ký trên máy chủ…</div>
           <div className="text-xs text-slate-500 max-w-md mx-auto">
             Mô hình đang phân tích các biến số ngày trong tuần, đặc thù học sinh từ bản lên trường để đưa ra định mức tối ưu nhất.
           </div>
@@ -332,10 +251,10 @@ export const AIBoardingMealForecastTab: React.FC = () => {
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-black uppercase text-slate-900 tracking-wider flex items-center gap-2">
                 <Calendar className="w-4 h-4 text-amber-600" />
-                <span>BẢNG DỰ BÁO SUẤT ĂN 7 NGÀY TỚI (SÁNG - TRƯA - TỐI)</span>
+                <span>ĐĂNG KÝ SUẤT ĂN 7 NGÀY TỚI (SÁNG - TRƯA - TỐI)</span>
               </h3>
               <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
-                ✓ Độ tin cậy AI: ~94%
+                Nguồn: đăng ký trên máy chủ
               </span>
             </div>
 

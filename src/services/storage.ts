@@ -1,3 +1,4 @@
+import {attendanceDayOff} from './gradeAttendanceStats';
 import { persistBoardingReports } from './boardingPersistence';
 import { persistDailyReport, validateAttendanceValues } from './dailyReportPersistence';
 import { compareSchoolClasses } from '../utils/classSorting';
@@ -7942,6 +7943,7 @@ export const StorageService = {
       return { sentCount: 0, remindedClasses: [], skippedClasses: [] };
     }
 
+    const offDays = await this.getOffDays();
     const profiles = await this.getProfiles();
     const aggregate = await this.getDailyAggregate(dateToCheck);
     const existingNotifs = await this.getNotifications();
@@ -7951,6 +7953,7 @@ export const StorageService = {
     let sentCount = 0;
 
     for (const cls of activeClasses) {
+      if (attendanceDayOff(dateToCheck,cls.campus_id,offDays,settings.allow_gvcn_report_saturday===true)) { skippedClasses.push(cls.class_name); continue; }
       // Tìm xem lớp này đã báo cáo chưa
       const row = aggregate.rows.find((r) => r.classItem.id === cls.id);
       const isReported = row && row.status !== 'NOT_REPORTED';

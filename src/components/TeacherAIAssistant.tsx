@@ -1,3 +1,5 @@
+import {isSchoolDataQuestion} from '../services/assistantRouting';
+import {attendanceDayOff} from '../services/gradeAttendanceStats';
 import { loadOperationsData } from '../services/operationsData';
 import { buildOperationsSnapshot, answerOperationsQuestion } from '../services/operationsInsights';
 import { getTodayDateStr } from '../utils/schoolWeeks';
@@ -45,6 +47,7 @@ export interface TeacherAIAssistantProps {
 export interface ChatMessage {
   id: string;
   sender: 'user' | 'ai';
+  general?: boolean;
   text: string;
   timestamp: string;
   keyMetrics?: Array<{ label: string; value: string }>;
@@ -138,13 +141,14 @@ export const TeacherAIAssistant: React.FC<TeacherAIAssistantProps> = ({
   const { settings, classes, students, activeYear, indicators } = useSchool();
   const { currentUser } = useAuth();
 
+  const conversationEpoch=useRef(0);
   const sendMessageRef = useRef<(text:string)=>void>(()=>{});
   const [inputMessage, setInputMessage] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>(() => [
     {
       id: 'welcome',
       sender: 'ai',
-      text: `Xin chào ${currentUser?.full_name || 'Thầy/Cô'}! Tôi hỗ trợ tra cứu sĩ số, lớp chưa báo, học sinh vắng, kiểm tra chênh lệch và giải thích quy trình báo cáo trong phạm vi được giao. Câu trả lời số liệu có ngày và thời điểm đối chiếu máy chủ. Thầy/Cô có thể mở Trợ lý dữ liệu để chọn ngày và xem căn cứ.`,
+      text: `Xin chào ${currentUser?.full_name || 'Thầy/Cô'}! Tôi hỗ trợ hỏi đáp kiến thức nhiều lĩnh vực, soạn bài, viết văn bản và tra cứu dữ liệu nhà trường theo quyền của Thầy/Cô. Câu trả lời số liệu có ngày và thời điểm đối chiếu máy chủ. Thầy/Cô có thể mở Trợ lý dữ liệu để chọn ngày và xem căn cứ.`,
       timestamp: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
       suggestedQuestions: [
         'Hôm nay có học sinh nào vắng không?',
@@ -157,6 +161,12 @@ export const TeacherAIAssistant: React.FC<TeacherAIAssistantProps> = ({
     },
   ]);
 
+  useEffect(()=>{
+    conversationEpoch.current++;
+    setIsLoading(false);
+    setMessages([{id:'welcome',sender:'ai',text:`Xin chào Thầy/Cô ${currentUser?.full_name||''}! Thầy/Cô có cần tôi hỗ trợ gì không ạ? Tôi có thể hỗ trợ báo cáo sĩ số, soạn bài, viết văn bản và giải đáp kiến thức nhiều lĩnh vực.`,timestamp:new Date().toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'}),suggestedQuestions:['Mật khẩu mở sổ chấm cơm?','Lớp nào chưa báo?','Giúp tôi soạn một hoạt động khởi động tiết Toán','Giải thích trí tuệ nhân tạo bằng ví dụ đơn giản']}]);
+  },[currentUser?.id]);
+  useEffect(()=>{if(!isOpen)return;const close=(e:KeyboardEvent)=>{if(e.key==='Escape')onClose();};window.addEventListener('keydown',close);return()=>window.removeEventListener('keydown',close);},[isOpen,onClose]);
   const [isLoading, setIsLoading] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [speechSupported, setSpeechSupported] = useState(false);
@@ -176,7 +186,7 @@ export const TeacherAIAssistant: React.FC<TeacherAIAssistantProps> = ({
   // Prevent background body scroll on mobile when drawer is open
   useEffect(() => {
     if (isOpen) {
-      document.body.style.overflow = 'hidden';
+      document.body.style.overflow = window.innerWidth < 768 ? 'hidden' : '';
     } else {
       document.body.style.overflow = '';
       if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
@@ -268,15 +278,27 @@ export const TeacherAIAssistant: React.FC<TeacherAIAssistantProps> = ({
 
   // Build live school context for AI
   const handleSendMessage = async (textToSend?: string) => {
+    const requestEpoch=conversationEpoch.current;
     const text = (textToSend || inputMessage).trim();
     if(!text || isLoading || !currentUser) return;
     setInputMessage(''); setIsLoading(true);
-    setMessages(prev=>[...prev,{id:crypto.randomUUID(),sender:'user',text,timestamp:new Date().toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'})}]);
+    setMessages(prev=>[...prev,{id:crypto.randomUUID(),sender:'user',general:!isSchoolDataQuestion(text),text,timestamp:new Date().toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'})}]);
     let reply='';
     let action:ChatMessage['action'];
     try {
       const q=normalizeVietnamese(text);
-      if(/han chot|quy dinh|thi dua/.test(q)) {
+      if(!isSchoolDataQuestion(text)) {
+        const response=await fetch('/api/ai/chat-assistant',{method:'POST',headers:{'Content-Type':'application/json'},signal:AbortSignal.timeout(28000),body:JSON.stringify({message:text,conversationHistory:messages.filter(m=>m.general).slice(-8).map(m=>({role:m.sender==='user'?'user':'model',text:m.text}))})});
+        const body=await response.json().catch(()=>({}));
+        if(!response.ok||!body.success) throw new Error(body.error||'Dịch vụ AI chưa sẵn sàng. Vui lòng thử lại.');
+        reply=body.data.reply;
+      } else if(/mat khau/.test(q)) {
+        reply='Sổ chấm cơm dùng mật khẩu riêng do quản trị cấp, không phải mật khẩu quản trị. Mật khẩu hiện được xác thực trên máy chủ nên trợ lý chưa đọc lại được. Thầy/Cô nhập mật khẩu đã được cấp tại cửa sổ mở sổ; nếu chưa có, liên hệ quản trị để nhận. Trợ lý không tự đặt hoặc đoán mật khẩu.';
+        action={type:'NAVIGATE',target:'/reports/boarding-monthly',label:'Mở sổ chấm cơm'};
+      } else if(/bao an|suat an|cham (an|com)|ban tru/.test(q)) {
+        reply='Báo ăn được kiểm tra theo lịch phục vụ và đăng ký đã nộp, riêng với báo cáo sĩ số. Chủ nhật mặc định nghỉ, không tự sinh suất ăn. Ngày học nhưng chưa có báo cáo không được tự coi là ăn đủ. Mở Báo ăn để xem số đã đăng ký và các bữa đang phục vụ.';
+        action={type:'NAVIGATE',target:'/boarding',label:'Mở báo ăn'};
+      } else if(/han chot|quy dinh|thi dua/.test(q)) {
         reply=`Hạn báo cáo đang cấu hình: ${settings?.early_report_deadline || '07:30'}. Điểm thưởng sớm: ${settings?.enable_early_report_bonus === false ? 'đã tắt' : `${settings?.early_report_bonus_points ?? 0.5} điểm/ngày; tối đa ${settings?.early_report_max_bonus ?? 2.5} điểm/tuần`}. Lịch nghỉ và lịch ăn áp dụng theo cấu hình nhà trường.`;
       } else if(/huong dan|cach diem danh|cac buoc/.test(q)) {
         reply='Chọn lớp được giao và ngày báo cáo → kiểm tra tổng sĩ số → nhập học sinh vắng và lý do → kiểm tra báo ăn → gửi báo cáo. Chỉ coi là đã gửi khi máy chủ xác nhận. Bản nháp trên thiết bị chưa được tính là báo cáo.';
@@ -292,22 +314,26 @@ export const TeacherAIAssistant: React.FC<TeacherAIAssistantProps> = ({
         if(target) scope=scope.filter(c=>normalizeVietnamese(c.class_name)===target);
         if(!scope.length) reply='Chưa có lớp thuộc phạm vi được giao hoặc lớp được hỏi. Không có dữ liệu để trả lời.';
         else if(/gvcn|giao vien chu nhiem|ho so|tra cuu/.test(q)) {
-          reply='Mở Trợ lý dữ liệu để đối chiếu lớp được giao. Tra cứu hồ sơ chi tiết tại mục Lớp học theo quyền hiện có; câu trả lời này không tải danh bạ toàn trường.';
+          const profiles=await StorageService.getProfiles();
+          reply=scope.map(c=>`${c.class_name}: ${profiles.find(p=>p.id===c.homeroom_teacher_id)?.full_name||'Chưa cấu hình GVCN'}`).join('\n')+'\nPhạm vi: các lớp được tài khoản hiện tại phép xem.';
         } else {
           const today=getTodayDateStr();
-          const data=await loadOperationsData(today,scope);
-          const snapshot=buildOperationsSnapshot(today,scope,data.reports,data.values,indicators,data.boarding);
-          reply=answerOperationsQuestion(text,snapshot)+`\n\nNguồn: báo cáo máy chủ ngày ${today}; phạm vi ${scope.length} lớp; đối chiếu lúc ${new Date(snapshot.checkedAt).toLocaleTimeString('vi-VN')}.`;
+          const offDays=await StorageService.getOffDays();
+          const allOff=scope.every(c=>attendanceDayOff(today,c.campus_id,offDays,settings?.allow_gvcn_report_saturday===true));
+          const data=allOff?{reports:[],values:[],boarding:[],boardingWarning:''}:await loadOperationsData(today,scope);
+          const snapshot=buildOperationsSnapshot(today,scope,data.reports,data.values,indicators,data.boarding,undefined,{offDays,allowSaturday:settings?.allow_gvcn_report_saturday===true});
+          reply=answerOperationsQuestion(text,snapshot)+`\n\nNguồn: lịch nghỉ và báo cáo ngày ${today}; phạm vi ${scope.length} lớp; đối chiếu lúc ${new Date(snapshot.checkedAt).toLocaleTimeString('vi-VN')}.`;
           if(data.boardingWarning) reply+='\n'+data.boardingWarning;
         }
         action={type:'NAVIGATE',target:'/operations',label:'Mở Trợ lý dữ liệu & đối chiếu'};
       }
-    } catch {
-      reply='Chưa tải được dữ liệu máy chủ nên chưa thể kết luận số lớp đã báo, số học sinh vắng hoặc tỷ lệ chuyên cần. Hãy thử lại khi kết nối ổn định.';
-    } finally { setIsLoading(false); }
-    setMessages(prev=>[...prev,{id:crypto.randomUUID(),sender:'ai',text:reply,action,
+    } catch(error:any) {
+      reply=!isSchoolDataQuestion(text)?(error.name==='TimeoutError'?'AI phản hồi chậm. Vui lòng thử lại.':error.message||'Chưa kết nối được AI.'):'Chưa tải được dữ liệu máy chủ nên chưa thể kết luận số lớp đã báo, số học sinh vắng hoặc tỷ lệ chuyên cần. Hãy thử lại khi kết nối ổn định.';
+    } finally { if(requestEpoch===conversationEpoch.current)setIsLoading(false); }
+    if(requestEpoch!==conversationEpoch.current)return;
+    setMessages(prev=>[...prev,{id:crypto.randomUUID(),sender:'ai',general:!isSchoolDataQuestion(text),text:reply,action,
       timestamp:new Date().toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'}),
-      suggestedQuestions:['Lớp nào chưa báo?','Kiểm tra sai lệch sĩ số','Danh sách học sinh vắng hôm nay']}]);
+      suggestedQuestions:!isSchoolDataQuestion(text)?['Giải thích dễ hiểu hơn','Cho tôi một ví dụ thực tế','Gợi ý cách áp dụng trong dạy học']:['Lớp nào chưa báo?','Mật khẩu mở sổ chấm cơm?','Danh sách học sinh vắng hôm nay']}]);
   };
   sendMessageRef.current = text => { void handleSendMessage(text); };
 
@@ -316,6 +342,8 @@ export const TeacherAIAssistant: React.FC<TeacherAIAssistantProps> = ({
   };
 
   const handleResetConversation = () => {
+    conversationEpoch.current++;
+    setIsLoading(false);
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       window.speechSynthesis.cancel();
     }
@@ -340,19 +368,15 @@ export const TeacherAIAssistant: React.FC<TeacherAIAssistantProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-slate-950/65 backdrop-blur-xs transition-opacity duration-200"
+      className="fixed inset-0 z-50 flex items-end justify-end md:pointer-events-none"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
       {/* Container: Mobile = Bottom Sheet Drawer; Desktop = Centered Modal Dialog */}
       <div
-        className={`w-full bg-white flex flex-col overflow-hidden shadow-2xl transition-all duration-200 border-slate-200
-          /* Mobile styles: ôm sát đáy, bo góc trên, full width, h-88vh */
-          max-md:rounded-t-3xl max-md:max-h-[88dvh] max-md:h-[88dvh] max-md:border-t
-          /* Desktop styles: modal trung tâm, bo 4 góc, max-w-2xl, h-[680px] */
-          md:rounded-3xl md:max-w-2xl md:h-[680px] md:max-h-[92vh] md:border
-        `}
+        role="dialog" aria-label="Trợ lý AI nhà trường"
+        className="pointer-events-auto w-full h-[100dvh] md:w-[460px] md:h-[min(680px,calc(100dvh-110px))] md:mb-24 md:mr-5 bg-white flex flex-col overflow-hidden shadow-2xl border border-slate-200 md:rounded-2xl pt-[env(safe-area-inset-top)]"
       >
         {/* Mobile Swipe / Drag Handle Bar */}
         <div className="md:hidden bg-gradient-to-r from-blue-950 via-indigo-950 to-slate-900 pt-2.5 pb-1 flex justify-center">
@@ -373,10 +397,10 @@ export const TeacherAIAssistant: React.FC<TeacherAIAssistantProps> = ({
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                 <h3 className="font-extrabold text-xs sm:text-sm text-white tracking-tight uppercase truncate">
-                  TRỢ LÝ ẢO AI - THẦY VŨ VĂN HÙNG
+                  TRỢ LÝ AI NHÀ TRƯỜNG
                 </h3>
                 <span className="text-[9px] sm:text-[10px] font-black px-1.5 py-0.5 rounded-full bg-emerald-500/25 text-emerald-300 border border-emerald-400/40 shrink-0">
-                  Hỗ trợ 24/7
+                  Hỏi đáp & dữ liệu
                 </span>
               </div>
               <div className="text-[10px] sm:text-xs text-blue-200 font-medium truncate mt-0.5 flex items-center gap-1.5">
@@ -644,9 +668,10 @@ export const TeacherAIAssistant: React.FC<TeacherAIAssistantProps> = ({
               type="text"
               value={inputMessage}
               onChange={(e) => setInputMessage(e.target.value)}
-              placeholder="Hỏi về hạn chót 07h30, chấm ăn bán trú, điểm danh, Supabase..."
+              placeholder="Hỏi sĩ số, soạn bài, toán học, công nghệ, kiến thức chung…"
               disabled={isLoading}
-              className="flex-1 px-3.5 sm:px-4 py-2.5 sm:py-3 rounded-2xl border border-slate-200 text-xs sm:text-sm font-medium focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none bg-slate-50/50"
+              aria-label="Câu hỏi cho trợ lý AI" maxLength={6000}
+              className="min-w-0 flex-1 px-3.5 sm:px-4 py-2.5 sm:py-3 rounded-2xl border border-slate-200 text-xs sm:text-sm font-medium focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none bg-slate-50/50"
             />
 
             <button

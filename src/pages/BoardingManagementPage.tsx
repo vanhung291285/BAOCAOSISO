@@ -473,7 +473,7 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
         };
       });
 
-      setMealRecords(syncedRecords);
+      setMealRecords(syncedRecords.map(r=>({...r,breakfast:mealSchedule.breakfastAllowed&&r.breakfast,lunch:mealSchedule.lunchAllowed&&r.lunch,dinner:mealSchedule.dinnerAllowed&&r.dinner})));
     };
 
     // 1. Phục vụ tức thời (0ms) từ dữ liệu offline cục bộ
@@ -714,6 +714,7 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
   // Save Meal Attendance Report
   const handleSaveMealReport = async () => {
     if (!selectedClassId || !selectedDate) return;
+    if(!mealSchedule.isMealDay){showToast('Ngày này không tổ chức ăn theo lịch nhà trường. Không gửi suất ăn.','error');return;}
 
     if (!isDailyAttendanceSubmitted) {
       const confirmSave = window.confirm(
@@ -1530,7 +1531,7 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
 
               {/* Status Badge */}
               <div className="flex items-center gap-2">
-                {!isDailyAttendanceSubmitted ? (
+                {!mealSchedule.isMealDay ? (<span className="rounded-xl bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600">Ngày nghỉ · Không tổ chức ăn</span>) : !isDailyAttendanceSubmitted ? (
                   <span className="px-3 py-1.5 rounded-xl text-xs font-black bg-rose-100 text-rose-800 border-2 border-rose-300 flex items-center gap-1.5 shadow-xs animate-pulse">
                     <AlertTriangle className="w-4 h-4 text-rose-600" />
                     Chưa báo cáo sĩ số
@@ -1565,7 +1566,7 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
           </div>
 
           {/* Cảnh báo rõ ràng khi GVCN chưa báo cáo sĩ số ngày */}
-          {!isDailyAttendanceSubmitted && (
+          {mealSchedule.isMealDay && !isDailyAttendanceSubmitted && (
             <div className="bg-gradient-to-r from-rose-50 via-amber-50 to-orange-50 border-2 border-rose-300 rounded-2xl p-4 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
               <div className="flex items-start gap-3">
                 <div className="w-10 h-10 rounded-xl bg-rose-500 text-white flex items-center justify-center shrink-0 shadow-sm mt-0.5 sm:mt-0">

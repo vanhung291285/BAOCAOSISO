@@ -1,3 +1,4 @@
+import {StorageService} from '../services/storage';
 import React,{useEffect,useMemo,useRef,useState} from 'react';
 import {useSchool} from '../contexts/SchoolContext';
 import {useAuth} from '../contexts/AuthContext';
@@ -30,14 +31,14 @@ export function OperationsCenterPage({onSelectClass}:Props) {
     const id=++request.current;
     setLoading(true);setError('');setWarning('');setSnapshot(undefined);setAnswer('');
     if(!currentUser) {setLoading(false);return;}
-    void loadOperationsData(date,scope).then(data=>{
+    void Promise.all([loadOperationsData(date,scope),StorageService.getOffDays()]).then(([data,offDays])=>{
       if(id!==request.current)return;
-      setSnapshot(buildOperationsSnapshot(date,scope,data.reports,data.values,indicators,data.boarding));
+      setSnapshot(buildOperationsSnapshot(date,scope,data.reports,data.values,indicators,data.boarding,undefined,{offDays,allowSaturday:settings?.allow_gvcn_report_saturday===true}));
       setWarning(data.boardingWarning);
     }).catch(e=>{if(id===request.current)setError(e.message||'Không tải được dữ liệu.');})
       .finally(()=>{if(id===request.current)setLoading(false);});
     return ()=>{++request.current;};
-  },[date,scope,indicators,revision,currentUser?.id]);
+  },[date,scope,indicators,revision,currentUser?.id,settings?.allow_gvcn_report_saturday]);
   const weekday = new Date(`${date}T12:00:00+07:00`).getUTCDay();
   const calendarNotice = weekday === 0 || weekday === 6 && settings?.allow_gvcn_report_saturday !== true ? 'Ngày cuối tuần: kiểm tra lịch học thực tế. Danh sách chưa báo là thông tin tra cứu, không tự kết luận lớp chậm nộp hoặc trừ thi đua.' : '';
   const brief=snapshot?operationsBrief(snapshot,settings?.school_name||'Nhà trường'):'';
@@ -75,7 +76,7 @@ export function OperationsCenterPage({onSelectClass}:Props) {
           <div className="flex items-center gap-2 border-b p-4 font-bold text-slate-900"><ClipboardCheck size={20}/>Theo dõi từng lớp</div>
           {!snapshot.rows.length&&<p className="p-6 text-slate-500">Chưa có lớp thuộc phạm vi này.</p>}
           <div className="divide-y">{snapshot.rows.map(r=><article key={r.classItem.id} className="p-4">
-            <div className="flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-3"><span className="rounded-xl bg-slate-100 px-3 py-2 font-extrabold text-slate-800">{r.classItem.class_name}</span><div><p className={`text-sm font-bold ${r.state==='valid'?'text-emerald-700':'text-amber-700'}`}>{r.state==='valid'?'Đã báo hợp lệ':r.state==='missing'?'Chưa báo cáo':'Chưa hoàn chỉnh'}</p><p className="text-xs text-slate-500">{r.state==='valid'?`Tổng ${r.total} · Có mặt ${r.present} · Vắng ${r.absent}`:'Chưa đưa vào tổng hợp chuyên cần'}</p></div></div><button type="button" onClick={()=>onSelectClass(r.classItem.id,date)} className="flex items-center gap-1 rounded-lg bg-blue-50 px-3 py-2 text-xs font-bold text-blue-800">Mở báo cáo<ArrowRight size={14}/></button></div>
+            <div className="flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-3"><span className="rounded-xl bg-slate-100 px-3 py-2 font-extrabold text-slate-800">{r.classItem.class_name}</span><div><p className={`text-sm font-bold ${r.state==='valid'?'text-emerald-700':'text-amber-700'}`}>{r.state==='valid'?'Đã báo hợp lệ':r.state==='off'?'Ngày nghỉ · Không yêu cầu báo cáo':r.state==='missing'?'Chưa báo cáo':'Chưa hoàn chỉnh'}</p><p className="text-xs text-slate-500">{r.state==='valid'?`Tổng ${r.total} · Có mặt ${r.present} · Vắng ${r.absent}`:'Chưa đưa vào tổng hợp chuyên cần'}</p></div></div><button type="button" onClick={()=>onSelectClass(r.classItem.id,date)} className="flex items-center gap-1 rounded-lg bg-blue-50 px-3 py-2 text-xs font-bold text-blue-800">Mở báo cáo<ArrowRight size={14}/></button></div>
             {r.issues.map(issue=><p key={issue} className="mt-2 flex gap-2 rounded-lg bg-amber-50 p-2 text-xs leading-5 text-amber-900"><AlertTriangle size={15} className="mt-0.5 shrink-0"/>{issue}</p>)}
           </article>)}</div>
         </section>

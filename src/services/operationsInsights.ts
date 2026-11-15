@@ -1,7 +1,8 @@
-import type { ClassItem, DailyReport, DailyReportValue, IndicatorGroup, BoardingDailyReport } from '../types';
+import { attendanceDayOff } from './gradeAttendanceStats';
+import type { ClassItem, DailyReport, DailyReportValue, IndicatorGroup, BoardingDailyReport, SchoolOffDay } from '../types';
 export interface ClassInsight {
-  classItem:ClassItem; report?:DailyReport; state:'missing'|'incomplete'|'valid';
-  total:number; present:number; absent:number; issues:string[];
+  classItem:ClassItem; report?:DailyReport; state:'missing'|'incomplete'|'valid'|'off';
+  offReason?:string; total:number; present:number; absent:number; issues:string[];
 }
 export interface OperationsSnapshot {
   date:string; checkedAt:string; rows:ClassInsight[];
@@ -9,10 +10,12 @@ export interface OperationsSnapshot {
 }
 const validValue=(v:DailyReportValue)=>[v.total_count,v.present_count,v.absent_count].every(n=>Number.isSafeInteger(n)&&n>=0)
   && v.total_count>0 && v.present_count+v.absent_count===v.total_count;
-export function buildOperationsSnapshot(date:string, classes:ClassItem[], reports:DailyReport[], values:DailyReportValue[], indicators:IndicatorGroup[], boarding:BoardingDailyReport[] = [], checkedAt=new Date().toISOString()):OperationsSnapshot {
+export function buildOperationsSnapshot(date:string, classes:ClassItem[], reports:DailyReport[], values:DailyReportValue[], indicators:IndicatorGroup[], boarding:BoardingDailyReport[] = [], checkedAt=new Date().toISOString(), calendar:{offDays:SchoolOffDay[];allowSaturday:boolean}={offDays:[],allowSaturday:true}):OperationsSnapshot {
   const allIds=new Set(indicators.filter(i=>i.code==='ALL').map(i=>i.id));
   const boardingIds=new Set(indicators.filter(i=>i.code==='BOARDING_HALF').map(i=>i.id));
   const rows=classes.filter(c=>c.active).map(classItem=>{
+    const offReason=attendanceDayOff(date,classItem.campus_id,calendar.offDays,calendar.allowSaturday);
+    if(offReason) return {classItem,state:'off',offReason,total:0,present:0,absent:0,issues:[]} as ClassInsight;
     const candidates=reports.filter(r=>r.class_id===classItem.id && r.report_date.split('T')[0]===date)
       .sort((a,b)=>b.updated_at.localeCompare(a.updated_at));
     const report=candidates[0]; const issues:string[]=[];
@@ -32,11 +35,12 @@ export function buildOperationsSnapshot(date:string, classes:ClassItem[], report
   });
   const good=rows.filter(r=>r.state==='valid');
   const total=good.reduce((s,r)=>s+r.total,0),present=good.reduce((s,r)=>s+r.present,0),absent=good.reduce((s,r)=>s+r.absent,0);
-  return {date,checkedAt,rows,totals:{classes:rows.length,reported:good.length,missing:rows.filter(r=>r.state==='missing').length,incomplete:rows.filter(r=>r.state==='incomplete').length,total,present,absent,rate:total?Math.round(present/total*10000)/100:null}};
+  return {date,checkedAt,rows,totals:{classes:rows.filter(r=>r.state!=='off').length,reported:good.length,missing:rows.filter(r=>r.state==='missing').length,incomplete:rows.filter(r=>r.state==='incomplete').length,total,present,absent,rate:total?Math.round(present/total*10000)/100:null}};
 }
 export function operationsBrief(s:OperationsSnapshot,schoolName:string) {
+  if(s.rows.length && s.rows.every(r=>r.state==='off')) return `Ngày ${s.date}: ${s.rows[0].offReason}. GVCN không phải báo cáo sĩ số; không tính lớp chưa báo hoặc học sinh vắng. Báo ăn được kiểm tra riêng theo lịch ăn và đăng ký thực tế.`;
   const t=s.totals;
-  const missing=s.rows.filter(r=>r.state!=='valid').map(r=>r.classItem.class_name);
+  const missing=s.rows.filter(r=>r.state==='missing'||r.state==='incomplete').map(r=>r.classItem.class_name);
   const issues=s.rows.flatMap(r=>r.issues.map(x=>`${r.classItem.class_name}: ${x}`));
   return [`BÁO CÁO SĨ SỐ — ${schoolName}`,`Ngày báo cáo: ${s.date}`,`Đã xác nhận: ${t.reported}/${t.classes} lớp; chưa báo: ${t.missing}; chưa hoàn chỉnh: ${t.incomplete}.`,
     `Trên các lớp đã báo hợp lệ: tổng ${t.total}, có mặt ${t.present}, vắng ${t.absent}.`,
@@ -48,8 +52,9 @@ export function operationsBrief(s:OperationsSnapshot,schoolName:string) {
 }
 export function answerOperationsQuestion(question:string,s:OperationsSnapshot) {
   const q=question.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/g,'d').toLowerCase();
+  if(s.rows.length && s.rows.every(r=>r.state==='off')) return operationsBrief(s,'Phạm vi đang chọn');
   if(/tuan|thang|hoc ky|nam hoc|hom qua|ngay mai/.test(q)) return `Màn hình này chỉ đối chiếu ngày ${s.date}. Hãy chọn ngày cần xem hoặc mở báo cáo tuần/tháng; tôi chưa có dữ liệu để trả lời kỳ khác.`;
-  if(/chua|thieu|nop/.test(q)) return s.rows.filter(r=>r.state!=='valid').map(r=>`${r.classItem.class_name}: ${r.state==='missing'?'chưa báo':'chưa hoàn chỉnh'}`).join('\n')||'Các lớp trong phạm vi đã có báo cáo hợp lệ.';
+  if(/chua|thieu|nop/.test(q)) return s.rows.filter(r=>r.state==='missing'||r.state==='incomplete').map(r=>`${r.classItem.class_name}: ${r.state==='missing'?'chưa báo':'chưa hoàn chỉnh'}`).join('\n')||'Các lớp trong phạm vi đã có báo cáo hợp lệ.';
   if(/sai|lech|kiem tra|bat thuong/.test(q)) return s.rows.flatMap(r=>r.issues.map(x=>`${r.classItem.class_name}: ${x}`)).join('\n')||'Chưa phát hiện sai lệch theo các quy tắc đã kiểm tra.';
   if(/vang|nghi/.test(q)) return s.rows.filter(r=>r.state==='valid').flatMap(r=>(r.report?.absent_students??[]).map(st=>`${r.classItem.class_name} — ${st.full_name}: ${st.reason?.trim()||'Chưa ghi lý do'}`)).join('\n')|| (s.totals.reported ? 'Chưa có tên học sinh vắng trong báo cáo hợp lệ. Xem mục sai lệch nếu số vắng chưa khớp.' : 'Chưa có báo cáo hợp lệ; chưa thể kết luận học sinh có mặt đầy đủ.');
   if(/si so|tong|ty le|bao cao|tinh hinh/.test(q)) return operationsBrief(s,'Phạm vi đang chọn');

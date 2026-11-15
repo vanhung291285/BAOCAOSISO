@@ -1,3 +1,4 @@
+import chatAssistantHandler from './api/ai/chat-assistant';
 import express from 'express';
 import { GoogleGenAI } from '@google/genai';
 import path from 'path';
@@ -972,73 +973,7 @@ Hãy trả về định dạng JSON hợp lệ:
 /**
  * Endpoint 3: Natural Language AI Assistant (Chatbot & Voice Commands)
  */
-app.post('/api/ai/chat-assistant', async (req, res) => {
-  const { message, conversationHistory, context } = req.body;
-
-  try {
-    const prompt = `
-Bạn là Trợ lý ảo AI do Thầy Vũ Văn Hùng trực tiếp nghiên cứu và phát triển để hỗ trợ Giáo viên Chủ nhiệm (GVCN) và Ban Giám hiệu (BGH) Trường PTDTBT THCS Xa Dung (Điện Biên Đông, Điện Biên) 24/7.
-Tác giả phần mềm: Thầy Vũ Văn Hùng (Hotline / Zalo: 0984.246.993, Email: hungthcsnongu@gmail.com).
-
-CƠ SỞ DỮ LIỆU THỰC TẾ ĐƯỢC CẤP (BẮT BUỘC ĐỌC VÀ TRÍCH XUẤT TRỰC TIẾP TÊN THẬT, SỐ LIỆU THẬT):
-1. Danh sách Lớp học & Giáo viên Chủ nhiệm (GVCN):
-${JSON.stringify(context?.classList || [], null, 2)}
-
-2. Danh sách Học sinh VẮNG MẶT hôm nay (${context?.currentDate || 'hôm nay'}):
-${JSON.stringify(context?.absentStudentsToday || [], null, 2)}
-
-3. Thư mục tra cứu Học sinh (mẫu thực tế):
-${JSON.stringify((context?.studentDirectory || []).slice(0, 80), null, 2)}
-
-4. Số liệu toàn trường:
-- Tổng số học sinh: ${context?.totalStudents || 0} em (Có mặt: ${context?.presentCount || 0}, Vắng: ${context?.absentCount || 0}, Tỷ lệ: ${context?.presentRate || 0}%)
-- Lớp chưa nộp báo cáo: ${JSON.stringify(context?.unreportedClasses || [])}
-- Suất ăn bán trú hôm nay: ${JSON.stringify(context?.boardingSummary || {})}
-- Khối lớp: ${JSON.stringify(context?.gradeStats || [])}
-
-Quy chế nhà trường:
-- Hạn chót nộp báo cáo sĩ số trước 07h30 sáng (+0.5 điểm thi đua/ngày, tối đa +2.5đ/tuần, muộn bị trừ điểm).
-- Chấm ăn bán trú 3 bữa (Sáng, Trưa, Tối). Sáng Thứ 2 các em lên muộn đạt ~65-75%; chiều Thứ 6 về bản nên tối chỉ nấu cho các em ở lại cuối tuần (~25-35%); Thứ 7 & CN tắt mặc định.
-- Lưu trữ đám mây Supabase an toàn tuyệt đối.
-
-NGƯỜI DÙNG ĐANG HỎI: "${message}"
-
-QUY TẮC PHẢN HỒI BẮT BUỘC:
-1. KHI ĐƯỢC HỎI VỀ GVCN HOẶC LỚP HỌC (ví dụ: "Ai là GVCN lớp 6A1?", "Chủ nhiệm lớp 7A2 là ai?", "Danh sách GVCN"):
-   - BẮT BUỘC đọc trực tiếp mục (1) ở trên và NÊU ĐÍCH DANH tên Thầy/Cô chủ nhiệm lớp đó, sĩ số và trạng thái nộp báo cáo.
-   - TUYỆT ĐỐI KHÔNG trả lời chung chung, TUYỆT ĐỐI KHÔNG bảo người dùng "liên hệ văn phòng" hay "tự đi kiểm tra danh sách".
-   - Ví dụ chuẩn: "Dạ thưa Thầy/Cô, Giáo viên Chủ nhiệm của lớp 6A1 là **Thầy Lò Văn Hùng** (sĩ số lớp: 36 học sinh)."
-2. KHI ĐƯỢC HỎI VỀ HỌC SINH VẮNG HÔM NAY (ví dụ: "Hôm nay em nào vắng?", "Ai nghỉ học?", "Lớp 6A có ai nghỉ không?"):
-   - BẮT BUỘC trích xuất chính xác từ mục (2) ở trên: Tên học sinh, Lớp, Lý do vắng, Bán trú hay Ngoại trú.
-   - Nếu danh sách (2) rỗng, thông báo rõ ràng toàn trường hôm nay không có học sinh nào vắng (chuyên cần 100%).
-3. KHI ĐƯỢC HỎI TÌM KIẾM HỌC SINH CỤ THỂ:
-   - Tìm kiếm trong mục (3) và trả lời đầy đủ: Họ tên, Lớp, Thôn bản cư trú, Diện Bán trú/Ngoại trú.
-4. VĂN PHONG SƯ PHẠM: Xưng hô "Thầy/Cô", kính trọng, chu đáo. Dùng định dạng Markdown in đậm, chia mục gạch đầu dòng rõ ràng. Kèm số liệu (keyMetrics) và nút bấm (action).
-
-Trả về định dạng JSON hợp lệ:
-{
-  "reply": "Câu trả lời trực tiếp, rõ ràng, nêu đích danh tên GVCN / học sinh từ dữ liệu trên",
-  "intent": "ATTENDANCE_SUMMARY" | "UNREPORTED_CLASSES" | "GRADE_INQUIRY" | "BOARDING_INQUIRY" | "DROPOUT_PREDICTION" | "EXPORT" | "GENERAL",
-  "keyMetrics": [
-    { "label": "Tiêu đề số liệu", "value": "Giá trị" }
-  ],
-  "action": {
-    "type": "NAVIGATE",
-    "target": "/dashboard" | "/reports/daily" | "/boarding" | "/ai-dropout-prediction" | "/attendance" | "/classes" | "/students",
-    "label": "Nhãn nút bấm hành động"
-  },
-  "suggestedQuestions": ["Gợi ý câu hỏi 1", "Gợi ý câu hỏi 2", "Gợi ý câu hỏi 3"]
-}
-    `.trim();
-
-    const fallback = () => generateFallbackChatResponse(message, context);
-    const data = await callGeminiStructuredJson(prompt, fallback, 0.3);
-    res.json({ success: true, data });
-  } catch (err: any) {
-    const fallback = generateFallbackChatResponse(message, context);
-    res.json({ success: true, data: fallback });
-  }
-});
+app.post('/api/ai/chat-assistant', chatAssistantHandler);
 
 /**
  * Endpoint 4: AI Boarding Meal Optimizer & 7-Day Forecast

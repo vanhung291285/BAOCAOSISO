@@ -76,6 +76,17 @@ const AppContent: React.FC = () => {
 
   // AI Assistant Modal state
   const [isAIAssistantOpen, setIsAIAssistantOpen] = useState(false);
+  const [showAIGreeting,setShowAIGreeting]=useState(false);
+  const greetedUsers=React.useRef(new Set<string>());
+  useEffect(()=>{setIsAIAssistantOpen(false);setShowAIGreeting(false);},[currentUser?.id]);
+  useEffect(()=>{
+    if(loading||!currentUser||!isGVCN||currentPath!=='/attendance')return;
+    const key=`siso_ai_greeting_${currentUser.id}`;
+    if(greetedUsers.current.has(key))return;
+    greetedUsers.current.add(key);
+    try{if(sessionStorage.getItem(key))return;sessionStorage.setItem(key,'1');}catch{}
+    setShowAIGreeting(true);
+  },[loading,currentUser?.id,isGVCN,currentPath]);
 
   const handleNavigate = (path: string) => {
     if (path === '/attendance') {
@@ -381,6 +392,13 @@ const AppContent: React.FC = () => {
             </nav>
           )}
 
+          {showAIGreeting && !isAIAssistantOpen && currentUser?.role==='GVCN' && currentPath==='/attendance' && <aside aria-live="polite" className="fixed bottom-[calc(9rem+env(safe-area-inset-bottom))] md:bottom-24 right-4 z-40 w-[min(320px,calc(100vw-2rem))] rounded-2xl border border-blue-200 bg-white p-4 text-sm text-slate-700 shadow-xl">
+            <button type="button" aria-label="Ẩn lời chào trợ lý" onClick={()=>setShowAIGreeting(false)} className="absolute right-2 top-1 text-lg px-2 py-1 text-slate-500">×</button>
+            <p className="pr-5 font-bold text-blue-800">Xin chào Thầy/Cô {currentUser.full_name}!</p>
+            <p className="mt-2 leading-6">Thầy/Cô có cần tôi hỗ trợ gì khi báo cáo sĩ số không ạ?</p>
+            <button type="button" onClick={()=>{setShowAIGreeting(false);setIsAIAssistantOpen(true);}} className="mt-3 rounded-xl bg-blue-50 px-3 py-2 font-bold text-blue-800">Trò chuyện với trợ lý →</button>
+          </aside>}
+          {!isAIAssistantOpen && <button type="button" aria-label="Mở hộp chat trợ lý AI" aria-expanded={isAIAssistantOpen} onClick={()=>setIsAIAssistantOpen(true)} className="fixed bottom-[calc(5rem+env(safe-area-inset-bottom))] md:bottom-5 right-4 z-40 flex items-center gap-2 rounded-full bg-gradient-to-r from-blue-700 to-indigo-700 px-4 py-3 text-sm font-bold text-white shadow-xl ring-2 ring-white hover:from-blue-800 hover:to-indigo-800"><Sparkles className="h-5 w-5"/><span>Hỏi trợ lý AI</span></button>}
           {/* Global Teacher AI Assistant (Thầy Vũ Văn Hùng) */}
           <TeacherAIAssistant
             isOpen={isAIAssistantOpen}
