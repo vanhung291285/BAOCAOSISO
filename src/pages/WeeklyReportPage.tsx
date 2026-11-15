@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useSchool } from '../contexts/SchoolContext';
 import { useAuth } from '../contexts/AuthContext';
 import { StorageService, subscribeRealtime } from '../services/storage';
@@ -127,40 +127,57 @@ export const WeeklyReportPage: React.FC<WeeklyReportPageProps> = ({
     }
   }, [isGVCN, assignedClass, selectedClassId, selectedCampusId]);
 
-  // Fetch weekly aggregate data
+  // Fetch the server snapshot on every explicit refresh; retain newer selections if requests finish out of order.
+  const weeklyLoadVersion = useRef(0);
   const loadWeeklyData = useCallback(async (showSpinner = true) => {
+    const version = ++weeklyLoadVersion.current;
     if (showSpinner) setIsLoading(true);
     try {
       const agg = await StorageService.getWeeklyAggregate(
-        selectedWeek,
-        week1StartDate,
+        selectedWeek, week1StartDate,
         selectedCampusId !== 'all' ? selectedCampusId : undefined,
-        undefined
+        undefined, true
       );
-      setData(agg);
+      if (version === weeklyLoadVersion.current) setData(agg);
     } catch (err) {
       console.error('Failed to load weekly aggregate:', err);
     } finally {
-      if (showSpinner) setIsLoading(false);
+      if (version === weeklyLoadVersion.current) setIsLoading(false);
     }
   }, [selectedWeek, week1StartDate, selectedCampusId]);
 
   useEffect(() => {
-    loadWeeklyData(true);
-
-    let debounceTimer: any = null;
+    let disposed = false, running = false, queued = false;
+    let debounceTimer: ReturnType<typeof setTimeout>;
+    const refresh = async (spinner = false) => {
+      if (disposed) return;
+      if (running) { queued = true; return; }
+      running = true;
+      try { await loadWeeklyData(spinner); }
+      finally {
+        running = false;
+        if (queued && !disposed) { queued = false; void refresh(); }
+      }
+    };
+    void refresh(true);
     const unsub = subscribeRealtime((event) => {
-      if (event.table === 'daily_reports' || event.table === 'daily_report_values' || event.table === 'boarding_reports') {
-        if (debounceTimer) clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(() => {
-          loadWeeklyData(false);
-        }, 500);
+      if (['daily_reports','daily_report_values','boarding_reports'].includes(event.table)) {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => { void refresh(); }, 500);
       }
     });
-
+    const resume = () => { if (document.visibilityState === 'visible') void refresh(); };
+    // Recover missed realtime events when returning to the page or regaining connectivity.
+    const interval = setInterval(resume, 15000);
+    window.addEventListener('focus', resume);
+    window.addEventListener('online', resume);
+    document.addEventListener('visibilitychange', resume);
     return () => {
-      if (debounceTimer) clearTimeout(debounceTimer);
-      unsub();
+      disposed = true; ++weeklyLoadVersion.current;
+      clearTimeout(debounceTimer); clearInterval(interval); unsub();
+      window.removeEventListener('focus', resume);
+      window.removeEventListener('online', resume);
+      document.removeEventListener('visibilitychange', resume);
     };
   }, [loadWeeklyData]);
 

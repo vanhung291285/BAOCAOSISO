@@ -177,11 +177,11 @@ export function invalidateCache(keyOrPrefix?: string): void {
   const prefix = keyOrPrefix.toLowerCase();
   const prefixes = [prefix];
   if (prefix === 'daily_reports' || prefix === 'reports') {
-    prefixes.push('report', 'daily_report', 'latest_report');
+    prefixes.push('report', 'daily_report', 'latest_report', 'weekly_aggregate');
   } else if (prefix === 'daily_report_values' || prefix === 'values') {
-    prefixes.push('value', 'daily_report_value', 'report_window', 'report', 'latest_report');
+    prefixes.push('value', 'daily_report_value', 'report_window', 'report', 'latest_report', 'weekly_aggregate');
   } else if (prefix === 'boarding_reports' || prefix === 'boarding') {
-    prefixes.push('boarding_report', 'boarding');
+    prefixes.push('boarding_report', 'boarding', 'weekly_aggregate');
   }
 
   for (const k of Array.from(memoryCache.keys())) {
@@ -4895,7 +4895,8 @@ export const StorageService = {
     weekNumber: number,
     week1StartDate?: string,
     campusId?: string,
-    classId?: string
+    classId?: string,
+    forceFresh = false
   ): Promise<SchoolWeeklyAggregate> {
     ensureInitialized();
     const settings = await this.getSchoolSettings();
@@ -4905,21 +4906,23 @@ export const StorageService = {
     const isCurrent = today >= weekInfo.startDate && today <= addDaysToDateStr(weekInfo.startDate, 6);
 
     const CACHE_KEY = `weekly_aggregate_w${weekNumber}_${refStartDate}_${campusId || 'all'}_${classId || 'all'}`;
-    const cached = getCached<SchoolWeeklyAggregate>(CACHE_KEY);
+    const cached = !forceFresh ? getCached<SchoolWeeklyAggregate>(CACHE_KEY) : null;
     if (cached) return cached;
 
-    return coalesceRequest(CACHE_KEY, async () => {
+    return coalesceRequest(forceFresh ? `${CACHE_KEY}:fresh` : CACHE_KEY, async () => {
       // 5 ngày học trong tuần: Thứ 2 đến Thứ 6
       const weekDates = [0, 1, 2, 3, 4].map((offset) => addDaysToDateStr(weekInfo.startDate, offset));
       const mondayStr = weekDates[0];
       const fridayStr = weekDates[4];
 
+      let serverWindow: {reports: DailyReport[]; values: DailyReportValue[]} | null = null;
       // Đồng bộ từ Supabase nếu có kết nối
       const supabase = getSupabaseClient();
       if (supabase && isSupabaseConnected()) {
         try {
-          const { reports: cloudReports, values: cloudValues } = await fetchReportWindow(mondayStr, fridayStr);
+          const { reports: cloudReports, values: cloudValues } = await fetchReportWindow(mondayStr, fridayStr, forceFresh);
 
+          serverWindow = {reports: cloudReports, values: cloudValues};
           if (cloudReports && cloudReports.length > 0) {
             const rawReports = localStorage.getItem(STORAGE_KEYS.REPORTS);
             let reports: DailyReport[] = rawReports ? JSON.parse(rawReports) : [];
@@ -4979,9 +4982,9 @@ export const StorageService = {
       ]);
 
       const rawReports = localStorage.getItem(STORAGE_KEYS.REPORTS);
-      const reports: DailyReport[] = rawReports ? JSON.parse(rawReports) : [];
+      const reports: DailyReport[] = serverWindow?.reports ?? (rawReports ? JSON.parse(rawReports) : []);
       const rawValues = localStorage.getItem(STORAGE_KEYS.VALUES);
-      const allValues: DailyReportValue[] = rawValues ? JSON.parse(rawValues) : [];
+      const allValues: DailyReportValue[] = serverWindow?.values ?? (rawValues ? JSON.parse(rawValues) : []);
 
       const allIndicator = indicators.find((i) => i.code === 'ALL') || indicators[0];
       const boardingIndicator = indicators.find(
