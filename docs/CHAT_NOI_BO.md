@@ -4,10 +4,10 @@
 
 - Nút Tin nhắn riêng với chatbot AI; dùng được trên điện thoại và máy tính.
 - Nhắn riêng giữa hai tài khoản, thông báo toàn trường chỉ quản trị chat được gửi.
-- Đếm chưa đọc, tự cập nhật (5 giây khi mở, 15 giây khi đóng), 100 tin gần nhất mỗi cuộc trò chuyện.
+- Biểu tượng tin nhắn trên thanh đầu trang và nút chat đều hiện số chưa đọc. Tải ngay khi vào tài khoản, cập nhật mỗi 5 giây khi trang hiển thị, làm mới ngay khi quay lại ứng dụng hoặc có mạng; 100 tin gần nhất mỗi cuộc trò chuyện.
 - Chỉ xác nhận gửi sau khi máy chủ lưu. Gửi lại cùng nội dung sau gián đoạn mạng dùng cùng mã gửi, tránh trùng tin.
 - GVCN chỉ chọn lớp là tự kết nối chat, không cần mật khẩu. Máy chủ đối chiếu hồ sơ GVCN và lớp được phân công; không gửi email, không cấp mật khẩu cho giáo viên.
-- Phiên GVCN tự tạo và tự nối lại sau khi hết hạn; cookie HttpOnly/Secure/SameSite tồn tại tối đa một giờ. Quản trị vẫn dùng phiên đăng nhập chính đã xác thực. GVCN không thể tự nhận quyền quản trị, cấp tài khoản hoặc phát thông báo toàn trường.
+- Phiên GVCN tự tạo và tự nối lại sau khi hết hạn; cookie HttpOnly/Secure/SameSite riêng từng tài khoản, tồn tại tối đa một giờ. Các tab quản trị/GVCN trong cùng trình duyệt không ghi đè phiên của nhau. Quản trị vẫn dùng phiên đăng nhập chính đã xác thực. GVCN không thể tự nhận quyền quản trị, cấp tài khoản hoặc phát thông báo toàn trường.
 
 ## Kích hoạt lần đầu trên Supabase
 

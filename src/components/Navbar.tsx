@@ -1,3 +1,4 @@
+import {useStaffChatUI} from '../contexts/StaffChatUIContext';
 import React, { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useSchool } from '../contexts/SchoolContext';
@@ -5,6 +6,7 @@ import { PWAInstallButton } from './PWAInstallButton';
 import { NotificationCenter } from './NotificationCenter';
 import { isSupabaseConnected } from '../services/supabase';
 import {
+  MessageCircle,
   School,
   Menu,
   X,
@@ -48,6 +50,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onToggleSidebar,
   onOpenAIAssistant,
 }) => {
+  const {unreadCount,openChat}=useStaffChatUI();
   const { currentUser, logout, isAdmin, isBGH, isGVCN } = useAuth();
   const { settings, activeYear, classes } = useSchool();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -254,6 +257,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
 
             {/* Notification Bell Center */}
+            <button type="button" onClick={openChat} aria-label={`Tin nhắn nội bộ${unreadCount?`, ${unreadCount} tin chưa đọc`:''}`} title={unreadCount?`${unreadCount} tin nhắn chưa đọc`:'Tin nhắn nội bộ'} className="relative grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-teal-200 bg-teal-50 text-teal-800 hover:bg-teal-100 focus-visible:ring-2 focus-visible:ring-teal-600"><MessageCircle className="h-5 w-5"/>{unreadCount>0&&<span aria-live="polite" className="absolute -right-1 -top-1 min-w-5 rounded-full bg-red-600 px-1 text-center text-[11px] font-extrabold leading-5 text-white ring-2 ring-white">{unreadCount>99?'99+':unreadCount}</span>}</button>
             <div className="hidden md:block shrink-0">
               <NotificationCenter onNavigate={handleNav} />
             </div>

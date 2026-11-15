@@ -1,3 +1,4 @@
+import {StaffChatUIProvider} from './contexts/StaffChatUIContext';
 const OperationsCenterPage = lazy(() => import('./pages/OperationsCenterPage').then(m => ({default:m.OperationsCenterPage})));
 import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -417,9 +418,11 @@ export default function App() {
   return (
     <SchoolProvider>
       <AuthProvider>
+        <StaffChatUIProvider>
         <NotificationProvider>
           <AppContent />
         </NotificationProvider>
+        </StaffChatUIProvider>
       </AuthProvider>
     </SchoolProvider>
   );

@@ -20,6 +20,15 @@ test('chat SQL isolates private threads, counts unread, prevents duplicate sends
   let inbox=await db.query<any>('SELECT * FROM staff_chat_inbox($1)',[a]);assert.equal(inbox.rows.length,2);assert.equal(inbox.rows.find(x=>x.thread_id==='school').unread,1);assert(!JSON.stringify(inbox.rows).includes('C private'));
   await assert.rejects(db.query("INSERT INTO staff_chat_messages(sender_id,recipient_id,body,client_nonce)VALUES($1,$2,'retry',$3)",[a,b,nonce]),/unique/);
   await db.query("SELECT staff_chat_mark_read($1,'school','2026-11-14T03:00:00Z')",[a]);await db.query("SELECT staff_chat_mark_read($1,'school','2026-11-14T01:00:00Z')",[a]);inbox=await db.query<any>('SELECT * FROM staff_chat_inbox($1)',[a]);assert.equal(inbox.rows.find(x=>x.thread_id==='school').unread,0);
+  // Regression: two direct messages from the admin must remain unread on teacher entry.
+  await db.query("UPDATE staff_chat_accounts SET is_admin=true,role_label='ADMIN' WHERE id=$1",[b]);
+  await db.query("INSERT INTO staff_chat_messages(sender_id,recipient_id,body,client_nonce,created_at)VALUES($1,$2,'First synthetic notification',gen_random_uuid(),'2026-11-14T04:00:00Z'),($1,$2,'Second synthetic notification',gen_random_uuid(),'2026-11-14T05:00:00Z')",[b,a]);
+  const directUnread=async()=>Number((await db.query<any>('SELECT * FROM staff_chat_inbox($1)',[a])).rows.find(x=>x.thread_id===b).unread);
+  assert.equal(await directUnread(),2);
+  // Reading the school channel must not clear the private thread's badge.
+  await db.query("SELECT staff_chat_mark_read($1,'school','2026-11-14T05:00:00Z')",[a]);assert.equal(await directUnread(),2);
+  await db.query("SELECT staff_chat_mark_read($1,$2,'2026-11-14T04:00:00Z')",[a,b]);assert.equal(await directUnread(),1);
+  await db.query("SELECT staff_chat_mark_read($1,$2,'2026-11-14T05:00:00Z')",[a,b]);assert.equal(await directUnread(),0);
   for(const role of ['anon','authenticated']){await db.exec(`SET ROLE ${role}`);await assert.rejects(db.query('SELECT * FROM staff_chat_messages'),/permission denied/);await assert.rejects(db.query('SELECT * FROM staff_chat_inbox($1)',[a]),/permission denied/);await db.exec('RESET ROLE');}
   assert.equal((await db.query<any>("SELECT staff_chat_allow_request('test',1,60) ok")).rows[0].ok,true);assert.equal((await db.query<any>("SELECT staff_chat_allow_request('test',1,60) ok")).rows[0].ok,false);
  }finally{await db.close();}

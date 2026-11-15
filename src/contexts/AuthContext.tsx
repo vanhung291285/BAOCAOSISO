@@ -127,7 +127,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if(!verified){
         const legacyAdmin=isAdminAlias&&['admin123456@','admin123456','123456','admin'].includes(password||'');
         if(!legacyAdmin)return false;
-        await chatRequest({action:'logout'},undefined,AbortSignal.timeout(3000)).catch(()=>{});
+        await chatRequest({action:'logout',profileId:found.id},undefined,AbortSignal.timeout(3000)).catch(()=>{});
       }
 
       setCurrentUser(found);
@@ -154,7 +154,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const logout = () => {
-    pendingLogout.current=chatRequest({action:'logout'},undefined,AbortSignal.timeout(3000)).catch(()=>{});
+    pendingLogout.current=chatRequest({action:'logout',profileId:currentUser?.id},undefined,AbortSignal.timeout(3000)).catch(()=>{});
     setCurrentUser(null);
     try { localStorage.removeItem(CURRENT_USER_KEY); } catch {}
     try {
@@ -199,7 +199,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     if(password)await chatRequest({action:'login',profileId:match.id,password});
-    else await chatRequest({action:'logout'},undefined,AbortSignal.timeout(3000)).catch(()=>{});
+    // Passwordless teacher sessions are created separately for the selected account.
     setCurrentUser(match);
     saveSession(match);
   };

@@ -2,7 +2,7 @@ import {teacherToken,verifyTeacherToken} from '../server/chat/teacherSession.js'
 import {getTeacherIdentity,ensureTeacherAccount} from '../server/chat/teacherAccounts.js';
 import { createClient } from '@supabase/supabase-js';
 import { createHash, randomUUID } from 'node:crypto';
-import {readSessionToken,sessionCookie} from '../server/chat/session.js';
+import {readSessionToken,sessionCookie,chatCookieName} from '../server/chat/session.js';
 import { messagePayload, validUuid } from '../server/chat/permissions.js';
 export default async function handler(req:any,res:any) {
  res.setHeader('Cache-Control','no-store');
@@ -10,7 +10,7 @@ export default async function handler(req:any,res:any) {
  try{if(req.headers.origin&&new URL(req.headers.origin).host!==req.headers.host)return res.status(403).json({error:'Nguồn yêu cầu không hợp lệ.'});}catch{return res.status(403).json({error:'Nguồn yêu cầu không hợp lệ.'});}
  const body=req.body||{};
  const secure=!/^localhost(?::|$)|^127\.0\.0\.1(?::|$)/.test(String(req.headers.host||''));
- if(body.action==='logout'){res.setHeader('Set-Cookie',sessionCookie('',0,secure));return res.status(200).json({ok:true});}
+ if(body.action==='logout'){res.setHeader('Set-Cookie',[sessionCookie('',0,secure),...(typeof body.profileId==='string'?[sessionCookie('',0,secure,body.profileId)]:[])]);return res.status(200).json({ok:true});}
  if(JSON.stringify(body).length>12000)return res.status(400).json({error:'Yêu cầu quá lớn.'});
  const url=process.env.SUPABASE_URL||process.env.VITE_SUPABASE_URL,key=process.env.SUPABASE_SERVICE_ROLE_KEY;
  if(!url||!key)return res.status(503).json({error:'Chat chưa được cấu hình trên máy chủ.'});
@@ -18,7 +18,7 @@ export default async function handler(req:any,res:any) {
  const check=(r:any)=>{if(r.error)throw r.error;return r.data;};
  try{
   const ip=String(req.headers['x-forwarded-for']||req.socket?.remoteAddress||'unknown').split(',')[0];
-  const allowed=check(await db.rpc('staff_chat_allow_request',{p_key:createHash('sha256').update(`${body.action==='login'?'login':'api'}:${ip}`).digest('hex'),p_limit:body.action==='login'?60:600,p_window:60}));
+  const allowed=check(await db.rpc('staff_chat_allow_request',{p_key:createHash('sha256').update(`${body.action==='login'?'login':'api'}:${ip}`).digest('hex'),p_limit:body.action==='login'?60:3000,p_window:60}));
   if(!allowed)return res.status(429).json({error:'Thao tác quá nhanh. Vui lòng đợi một phút.'});
   if(body.action==='status'){
    const ready=check(await db.from('staff_chat_accounts').select('id').eq('is_admin',true).eq('enabled',true).limit(1));
@@ -28,7 +28,7 @@ export default async function handler(req:any,res:any) {
    if(typeof body.profileId!=='string'||!body.profileId||body.profileId.length>128||typeof body.classId!=='string'||!body.classId||body.classId.length>128)return res.status(400).json({error:'Chưa xác định được lớp và GVCN.'});
    const {profile,cls}=await getTeacherIdentity(db,body.profileId,body.classId);
    const account=await ensureTeacherAccount(db,profile);
-   res.setHeader('Set-Cookie',sessionCookie(teacherToken({accountId:account.id,profileId:profile.id,classId:cls.id},key),3600,secure));
+   res.setHeader('Set-Cookie',sessionCookie(teacherToken({accountId:account.id,profileId:profile.id,classId:cls.id},key),3600,secure,profile.id));
    return res.status(200).json({account,identityMode:'CLASS_SELECTION'});
   }
   if(body.action==='login'){
@@ -41,10 +41,10 @@ export default async function handler(req:any,res:any) {
    if(!user?.email)throw new Error('CHAT_ACCOUNT_INCOMPLETE');
    const auth=await db.auth.signInWithPassword({email:user.email,password:body.password});
    if(auth.error||!auth.data.session)return res.status(401).json({error:'Tài khoản chưa được cấp quyền chat hoặc mật khẩu không đúng.'});
-   res.setHeader('Set-Cookie',sessionCookie(auth.data.session.access_token,Math.min(auth.data.session.expires_in||3600,3600),secure));
+   res.setHeader('Set-Cookie',sessionCookie(auth.data.session.access_token,Math.min(auth.data.session.expires_in||3600,3600),secure,account.profile_id));
    return res.status(200).json({account});
   }
-  const token=readSessionToken(req.headers);
+  const token=readSessionToken(req.headers,typeof body.profileId==='string'?body.profileId:undefined);
   if(!token||token.length>6000)return res.status(401).json({error:'Vui lòng đăng nhập tài khoản ở trang chính.'});
   let account:any;
   if(token.startsWith('gvcn.')){
@@ -60,6 +60,8 @@ export default async function handler(req:any,res:any) {
    if(!account)return res.status(403).json({error:'Tài khoản chat chưa được cấp quyền hoặc đã bị tạm khóa.'});
   }
   if(body.profileId!==account.profile_id)return res.status(409).json({error:'Phiên đăng nhập không khớp tài khoản đang chọn. Vui lòng đăng nhập lại.'});
+  // Upgrade an existing single-account cookie without disturbing other signed-in tabs.
+  if(!String(req.headers.cookie||'').split(';').some((c:string)=>c.trim().startsWith(`${chatCookieName(account.profile_id)}=`)))res.setHeader('Set-Cookie',sessionCookie(token,3600,secure,account.profile_id));
   const accountAllowed=check(await db.rpc('staff_chat_allow_request',{p_key:`api:${account.id}`,p_limit:100,p_window:60}));
   if(!accountAllowed)return res.status(429).json({error:'Tài khoản thao tác quá nhanh. Vui lòng đợi một phút.'});
   if(body.action==='session'){

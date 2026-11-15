@@ -1,3 +1,4 @@
+import {useStaffChatUI} from '../contexts/StaffChatUIContext';
 import React,{useEffect,useRef,useState} from 'react';
 import {MessageCircle,X,Send,ArrowLeft,Search,Users,Megaphone,RefreshCw} from 'lucide-react';
 import {useSchool} from '../contexts/SchoolContext';
@@ -8,6 +9,7 @@ import {chatRequest,ChatAccount,ChatMessage,ChatThread,ChatError} from '../servi
 export function StaffChat({onOpen,hidden=false}:{onOpen:()=>void;hidden?:boolean}){
  const {currentUser,allUsers,logout:logoutAccount}=useAuth();
  const {classes}=useSchool();
+ const {updateUnread,openRequest}=useStaffChatUI();
  const request=(body:Record<string,unknown>,_token?:undefined,signal?:AbortSignal)=>chatRequest({...body,profileId:currentUser?.id},undefined,signal);
  const teacherClassId=currentUser?.assigned_class_id||classes.find(c=>c.homeroom_teacher_id===currentUser?.id)?.id;
  const identity=(a:Parameters<typeof chatIdentity>[0])=>chatIdentity(a,allUsers,classes);
@@ -22,16 +24,22 @@ export function StaffChat({onOpen,hidden=false}:{onOpen:()=>void;hidden?:boolean
  const [connected,setConnected]=useState(false),[historyLoading,setHistoryLoading]=useState(false);
  const pending=useRef<{thread:string;text:string;nonce:string}|null>(null),end=useRef<HTMLDivElement>(null),epoch=useRef(0),historyEpoch=useRef(0);
  const dialog=useRef<HTMLElement>(null);
+ const totalUnread=session?threads.reduce((sum,t)=>sum+Math.max(0,Number(t.unread)||0),0):0;
+ useEffect(()=>{updateUnread(totalUnread);},[totalUnread,updateUnread]);
+ useEffect(()=>{if(openRequest>0){onOpen();setOpen(true);}},[openRequest]);
  useEffect(()=>{if(!open)return;const before=document.activeElement as HTMLElement|null;dialog.current?.querySelector<HTMLButtonElement>('button')?.focus();return()=>before?.focus();},[open]);
  useEffect(()=>{epoch.current++;historyEpoch.current++;setSession(null);setOpen(false);setMessages([]);setContacts([]);setThreads([]);setDrafts({});setNewPassword('');setError('');setNotice('');setBusy(false);setManage(false);setProfiles([]);setAccounts([]);setTarget('');setSearch('');setMobileList(true);setThread('school');pending.current=null;},[currentUser?.id]);
- useEffect(()=>{if(!currentUser||session)return;let cancelled=false;const controller=new AbortController();setCheckingSession(true);
-  request({action:currentUser.role==='GVCN'?'teacher-session':'session',classId:teacherClassId},undefined,controller.signal).then(data=>{if(!cancelled){setSession({account:data.account});setError('');}}).catch(e=>{if(!cancelled&&(!(e instanceof ChatError)||![401,403,409].includes(e.status)))setError(e instanceof Error?e.message:'Không kết nối được tin nhắn.');}).finally(()=>{if(!cancelled)setCheckingSession(false);});
-  return()=>{cancelled=true;controller.abort();};},[currentUser?.id,teacherClassId,Boolean(session),reconnect]);
- useEffect(()=>{if(!session)return;let disposed=false;let timer:ReturnType<typeof setTimeout>;const controller=new AbortController();
-  const poll=async()=>{try{const data=await request({action:'inbox'},undefined,controller.signal);if(!disposed){setContacts(data.contacts);setThreads(data.threads);setConnected(true);}}
+ useEffect(()=>{if(!currentUser||session)return;let cancelled=false;let retry:ReturnType<typeof setTimeout>;const controller=new AbortController();setCheckingSession(true);
+  request({action:currentUser.role==='GVCN'?'teacher-session':'session',classId:teacherClassId},undefined,controller.signal).then(data=>{if(!cancelled){setSession({account:data.account});setError('');}}).catch(e=>{if(!cancelled&&(!(e instanceof ChatError)||![401,403,409].includes(e.status))){setError(e instanceof Error?e.message:'Không kết nối được tin nhắn.');if(currentUser.role==='GVCN')retry=setTimeout(()=>setReconnect(n=>n+1),8000);}}).finally(()=>{if(!cancelled)setCheckingSession(false);});
+  return()=>{cancelled=true;clearTimeout(retry);controller.abort();};},[currentUser?.id,teacherClassId,Boolean(session),reconnect]);
+ useEffect(()=>{if(!session)return;let disposed=false,running=false;let timer:ReturnType<typeof setTimeout>;const controller=new AbortController();
+  const poll=async()=>{if(disposed||running)return;running=true;clearTimeout(timer);try{const data=await request({action:'inbox'},undefined,controller.signal);if(!disposed){setContacts(data.contacts);setThreads(data.threads);setConnected(true);}}
    catch(e){if(!disposed){setConnected(false);if(e instanceof ChatError&&[401,403,409].includes(e.status)){setSession(null);setMessages([]);setContacts([]);setThreads([]);setError(e.message);}else setError(e instanceof Error?e.message:'Mất kết nối chat.');}}
-   finally{if(!disposed)timer=setTimeout(poll,open?5000:15000);}};void poll();return()=>{disposed=true;clearTimeout(timer);controller.abort();};
- },[session,open]);
+   finally{running=false;if(!disposed)timer=setTimeout(poll,document.visibilityState==='visible'?5000:15000);}};
+  const resume=()=>{if(document.visibilityState==='visible')void poll();};
+  document.addEventListener('visibilitychange',resume);window.addEventListener('focus',resume);window.addEventListener('online',resume);void poll();
+  return()=>{disposed=true;clearTimeout(timer);controller.abort();document.removeEventListener('visibilitychange',resume);window.removeEventListener('focus',resume);window.removeEventListener('online',resume);};
+ },[session]);
  useEffect(()=>{historyEpoch.current++;const version=historyEpoch.current;if(!open||!session||manage)return;let disposed=false;let timer:ReturnType<typeof setTimeout>;const controller=new AbortController();setMessages([]);setHistoryLoading(true);
   const poll=async()=>{try{const data=await request({action:'history',thread},undefined,controller.signal);if(!disposed&&historyEpoch.current===version){setMessages(data.messages);setConnected(true);setHistoryLoading(false);}}
    catch(e){if(!disposed){setHistoryLoading(false);setConnected(false);setError(e instanceof Error?e.message:'Không tải được tin nhắn.');}}
@@ -39,7 +47,7 @@ export function StaffChat({onOpen,hidden=false}:{onOpen:()=>void;hidden?:boolean
  },[session,open,thread,manage]);
  const lastMessageId=messages.at(-1)?.id;
  useEffect(()=>{end.current?.scrollIntoView({behavior:'smooth',block:'end'});if(open&&!manage&&session&&messages.length&&(!mobileList||window.innerWidth>=768)&&document.visibilityState==='visible'){
-  const last=messages.at(-1)!;void request({action:'read',thread,seenAt:last.created_at},undefined).then(()=>setThreads(prev=>prev.map(t=>t.thread_id===thread?{...t,unread:0}:t))).catch(()=>{});
+  const last=messages.at(-1)!;void request({action:'read',thread,seenAt:last.created_at},undefined).then(()=>setThreads(prev=>prev.map(t=>t.thread_id===thread&&Date.parse(t.last_at)<=Date.parse(last.created_at)?{...t,unread:0}:t))).catch(()=>{});
  }},[lastMessageId,open,manage,mobileList,session,thread]);
  const send=async(e:React.FormEvent)=>{e.preventDefault();const text=(drafts[thread]||'').trim();if(!session||!text||busy)return;setBusy(true);setError('');const version=epoch.current,selected=thread;
   const attempt=pending.current?.thread===selected&&pending.current.text===text?pending.current:{thread:selected,text,nonce:crypto.randomUUID()};pending.current=attempt;
