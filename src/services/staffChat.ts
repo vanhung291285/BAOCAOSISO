@@ -3,7 +3,7 @@ export interface ChatMessage {id:string;sender_id:string;recipient_id:string|nul
 export interface ChatThread {thread_id:string;last_body:string;last_at:string;unread:number}
 export class ChatError extends Error {constructor(message:string,public status:number){super(message);}}
 export async function chatRequest<T=any>(body:Record<string,unknown>,token?:string,signal?:AbortSignal):Promise<T>{
- const response=await fetch('/api/staff-chat',{method:'POST',headers:{'Content-Type':'application/json',...(token?{Authorization:`Bearer ${token}`}:{})},body:JSON.stringify(body),signal:signal||AbortSignal.timeout(25000)});
+ const response=await fetch('/api/staff-chat',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json',...(token?{Authorization:`Bearer ${token}`}:{})},body:JSON.stringify(body),signal:signal||AbortSignal.timeout(25000)});
  const data=await response.json().catch(()=>null);
  if(!response.ok)throw new ChatError(data?.error||'Chưa kết nối được máy chủ chat. Vui lòng thử lại.',response.status);
  return data;

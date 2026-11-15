@@ -6,8 +6,8 @@
 - Nhắn riêng giữa hai tài khoản, thông báo toàn trường chỉ quản trị chat được gửi.
 - Đếm chưa đọc, tự cập nhật (5 giây khi mở, 15 giây khi đóng), 100 tin gần nhất mỗi cuộc trò chuyện.
 - Chỉ xác nhận gửi sau khi máy chủ lưu. Gửi lại cùng nội dung sau gián đoạn mạng dùng cùng mã gửi, tránh trùng tin.
-- Quản trị chat cấp/đổi mật khẩu riêng từng giáo viên. Không gửi email hoặc tin nhắn tự động khi cấp tài khoản.
-- Phiên chat chỉ giữ trong bộ nhớ trang; tải lại, đổi tài khoản hoặc đăng xuất cần đăng nhập chat lại. Mật khẩu báo cáo sĩ số không bị thay đổi.
+- Quản trị kích hoạt tài khoản và mật khẩu đăng nhập chính cho từng giáo viên. Không có mật khẩu chat riêng. Không gửi email hoặc tin nhắn tự động khi cấp tài khoản.
+- Chat dùng chung phiên xác thực của trang đăng nhập chính. Cookie HttpOnly/Secure/SameSite giữ phiên tối đa một giờ và được xóa khi đăng xuất. Chat không có ô mật khẩu hoặc màn hình đăng nhập riêng. Chọn lớp không kèm xác thực vẫn báo cáo sĩ số được, nhưng không đọc/gửi tin riêng.
 
 ## Kích hoạt lần đầu trên Supabase
 
@@ -26,7 +26,7 @@ WHERE id='ID_HO_SO_QUAN_TRI' AND role='ADMIN' AND active=true;
 
 Cần đúng hồ sơ quản trị đang dùng để đăng nhập ứng dụng. Quyền quản trị chat được gán riêng tại đây, không suy ra từ vai trò do trình duyệt gửi lên.
 
-5. Vào ứng dụng bằng tài khoản quản trị, mở Tin nhắn, đăng nhập bằng mật khẩu vừa tạo. Chọn Cấp tài khoản chat → chọn giáo viên → đặt mật khẩu riêng và cấp trực tiếp cho đúng người. GVCN mở Tin nhắn trong tài khoản của mình để nhập mật khẩu được cấp.
+5. Đăng nhập tài khoản quản trị ở trang chính bằng mật khẩu Supabase Auth. Mở Tin nhắn sẽ tự dùng phiên đó. Chọn Cấp tài khoản nhắn tin → chọn giáo viên → đặt mật khẩu tài khoản và cấp riêng cho đúng người. GVCN chọn lớp và nhập mật khẩu tài khoản một lần tại trang đăng nhập chính. Không nhập lại trong khung chat. Biểu tượng Tin nhắn hiển thị chấm đỏ và tổng số chưa đọc, tự cập nhật kể cả khi khung chat đóng. Các mã quản trị cũ chỉ dùng cho báo cáo sĩ số, không cấp phiên tin nhắn.
 
 ## Kiểm tra sau kích hoạt
 

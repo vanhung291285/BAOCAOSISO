@@ -1,11 +1,14 @@
 import { createClient } from '@supabase/supabase-js';
 import { createHash, randomUUID } from 'node:crypto';
+import {readSessionToken,sessionCookie} from '../server/chat/session.js';
 import { messagePayload, validUuid } from '../server/chat/permissions.js';
 export default async function handler(req:any,res:any) {
  res.setHeader('Cache-Control','no-store');
  if(req.method!=='POST')return res.status(405).json({error:'Chỉ hỗ trợ POST.'});
  try{if(req.headers.origin&&new URL(req.headers.origin).host!==req.headers.host)return res.status(403).json({error:'Nguồn yêu cầu không hợp lệ.'});}catch{return res.status(403).json({error:'Nguồn yêu cầu không hợp lệ.'});}
  const body=req.body||{};
+ const secure=!/^localhost(?::|$)|^127\.0\.0\.1(?::|$)/.test(String(req.headers.host||''));
+ if(body.action==='logout'){res.setHeader('Set-Cookie',sessionCookie('',0,secure));return res.status(200).json({ok:true});}
  if(JSON.stringify(body).length>12000)return res.status(400).json({error:'Yêu cầu quá lớn.'});
  const url=process.env.SUPABASE_URL||process.env.VITE_SUPABASE_URL,key=process.env.SUPABASE_SERVICE_ROLE_KEY;
  if(!url||!key)return res.status(503).json({error:'Chat chưa được cấu hình trên máy chủ.'});
@@ -13,13 +16,15 @@ export default async function handler(req:any,res:any) {
  const check=(r:any)=>{if(r.error)throw r.error;return r.data;};
  try{
   const ip=String(req.headers['x-forwarded-for']||req.socket?.remoteAddress||'unknown').split(',')[0];
-  const allowed=check(await db.rpc('staff_chat_allow_request',{p_key:createHash('sha256').update(`${body.action==='login'?'login':'api'}:${ip}`).digest('hex'),p_limit:body.action==='login'?8:100,p_window:60}));
+  const allowed=check(await db.rpc('staff_chat_allow_request',{p_key:createHash('sha256').update(`${body.action==='login'?'login':'api'}:${ip}`).digest('hex'),p_limit:body.action==='login'?60:600,p_window:60}));
   if(!allowed)return res.status(429).json({error:'Thao tác quá nhanh. Vui lòng đợi một phút.'});
   if(body.action==='status'){
    const ready=check(await db.from('staff_chat_accounts').select('id').eq('is_admin',true).eq('enabled',true).limit(1));
    return res.status(200).json({ready:ready.length>0});
   }
   if(body.action==='login'){
+   const loginAllowed=check(await db.rpc('staff_chat_allow_request',{p_key:createHash('sha256').update(`account-login:${String(body.profileId).slice(0,128)}`).digest('hex'),p_limit:6,p_window:60}));
+   if(!loginAllowed)return res.status(429).json({error:'Tài khoản thử đăng nhập quá nhiều lần. Vui lòng đợi một phút.'});
    if(typeof body.profileId!=='string'||body.profileId.length>128||typeof body.password!=='string'||body.password.length>128)return res.status(400).json({error:'Thông tin đăng nhập không hợp lệ.'});
    const account=check(await db.from('staff_chat_accounts').select('*').eq('profile_id',body.profileId).eq('enabled',true).maybeSingle());
    if(!account)return res.status(401).json({error:'Tài khoản chưa được cấp quyền chat hoặc mật khẩu không đúng.'});
@@ -27,14 +32,22 @@ export default async function handler(req:any,res:any) {
    if(!user?.email)throw new Error('CHAT_ACCOUNT_INCOMPLETE');
    const auth=await db.auth.signInWithPassword({email:user.email,password:body.password});
    if(auth.error||!auth.data.session)return res.status(401).json({error:'Tài khoản chưa được cấp quyền chat hoặc mật khẩu không đúng.'});
-   return res.status(200).json({account,token:auth.data.session.access_token,expiresAt:auth.data.session.expires_at});
+   res.setHeader('Set-Cookie',sessionCookie(auth.data.session.access_token,Math.min(auth.data.session.expires_in||3600,3600),secure));
+   return res.status(200).json({account});
   }
-  const token=String(req.headers.authorization||'').replace(/^Bearer /,'');
-  if(!token||token.length>6000)return res.status(401).json({error:'Vui lòng đăng nhập phần chat.'});
+  const token=readSessionToken(req.headers);
+  if(!token||token.length>6000)return res.status(401).json({error:'Vui lòng đăng nhập tài khoản ở trang chính.'});
   const verified=await db.auth.getUser(token);
-  if(verified.error||!verified.data.user)return res.status(401).json({error:'Phiên chat hết hạn. Vui lòng đăng nhập lại.'});
+  if(verified.error||!verified.data.user)return res.status(401).json({error:'Phiên tài khoản hết hạn. Vui lòng đăng nhập lại ở trang chính.'});
   const account=check(await db.from('staff_chat_accounts').select('*').eq('id',verified.data.user.id).eq('enabled',true).maybeSingle());
   if(!account)return res.status(403).json({error:'Tài khoản chat chưa được cấp quyền hoặc đã bị tạm khóa.'});
+  if(body.profileId!==account.profile_id)return res.status(409).json({error:'Phiên đăng nhập không khớp tài khoản đang chọn. Vui lòng đăng nhập lại.'});
+  const accountAllowed=check(await db.rpc('staff_chat_allow_request',{p_key:`api:${account.id}`,p_limit:100,p_window:60}));
+  if(!accountAllowed)return res.status(429).json({error:'Tài khoản thao tác quá nhanh. Vui lòng đợi một phút.'});
+  if(body.action==='session'){
+   if(body.profileId!==account.profile_id)return res.status(409).json({error:'Vui lòng đăng nhập đúng tài khoản để sử dụng tin nhắn.'});
+   return res.status(200).json({account});
+  }
   if(body.action==='inbox'){
    const contacts=check(await db.from('staff_chat_accounts').select('id,profile_id,display_name,role_label').eq('enabled',true).neq('id',account.id).order('display_name'));
    const threads=check(await db.rpc('staff_chat_inbox',{p_account:account.id}));
@@ -76,7 +89,7 @@ export default async function handler(req:any,res:any) {
   }
   if(body.action==='provision'){
    if(!account.is_admin)return res.status(403).json({error:'Chỉ quản trị chat được cấp tài khoản.'});
-   if(typeof body.profileId!=='string'||typeof body.password!=='string'||body.password.length<10||body.password.length>128)return res.status(400).json({error:'Mật khẩu chat cần từ 10 đến 128 ký tự.'});
+   if(typeof body.profileId!=='string'||typeof body.password!=='string'||body.password.length<10||body.password.length>128)return res.status(400).json({error:'Mật khẩu tài khoản cần từ 10 đến 128 ký tự.'});
    const profile=check(await db.from('profiles').select('id,full_name,role').eq('id',body.profileId).eq('active',true).maybeSingle());
    if(!profile)return res.status(404).json({error:'Không tìm thấy tài khoản đang hoạt động.'});
    const existing=check(await db.from('staff_chat_accounts').select('*').eq('profile_id',profile.id).maybeSingle());

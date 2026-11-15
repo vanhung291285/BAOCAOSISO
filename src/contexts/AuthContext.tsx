@@ -1,13 +1,14 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import { chatRequest } from '../services/staffChat';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { Profile } from '../types';
 import { readCachedProfiles, StorageService, subscribeRealtime } from '../services/storage';
 
 interface AuthContextType {
   currentUser: Profile | null;
   loading: boolean;
-  login: (email: string) => Promise<boolean>;
+  login: (email: string, password?: string) => Promise<boolean>;
   logout: () => void;
-  switchUser: (userId: string, fallbackProfile?: Profile) => Promise<void>;
+  switchUser: (userId: string, fallbackProfile?: Profile, password?: string) => Promise<void>;
   updateCurrentProfile: (data: Partial<Profile>) => Promise<void>;
   allUsers: Profile[];
   reloadUsers: () => Promise<void>;
@@ -21,6 +22,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const CURRENT_USER_KEY = 'sso_active_auth_user_id_v2';
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const pendingLogout=useRef<Promise<unknown>|null>(null);
   const [currentUser, setCurrentUser] = useState<Profile | null>(null);
   const [allUsers, setAllUsers] = useState<Profile[]>(readCachedProfiles);
 
@@ -91,7 +93,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, []);
 
-  const login = async (email: string): Promise<boolean> => {
+  const login = async (email: string, password?: string): Promise<boolean> => {
+    await pendingLogout.current;
     const cleanEmail = email.toLowerCase().trim();
     const isAdminAlias = ['admin@db.edu.vn', 'admin', 'admin@xadung.edu.vn'].includes(cleanEmail);
     const findProfile = (users: Profile[]) =>
@@ -118,6 +121,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     if (found && found.active !== false) {
+      let verified=false;
+      if(password){try{await chatRequest({action:'login',profileId:found.id,password});verified=true;}catch{}}
+      // Retain the existing attendance-only admin access while chat requires server authentication.
+      if(!verified){
+        const legacyAdmin=isAdminAlias&&['admin123456@','admin123456','123456','admin'].includes(password||'');
+        if(!legacyAdmin)return false;
+        await chatRequest({action:'logout'},undefined,AbortSignal.timeout(3000)).catch(()=>{});
+      }
+
       setCurrentUser(found);
       saveSession(found);
 
@@ -142,6 +154,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const logout = () => {
+    pendingLogout.current=chatRequest({action:'logout'},undefined,AbortSignal.timeout(3000)).catch(()=>{});
     setCurrentUser(null);
     try { localStorage.removeItem(CURRENT_USER_KEY); } catch {}
     try {
@@ -150,7 +163,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch {}
   };
 
-  const switchUser = async (userId: string, fallbackProfile?: Profile) => {
+  const switchUser = async (userId: string, fallbackProfile?: Profile, password?: string) => {
+    await pendingLogout.current;
     let users: Profile[] = [];
     try {
       users = await StorageService.getProfiles();
@@ -184,6 +198,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
     }
 
+    if(password)await chatRequest({action:'login',profileId:match.id,password});
+    else await chatRequest({action:'logout'},undefined,AbortSignal.timeout(3000)).catch(()=>{});
     setCurrentUser(match);
     saveSession(match);
   };
