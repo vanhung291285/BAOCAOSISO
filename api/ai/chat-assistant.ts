@@ -1,4 +1,4 @@
-import {GoogleGenAI} from '@google/genai';
+import {GoogleGenAI,ThinkingLevel} from '@google/genai';
 const requests=new Map<string,{count:number;until:number}>();
 export default async function handler(req:any,res:any) {
   res.setHeader('Cache-Control','no-store');
@@ -18,11 +18,11 @@ export default async function handler(req:any,res:any) {
   const history=Array.isArray(req.body?.conversationHistory)?req.body.conversationHistory.slice(-8).filter((m:any)=>['user','model'].includes(m.role)&&typeof m.text==='string').map((m:any)=>({role:m.role,parts:[{text:m.text.slice(0,4000)}]})):[];
   let timer:ReturnType<typeof setTimeout>|undefined;
   try {
-    const ai=new GoogleGenAI({apiKey,httpOptions:{timeout:22000}});
+    const ai=new GoogleGenAI({apiKey,httpOptions:{timeout:45000}});
     const result=await Promise.race([ai.models.generateContent({model:process.env.GEMINI_CHAT_MODEL||'gemini-3.8-flash',contents:[...history,{role:'user',parts:[{text:message}]}],config:{
       systemInstruction:'Bạn là trợ lý AI của Trường PTDTBT THCS Xa Dung, do Thầy Vũ Văn Hùng phát triển. Trả lời bằng tiếng Việt, rõ ràng, hữu ích, phù hợp câu hỏi. Hỗ trợ nhiều lĩnh vực: kiến thức phổ thông, toán, khoa học, công nghệ, soạn bài, viết văn bản, nông nghiệp và đời sống. Dùng lập luận, ví dụ, công thức khi cần; hỏi lại khi thiếu thông tin quan trọng. Không giới hạn câu trả lời vào nghiệp vụ trường học. Bạn không có quyền truy cập dữ liệu nội bộ, không bịa tên học sinh, số liệu trường, chính sách hay nguồn tham khảo. Chỉ nhận định chắc chắn khi có căn cứ. Không tuyên bố đã tìm kiếm web; với thông tin mới, giá, luật, y tế, nói rõ giới hạn cập nhật và khuyến nghị nguồn chính thức. Không tự thực hiện thay đổi, gửi tin hoặc báo cáo. Nếu câu hỏi cần dữ liệu nhà trường, hướng dẫn dùng Trợ lý dữ liệu theo quyền truy cập. Phân biệt hướng dẫn với hành động đã thực hiện.',
-      maxOutputTokens:4096
-    }}),new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(new Error('timeout')),24000);})]);
+      thinkingConfig:{thinkingLevel:ThinkingLevel.LOW},maxOutputTokens:4096
+    }}),new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(new Error('timeout')),50000);})]);
     if(!result.text?.trim())return res.status(502).json({error:'AI chưa tạo được câu trả lời. Thầy/Cô có thể diễn đạt lại câu hỏi.'});
     return res.status(200).json({success:true,data:{reply:result.text}});
   }catch(err:any){
@@ -33,7 +33,7 @@ export default async function handler(req:any,res:any) {
       : status===401||status===403 ? 'ACCESS_DENIED'
       : status===404 ? 'MODEL_UNAVAILABLE'
       : status===429 ? 'QUOTA_EXCEEDED'
-      : /timeout|timed out|abort/.test(detail) ? 'TIMEOUT' : 'PROVIDER_ERROR';
+      : status===504||/timeout|timed out|abort/.test(detail) ? 'TIMEOUT' : 'PROVIDER_ERROR';
     const errors:Record<string,string>={
       INVALID_API_KEY:'Khóa Gemini hiện tại không hợp lệ hoặc đã hết hiệu lực. Quản trị cần cập nhật GEMINI_API_KEY trên Vercel.',
       ACCESS_DENIED:'Google từ chối quyền sử dụng khóa AI. Quản trị kiểm tra quyền API và giới hạn của khóa trong Google AI Studio.',

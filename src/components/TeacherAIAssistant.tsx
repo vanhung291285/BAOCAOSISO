@@ -288,7 +288,7 @@ export const TeacherAIAssistant: React.FC<TeacherAIAssistantProps> = ({
     try {
       const q=normalizeVietnamese(text);
       if(!isSchoolDataQuestion(text)) {
-        const response=await fetch('/api/ai/chat-assistant',{method:'POST',headers:{'Content-Type':'application/json'},signal:AbortSignal.timeout(28000),body:JSON.stringify({message:text,conversationHistory:messages.filter(m=>m.general).slice(-8).map(m=>({role:m.sender==='user'?'user':'model',text:m.text}))})});
+        const response=await fetch('/api/ai/chat-assistant',{method:'POST',headers:{'Content-Type':'application/json'},signal:AbortSignal.timeout(55000),body:JSON.stringify({message:text,conversationHistory:messages.filter(m=>m.general).slice(-8).map(m=>({role:m.sender==='user'?'user':'model',text:m.text}))})});
         const body=await response.json().catch(()=>({}));
         if(!response.ok||!body.success) throw new Error(body.error||'Dịch vụ AI chưa sẵn sàng. Vui lòng thử lại.');
         reply=body.data.reply;
