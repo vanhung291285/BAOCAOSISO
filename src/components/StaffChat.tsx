@@ -1,3 +1,4 @@
+import {getSupabaseClient} from '../services/supabase';
 import {useStaffChatUI} from '../contexts/StaffChatUIContext';
 import React,{useEffect,useRef,useState} from 'react';
 import {MessageCircle,X,Send,ArrowLeft,Search,Users,Megaphone,RefreshCw} from 'lucide-react';
@@ -13,7 +14,7 @@ export function StaffChat({onOpen,hidden=false}:{onOpen:()=>void;hidden?:boolean
  const request=(body:Record<string,unknown>,_token?:undefined,signal?:AbortSignal)=>chatRequest({...body,profileId:currentUser?.id},undefined,signal);
  const teacherClassId=currentUser?.assigned_class_id||classes.find(c=>c.homeroom_teacher_id===currentUser?.id)?.id;
  const identity=(a:Parameters<typeof chatIdentity>[0])=>chatIdentity(a,allUsers,classes);
- const [open,setOpen]=useState(false),[storedSession,setSession]=useState<{account:ChatAccount}|null>(null);
+ const [open,setOpen]=useState(false),[storedSession,setSession]=useState<{account:ChatAccount;realtime?:{personal:string;school:string}}|null>(null);
  const session=storedSession?.account.profile_id===currentUser?.id?storedSession:null;
  const [checkingSession,setCheckingSession]=useState(true);
  const [reconnect,setReconnect]=useState(0);
@@ -23,27 +24,39 @@ export function StaffChat({onOpen,hidden=false}:{onOpen:()=>void;hidden?:boolean
  const [profiles,setProfiles]=useState<any[]>([]),[accounts,setAccounts]=useState<ChatAccount[]>([]),[target,setTarget]=useState(''),[newPassword,setNewPassword]=useState(''),[notice,setNotice]=useState('');
  const [connected,setConnected]=useState(false),[historyLoading,setHistoryLoading]=useState(false);
  const pending=useRef<{thread:string;text:string;nonce:string}|null>(null),end=useRef<HTMLDivElement>(null),epoch=useRef(0),historyEpoch=useRef(0);
+ const refreshInbox=useRef<()=>void>(()=>{}),refreshHistory=useRef<()=>void>(()=>{});
  const dialog=useRef<HTMLElement>(null);
+ useEffect(()=>{
+  if(!session?.realtime)return;
+  const db=getSupabaseClient();if(!db)return;
+  let timer:ReturnType<typeof setTimeout>|undefined,disposed=false;
+  const refresh=()=>{if(disposed||timer)return;timer=setTimeout(()=>{timer=undefined;refreshInbox.current();refreshHistory.current();},500);};
+  const channels=[session.realtime.personal,session.realtime.school].map(topic=>db.channel(topic)
+   .on('broadcast',{event:'changed'},refresh)
+   .subscribe(status=>{if(status==='SUBSCRIBED')refresh();}));
+  return()=>{disposed=true;clearTimeout(timer);for(const channel of channels)void db.removeChannel(channel);};
+ },[session]);
  const totalUnread=session?threads.reduce((sum,t)=>sum+Math.max(0,Number(t.unread)||0),0):0;
  useEffect(()=>{updateUnread(totalUnread);},[totalUnread,updateUnread]);
  useEffect(()=>{if(openRequest>0){onOpen();setOpen(true);}},[openRequest]);
  useEffect(()=>{if(!open)return;const before=document.activeElement as HTMLElement|null;dialog.current?.querySelector<HTMLButtonElement>('button')?.focus();return()=>before?.focus();},[open]);
  useEffect(()=>{epoch.current++;historyEpoch.current++;setSession(null);setOpen(false);setMessages([]);setContacts([]);setThreads([]);setDrafts({});setNewPassword('');setError('');setNotice('');setBusy(false);setManage(false);setProfiles([]);setAccounts([]);setTarget('');setSearch('');setMobileList(true);setThread('school');pending.current=null;},[currentUser?.id]);
  useEffect(()=>{if(!currentUser||session)return;let cancelled=false;let retry:ReturnType<typeof setTimeout>;const controller=new AbortController();setCheckingSession(true);
-  request({action:currentUser.role==='GVCN'?'teacher-session':'session',classId:teacherClassId},undefined,controller.signal).then(data=>{if(!cancelled){setSession({account:data.account});setError('');}}).catch(e=>{if(!cancelled&&(!(e instanceof ChatError)||![401,403,409].includes(e.status))){setError(e instanceof Error?e.message:'Không kết nối được tin nhắn.');if(currentUser.role==='GVCN')retry=setTimeout(()=>setReconnect(n=>n+1),8000);}}).finally(()=>{if(!cancelled)setCheckingSession(false);});
+  request({action:currentUser.role==='GVCN'?'teacher-session':'session',classId:teacherClassId},undefined,controller.signal).then(data=>{if(!cancelled){setSession({account:data.account,realtime:data.realtime});setError('');}}).catch(e=>{if(!cancelled&&(!(e instanceof ChatError)||![401,403,409].includes(e.status))){setError(e instanceof Error?e.message:'Không kết nối được tin nhắn.');if(currentUser.role==='GVCN')retry=setTimeout(()=>setReconnect(n=>n+1),8000);}}).finally(()=>{if(!cancelled)setCheckingSession(false);});
   return()=>{cancelled=true;clearTimeout(retry);controller.abort();};},[currentUser?.id,teacherClassId,Boolean(session),reconnect]);
- useEffect(()=>{if(!session)return;let disposed=false,running=false;let timer:ReturnType<typeof setTimeout>;const controller=new AbortController();
-  const poll=async()=>{if(disposed||running)return;running=true;clearTimeout(timer);try{const data=await request({action:'inbox'},undefined,controller.signal);if(!disposed){setContacts(data.contacts);setThreads(data.threads);setConnected(true);}}
+ useEffect(()=>{if(!session)return;let disposed=false,running=false,queued=false;let timer:ReturnType<typeof setTimeout>;const controller=new AbortController();
+  const poll=async()=>{if(disposed)return;if(running){queued=true;return;}running=true;clearTimeout(timer);try{const data=await request({action:'inbox'},undefined,controller.signal);if(!disposed){setContacts(data.contacts);setThreads(data.threads);setConnected(true);}}
    catch(e){if(!disposed){setConnected(false);if(e instanceof ChatError&&[401,403,409].includes(e.status)){setSession(null);setMessages([]);setContacts([]);setThreads([]);setError(e.message);}else setError(e instanceof Error?e.message:'Mất kết nối chat.');}}
-   finally{running=false;if(!disposed)timer=setTimeout(poll,document.visibilityState==='visible'?5000:15000);}};
+   finally{running=false;if(!disposed)timer=setTimeout(poll,queued?150:document.visibilityState==='visible'?5000:15000);queued=false;}};
+  refreshInbox.current=()=>{void poll();};
   const resume=()=>{if(document.visibilityState==='visible')void poll();};
   document.addEventListener('visibilitychange',resume);window.addEventListener('focus',resume);window.addEventListener('online',resume);void poll();
-  return()=>{disposed=true;clearTimeout(timer);controller.abort();document.removeEventListener('visibilitychange',resume);window.removeEventListener('focus',resume);window.removeEventListener('online',resume);};
+  return()=>{disposed=true;refreshInbox.current=()=>{};clearTimeout(timer);controller.abort();document.removeEventListener('visibilitychange',resume);window.removeEventListener('focus',resume);window.removeEventListener('online',resume);};
  },[session]);
- useEffect(()=>{historyEpoch.current++;const version=historyEpoch.current;if(!open||!session||manage)return;let disposed=false;let timer:ReturnType<typeof setTimeout>;const controller=new AbortController();setMessages([]);setHistoryLoading(true);
-  const poll=async()=>{try{const data=await request({action:'history',thread},undefined,controller.signal);if(!disposed&&historyEpoch.current===version){setMessages(data.messages);setConnected(true);setHistoryLoading(false);}}
+ useEffect(()=>{historyEpoch.current++;const version=historyEpoch.current;if(!open||!session||manage)return;let disposed=false,running=false,queued=false;let timer:ReturnType<typeof setTimeout>;const controller=new AbortController();setMessages([]);setHistoryLoading(true);
+  const poll=async()=>{if(disposed)return;if(running){queued=true;return;}running=true;clearTimeout(timer);try{const data=await request({action:'history',thread},undefined,controller.signal);if(!disposed&&historyEpoch.current===version){setMessages(data.messages);setConnected(true);setHistoryLoading(false);}}
    catch(e){if(!disposed){setHistoryLoading(false);setConnected(false);setError(e instanceof Error?e.message:'Không tải được tin nhắn.');}}
-   finally{if(!disposed)timer=setTimeout(poll,5000);}};void poll();return()=>{disposed=true;clearTimeout(timer);controller.abort();};
+   finally{running=false;if(!disposed)timer=setTimeout(poll,queued?150:5000);queued=false;}};refreshHistory.current=()=>{void poll();};void poll();return()=>{disposed=true;refreshHistory.current=()=>{};clearTimeout(timer);controller.abort();};
  },[session,open,thread,manage]);
  const lastMessageId=messages.at(-1)?.id;
  useEffect(()=>{end.current?.scrollIntoView({behavior:'smooth',block:'end'});if(open&&!manage&&session&&messages.length&&(!mobileList||window.innerWidth>=768)&&document.visibilityState==='visible'){

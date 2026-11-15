@@ -1,3 +1,4 @@
+import {chatTopics,notifyChatChange} from '../server/chat/realtime.js';
 import {teacherToken,verifyTeacherToken} from '../server/chat/teacherSession.js';
 import {getTeacherIdentity,ensureTeacherAccount} from '../server/chat/teacherAccounts.js';
 import { createClient } from '@supabase/supabase-js';
@@ -29,7 +30,7 @@ export default async function handler(req:any,res:any) {
    const {profile,cls}=await getTeacherIdentity(db,body.profileId,body.classId);
    const account=await ensureTeacherAccount(db,profile);
    res.setHeader('Set-Cookie',sessionCookie(teacherToken({accountId:account.id,profileId:profile.id,classId:cls.id},key),3600,secure,profile.id));
-   return res.status(200).json({account,identityMode:'CLASS_SELECTION'});
+   return res.status(200).json({account,realtime:chatTopics(account.id,key),identityMode:'CLASS_SELECTION'});
   }
   if(body.action==='login'){
    const loginAllowed=check(await db.rpc('staff_chat_allow_request',{p_key:createHash('sha256').update(`account-login:${String(body.profileId).slice(0,128)}`).digest('hex'),p_limit:6,p_window:60}));
@@ -42,7 +43,7 @@ export default async function handler(req:any,res:any) {
    const auth=await db.auth.signInWithPassword({email:user.email,password:body.password});
    if(auth.error||!auth.data.session)return res.status(401).json({error:'Tài khoản chưa được cấp quyền chat hoặc mật khẩu không đúng.'});
    res.setHeader('Set-Cookie',sessionCookie(auth.data.session.access_token,Math.min(auth.data.session.expires_in||3600,3600),secure,account.profile_id));
-   return res.status(200).json({account});
+   return res.status(200).json({account,realtime:chatTopics(account.id,key)});
   }
   const token=readSessionToken(req.headers,typeof body.profileId==='string'?body.profileId:undefined);
   if(!token||token.length>6000)return res.status(401).json({error:'Vui lòng đăng nhập tài khoản ở trang chính.'});
@@ -62,11 +63,11 @@ export default async function handler(req:any,res:any) {
   if(body.profileId!==account.profile_id)return res.status(409).json({error:'Phiên đăng nhập không khớp tài khoản đang chọn. Vui lòng đăng nhập lại.'});
   // Upgrade an existing single-account cookie without disturbing other signed-in tabs.
   if(!String(req.headers.cookie||'').split(';').some((c:string)=>c.trim().startsWith(`${chatCookieName(account.profile_id)}=`)))res.setHeader('Set-Cookie',sessionCookie(token,3600,secure,account.profile_id));
-  const accountAllowed=check(await db.rpc('staff_chat_allow_request',{p_key:`api:${account.id}`,p_limit:100,p_window:60}));
+  const accountAllowed=check(await db.rpc('staff_chat_allow_request',{p_key:`api:${account.id}`,p_limit:180,p_window:60}));
   if(!accountAllowed)return res.status(429).json({error:'Tài khoản thao tác quá nhanh. Vui lòng đợi một phút.'});
   if(body.action==='session'){
    if(body.profileId!==account.profile_id)return res.status(409).json({error:'Vui lòng đăng nhập đúng tài khoản để sử dụng tin nhắn.'});
-   return res.status(200).json({account});
+   return res.status(200).json({account,realtime:chatTopics(account.id,key)});
   }
   if(body.action==='inbox'){
    const contacts=check(await db.from('staff_chat_accounts').select('id,profile_id,display_name,role_label').eq('enabled',true).neq('id',account.id).order('display_name'));
@@ -87,9 +88,12 @@ export default async function handler(req:any,res:any) {
     if(inserted.error?.code==='23505'){
      const previous=check(await db.from('staff_chat_messages').select('id,sender_id,recipient_id,body,created_at').eq('sender_id',account.id).eq('client_nonce',payload.client_nonce).single());
      if(previous.recipient_id!==payload.recipient_id||previous.body!==payload.body)return res.status(409).json({error:'Mã gửi đã dùng cho nội dung khác. Vui lòng đóng và mở lại cuộc trò chuyện.'});
+     await notifyChatChange(db,key,previous);
      return res.status(200).json({message:previous});
     }
-    return res.status(200).json({message:check(inserted)});
+    const message=check(inserted);
+    await notifyChatChange(db,key,message);
+    return res.status(200).json({message});
    }
    if(body.action==='read'){
     // Bound by the newest message the client actually displayed; do not mark unseen incoming messages.
