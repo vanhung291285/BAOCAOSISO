@@ -1,3 +1,4 @@
+import {RECALLED_MESSAGE,RECALLED_LABEL,publicChatMessage} from '../src/services/chatMessageState.js';
 import {chatTopics,notifyChatChange} from '../server/chat/realtime.js';
 import {teacherToken,verifyTeacherToken} from '../server/chat/teacherSession.js';
 import {getTeacherIdentity,ensureTeacherAccount} from '../server/chat/teacherAccounts.js';
@@ -72,7 +73,16 @@ export default async function handler(req:any,res:any) {
   if(body.action==='inbox'){
    const contacts=check(await db.from('staff_chat_accounts').select('id,profile_id,display_name,role_label').eq('enabled',true).neq('id',account.id).order('display_name'));
    const threads=check(await db.rpc('staff_chat_inbox',{p_account:account.id}));
-   return res.status(200).json({account,contacts,threads});
+   return res.status(200).json({account,contacts,threads:threads.map((t:any)=>({...t,last_body:t.last_body===RECALLED_MESSAGE?RECALLED_LABEL:t.last_body}))});
+  }
+  if(body.action==='recall'){
+   if(!validUuid(body.messageId))return res.status(400).json({error:'Tin nhắn không hợp lệ.'});
+   const message=check(await db.from('staff_chat_messages').update({body:RECALLED_MESSAGE})
+    .eq('id',body.messageId).eq('sender_id',account.id)
+    .select('id,sender_id,recipient_id,body,created_at').maybeSingle());
+   if(!message)return res.status(404).json({error:'Chỉ có thể thu hồi tin nhắn do chính tài khoản gửi.'});
+   await notifyChatChange(url,key,message);
+   return res.status(200).json({message:publicChatMessage(message)});
   }
   if(['history','read','send'].includes(body.action)){
    if(body.thread!=='school'&&(!validUuid(body.thread)||body.thread===account.id))return res.status(400).json({error:'Người nhận không hợp lệ.'});
@@ -88,11 +98,11 @@ export default async function handler(req:any,res:any) {
     if(inserted.error?.code==='23505'){
      const previous=check(await db.from('staff_chat_messages').select('id,sender_id,recipient_id,body,created_at').eq('sender_id',account.id).eq('client_nonce',payload.client_nonce).single());
      if(previous.recipient_id!==payload.recipient_id||previous.body!==payload.body)return res.status(409).json({error:'Mã gửi đã dùng cho nội dung khác. Vui lòng đóng và mở lại cuộc trò chuyện.'});
-     await notifyChatChange(db,key,previous);
+     await notifyChatChange(url,key,previous);
      return res.status(200).json({message:previous});
     }
     const message=check(inserted);
-    await notifyChatChange(db,key,message);
+    await notifyChatChange(url,key,message);
     return res.status(200).json({message});
    }
    if(body.action==='read'){
@@ -103,7 +113,7 @@ export default async function handler(req:any,res:any) {
    let q=db.from('staff_chat_messages').select('id,sender_id,recipient_id,body,created_at');
    q=body.thread==='school'?q.is('recipient_id',null):q.or(`and(sender_id.eq.${account.id},recipient_id.eq.${body.thread}),and(sender_id.eq.${body.thread},recipient_id.eq.${account.id})`);
    const messages=check(await q.order('created_at',{ascending:false}).order('id',{ascending:false}).limit(100));
-   return res.status(200).json({messages:messages.reverse()});
+   return res.status(200).json({messages:messages.reverse().map(publicChatMessage)});
   }
   if(body.action==='accounts'){
    if(!account.is_admin)return res.status(403).json({error:'Chỉ quản trị chat được quản lý tài khoản.'});
