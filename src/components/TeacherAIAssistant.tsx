@@ -129,7 +129,7 @@ const QUICK_PROMPTS: QuickPromptCategory[] = [
     id: 'author',
     label: '📞 Tác giả & Hỗ trợ kỹ thuật',
     icon: <Phone className="w-3.5 h-3.5 text-violet-500" />,
-    prompt: 'Cho tôi biết thông tin liên hệ hỗ trợ kỹ thuật của Thầy Vũ Văn Hùng.',
+    prompt: 'Cho tôi biết thông tin liên hệ hỗ trợ kỹ thuật của nhà trường.',
   },
 ];
 
@@ -156,7 +156,7 @@ export const TeacherAIAssistant: React.FC<TeacherAIAssistantProps> = ({
         'Hạn chót nộp báo cáo sĩ số là mấy giờ? Có tính thi đua không?',
         'Quy định chấm ăn bán trú và ngày thứ Sáu như thế nào?',
         'Hôm nay có những lớp nào chưa nộp báo cáo?',
-        'Thông tin hỗ trợ kỹ thuật của Thầy Vũ Văn Hùng',
+        'Thông tin hỗ trợ kỹ thuật của nhà trường',
       ],
     },
   ]);
@@ -352,13 +352,13 @@ export const TeacherAIAssistant: React.FC<TeacherAIAssistantProps> = ({
       {
         id: `welcome_${Date.now()}`,
         sender: 'ai',
-        text: `Hội thoại đã được làm mới. Tôi là **Trợ lý ảo AI do Thầy Vũ Văn Hùng trực tiếp phát triển** hỗ trợ GVCN và BGH 24/7. Thầy/Cô cần hỗ trợ thông tin gì về quy chế, hạn chót 07h30, chấm ăn bán trú hay điểm danh sĩ số hôm nay ạ?`,
+        text: `Hội thoại đã được làm mới. Tôi là **Trợ lý AI nhà trường** hỗ trợ GVCN và BGH 24/7. Thầy/Cô cần hỗ trợ thông tin gì về quy chế, hạn chót 07h30, chấm ăn bán trú hay điểm danh sĩ số hôm nay ạ?`,
         timestamp: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
         suggestedQuestions: [
           'Hạn chót nộp báo cáo sĩ số là mấy giờ?',
           'Quy định chấm ăn bán trú và ngày thứ Sáu thế nào?',
           'Hôm nay có những lớp nào chưa nộp báo cáo?',
-          'Thông tin hỗ trợ kỹ thuật của Thầy Vũ Văn Hùng',
+          'Thông tin hỗ trợ kỹ thuật của nhà trường',
         ],
       },
     ]);
@@ -404,7 +404,7 @@ export const TeacherAIAssistant: React.FC<TeacherAIAssistantProps> = ({
                 </span>
               </div>
               <div className="text-[10px] sm:text-xs text-blue-200 font-medium truncate mt-0.5 flex items-center gap-1.5">
-                <span>Phát triển trực tiếp bởi Thầy Vũ Văn Hùng</span>
+                <span>Hỗ trợ giáo viên · Không gian nghiên cứu học sinh</span>
                 <span className="text-blue-400 hidden sm:inline">•</span>
                 <span className="text-amber-300 font-bold hidden sm:inline">PTDTBT THCS Xa Dung</span>
               </div>
@@ -416,7 +416,7 @@ export const TeacherAIAssistant: React.FC<TeacherAIAssistantProps> = ({
             <a
               href="tel:0984246993"
               className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-400/30 text-[11px] font-bold transition-all"
-              title="Gọi hotline Thầy Vũ Văn Hùng: 0984246993"
+              title="Gọi hỗ trợ kỹ thuật: 0984246993"
             >
               <Phone className="w-3 h-3 text-amber-300" />
               <span>0984.246.993</span>
@@ -488,7 +488,7 @@ export const TeacherAIAssistant: React.FC<TeacherAIAssistantProps> = ({
                   <div className="flex items-center justify-between pb-1 mb-1 border-b border-slate-100 text-[10px] text-slate-500 font-bold">
                     <span className="flex items-center gap-1 text-blue-700">
                       <Sparkles className="w-3 h-3 text-amber-500 fill-amber-400" />
-                      Trợ lý AI Thầy Vũ Văn Hùng
+                      Trợ lý AI nhà trường
                     </span>
                     <span className="text-[10px] text-slate-400">{m.timestamp}</span>
                   </div>
@@ -687,7 +687,7 @@ export const TeacherAIAssistant: React.FC<TeacherAIAssistantProps> = ({
           {/* Teacher Vu Van Hung signature footer */}
           <div className="flex items-center justify-between text-[10px] text-slate-400 px-1 pt-0.5">
             <span className="truncate">
-              Trợ lý ảo AI do <strong>Thầy Vũ Văn Hùng</strong> trực tiếp phát triển
+              Trợ lý AI hỗ trợ nhà trường
             </span>
             <span className="text-slate-500 font-bold shrink-0">
               Hotline: 0984.246.993

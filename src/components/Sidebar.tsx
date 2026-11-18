@@ -132,6 +132,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
       allowed: true,
     },
     {
+      id: 'research', label: 'Nghiên cứu KHKT', path: '/research', icon: BarChart3, allowed: true,
+    },
+    {
       id: 'charts',
       label: 'Thống kê biểu đồ',
       path: '/charts',
@@ -374,7 +377,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               {!collapsed && (
                 <div className="flex-1 text-left min-w-0">
                   <div className="text-xs font-black leading-tight flex items-center justify-between">
-                    <span>Trợ lý AI Thầy Hùng</span>
+                    <span>Trợ lý AI nhà trường</span>
                     <span className="text-[9px] bg-emerald-400/20 text-emerald-300 font-bold px-1.5 py-0.2 rounded-full border border-emerald-400/30">
                       24/7
                     </span>

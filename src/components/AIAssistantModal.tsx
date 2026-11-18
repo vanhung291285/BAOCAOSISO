@@ -5,7 +5,7 @@ export interface AIAssistantModalProps extends TeacherAIAssistantProps {}
 
 /**
  * AIAssistantModal wraps the TeacherAIAssistant component
- * (Trợ lý ảo AI do Thầy Vũ Văn Hùng trực tiếp phát triển).
+ * (Trợ lý AI nhà trường).
  */
 export const AIAssistantModal: React.FC<AIAssistantModalProps> = (props) => {
   return <TeacherAIAssistant {...props} />;

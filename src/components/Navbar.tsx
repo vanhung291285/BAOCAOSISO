@@ -205,10 +205,10 @@ export const Navbar: React.FC<NavbarProps> = ({
                 type="button"
                 onClick={() => { if (utilitiesRef.current) utilitiesRef.current.open = false; onOpenAIAssistant(); }}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black bg-gradient-to-r from-indigo-700 via-blue-600 to-indigo-800 text-white shadow-xs hover:shadow-indigo-500/25 hover:scale-[1.02] active:scale-95 transition-all cursor-pointer border border-indigo-400/30 group shrink-0"
-                title="Trợ lý ảo AI do Thầy Vũ Văn Hùng trực tiếp phát triển hỗ trợ GVCN & BGH 24/7"
+                title="Trợ lý AI nhà trường hỗ trợ GVCN & BGH 24/7"
               >
                 <Bot className="w-3.5 h-3.5 text-amber-300 group-hover:rotate-12 transition-transform shrink-0" />
-                <span className="whitespace-nowrap">Trợ lý AI Thầy Hùng</span>
+                <span className="whitespace-nowrap">Trợ lý AI nhà trường</span>
                 <Mic className="w-3 h-3 text-indigo-200 shrink-0" />
               </button>
             )}
@@ -597,7 +597,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-black text-indigo-950 bg-gradient-to-r from-indigo-100 via-blue-50 to-indigo-100 border border-indigo-200/80 hover:bg-indigo-200 transition-colors shadow-2xs cursor-pointer"
               >
                 <Bot className="w-4 h-4 text-indigo-700" />
-                <span>Trợ lý ảo AI (Thầy Vũ Văn Hùng)</span>
+                <span>Trợ lý AI nhà trường</span>
                 <span className="ml-auto text-[9px] bg-indigo-600 text-white font-bold px-1.5 py-0.2 rounded-full">
                   24/7
                 </span>

@@ -1,3 +1,4 @@
+import {ResearchPage} from './pages/ResearchPage';
 import {StaffChatUIProvider} from './contexts/StaffChatUIContext';
 const OperationsCenterPage = lazy(() => import('./pages/OperationsCenterPage').then(m => ({default:m.OperationsCenterPage})));
 import React, { useState, useEffect, lazy, Suspense } from 'react';
@@ -242,6 +243,7 @@ const AppContent: React.FC = () => {
                   <DailyReportPage onNavigate={handleNavigate} />
                 )}
 
+                {currentPath === '/research' && <ResearchPage />}
                 {currentPath.startsWith('/reports/weekly') && (
                   <WeeklyReportPage
                     initialView={
