@@ -75,7 +75,7 @@ interface BoardingManagementPageProps {
 type TabType = 'daily-attendance' | 'monthly-sheet' | 'students-list' | 'kitchen-report' | 'rules-info' | 'ai-forecast';
 
 export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ onNavigate, initialTab }) => {
-  const { classes, campuses, students, settings, refreshAll, addStudent, updateStudent, deleteStudent, deleteStudentsByClass, importStudents } = useSchool();
+  const { classes, campuses, students, settings, updateSettings, refreshAll, addStudent, updateStudent, deleteStudent, deleteStudentsByClass, importStudents } = useSchool();
   const { currentUser, isGVCN, isAdmin, isBGH } = useAuth();
 
   // Active Tab
@@ -209,6 +209,34 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
   const mealSchedule = useMemo(() => {
     return getMealScheduleForDate(selectedDate, undefined, settings);
   }, [selectedDate, settings]);
+
+  // Cấu hình riêng ngày ăn, lưu vào thiết lập trường (đồng bộ Cloud).
+  const [savingMealDayOverride, setSavingMealDayOverride] = useState(false);
+  const handleMealDayOverride = async () => {
+    if (!isAdmin || savingMealDayOverride) return;
+    const overrides = { ...(settings?.meal_day_overrides || {}) };
+    const currentlyOpen = mealSchedule.isMealDay;
+    if (currentlyOpen) {
+      if (!window.confirm('Tắt tổ chức ăn ngày ' + formatDateVN(selectedDate) + '? Dữ liệu đã lưu không bị xóa.')) return;
+      overrides[selectedDate] = { breakfast: false, lunch: false, dinner: false };
+    } else {
+      if (!window.confirm('Cho phép chấm báo ăn ngày ' + formatDateVN(selectedDate) + ' trên toàn trường?')) return;
+      const [year, month, day] = selectedDate.split('-').map(Number);
+      const friday = new Date(year, month - 1, day).getDay() === 5;
+      overrides[selectedDate] = {
+        breakfast: friday ? settings?.friday_breakfast !== false : true,
+        lunch: friday ? settings?.friday_lunch !== false : true,
+        dinner: friday ? Boolean(settings?.friday_dinner) : true,
+      };
+    }
+    setSavingMealDayOverride(true);
+    try {
+      await updateSettings({ meal_day_overrides: overrides });
+      showToast('Đã cập nhật lịch báo ăn ' + formatDateVN(selectedDate), 'success');
+    } catch (error: any) {
+      showToast(error?.message || 'Không lưu được lịch ăn', 'error');
+    } finally { setSavingMealDayOverride(false); }
+  };
 
   // Meal Attendance State for selected date and class
   const [mealReport, setMealReport] = useState<BoardingDailyReport | null>(null);
@@ -1564,6 +1592,16 @@ export const BoardingManagementPage: React.FC<BoardingManagementPageProps> = ({ 
               </div>
             </div>
           </div>
+
+          {isAdmin && activeTab === 'daily-attendance' && (
+            <div className="flex flex-wrap items-center gap-2">
+              <button type="button" onClick={handleMealDayOverride} disabled={savingMealDayOverride}
+                className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-2 text-xs font-bold text-amber-900 hover:bg-amber-100 disabled:opacity-50">
+                {savingMealDayOverride ? 'Đang lưu...' : mealSchedule.isMealDay ? 'Tắt báo ăn ngày này' : 'Cho phép báo ăn ngày này'}
+              </button>
+              <span className="text-xs text-slate-500">Chỉ quản trị được thay đổi; không xóa số liệu báo ăn cũ.</span>
+            </div>
+          )}
 
           {/* Cảnh báo rõ ràng khi GVCN chưa báo cáo sĩ số ngày */}
           {mealSchedule.isMealDay && !isDailyAttendanceSubmitted && (
