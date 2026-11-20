@@ -56,6 +56,7 @@ export interface SchoolSettings {
   auto_reminder_time?: string; // Giờ tự động nhắc nhở (mặc định: '07:30')
   reminder_message_template?: string; // Mẫu tin nhắn nhắc nhở
   // Cấu hình chấm ăn Thứ 6, Thứ 7 & Tên sổ chấm bán trú
+  meal_day_overrides?: Record<string, { breakfast: boolean; lunch: boolean; dinner: boolean }>; // Lịch tổ chức ăn riêng theo ngày
   friday_breakfast?: boolean; // Ăn sáng thứ 6 (mặc định: true)
   friday_lunch?: boolean; // Ăn trưa thứ 6 (mặc định: true)
   friday_dinner?: boolean; // Ăn tối thứ 6 (mặc định: false)
