@@ -63,15 +63,11 @@ export function getMealScheduleForDate(
   const dateObj = new Date(y, m - 1, d);
   const dayOfWeek = dateObj.getDay();
 
-  // Ngày nghỉ học vẫn có thể tổ chức ăn theo cấu hình quản trị.
-  // Riêng 20/11/2026: nhà trường xác nhận vẫn báo ăn, áp dụng lịch thứ Sáu.
-  const specificMeals = schoolSettings.meal_day_overrides?.[dateStr];
-  if (specificMeals || dateStr === '2026-11-20') {
-    const meals = specificMeals || {
-      breakfast: schoolSettings.friday_breakfast !== false,
-      lunch: schoolSettings.friday_lunch !== false,
-      dinner: Boolean(schoolSettings.friday_dinner),
-    };
+  // Chỉ cấu hình quản trị mới được phép mở bữa ăn cho ngày đặc biệt.
+  // Ngày nghỉ áp dụng cho điểm trường vẫn có hiệu lực; không ngoại lệ theo ngày cố định.
+  const specificMeals = !offName ? schoolSettings.meal_day_overrides?.[dateStr] : undefined;
+  if (specificMeals) {
+    const meals = specificMeals;
     const names = ['Chủ Nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'];
     const shortNames = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
     const isMealDay = Boolean(meals.breakfast || meals.lunch || meals.dinner);
