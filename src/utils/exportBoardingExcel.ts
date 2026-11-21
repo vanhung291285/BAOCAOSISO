@@ -230,7 +230,8 @@ export function buildBoardingWorksheet(
   // Trang 1 (15 ngày = 45 cột): 2.35 -> Bề rộng vừa khít khổ A4 ngang, tỷ lệ phóng to in ấn ~95-98%, chữ cực rõ nét
   // Trang 2 (15-16 ngày = 45-48 cột + 6 cột tổng): 2.15 -> In vừa vặn toàn bộ 56 cột trên 1 trang ngang
   // Toàn bộ tháng (31 ngày = 93 cột + 6 cột tổng): 1.95 -> Vừa vặn 101 cột
-  const mealColWidth = isTrang1 ? 2.8 : isTrang2 ? 2.55 : 2.45;
+  // Tận dụng chiều ngang A3: cột ngày rộng hơn để bảng trải đều trang, không để khoảng trắng lớn hai bên.
+  const mealColWidth = isTrang1 ? 3.75 : isTrang2 ? 3.45 : 3.0;
 
   for (let d = 0; d < numDays; d++) {
     const colStart = 3 + d * 3;
@@ -241,7 +242,7 @@ export function buildBoardingWorksheet(
 
   // Summary columns: Tự động co giãn phù hợp để hiển thị số ngày ăn/nghỉ rõ ràng (chứa số 2-3 chữ số)
   if (includeMonthSummary && sumColIdx > 0) {
-    const sumWidth = isTrang2 ? 4.2 : 4.0;
+    const sumWidth = isTrang2 ? 5.0 : 4.6;
     for (let c = sumColIdx; c <= sumColIdx + 5; c++) {
       ws.getColumn(c).width = sumWidth;
     }
@@ -389,7 +390,9 @@ export function buildBoardingWorksheet(
   // Data rows (Students)
   let currentExcelRow = 10;
   // Chiều cao dòng học sinh tự động co giãn: 16.5pt nếu <= 36 HS (vừa vặn 1 trang A4 hoàn hảo), 15.5pt nếu > 36 HS
-  const dataRowHeight = studentCount <= 36 ? 17 : 15.5;
+  // Dãn chiều cao dòng cho lớp ít học sinh để bảng chiếm phần lớn chiều cao tờ giấy.
+  // Lớp đông vẫn ngắt trang theo chiều dọc, tuyệt đối không cắt bớt dòng.
+  const dataRowHeight = studentCount <= 20 ? 27 : studentCount <= 28 ? 24 : studentCount <= 36 ? 21 : 18;
 
   boardingStudents.forEach((st, idx) => {
     const rowObj = ws.getRow(currentExcelRow);
@@ -629,6 +632,8 @@ export function buildBoardingWorksheet(
 
   // Chỉ in vùng biểu mẫu có dữ liệu và chữ ký, tránh trang trắng hoặc vùng thừa.
   ws.pageSetup.printArea = `A1:${getColLetter(totalColsCount - 1)}${currentExcelRow}`;
+  // Chỉ ép vừa chiều cao nếu danh sách ngắn; danh sách dài cho phép in nhiều tờ.
+  ws.pageSetup.fitToHeight = studentCount <= 36 ? 1 : 0;
   ws.pageSetup.horizontalCentered = true;
   ws.pageSetup.verticalCentered = false;
   ws.headerFooter.oddFooter = '&CTrang &P / &N';
@@ -636,7 +641,7 @@ export function buildBoardingWorksheet(
     // Sheet tổng hợp 30-31 ngày chỉ dùng tra cứu trên máy; in theo Trang 1 và Trang 2.
     ws.pageSetup.paperSize = 8 as typeof ws.pageSetup.paperSize; // A3 ngang
     ws.pageSetup.fitToWidth = 1;
-    ws.pageSetup.fitToHeight = 0;
+    ws.pageSetup.fitToHeight = studentCount <= 36 ? 1 : 0;
   }
 }
 
