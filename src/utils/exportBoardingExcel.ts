@@ -112,7 +112,7 @@ interface SheetBuildOptions {
 /**
  * Helper to build one boarding worksheet (Trang 1, Trang 2, or Toàn bộ tháng).
  */
-function buildBoardingWorksheet(
+export function buildBoardingWorksheet(
   wb: ExcelJS.Workbook,
   options: SheetBuildOptions,
   context: {
@@ -183,10 +183,10 @@ function buildBoardingWorksheet(
   const ws = wb.addWorksheet(sheetName, {
     pageSetup: {
       orientation: 'landscape',
-      paperSize: 9, // A4 chuẩn
+      paperSize: 9, // Thiết lập lại theo số cột thực tế ở dưới
       fitToPage: true,
-      fitToWidth: 1, // Luôn vừa khít 1 trang A4 chiều ngang, hiển thị đầy đủ 100% tất cả các cột
-      fitToHeight: 1, // Mỗi nửa tháng in đúng một mặt A4; không tự cắt sang trang khác
+      fitToWidth: 1, // Không cắt cột theo chiều ngang; khổ A3 khi bảng nhiều cột
+      fitToHeight: 0, // Không ép toàn bộ học sinh vào một trang dọc; tự ngắt trang để giữ chữ rõ và đủ dòng
       horizontalCentered: true,
       verticalCentered: false,
       margins: { left: 0.2, right: 0.2, top: 0.25, bottom: 0.25, header: 0.1, footer: 0.1 },
@@ -212,6 +212,9 @@ function buildBoardingWorksheet(
     15
   );
   const isFullMonth = numDays > 16;
+  // Bảng 15-16 ngày có 47-56 cột; A4 ngang làm chữ quá nhỏ.
+  // A3 ngang giữ đủ cột trên cùng một trang ngang, có thể ngắt dọc theo số học sinh.
+  ws.pageSetup.paperSize = (numDays > 10 ? 8 : 9) as typeof ws.pageSetup.paperSize;
   const isTrang1 = numDays <= 16 && !includeMonthSummary;
   const isTrang2 = numDays <= 16 && includeMonthSummary;
 
@@ -631,9 +634,9 @@ function buildBoardingWorksheet(
   ws.headerFooter.oddFooter = '&CTrang &P / &N';
   if (isFullMonth) {
     // Sheet tổng hợp 30-31 ngày chỉ dùng tra cứu trên máy; in theo Trang 1 và Trang 2.
-    ws.pageSetup.paperSize = 8 as typeof ws.pageSetup.paperSize; // Excel A3 (ExcelJS typings omit this paper code).
+    ws.pageSetup.paperSize = 8 as typeof ws.pageSetup.paperSize; // A3 ngang
     ws.pageSetup.fitToWidth = 1;
-    ws.pageSetup.fitToHeight = 1;
+    ws.pageSetup.fitToHeight = 0;
   }
 }
 
