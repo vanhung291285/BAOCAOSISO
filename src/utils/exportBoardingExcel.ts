@@ -631,7 +631,7 @@ function buildBoardingWorksheet(
   ws.headerFooter.oddFooter = '&CTrang &P / &N';
   if (isFullMonth) {
     // Sheet tổng hợp 30-31 ngày chỉ dùng tra cứu trên máy; in theo Trang 1 và Trang 2.
-    ws.pageSetup.paperSize = 8; // A3 cho trường hợp cần in toàn bộ tháng.
+    ws.pageSetup.paperSize = 8 as typeof ws.pageSetup.paperSize; // Excel A3 (ExcelJS typings omit this paper code).
     ws.pageSetup.fitToWidth = 1;
     ws.pageSetup.fitToHeight = 1;
   }
