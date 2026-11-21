@@ -149,8 +149,8 @@ export const AIBoardingMealForecastTab: React.FC = () => {
       'Bữa trưa (Suất)': d.predictedLunch,
       'Bữa tối (Suất)': d.predictedDinner,
       'Tổng suất trong ngày': d.predictedBreakfast + d.predictedLunch + d.predictedDinner,
-      'Độ tin cậy AI': `${d.confidence}%`,
-      'Ghi chú điều chỉnh AI': d.notes,
+      'Trạng thái đối chiếu': d.notes,
+      'Ghi chú': d.notes,
     }));
 
     // Sheet 2: Dự trù nguyên vật liệu
@@ -226,7 +226,7 @@ export const AIBoardingMealForecastTab: React.FC = () => {
           <Utensils className="w-10 h-10 text-amber-600 animate-bounce mx-auto" />
           <div className="text-sm font-bold text-slate-900">Đang đối chiếu lịch ăn và đăng ký trên máy chủ…</div>
           <div className="text-xs text-slate-500 max-w-md mx-auto">
-            Mô hình đang phân tích các biến số ngày trong tuần, đặc thù học sinh từ bản lên trường để đưa ra định mức tối ưu nhất.
+            Đang tổng hợp đăng ký đã nộp, lịch ăn và ngày nghỉ. Đây là dự trù theo dữ liệu đăng ký, không phải dự báo AI.
           </div>
         </div>
       ) : error ? (
