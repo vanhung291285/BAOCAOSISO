@@ -53,6 +53,7 @@ export const SettingsSchoolPage: React.FC = () => {
   } = useSchool();
 
   const [formData, setFormData] = useState<Partial<SchoolSettings>>(settings || {});
+  const [specialMealDate, setSpecialMealDate] = useState('');
   const [mealNewPassword, setMealNewPassword] = useState('');
   const [mealConfirmPassword, setMealConfirmPassword] = useState('');
   const [mealManagementPassword, setMealManagementPassword] = useState('');
@@ -701,6 +702,61 @@ export const SettingsSchoolPage: React.FC = () => {
             <span className="text-[11px] font-bold text-blue-700 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200 shrink-0 self-start sm:self-auto">
               Đồng bộ Supabase Cloud
             </span>
+          </div>
+
+          {/* Lịch ăn theo ngày: độc lập với lịch nghỉ học, lưu trong school_settings Supabase. */}
+          <div className="p-4 rounded-2xl bg-orange-50/60 border border-orange-200 space-y-3">
+            <h3 className="text-sm font-bold text-slate-900">Cấu hình ngày báo ăn đặc biệt</h3>
+            <p className="text-xs text-slate-600">Ngày nghỉ học vẫn có thể tổ chức ăn bán trú. Chọn ngày và các bữa được phục vụ; số suất thực tế chỉ lấy từ báo cáo đã nộp của các lớp. Nhấn Lưu cấu hình ở cuối trang để ghi lên Supabase.</p>
+            <label className="flex flex-col gap-1 text-xs font-semibold text-slate-700">
+              Ngày tổ chức ăn
+              <input type="date" value={specialMealDate} onChange={e => setSpecialMealDate(e.target.value)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 max-w-xs" />
+            </label>
+            {specialMealDate && (
+              <div className="flex flex-wrap gap-4">
+                {(['breakfast', 'lunch', 'dinner'] as const).map((meal, index) => (
+                  <label key={meal} className="flex items-center gap-2 text-sm">
+                    <input type="checkbox"
+                      checked={Boolean(formData.meal_day_overrides?.[specialMealDate]?.[meal])}
+                      onChange={e => setFormData(prev => ({
+                        ...prev,
+                        meal_day_overrides: {
+                          ...(prev.meal_day_overrides || {}),
+                          [specialMealDate]: {
+                            breakfast: prev.meal_day_overrides?.[specialMealDate]?.breakfast ?? false,
+                            lunch: prev.meal_day_overrides?.[specialMealDate]?.lunch ?? false,
+                            dinner: prev.meal_day_overrides?.[specialMealDate]?.dinner ?? false,
+                            [meal]: e.target.checked,
+                          },
+                        },
+                      }))}
+                    />
+                    {['Ăn sáng', 'Ăn trưa', 'Ăn tối'][index]}
+                  </label>
+                ))}
+              </div>
+            )}
+            {specialMealDate && formData.meal_day_overrides?.[specialMealDate] && (
+              <button type="button" className="text-xs font-semibold text-red-700 underline"
+                onClick={() => setFormData(prev => {
+                  const overrides = { ...(prev.meal_day_overrides || {}) };
+                  delete overrides[specialMealDate];
+                  return { ...prev, meal_day_overrides: overrides };
+                })}>
+                Bỏ cấu hình riêng ngày này (trở về lịch mặc định)
+              </button>
+            )}
+            <div className="text-xs text-slate-600">
+              <strong>Ngày đã cấu hình:</strong>{' '}
+              {Object.entries(formData.meal_day_overrides || {}).length === 0
+                ? 'Chưa có'
+                : Object.entries(formData.meal_day_overrides || {}).sort(([a], [b]) => a.localeCompare(b)).map(([date, meals]) =>
+                    <button type="button" key={date} onClick={() => setSpecialMealDate(date)}
+                      className="inline-block mr-2 mb-1 rounded-lg border border-orange-200 bg-white px-2 py-1">
+                      {date}: {[meals.breakfast && 'Sáng', meals.lunch && 'Trưa', meals.dinner && 'Tối'].filter(Boolean).join(', ') || 'Không ăn'}
+                    </button>
+                  )}
+            </div>
           </div>
 
           {/* Section 1: Cấu hình Thứ 6 */}

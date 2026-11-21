@@ -63,15 +63,11 @@ export function getMealScheduleForDate(
   const dateObj = new Date(y, m - 1, d);
   const dayOfWeek = dateObj.getDay();
 
-  // Ngày nghỉ học vẫn có thể tổ chức ăn theo cấu hình quản trị.
-  // Riêng 20/11/2026: nhà trường xác nhận vẫn báo ăn, áp dụng lịch thứ Sáu.
+  // Lịch ăn theo ngày do quản trị cấu hình có ưu tiên cao nhất, kể cả ngày nghỉ học.
+  // Không tự suy luận rằng ngày nghỉ học đồng nghĩa với không tổ chức ăn bán trú.
   const specificMeals = schoolSettings.meal_day_overrides?.[dateStr];
-  if (specificMeals || dateStr === '2026-11-20') {
-    const meals = specificMeals || {
-      breakfast: schoolSettings.friday_breakfast !== false,
-      lunch: schoolSettings.friday_lunch !== false,
-      dinner: Boolean(schoolSettings.friday_dinner),
-    };
+  if (specificMeals) {
+    const meals = specificMeals;
     const names = ['Chủ Nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'];
     const shortNames = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
     const isMealDay = Boolean(meals.breakfast || meals.lunch || meals.dinner);
@@ -84,7 +80,7 @@ export function getMealScheduleForDate(
       lunchAllowed: Boolean(meals.lunch),
       dinnerAllowed: Boolean(meals.dinner),
       note: isMealDay
-        ? 'Nhà trường có tổ chức ăn ngày đặc biệt (' + [meals.breakfast && 'Sáng', meals.lunch && 'Trưa', meals.dinner && 'Tối'].filter(Boolean).join(', ') + ')'
+        ? 'Theo cấu hình quản trị, nhà trường tổ chức ăn (' + [meals.breakfast && 'Sáng', meals.lunch && 'Trưa', meals.dinner && 'Tối'].filter(Boolean).join(', ') + ')'
         : 'Quản trị không tổ chức ăn trong ngày này',
     };
   }
@@ -108,7 +104,7 @@ export function getMealScheduleForDate(
       breakfastAllowed: false,
       lunchAllowed: false,
       dinnerAllowed: false,
-      note: `Nghỉ học / Lễ (${offName}): Học sinh về nhà (Không ăn)`,
+      note: `Ngày nghỉ học (${offName}); không tổ chức ăn theo cấu hình hiện tại`,
     };
   }
 

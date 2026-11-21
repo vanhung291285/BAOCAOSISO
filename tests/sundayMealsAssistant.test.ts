@@ -25,6 +25,19 @@ test('meals respect submitted state, date, scope, configured Friday and campus h
  assert.equal(plannedMeals('2026-11-16',classes,[report('2026-11-16','a',{status:'DRAFT'})],{},[]).lunch,0);
  assert.equal(plannedMeals('2026-11-16',classes,[report('2026-11-16','a',{lunch_count:500})],{},[]).lunch,0);
 });
+test('admin-configured meal day remains open even when school is off, but only submitted class reports count',()=>{
+ const off=[{date:'2026-11-20',name:'Nghỉ học',applies_to:'ALL'}] as SchoolOffDay[];
+ const configured={meal_day_overrides:{'2026-11-20':{breakfast:true,lunch:true,dinner:false}}};
+ const p=plannedMeals('2026-11-20',classes,[report('2026-11-20','a')],configured,off);
+ assert.equal(p.open,2);
+ assert.equal(p.submitted,1);
+ assert.equal(p.breakfast,18);
+ assert.equal(p.lunch,20);
+ assert.equal(p.dinner,0);
+ const closed=plannedMeals('2026-11-20',classes,[report('2026-11-20','a')],{},off);
+ assert.equal(closed.open,0);
+ assert.equal(closed.breakfast+closed.lunch+closed.dinner,0);
+});
 test('knowledge questions use model; private operational and password questions stay local',()=>{
  for(const q of ['Lớp nào chưa báo?','Hôm nay học sinh nào vắng?','Mật khẩu mở sổ chấm cơm?','Sĩ số lớp 6A1'])assert.equal(isSchoolDataQuestion(q),true,q);
  for(const q of ['Giải phương trình 2x + 3 = 7','Giải thích quang hợp','Soạn hoạt động khởi động tiết Toán','Viết một bài thơ về mùa xuân'])assert.equal(isSchoolDataQuestion(q),false,q);
