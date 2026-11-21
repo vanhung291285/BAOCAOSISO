@@ -1075,27 +1075,17 @@ export const StorageService = {
   },
 
   async saveSchoolYear(year: SchoolYear): Promise<void> {
-    const list = await this.getSchoolYears();
-    const index = list.findIndex((y) => y.id === year.id);
-    if (index >= 0) {
-      list[index] = year;
-    } else {
-      list.push(year);
-    }
-    localStorage.setItem(STORAGE_KEYS.YEARS, JSON.stringify(list));
-
     const supabase = getSupabaseClient();
-    if (supabase && isSupabaseConnected()) {
-      try {
-        const { error } = await supabase.from('school_years').upsert(year);
-        if (error) console.error('Supabase upsert school_years error:', error);
-      } catch (e) {
-        console.error('Supabase saveSchoolYear error:', e);
-      }
-    }
-
+    if (!supabase || !isSupabaseConnected()) throw new Error('Chưa kết nối Supabase; năm học chưa được lưu.');
+    const { error } = await supabase.from('school_years').upsert(year);
+    if (error) throw new Error('Không lưu được năm học: ' + error.message);
+    const list = [...await this.getSchoolYears()];
+    const idx = list.findIndex(y => y.id === year.id);
+    if (idx >= 0) list[idx] = year; else list.push(year);
+    localStorage.setItem(STORAGE_KEYS.YEARS, JSON.stringify(list));
+    invalidateCache('school_years_list');
     notifyRealtimeChange('school_years');
-  },
+  }
 
   async setActiveSchoolYear(yearId: string): Promise<void> {
     const list = await this.getSchoolYears();
@@ -1119,38 +1109,26 @@ export const StorageService = {
   },
 
   async deleteSchoolYear(yearId: string): Promise<void> {
-    const list = await this.getSchoolYears();
-    const filtered = list.filter((y) => y.id !== yearId);
-    localStorage.setItem(STORAGE_KEYS.YEARS, JSON.stringify(filtered));
-
     const supabase = getSupabaseClient();
-    if (supabase && isSupabaseConnected()) {
-      try {
-        await supabase.from('school_years').delete().eq('id', yearId);
-      } catch (e) {
-        console.error('Supabase deleteSchoolYear error:', e);
-      }
-    }
-
+    if (!supabase || !isSupabaseConnected()) throw new Error('Chưa kết nối Supabase; chưa xóa năm học.');
+    const { error } = await supabase.from('school_years').delete().eq('id', yearId);
+    if (error) throw new Error('Không xóa được năm học: ' + error.message);
+    const list = (await this.getSchoolYears()).filter(y => y.id !== yearId);
+    localStorage.setItem(STORAGE_KEYS.YEARS, JSON.stringify(list));
+    invalidateCache('school_years_list');
     notifyRealtimeChange('school_years');
-  },
+  }
 
   async toggleLockSchoolYear(yearId: string, locked: boolean): Promise<void> {
-    const list = await this.getSchoolYears();
-    const updated = list.map((y) => (y.id === yearId ? { ...y, is_locked: locked } : y));
-    localStorage.setItem(STORAGE_KEYS.YEARS, JSON.stringify(updated));
-
     const supabase = getSupabaseClient();
-    if (supabase && isSupabaseConnected()) {
-      try {
-        await supabase.from('school_years').update({ is_locked: locked }).eq('id', yearId);
-      } catch (e) {
-        console.error('Supabase toggleLockSchoolYear error:', e);
-      }
-    }
-
+    if (!supabase || !isSupabaseConnected()) throw new Error('Chưa kết nối Supabase; trạng thái khóa chưa được lưu.');
+    const { error } = await supabase.from('school_years').update({ is_locked: locked }).eq('id', yearId);
+    if (error) throw new Error('Không cập nhật được khóa năm học: ' + error.message);
+    const list = (await this.getSchoolYears()).map(y => y.id === yearId ? { ...y, is_locked: locked } : y);
+    localStorage.setItem(STORAGE_KEYS.YEARS, JSON.stringify(list));
+    invalidateCache('school_years_list');
     notifyRealtimeChange('school_years');
-  },
+  }
 
   // --- 3. Campuses ---
   async getCampuses(): Promise<Campus[]> {
@@ -1199,40 +1177,28 @@ export const StorageService = {
   },
 
   async saveCampus(campus: Campus): Promise<void> {
-    const list = await this.getCampuses();
-    const idx = list.findIndex((c) => c.id === campus.id);
-    if (idx >= 0) list[idx] = campus;
-    else list.push(campus);
-    localStorage.setItem(STORAGE_KEYS.CAMPUSES, JSON.stringify(list));
-
     const supabase = getSupabaseClient();
-    if (supabase && isSupabaseConnected()) {
-      try {
-        await supabase.from('campuses').upsert(campus);
-      } catch (e) {
-        console.error('Supabase saveCampus error:', e);
-      }
-    }
-
+    if (!supabase || !isSupabaseConnected()) throw new Error('Chưa kết nối Supabase; điểm trường chưa được lưu.');
+    const { error } = await supabase.from('campuses').upsert(campus);
+    if (error) throw new Error('Không lưu được điểm trường lên Supabase: ' + error.message);
+    const list = [...await this.getCampuses()];
+    const idx = list.findIndex(c => c.id === campus.id);
+    if (idx >= 0) list[idx] = campus; else list.push(campus);
+    localStorage.setItem(STORAGE_KEYS.CAMPUSES, JSON.stringify(list));
+    invalidateCache('campuses_list');
     notifyRealtimeChange('campuses');
-  },
+  }
 
   async deleteCampus(campusId: string): Promise<void> {
-    const list = await this.getCampuses();
-    const filtered = list.filter((c) => c.id !== campusId);
-    localStorage.setItem(STORAGE_KEYS.CAMPUSES, JSON.stringify(filtered));
-
     const supabase = getSupabaseClient();
-    if (supabase && isSupabaseConnected()) {
-      try {
-        await supabase.from('campuses').delete().eq('id', campusId);
-      } catch (e) {
-        console.error('Supabase deleteCampus error:', e);
-      }
-    }
-
+    if (!supabase || !isSupabaseConnected()) throw new Error('Chưa kết nối Supabase; chưa xóa điểm trường.');
+    const { error } = await supabase.from('campuses').delete().eq('id', campusId);
+    if (error) throw new Error('Không xóa được điểm trường: ' + error.message);
+    const list = (await this.getCampuses()).filter(c => c.id !== campusId);
+    localStorage.setItem(STORAGE_KEYS.CAMPUSES, JSON.stringify(list));
+    invalidateCache('campuses_list');
     notifyRealtimeChange('campuses');
-  },
+  }
 
   // --- 4. Indicator Groups ---
   async getIndicatorGroups(): Promise<IndicatorGroup[]> {
@@ -1299,41 +1265,29 @@ export const StorageService = {
   },
 
   async saveIndicatorGroup(group: IndicatorGroup): Promise<void> {
-    const list = await this.getIndicatorGroups();
-    const idx = list.findIndex((g) => g.id === group.id);
-    if (idx >= 0) list[idx] = group;
-    else list.push(group);
+    const supabase = getSupabaseClient();
+    if (!supabase || !isSupabaseConnected()) throw new Error('Chưa kết nối Supabase; chỉ tiêu chưa được lưu.');
+    const { error } = await supabase.from('indicator_groups').upsert(group);
+    if (error) throw new Error('Không lưu được chỉ tiêu: ' + error.message);
+    const list = [...await this.getIndicatorGroups()];
+    const idx = list.findIndex(g => g.id === group.id);
+    if (idx >= 0) list[idx] = group; else list.push(group);
     list.sort((a, b) => a.sort_order - b.sort_order);
     localStorage.setItem(STORAGE_KEYS.INDICATORS, JSON.stringify(list));
-
-    const supabase = getSupabaseClient();
-    if (supabase && isSupabaseConnected()) {
-      try {
-        await supabase.from('indicator_groups').upsert(group);
-      } catch (e) {
-        console.error('Supabase saveIndicatorGroup error:', e);
-      }
-    }
-
+    invalidateCache('indicator_groups');
     notifyRealtimeChange('indicator_groups');
-  },
+  }
 
   async deleteIndicatorGroup(groupId: string): Promise<void> {
-    const list = await this.getIndicatorGroups();
-    const filtered = list.filter((g) => g.id !== groupId);
-    localStorage.setItem(STORAGE_KEYS.INDICATORS, JSON.stringify(filtered));
-
     const supabase = getSupabaseClient();
-    if (supabase && isSupabaseConnected()) {
-      try {
-        await supabase.from('indicator_groups').delete().eq('id', groupId);
-      } catch (e) {
-        console.error('Supabase deleteIndicatorGroup error:', e);
-      }
-    }
-
+    if (!supabase || !isSupabaseConnected()) throw new Error('Chưa kết nối Supabase; chưa xóa chỉ tiêu.');
+    const { error } = await supabase.from('indicator_groups').delete().eq('id', groupId);
+    if (error) throw new Error('Không xóa được chỉ tiêu: ' + error.message);
+    const list = (await this.getIndicatorGroups()).filter(g => g.id !== groupId);
+    localStorage.setItem(STORAGE_KEYS.INDICATORS, JSON.stringify(list));
+    invalidateCache('indicator_groups');
     notifyRealtimeChange('indicator_groups');
-  },
+  }
 
   // --- 5. Classes ---
   async getClasses(): Promise<ClassItem[]> {
