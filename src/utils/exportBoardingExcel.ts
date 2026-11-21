@@ -112,7 +112,7 @@ interface SheetBuildOptions {
 /**
  * Helper to build one boarding worksheet (Trang 1, Trang 2, or Toàn bộ tháng).
  */
-function buildBoardingWorksheet(
+export function buildBoardingWorksheet(
   wb: ExcelJS.Workbook,
   options: SheetBuildOptions,
   context: {
