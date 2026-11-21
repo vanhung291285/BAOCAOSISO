@@ -251,13 +251,13 @@ export function buildBoardingWorksheet(
   // Header 1: School & Campus info (Rows 1 & 2)
   ws.mergeCells('A1:H1');
   ws.getCell('A1').value = schoolName.toUpperCase();
-  ws.getCell('A1').font = { name: 'Times New Roman', size: 11, bold: true };
+  ws.getCell('A1').font = { name: 'Times New Roman', size: 14, bold: true };
   ws.getCell('A1').alignment = { horizontal: 'left', vertical: 'middle' };
   ws.getRow(1).height = 18;
 
   ws.mergeCells('A2:H2');
   ws.getCell('A2').value = `PHÂN HIỆU: ${(campusName || 'XA DUNG').toUpperCase()}`;
-  ws.getCell('A2').font = { name: 'Times New Roman', size: 10.5, bold: true };
+  ws.getCell('A2').font = { name: 'Times New Roman', size: 14, bold: true };
   ws.getCell('A2').alignment = { horizontal: 'left', vertical: 'middle' };
   ws.getRow(2).height = 16;
 
@@ -270,7 +270,7 @@ export function buildBoardingWorksheet(
   const titleCell = ws.getCell('A4');
   const mainSheetTitle = (sheetTitle || 'SỔ CHẤM CƠM').toUpperCase();
   titleCell.value = `${mainSheetTitle} LỚP: ${className.toUpperCase()} THÁNG ${monthNum}/${yearNum}`;
-  titleCell.font = { name: 'Times New Roman', size: 14, bold: true };
+  titleCell.font = { name: 'Times New Roman', size: 18, bold: true };
   titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
   ws.getRow(4).height = 24;
 
@@ -279,7 +279,7 @@ export function buildBoardingWorksheet(
   ws.mergeCells(subtitleRange);
   const subtitleCell = ws.getCell('A5');
   subtitleCell.value = pageSubtitle.toUpperCase();
-  subtitleCell.font = { name: 'Times New Roman', size: 10, bold: true, italic: true };
+  subtitleCell.font = { name: 'Times New Roman', size: 14, bold: true, italic: true };
   subtitleCell.alignment = { horizontal: 'center', vertical: 'middle' };
   ws.getRow(5).height = 17;
 
@@ -355,16 +355,16 @@ export function buildBoardingWorksheet(
   }
 
   // Style Header rows - Căn chỉnh chiều cao và cỡ chữ chuẩn in ấn sắc nét
-  ws.getRow(headerRow1).height = 19;
-  ws.getRow(headerRow2).height = 16;
-  ws.getRow(headerRow3).height = 16;
+  ws.getRow(headerRow1).height = 24;
+  ws.getRow(headerRow2).height = 20;
+  ws.getRow(headerRow3).height = 20;
 
   for (let r = headerRow1; r <= headerRow3; r++) {
     const row = ws.getRow(r);
     for (let c = 1; c <= totalColsCount; c++) {
       const cell = row.getCell(c);
       cell.border = thinBorder;
-      const fontSize = r === headerRow1 ? 10 : r === headerRow2 ? 9.5 : 9;
+      const fontSize = r === headerRow1 ? 13 : r === headerRow2 ? 13 : 13;
       cell.font = { name: 'Times New Roman', size: fontSize, bold: true, color: { argb: 'FF000000' } };
       cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
 
@@ -453,7 +453,7 @@ export function buildBoardingWorksheet(
 
       cell.font = {
         name: 'Times New Roman',
-        size: isName ? 10 : 9.5,
+        size: isName ? 14 : 13,
         bold: isName || isSummary,
         color: { argb: 'FF000000' },
       };
@@ -466,7 +466,7 @@ export function buildBoardingWorksheet(
 
       // Bold '+' marks rõ nét
       if (c >= 3 && (!includeMonthSummary || c < sumColIdx) && cell.value === '+') {
-        cell.font = { name: 'Times New Roman', size: 10.5, bold: true, color: { argb: 'FF000000' } };
+        cell.font = { name: 'Times New Roman', size: 14, bold: true, color: { argb: 'FF000000' } };
       }
     }
 
@@ -480,7 +480,7 @@ export function buildBoardingWorksheet(
 
   const sumLabelCell = sumRowObj.getCell(1);
   sumLabelCell.value = 'CỘNG';
-  sumLabelCell.font = { name: 'Times New Roman', size: 10, bold: true, color: { argb: 'FF000000' } };
+  sumLabelCell.font = { name: 'Times New Roman', size: 14, bold: true, color: { argb: 'FF000000' } };
   sumLabelCell.alignment = { horizontal: 'center', vertical: 'middle' };
   sumLabelCell.border = thinBorder;
   sumRowObj.getCell(2).border = thinBorder;
@@ -495,7 +495,7 @@ export function buildBoardingWorksheet(
     const endCellRef = `${colLetter}${lastDataRow}`;
     const cell = sumRowObj.getCell(c);
     cell.value = { formula: `COUNTIF(${startCellRef}:${endCellRef}, "+")` };
-    cell.font = { name: 'Times New Roman', size: 9.5, bold: true, color: { argb: 'FF000000' } };
+    cell.font = { name: 'Times New Roman', size: 13, bold: true, color: { argb: 'FF000000' } };
     cell.alignment = { horizontal: 'center', vertical: 'middle' };
     cell.border = thinBorder;
     cell.numFmt = '#,##0';
@@ -509,14 +509,14 @@ export function buildBoardingWorksheet(
       const endCellRef = `${colLetter}${lastDataRow}`;
       const cell = sumRowObj.getCell(c);
       cell.value = { formula: `SUM(${startCellRef}:${endCellRef})` };
-      cell.font = { name: 'Times New Roman', size: 9.5, bold: true, color: { argb: 'FF000000' } };
+      cell.font = { name: 'Times New Roman', size: 13, bold: true, color: { argb: 'FF000000' } };
       cell.alignment = { horizontal: 'center', vertical: 'middle' };
       cell.border = thinBorder;
       cell.numFmt = '#,##0';
     }
   }
 
-  sumRowObj.height = 20;
+  sumRowObj.height = 24;
 
   // Signatures block - Chỉ hiển thị khi includeSignature !== false
   const includeSig = options.includeSignature !== false;
@@ -534,7 +534,7 @@ export function buildBoardingWorksheet(
     ws.mergeCells(`${rightColLetterStart}${currentExcelRow}:${rightColLetterEnd}${currentExcelRow}`);
     const dateCell = ws.getCell(`${rightColLetterStart}${currentExcelRow}`);
     dateCell.value = signDateText;
-    dateCell.font = { name: 'Times New Roman', size: 10, italic: true, color: { argb: 'FF000000' } };
+    dateCell.font = { name: 'Times New Roman', size: 14, italic: true, color: { argb: 'FF000000' } };
     dateCell.alignment = { horizontal: 'center', vertical: 'middle' };
     ws.getRow(currentExcelRow).height = 16;
 
@@ -543,7 +543,7 @@ export function buildBoardingWorksheet(
     ws.mergeCells(`${rightColLetterStart}${currentExcelRow}:${rightColLetterEnd}${currentExcelRow}`);
     const gvcnTitle = ws.getCell(`${rightColLetterStart}${currentExcelRow}`);
     gvcnTitle.value = (sigConfig?.teacher_title || teacherTitle || 'GIÁO VIÊN CHỦ NHIỆM').toUpperCase();
-    gvcnTitle.font = { name: 'Times New Roman', size: 10.5, bold: true, color: { argb: 'FF000000' } };
+    gvcnTitle.font = { name: 'Times New Roman', size: 14, bold: true, color: { argb: 'FF000000' } };
     gvcnTitle.alignment = { horizontal: 'center', vertical: 'middle' };
     ws.getRow(currentExcelRow).height = 17;
 
@@ -552,7 +552,7 @@ export function buildBoardingWorksheet(
     ws.mergeCells(`${rightColLetterStart}${currentExcelRow}:${rightColLetterEnd}${currentExcelRow}`);
     const gvcnSub = ws.getCell(`${rightColLetterStart}${currentExcelRow}`);
     gvcnSub.value = '(Ký và ghi rõ họ tên)';
-    gvcnSub.font = { name: 'Times New Roman', size: 9, italic: true, color: { argb: 'FF475569' } };
+    gvcnSub.font = { name: 'Times New Roman', size: 13, italic: true, color: { argb: 'FF475569' } };
     gvcnSub.alignment = { horizontal: 'center', vertical: 'middle' };
     ws.getRow(currentExcelRow).height = 14;
 
@@ -572,10 +572,10 @@ export function buildBoardingWorksheet(
         badgeCell.value = monthSig?.certificate_hash
           ? `[✓ ĐÃ KÝ ĐIỆN TỬ: ${monthSig.certificate_hash}]`
           : '[✓ ĐÃ KÝ ĐIỆN TỬ]';
-        badgeCell.font = { name: 'Times New Roman', size: 8.5, bold: true, color: { argb: 'FF047857' } }; // Xanh lá cây
+        badgeCell.font = { name: 'Times New Roman', size: 10, bold: true, color: { argb: 'FF047857' } }; // Xanh lá cây
       } else {
         badgeCell.value = '(Chữ ký điện tử)';
-        badgeCell.font = { name: 'Times New Roman', size: 8.5, italic: true, color: { argb: 'FF64748B' } };
+        badgeCell.font = { name: 'Times New Roman', size: 10, italic: true, color: { argb: 'FF64748B' } };
       }
       badgeCell.alignment = { horizontal: 'center', vertical: 'middle' };
       ws.getRow(currentExcelRow).height = 14;
@@ -625,7 +625,7 @@ export function buildBoardingWorksheet(
     ws.mergeCells(`${rightColLetterStart}${currentExcelRow}:${rightColLetterEnd}${currentExcelRow}`);
     const gvcnName = ws.getCell(`${rightColLetterStart}${currentExcelRow}`);
     gvcnName.value = teacherName;
-    gvcnName.font = { name: 'Times New Roman', size: 11, bold: true, color: { argb: 'FF000000' } };
+    gvcnName.font = { name: 'Times New Roman', size: 14, bold: true, color: { argb: 'FF000000' } };
     gvcnName.alignment = { horizontal: 'center', vertical: 'middle' };
     ws.getRow(currentExcelRow).height = 19;
   }
