@@ -47,3 +47,31 @@ test('boarding print retains every student, meal column and monthly summary', as
   assert.equal(printed.getCell('B54').value, 'Học sinh bán trú số 45');
   assert.equal(printed.getCell('BA7').value, 'Số ngày ăn trong tháng');
 });
+
+test('32 boarding students use expanded rows and one-page vertical fit', () => {
+  const students = makeStudents(32);
+  const monthDays = Array.from({ length: 30 }, (_, i) => ({
+    dayNum: i + 1, dateStr: '2026-11-' + String(i + 1).padStart(2, '0'),
+    dayOfWeekShort: '2', isMealDay: true,
+    allowedMeals: { breakfast: true, lunch: true, dinner: true },
+  }));
+  const wb = new ExcelJS.Workbook();
+  buildBoardingWorksheet(wb, {
+    sheetName: 'Trang 1', pageSubtitle: 'Ngày 01-15', startDay: 1,
+    endDay: 15, includeMonthSummary: false, includeSignature: false,
+    signDateText: 'Xa Dung, ngày 15 tháng 11 năm 2026',
+  }, {
+    schoolName: 'TRƯỜNG PTDTBT THCS XA DUNG', campusName: 'PHÌ NHỪ',
+    className: '6A1', monthNum: 11, yearNum: 2026, daysInMonth: 30,
+    monthDays, boardingStudents: students, matrix: {},
+    standardBreakfastDays: 15, standardLunchDays: 15, standardDinnerDays: 12,
+    teacherName: 'Giáo viên chủ nhiệm', principalName: 'Hiệu trưởng',
+  } as any);
+  const ws = wb.getWorksheet('Trang 1')!;
+  assert.equal(ws.getRow(10).height, 21);
+  assert.equal(ws.pageSetup.fitToWidth, 1);
+  assert.equal(ws.pageSetup.fitToHeight, 1);
+  assert.equal(ws.getCell('B41').value, 'Học sinh bán trú số 32');
+  assert.equal(ws.pageSetup.printArea, 'A1:AU42');
+  assert.ok(ws.getColumn(3).width! >= 3.7);
+});
