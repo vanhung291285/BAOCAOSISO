@@ -186,12 +186,12 @@ function buildBoardingWorksheet(
       paperSize: 9, // A4 chuẩn
       fitToPage: true,
       fitToWidth: 1, // Luôn vừa khít 1 trang A4 chiều ngang, hiển thị đầy đủ 100% tất cả các cột
-      fitToHeight: boardingStudents.length <= 36 ? 1 : 2, // <= 36 HS vừa khít trọn vẹn 1 trang A4, đông hơn tự động chia trang chuẩn
+      fitToHeight: 1, // Mỗi nửa tháng in đúng một mặt A4; không tự cắt sang trang khác
       horizontalCentered: true,
       verticalCentered: false,
       margins: { left: 0.2, right: 0.2, top: 0.25, bottom: 0.25, header: 0.1, footer: 0.1 },
       showGridLines: false, // Tắt dòng kẻ mặc định của trang in để không bị kẻ ô li ti ở phần tiêu đề và chữ ký
-      printTitlesRow: '7:9', // Lặp lại hàng tiêu đề STT, Họ tên, Thứ, Ngày, Bữa ăn trên tất cả các trang in khi nhiều trang
+      printTitlesRow: '7:9', // Lặp tiêu đề khi người dùng thay đổi thiết lập in
     },
     views: [
       {
@@ -211,13 +211,14 @@ function buildBoardingWorksheet(
     ...boardingStudents.map((s) => (s.full_name || '').trim().length),
     15
   );
+  const isFullMonth = numDays > 16;
   const isTrang1 = numDays <= 16 && !includeMonthSummary;
   const isTrang2 = numDays <= 16 && includeMonthSummary;
 
   // Họ và tên tự động co giãn thông minh: không quá rộng gây tràn trang, không quá hẹp gây cắt chữ
   const nameColWidth = numDays <= 16
-    ? Math.min(Math.max(18, maxNameLen * 1.05 + 1.5), 23)
-    : Math.min(Math.max(17, maxNameLen * 0.95 + 1.0), 21);
+    ? Math.min(Math.max(19, maxNameLen * 1.1 + 2), 25)
+    : Math.min(Math.max(19, maxNameLen + 2), 25);
 
   ws.getColumn(1).width = 4.2; // STT gọn gàng, rõ ràng
   ws.getColumn(2).width = nameColWidth; // Họ và tên tự động co giãn theo danh sách thực tế
@@ -226,7 +227,7 @@ function buildBoardingWorksheet(
   // Trang 1 (15 ngày = 45 cột): 2.35 -> Bề rộng vừa khít khổ A4 ngang, tỷ lệ phóng to in ấn ~95-98%, chữ cực rõ nét
   // Trang 2 (15-16 ngày = 45-48 cột + 6 cột tổng): 2.15 -> In vừa vặn toàn bộ 56 cột trên 1 trang ngang
   // Toàn bộ tháng (31 ngày = 93 cột + 6 cột tổng): 1.95 -> Vừa vặn 101 cột
-  const mealColWidth = isTrang1 ? 2.35 : isTrang2 ? 2.15 : 1.95;
+  const mealColWidth = isTrang1 ? 2.8 : isTrang2 ? 2.55 : 2.45;
 
   for (let d = 0; d < numDays; d++) {
     const colStart = 3 + d * 3;
@@ -237,7 +238,7 @@ function buildBoardingWorksheet(
 
   // Summary columns: Tự động co giãn phù hợp để hiển thị số ngày ăn/nghỉ rõ ràng (chứa số 2-3 chữ số)
   if (includeMonthSummary && sumColIdx > 0) {
-    const sumWidth = isTrang2 ? 3.9 : 3.4;
+    const sumWidth = isTrang2 ? 4.2 : 4.0;
     for (let c = sumColIdx; c <= sumColIdx + 5; c++) {
       ws.getColumn(c).width = sumWidth;
     }
@@ -385,7 +386,7 @@ function buildBoardingWorksheet(
   // Data rows (Students)
   let currentExcelRow = 10;
   // Chiều cao dòng học sinh tự động co giãn: 16.5pt nếu <= 36 HS (vừa vặn 1 trang A4 hoàn hảo), 15.5pt nếu > 36 HS
-  const dataRowHeight = studentCount <= 36 ? 16.5 : 15.5;
+  const dataRowHeight = studentCount <= 36 ? 17 : 15.5;
 
   boardingStudents.forEach((st, idx) => {
     const rowObj = ws.getRow(currentExcelRow);
@@ -621,6 +622,18 @@ function buildBoardingWorksheet(
     gvcnName.font = { name: 'Times New Roman', size: 11, bold: true, color: { argb: 'FF000000' } };
     gvcnName.alignment = { horizontal: 'center', vertical: 'middle' };
     ws.getRow(currentExcelRow).height = 19;
+  }
+
+  // Chỉ in vùng biểu mẫu có dữ liệu và chữ ký, tránh trang trắng hoặc vùng thừa.
+  ws.pageSetup.printArea = `A1:${getColLetter(totalColsCount - 1)}${currentExcelRow}`;
+  ws.pageSetup.horizontalCentered = true;
+  ws.pageSetup.verticalCentered = false;
+  ws.headerFooter.oddFooter = '&CTrang &P / &N';
+  if (isFullMonth) {
+    // Sheet tổng hợp 30-31 ngày chỉ dùng tra cứu trên máy; in theo Trang 1 và Trang 2.
+    ws.pageSetup.paperSize = 8; // A3 cho trường hợp cần in toàn bộ tháng.
+    ws.pageSetup.fitToWidth = 1;
+    ws.pageSetup.fitToHeight = 1;
   }
 }
 
