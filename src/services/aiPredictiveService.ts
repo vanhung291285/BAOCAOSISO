@@ -88,7 +88,7 @@ const INTERVENTIONS_STORAGE_KEY = 'sso_ai_dropout_interventions_v1';
 export const AIPredictiveService = {
   /**
    * Tính toán chỉ số nguy cơ bỏ học (Dropout Risk Index) cho toàn bộ học sinh
-   * Sử dụng thuật toán học máy heuristic kết hợp nhận diện mẫu chuỗi thời gian
+   * Chỉ số cảnh báo theo quy tắc, không phải mô hình học máy hay xác suất bỏ học.
    */
   calculateDropoutRisk(
     students: Student[],
@@ -103,9 +103,7 @@ export const AIPredictiveService = {
       .sort((a, b) => (a.report_date || '').localeCompare(b.report_date || ''));
 
     // Tập hợp tất cả các ngày học đã có báo cáo
-    const reportedDates = Array.from(new Set(relevantReports.map((r) => r.report_date))).sort();
-    const totalSchoolDays = Math.max(reportedDates.length, 1);
-    const recentSchoolDates = reportedDates.slice(-30); // 30 ngày học gần nhất
+    // Do not use a school-wide reporting denominator for an individual class.
 
     const classMap = new Map<string, ClassItem>();
     classes.forEach((c) => {
@@ -167,15 +165,19 @@ export const AIPredictiveService = {
       // Sắp xếp ngày vắng từ gần nhất đến xa nhất
       absences.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
 
-      const totalDaysAbsent = absences.length;
-      const absentRate = (totalDaysAbsent / totalSchoolDays) * 100;
+      const classReportedDates = Array.from(new Set(relevantReports.filter(r => r.class_id === st.class_id).map(r => r.report_date))).sort();
+      const classDates = new Set(classReportedDates);
+      const validAbsences = absences.filter(r => classDates.has(r.date));
+      const totalSchoolDays = classReportedDates.length;
+      const totalDaysAbsent = validAbsences.length;
+      const absentRate = totalSchoolDays ? (totalDaysAbsent / totalSchoolDays) * 100 : 0;
 
       // Tính chuỗi vắng liên tiếp gần nhất (streak)
       let consecutiveAbsences = 0;
-      if (absences.length > 0 && recentSchoolDates.length > 0) {
+      if (validAbsences.length > 0 && classReportedDates.length > 0) {
         // Duyệt ngược từ các ngày học gần nhất
-        for (let i = recentSchoolDates.length - 1; i >= 0; i--) {
-          const d = recentSchoolDates[i];
+        for (let i = classReportedDates.length - 1; i >= 0; i--) {
+          const d = classReportedDates[i];
           const isAbsentThisDay = seenDates.has(d);
           if (isAbsentThisDay) {
             consecutiveAbsences++;
@@ -187,23 +189,15 @@ export const AIPredictiveService = {
       }
 
       // Đếm số ngày vắng vào Thứ 2 hoặc Thứ 6 (quy luật nghỉ cầu nối cuối tuần)
-      const mondayFridayCount = absences.filter(
+      const mondayFridayCount = validAbsences.filter(
         (a) => a.dayOfWeek === 'Thứ 2' || a.dayOfWeek === 'Thứ 6'
       ).length;
 
       // Đếm số ngày vắng không rõ lý do hoặc lý do đáng ngờ (nương rẫy, việc nhà)
-      const unexcusedCount = absences.filter((a) => {
-        const r = (a.reason || '').toLowerCase();
-        return (
-          r.includes('không phép') ||
-          r.includes('kp') ||
-          r.includes('k') ||
-          r.includes('nương') ||
-          r.includes('việc nhà') ||
-          r.includes('chăn') ||
-          r.includes('ở nhà') ||
-          r.includes('chưa rõ')
-        );
+      const unexcusedCount = validAbsences.filter((a) => {
+        const reason = (a.reason || '').trim().toLowerCase();
+        // Unknown reasons require verification; do not label family work as misconduct.
+        return /^(không phép|nghỉ không phép|kp|k\.p\.)$/.test(reason);
       }).length;
 
       // --- MÔ HÌNH CHẤM ĐIỂM RỦI RO (DROPOUT RISK HEURISTIC & STATISTICAL MODEL) ---
@@ -247,16 +241,16 @@ export const AIPredictiveService = {
 
       // 5. Yếu tố bán trú & bản làng vùng cao:
       // Học sinh bán trú ở bản xa nếu nghỉ học liên tiếp có nguy cơ bỏ học rất cao do khoảng cách
-      if (st.isBoarding && (consecutiveAbsences >= 2 || totalDaysAbsent >= 3)) {
-        score += 8;
-      }
+      // Boarding status and residential location must not increase a child's risk score.
 
       // Giới hạn trong khoảng 0 - 100
       const finalScore = Math.min(Math.max(Math.round(score), 0), 100);
 
       // Xác định cấp độ rủi ro (Risk Level)
       let riskLevel: RiskLevel = 'LOW';
-      if (finalScore >= 75 || consecutiveAbsences >= 4) {
+      if (totalSchoolDays === 0) {
+        riskLevel = 'LOW'; // No evidence: UI must not interpret LOW as confirmed safe.
+      } else if (finalScore >= 75 || consecutiveAbsences >= 4) {
         riskLevel = 'CRITICAL';
       } else if (finalScore >= 50 || consecutiveAbsences >= 2 || totalDaysAbsent >= 4) {
         riskLevel = 'HIGH';
@@ -282,17 +276,11 @@ export const AIPredictiveService = {
         warningFlags.push(`${unexcusedCount} buổi không phép / việc nương`);
       }
 
-      if (st.isBoarding && totalDaysAbsent >= 2) {
-        warningFlags.push('Học sinh bán trú nghỉ học bất thường');
-      }
+      // Do not infer risk from boarding status, village, or address.
 
-      if (st.address) {
-        const addrLower = st.address.toLowerCase();
-        if (addrLower.includes('phì cao') || addrLower.includes('háng tàu') || addrLower.includes('khó') || addrLower.includes('xa')) {
-          warningFlags.push(`Bản xa trung tâm (${st.address})`);
-        }
+      if (totalSchoolDays === 0) {
+        warningFlags.push('Chưa có dữ liệu báo cáo hợp lệ của lớp; không thể đánh giá');
       }
-
       if (warningFlags.length === 0 && totalDaysAbsent > 0) {
         warningFlags.push(`Đã vắng ${totalDaysAbsent} ngày trong năm`);
       }
@@ -308,7 +296,7 @@ export const AIPredictiveService = {
         consecutiveAbsences,
         mondayFridayCount,
         unexcusedCount,
-        recentAbsences: absences.slice(0, 10),
+        recentAbsences: validAbsences.slice(0, 10),
         warningFlags,
         lastAbsentDate: absences[0]?.date,
       };
