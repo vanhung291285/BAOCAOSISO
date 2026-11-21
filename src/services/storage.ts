@@ -1086,7 +1086,7 @@ export const StorageService = {
     localStorage.setItem(STORAGE_KEYS.YEARS, JSON.stringify(list));
     invalidateCache('school_years_list');
     notifyRealtimeChange('school_years');
-  }
+  },
 
   async setActiveSchoolYear(yearId: string): Promise<void> {
     const list = await this.getSchoolYears();
@@ -1118,7 +1118,7 @@ export const StorageService = {
     localStorage.setItem(STORAGE_KEYS.YEARS, JSON.stringify(list));
     invalidateCache('school_years_list');
     notifyRealtimeChange('school_years');
-  }
+  },
 
   async toggleLockSchoolYear(yearId: string, locked: boolean): Promise<void> {
     const supabase = getSupabaseClient();
@@ -1188,7 +1188,7 @@ export const StorageService = {
     localStorage.setItem(STORAGE_KEYS.CAMPUSES, JSON.stringify(list));
     invalidateCache('campuses_list');
     notifyRealtimeChange('campuses');
-  }
+  },
 
   async deleteCampus(campusId: string): Promise<void> {
     const supabase = getSupabaseClient();
@@ -1277,7 +1277,7 @@ export const StorageService = {
     localStorage.setItem(STORAGE_KEYS.INDICATORS, JSON.stringify(list));
     invalidateCache('indicator_groups');
     notifyRealtimeChange('indicator_groups');
-  }
+  },
 
   async deleteIndicatorGroup(groupId: string): Promise<void> {
     const supabase = getSupabaseClient();
