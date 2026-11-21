@@ -13,6 +13,8 @@ export const SettingsReportTemplatePage: React.FC = () => {
   const [developerName, setDeveloperName] = useState(settings?.developer_name || 'Vũ Văn Hùng');
   const [developerContact, setDeveloperContact] = useState(settings?.developer_contact || 'SĐT: 0984246993');
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const [saveError, setSaveError] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     if (settings) {
@@ -27,16 +29,26 @@ export const SettingsReportTemplatePage: React.FC = () => {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    await updateSchoolSettings({
-      report_title: reportTitle,
-      boarding_sheet_title: boardingSheetTitle,
-      input_mode: inputMode,
-      footer_text: footerText,
-      developer_name: developerName,
-      developer_contact: developerContact,
-    });
-    setSavedSuccess(true);
-    setTimeout(() => setSavedSuccess(false), 3000);
+    if (isSaving) return;
+    setSaveError('');
+    setSavedSuccess(false);
+    setIsSaving(true);
+    try {
+      await updateSchoolSettings({
+        report_title: reportTitle,
+        boarding_sheet_title: boardingSheetTitle,
+        input_mode: inputMode,
+        footer_text: footerText,
+        developer_name: developerName,
+        developer_contact: developerContact,
+      });
+      setSavedSuccess(true);
+      setTimeout(() => setSavedSuccess(false), 3000);
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : 'Không lưu được biểu mẫu trên Supabase.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -61,6 +73,7 @@ export const SettingsReportTemplatePage: React.FC = () => {
         )}
       </div>
 
+      {saveError && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{saveError}</div>}
       <form onSubmit={handleSave} className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs space-y-6">
         {/* Input Mode Selector */}
         <div>
