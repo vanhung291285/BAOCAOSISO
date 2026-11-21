@@ -1129,7 +1129,7 @@ export const StorageService = {
     localStorage.setItem(STORAGE_KEYS.YEARS, JSON.stringify(list));
     invalidateCache('school_years_list');
     notifyRealtimeChange('school_years');
-  }
+  },
 
   // --- 3. Campuses ---
   async getCampuses(): Promise<Campus[]> {
@@ -1199,7 +1199,7 @@ export const StorageService = {
     localStorage.setItem(STORAGE_KEYS.CAMPUSES, JSON.stringify(list));
     invalidateCache('campuses_list');
     notifyRealtimeChange('campuses');
-  }
+  },
 
   // --- 4. Indicator Groups ---
   async getIndicatorGroups(): Promise<IndicatorGroup[]> {
@@ -1288,7 +1288,7 @@ export const StorageService = {
     localStorage.setItem(STORAGE_KEYS.INDICATORS, JSON.stringify(list));
     invalidateCache('indicator_groups');
     notifyRealtimeChange('indicator_groups');
-  }
+  },
 
   // --- 5. Classes ---
   async getClasses(): Promise<ClassItem[]> {
