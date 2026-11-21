@@ -932,12 +932,12 @@ export const StorageService = {
       footer_text: cleanFooter,
       updated_at: new Date().toISOString(),
     };
-    localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(updated));
+    // Commit to Supabase before updating the local display cache.
 
     const supabase = getSupabaseClient();
     const logoChanged = settings.logo_url !== undefined && settings.logo_url !== current.logo_url;
-    if (logoChanged && (!supabase || !isSupabaseConnected())) {
-      throw new Error('Chưa kết nối Supabase, huy hiệu chưa được lưu vào CSDL.');
+    if (!supabase || !isSupabaseConnected()) {
+      throw new Error('Chưa kết nối Supabase; thiết lập quản trị chưa được lưu.');
     }
     if (supabase && isSupabaseConnected()) {
       try {
@@ -958,9 +958,10 @@ export const StorageService = {
           }
         } else {
         let curPayload: any = { ...cloudPayload };
+        let committed = false;
         for (let attempt = 0; attempt < 8; attempt++) {
           const { error } = await supabase.from('school_settings').upsert(curPayload);
-          if (!error) break;
+          if (!error) { committed = true; break; }
 
           console.warn(`Supabase update school_settings attempt ${attempt + 1} warning:`, error.message);
           const colMatch =
@@ -985,19 +986,16 @@ export const StorageService = {
             updated_at: updated.updated_at,
           };
           const { error: fallbackErr } = await supabase.from('school_settings').upsert(curPayload);
-          if (fallbackErr) {
-            console.error('Supabase update school_settings core fallback error:', fallbackErr);
-          }
+          if (fallbackErr) throw new Error('Không lưu được cấu hình trên Supabase: ' + fallbackErr.message);
+          committed = true;
           break;
         }
+        if (!committed) throw new Error('Không xác nhận được cấu hình đã lưu trên Supabase.');
         }
       } catch (e) {
         console.error('Supabase update settings error:', e);
-        if (logoChanged) {
-          localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(current));
-          invalidateCache('school_settings');
-          throw e;
-        }
+        invalidateCache('school_settings');
+        throw e;
       }
 
       // Lưu snapshot cấu hình vào system_logs để luôn đồng bộ ngay cả khi bảng thiếu cột
@@ -1016,6 +1014,9 @@ export const StorageService = {
         console.warn('Supabase system_logs insert warning:', logErr);
       }
     }
+
+    localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(updated));
+    invalidateCache('school_settings');
 
     if (updatedBy) {
       await this.addLog({
